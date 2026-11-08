@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Caja;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTesoreriaCrownTipoValor;
 use App\Http\Requests\ValidacionTesoreriaCrownValor;
+use App\Models\Caja\TesoreriaCrownConversionFicha;
+use App\Models\Caja\TesoreriaCrownFicha;
 use App\Models\Caja\TesoreriaCrownTipoValor;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
@@ -400,5 +402,74 @@ class TesoreriaCrownValorController extends Controller
             ->orderBy('orden')
             ->orderBy('codigo')
             ->get();
+    }
+
+    /**
+     * Conversión diaria del poder público (ledger l-stockfichm).
+     * El catálogo canónico de denominaciones es Valores (FVAL/FCOL);
+     * acá solo se edita conv_final por código Anita del ledger PP.
+     */
+    public function conversion(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-valor');
+
+        $fecha = (string) $request->input('fecha', now()->format('Y-m-d'));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            $fecha = now()->format('Y-m-d');
+        }
+        $catalogo = TesoreriaCrownFicha::query()->orderBy('orden_carga')->orderBy('codigo')->get();
+        $conv = TesoreriaCrownConversionFicha::query()
+            ->whereDate('fecha', $fecha)
+            ->pluck('conv_final', 'codigo_ficha');
+
+        return view('caja.tesoreria_crown.valor.conversion', [
+            'fecha' => $fecha,
+            'catalogo' => $catalogo,
+            'conversiones' => $conv,
+            'sala' => TesoreriaCrownSalaSupport::pedida($request),
+        ]);
+    }
+
+    public function guardarConversion(Request $request)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('actualizar-tesoreria-crown-valor');
+
+        $fecha = (string) $request->input('fecha', '');
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            return back()->withErrors(['fecha' => 'Fecha inválida.'])->withInput();
+        }
+        $cantidades = $request->input('conv_final', []);
+        if (! is_array($cantidades)) {
+            $cantidades = [];
+        }
+
+        DB::transaction(function () use ($fecha, $cantidades) {
+            foreach ($cantidades as $codigo => $valor) {
+                $codigo = (int) $codigo;
+                if ($codigo <= 0) {
+                    continue;
+                }
+                $final = (int) $valor;
+                $fila = TesoreriaCrownConversionFicha::query()
+                    ->whereDate('fecha', $fecha)
+                    ->where('codigo_ficha', $codigo)
+                    ->first();
+                if ($fila) {
+                    $fila->update(['conv_final' => $final]);
+                } else {
+                    TesoreriaCrownConversionFicha::query()->create([
+                        'fecha' => $fecha,
+                        'codigo_ficha' => $codigo,
+                        'conv_final' => $final,
+                    ]);
+                }
+            }
+        });
+
+        return redirect()
+            ->route('conversion_tesoreria_crown_valor', ['fecha' => $fecha])
+            ->with('mensaje', 'Conversión del '.$fecha.' guardada.');
     }
 }

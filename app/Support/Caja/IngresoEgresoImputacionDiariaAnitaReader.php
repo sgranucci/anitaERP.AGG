@@ -113,7 +113,7 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                     'pag_tipo,pag_rec,pag_empresa',
                     ' WHERE pag_tipo = '.$this->esc($tipo)
                         .' AND pag_rec IN ('.implode(',', $lote).')'
-                        .' AND pag_empresa = '.$empresa
+                        .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaPago($empresa)
                 ) as $fila) {
                     $nro = (int) ($fila->pag_rec ?? 0);
                     $key = self::claveComprobante($empresa, $tipo, $nro);

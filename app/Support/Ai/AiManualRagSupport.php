@@ -314,6 +314,7 @@ final class AiManualRagSupport
             'manual-canjes-marketing' => 'manual_canjes_marketing',
             'manual-solicitudpago' => 'manual_solicitudpago',
             'manual-caja' => 'manual_caja',
+            'manual-tesoreria-crown' => 'manual_tesoreria_crown',
             'manual-contable' => 'manual_contable',
             'manual-cierres-rendiciones' => 'manual_cierres_rendiciones',
             'manual-reporte-definible' => 'manual_reporte_definible',

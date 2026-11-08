@@ -2,32 +2,30 @@
 
 namespace App\Services\Ventas\GastronomiaCrown;
 
-use App\Models\Caja\RendicionGastronomiaCaja;
-use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Caja\CajeroCrown;
+use App\Models\Caja\TesoreriaCrownAsignacion;
+use App\Models\Caja\TesoreriaCrownCierreFiscal;
+use App\Models\Caja\TesoreriaCrownComprobante;
+use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownCuenta;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
-use App\Services\Caja\RendicionGastronomiaCajaService;
+use App\Support\Caja\TesoreriaCrownComprobanteSupport;
+use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
- * Cierre X de Crown: lo que cada mozo (cajero en la lógica Anita de p-cierrecajero.c) tiene
- * que rendir en tesorería antes del Z fiscal. El total X sale de las cuentas cerradas del POS
- * Crown de la jornada de la sala, agrupadas por mozo.
+ * Cierre X de gastronomía Crown → una sola operación:
+ * genera la rendición de cajero G en tesorería Crown (como a-transfefe gastro),
+ * con el total X desde cuentas POS cerradas, y un informe X en
+ * tesoreria_crown_cierre_fiscal. No pasa por Caja→Rendición gastronomía.
  */
 class GastronomiaCrownCierreXService
 {
-    public function __construct(
-        private readonly RendicionGastronomiaCajaService $rendicionService,
-    ) {
-    }
-
     /**
-     * Jornadas (abiertas y cerradas) de la empresa + sala para elegir el cierre X.
-     *
      * @return Collection<int, JornadaGastronomia>
      */
     public function jornadasParaElegir(int $empresaId, ?int $salaId, int $limite = 30): Collection
@@ -47,9 +45,6 @@ class GastronomiaCrownCierreXService
     }
 
     /**
-     * Total a rendir por mozo. Si viene jornada se usa su ventana (apertura → cierre o ahora);
-     * si no, el día calendario de `$fecha` sobre `cerrada_at`.
-     *
      * @return list<array{
      *   mozo_gastronomia_id:int,
      *   mozo_codigo:string,
@@ -58,7 +53,7 @@ class GastronomiaCrownCierreXService
      *   total_x:float,
      *   total_facturado:float,
      *   ya_rendido:bool,
-     *   rendicion_id:int
+     *   comprobante_id:int
      * }>
      */
     public function totalesPorMozo(
@@ -97,18 +92,13 @@ class GastronomiaCrownCierreXService
             ->get(['id', 'codigo', 'nombre'])
             ->keyBy('id');
 
-        $rendiciones = $jornada !== null
-            ? RendicionGastronomiaCaja::query()
-                ->where('tipo', RendicionGastronomiaCaja::TIPO_CIERRE_X)
-                ->where('jornada_gastronomia_id', (int) $jornada->id)
-                ->pluck('id', 'mozo_gastronomia_id')
-            : collect();
+        $comprobantesPorMozo = $this->comprobantesCierreXPorMozo($jornada, $salaId);
 
         $out = [];
         foreach ($filas as $fila) {
             $mozoId = (int) $fila->mozo_gastronomia_id;
             $mozo = $mozos->get($mozoId);
-            $rendicionId = (int) ($rendiciones[$mozoId] ?? 0);
+            $comprobanteId = (int) ($comprobantesPorMozo[$mozoId] ?? 0);
 
             $out[] = [
                 'mozo_gastronomia_id' => $mozoId,
@@ -117,8 +107,9 @@ class GastronomiaCrownCierreXService
                 'cuentas' => (int) $fila->cuentas,
                 'total_x' => round((float) $fila->total_x, 2),
                 'total_facturado' => round((float) $fila->total_facturado, 2),
-                'ya_rendido' => $rendicionId > 0,
-                'rendicion_id' => $rendicionId,
+                'ya_rendido' => $comprobanteId > 0,
+                'comprobante_id' => $comprobanteId,
+                'rendicion_id' => $comprobanteId, // compat vista
             ];
         }
 
@@ -128,9 +119,9 @@ class GastronomiaCrownCierreXService
     }
 
     /**
-     * Crea la rendición de tesorería del mozo y la deja lista para que Caja la continúe.
+     * Crea la rendición de cajero G en tesorería Crown + informe X fiscal ERP.
      */
-    public function crearRendicion(JornadaGastronomia $jornada, int $mozoId, ?int $salaId = null): RendicionGastronomiaCaja
+    public function crearRendicion(JornadaGastronomia $jornada, int $mozoId, ?int $salaId = null): TesoreriaCrownComprobante
     {
         $empresaId = (int) $jornada->empresa_id;
         $salaId = $salaId !== null && $salaId > 0
@@ -140,16 +131,13 @@ class GastronomiaCrownCierreXService
         if ($mozoId <= 0) {
             throw new InvalidArgumentException('Debe indicar el mozo a rendir.');
         }
+        if ($salaId === null || $salaId <= 0) {
+            throw new InvalidArgumentException('La jornada de gastronomía no tiene sala.');
+        }
 
         $mozo = MozoGastronomia::query()->findOrFail($mozoId);
         if ((int) $mozo->empresa_id !== $empresaId) {
             throw new InvalidArgumentException('El mozo pertenece a otra empresa.');
-        }
-
-        if ($this->rendicionService->cierreXYaRendido((int) $jornada->id, $mozoId)) {
-            throw new InvalidArgumentException(
-                'El mozo '.$mozo->nombre.' ya tiene una rendición de cierre X en esta jornada.'
-            );
         }
 
         $totales = collect($this->totalesPorMozo($empresaId, $salaId, $jornada))
@@ -160,102 +148,188 @@ class GastronomiaCrownCierreXService
                 'El mozo '.$mozo->nombre.' no tiene cuentas cerradas en esta jornada.'
             );
         }
+        if (! empty($totales['ya_rendido'])) {
+            throw new InvalidArgumentException(
+                'El mozo '.$mozo->nombre.' ya tiene una rendición de cierre X en tesorería para esta jornada.'
+            );
+        }
 
         $totalX = round((float) $totales['total_x'], 2);
-        $referencias = $this->referenciasCaja($empresaId, $salaId);
+        $fechaYmd = $jornada->fecha_jornada?->format('Y-m-d') ?? '';
+        if ($fechaYmd === '') {
+            throw new InvalidArgumentException('La jornada de gastronomía no tiene fecha.');
+        }
 
-        $cabecera = [
-            'tipo' => RendicionGastronomiaCaja::TIPO_CIERRE_X,
-            'codigo' => $this->proponerCodigo($empresaId, (int) $jornada->id, $mozoId),
-            'empresa_id' => $empresaId,
-            'sala_id' => $salaId,
-            'mozo_gastronomia_id' => $mozoId,
-            'jornada_gastronomia_id' => (int) $jornada->id,
-            'puntoventa_cae_id' => $referencias['puntoventa_cae_id'],
-            'puntoventa_caea_id' => $referencias['puntoventa_caea_id'],
-            'caja_id' => $referencias['caja_id'],
-            'creousuario_id' => (int) Auth::id(),
-            'fecharendicion' => now()->format('Y-m-d H:i:s'),
-            'iniciodelfondo' => 0.0,
-            'totalfactura' => round((float) $totales['total_facturado'], 2),
-            'totalcobrado' => $totalX,
-            'total_x' => $totalX,
-            'totalinvitacion' => 0.0,
-            'totalnotacredito' => 0.0,
-            'totalredondeo' => 0.0,
-            'totalredondeoinvitacion' => 0.0,
-            'sobrantefaltante' => 0.0,
-            'observacion' => 'Cierre X — mozo '.$mozo->nombre
-                .' — jornada #'.$jornada->id
-                .' del '.($jornada->fecha_jornada?->format('d/m/Y') ?? ''),
-        ];
-
-        return $this->rendicionService->guardar($cabecera, []);
-    }
-
-    /**
-     * Punto de venta y caja con los que Caja continúa la rendición (columnas NOT NULL).
-     *
-     * @return array{puntoventa_cae_id:int, puntoventa_caea_id:int, caja_id:int}
-     */
-    private function referenciasCaja(int $empresaId, ?int $salaId): array
-    {
-        $cfg = ConfiguracionPuntoventaGastronomia::query()
-            ->where('empresa_id', $empresaId)
-            ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+        $jornadaTesoreria = TesoreriaCrownJornada::query()
+            ->where('sala_id', $salaId)
+            ->whereDate('fecha', $fechaYmd)
             ->orderBy('id')
             ->first();
-
-        if ($cfg === null && $salaId !== null) {
-            $cfg = ConfiguracionPuntoventaGastronomia::query()
-                ->where('empresa_id', $empresaId)
-                ->orderBy('id')
-                ->first();
+        if ($jornadaTesoreria === null) {
+            throw new InvalidArgumentException(
+                'No hay jornada de tesorería Crown para la sala en '.$fechaYmd.'. Abrala en Tesorería Crown.'
+            );
+        }
+        if (! $jornadaTesoreria->estaAbierta()) {
+            throw new InvalidArgumentException('La jornada de tesorería Crown de ese día está cerrada.');
         }
 
-        if ($cfg === null) {
+        $cajero = CajeroCrown::query()
+            ->where('mozo_gastronomia_id', $mozoId)
+            ->orderBy('id')
+            ->first();
+        if ($cajero === null) {
             throw new InvalidArgumentException(
-                'No hay configuración de punto de venta de gastronomía para la empresa/sala. '
-                .'Configúrela en Configuración → Configuración por módulo → Ventas.'
+                'El mozo '.$mozo->nombre.' no está vinculado a un cajero Crown. Enlácelo en cajeros Crown.'
             );
         }
 
-        $caeId = (int) ($cfg->puntoventa_cae_id ?? 0);
-        $caeaId = (int) ($cfg->puntoventa_caea_id ?? 0);
-        $cajaId = (int) ($cfg->caja_id ?? 0);
-
-        if ($caeId <= 0) {
-            throw new InvalidArgumentException('La configuración de punto de venta no tiene punto de venta CAE.');
-        }
-
-        if ($cajaId <= 0) {
-            $cajaId = (int) (config('cliente.CAJA_DEFAULT_ID') ?? 0);
-        }
-
-        if ($cajaId <= 0) {
+        $asignacion = TesoreriaCrownAsignacion::query()
+            ->where('jornada_id', $jornadaTesoreria->id)
+            ->where('cajero_crown_id', $cajero->id)
+            ->where('tipo_tarea', 'G')
+            ->orderBy('id')
+            ->first();
+        if ($asignacion === null) {
             throw new InvalidArgumentException(
-                'La configuración de punto de venta no tiene caja de recepción. '
-                .'Asigne la caja en la configuración del punto de venta.'
+                'No hay caja gastronomía (G) asignada a '.$mozo->nombre.' en la jornada de tesorería #'.$jornadaTesoreria->id.'.'
+            );
+        }
+        if ($asignacion->cierre !== null) {
+            throw new InvalidArgumentException('La caja de '.$mozo->nombre.' ya está cerrada en tesorería.');
+        }
+
+        $hayHabilitacion = TesoreriaCrownComprobante::query()
+            ->where('asignacion_id', $asignacion->id)
+            ->where('tipo', TesoreriaCrownComprobanteSupport::HABILITACION)
+            ->where('estado', TesoreriaCrownComprobanteSupport::CONFORME)
+            ->whereNull('revierte_id')
+            ->exists();
+        if (! $hayHabilitacion) {
+            throw new InvalidArgumentException(
+                'La caja de '.$mozo->nombre.' necesita una habilitación conforme antes de rendir.'
             );
         }
 
-        return [
-            'puntoventa_cae_id' => $caeId,
-            'puntoventa_caea_id' => $caeaId > 0 ? $caeaId : $caeId,
-            'caja_id' => $cajaId,
-        ];
-    }
+        $yaHayRendicion = TesoreriaCrownComprobante::query()
+            ->where('asignacion_id', $asignacion->id)
+            ->where('tipo', TesoreriaCrownComprobanteSupport::RENDICION)
+            ->whereNull('revierte_id')
+            ->exists();
+        if ($yaHayRendicion) {
+            throw new InvalidArgumentException(
+                'La caja de '.$mozo->nombre.' ya tiene una rendición en tesorería para esta jornada.'
+            );
+        }
 
-    private function proponerCodigo(int $empresaId, int $jornadaId, int $mozoId): string
-    {
-        return 'RGX-'.$empresaId.'-'.$jornadaId.'-M'.$mozoId;
+        return DB::transaction(function () use (
+            $asignacion,
+            $jornadaTesoreria,
+            $jornada,
+            $mozo,
+            $mozoId,
+            $totalX,
+            $fechaYmd,
+            $salaId,
+        ) {
+            $nroX = $this->siguienteNroX($fechaYmd);
+            $hora = now()->format('H:i:s');
+
+            $comprobante = TesoreriaCrownComprobante::query()->create([
+                'sala_id' => (int) $asignacion->sala_id,
+                'empresa_id' => (int) $jornadaTesoreria->empresa_id,
+                'jornada_id' => (int) $jornadaTesoreria->id,
+                'asignacion_id' => (int) $asignacion->id,
+                'tipo' => TesoreriaCrownComprobanteSupport::RENDICION,
+                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $asignacion->sala_id, TesoreriaCrownComprobanteSupport::RENDICION),
+                'estado' => TesoreriaCrownComprobanteSupport::BORRADOR,
+                'total_x' => $totalX,
+                'nro_z' => (string) $nroX,
+                'observacion' => 'Cierre X gastronomía — mozo '.$mozo->nombre
+                    .' — jornada gastro #'.$jornada->id
+                    .' del '.($jornada->fecha_jornada?->format('d/m/Y') ?? ''),
+                'creado_usuario_id' => (int) Auth::id(),
+            ]);
+
+            TesoreriaCrownComprobanteSupport::sellarCotizacionVigente($comprobante);
+
+            TesoreriaCrownCierreFiscal::query()->create([
+                'jornada_id' => (int) $jornadaTesoreria->id,
+                'comprobante_id' => (int) $comprobante->id,
+                'sucursal' => 0,
+                'fecha_jor' => $fechaYmd,
+                'hora' => $hora,
+                'nro_x' => $nroX,
+                'nro_z' => 0,
+                'tipo' => 'X',
+                'nombre_sucursal' => 'X mozo '.$mozo->nombre.' (gastro #'.$mozoId.')',
+                'tot_venta' => $totalX,
+                'tot_cred' => 0,
+                'tot_iva' => 0,
+                'tot_iva_cred' => 0,
+                'ult_fact_b' => 0,
+            ]);
+
+            return $comprobante->fresh();
+        });
     }
 
     /**
-     * Ventana temporal del cierre X: la jornada manda; si no hay jornada se usa el día.
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder<GastroCrownCuenta>  $q
+     * @return array<int, int> mozo_id => comprobante_id
      */
+    private function comprobantesCierreXPorMozo(?JornadaGastronomia $jornada, ?int $salaId): array
+    {
+        if ($jornada === null) {
+            return [];
+        }
+        $fechaYmd = $jornada->fecha_jornada?->format('Y-m-d');
+        if ($fechaYmd === null || $fechaYmd === '') {
+            return [];
+        }
+        $sala = $salaId !== null && $salaId > 0
+            ? $salaId
+            : ($jornada->sala_id !== null ? (int) $jornada->sala_id : 0);
+        if ($sala <= 0) {
+            return [];
+        }
+
+        $jornadaTesoreria = TesoreriaCrownJornada::query()
+            ->where('sala_id', $sala)
+            ->whereDate('fecha', $fechaYmd)
+            ->value('id');
+        if (! $jornadaTesoreria) {
+            return [];
+        }
+
+        $comps = TesoreriaCrownComprobante::query()
+            ->with(['asignacion.cajero:id,mozo_gastronomia_id'])
+            ->where('jornada_id', (int) $jornadaTesoreria)
+            ->where('tipo', TesoreriaCrownComprobanteSupport::RENDICION)
+            ->whereNull('revierte_id')
+            ->whereHas('asignacion', fn ($q) => $q->where('tipo_tarea', 'G'))
+            ->get();
+
+        $out = [];
+        foreach ($comps as $comp) {
+            $mozoId = (int) ($comp->asignacion->cajero->mozo_gastronomia_id ?? 0);
+            if ($mozoId > 0) {
+                $out[$mozoId] = (int) $comp->id;
+            }
+        }
+
+        return $out;
+    }
+
+    private function siguienteNroX(string $fechaYmd): int
+    {
+        $max = (int) TesoreriaCrownCierreFiscal::query()
+            ->whereDate('fecha_jor', $fechaYmd)
+            ->where('tipo', 'X')
+            ->max('nro_x');
+
+        return max(1, $max + 1);
+    }
+
     private function aplicarVentana($q, ?JornadaGastronomia $jornada, ?string $fecha): void
     {
         if ($jornada !== null) {

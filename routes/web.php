@@ -2522,6 +2522,10 @@ Route::get('ventas/gastronomia-crown/api/planos-estado', 'Ventas\GastronomiaCrow
 Route::get('ventas/gastronomia-crown/cierre-x', 'Ventas\GastronomiaCrown\GastronomiaCrownCierreXController@index')->name('gastronomia_crown_cierre_x');
 Route::post('ventas/gastronomia-crown/cierre-x/rendicion', 'Ventas\GastronomiaCrown\GastronomiaCrownCierreXController@crearRendicion')->name('gastronomia_crown_cierre_x_crear_rendicion');
 
+// Cierre fiscal Z (p-cierrefact) desde venta ERP (Crown)
+Route::get('ventas/gastronomia-crown/cierre-fiscal', 'Ventas\GastronomiaCrown\GastronomiaCrownCierreFiscalController@index')->name('gastronomia_crown_cierre_fiscal');
+Route::post('ventas/gastronomia-crown/cierre-fiscal', 'Ventas\GastronomiaCrown\GastronomiaCrownCierreFiscalController@procesar')->name('gastronomia_crown_cierre_fiscal_procesar');
+
 Route::get('ventas/gastronomia/api/config', 'Ventas\GastronomiaProcesoFacturacionController@apiConfig')->name('gastronomia_api_config');
 Route::get('ventas/gastronomia/api/turno-estado', 'Ventas\GastronomiaProcesoFacturacionController@apiTurnoEstado')->name('gastronomia_api_turno_estado');
 Route::post('ventas/gastronomia/api/cierre-parcial-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiCierreParcialTurno')->name('gastronomia_api_cierre_parcial_turno');
@@ -3214,6 +3218,11 @@ Route::get('caja/tesoreria-crown/valor', 'Caja\TesoreriaCrownValorController@ind
 Route::get('caja/tesoreria-crown/valor/crear', 'Caja\TesoreriaCrownValorController@crear')->name('crear_tesoreria_crown_valor');
 Route::post('caja/tesoreria-crown/valor', 'Caja\TesoreriaCrownValorController@guardar')->name('guardar_tesoreria_crown_valor');
 Route::get('caja/tesoreria-crown/valor/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownValorController@listar')->name('listar_tesoreria_crown_valor');
+Route::get('caja/tesoreria-crown/valor/conversion', 'Caja\TesoreriaCrownValorController@conversion')->name('conversion_tesoreria_crown_valor');
+Route::post('caja/tesoreria-crown/valor/conversion', 'Caja\TesoreriaCrownValorController@guardarConversion')->name('guardar_conversion_tesoreria_crown_valor');
+// Alias legacy del ABM Fichas retirado → conversión bajo Valores
+Route::redirect('caja/tesoreria-crown/ficha', 'caja/tesoreria-crown/valor/conversion');
+Route::redirect('caja/tesoreria-crown/ficha/conversion', 'caja/tesoreria-crown/valor/conversion');
 Route::get('caja/tesoreria-crown/valor/tipos', 'Caja\TesoreriaCrownValorController@indexTipos')->name('tesoreria_crown_tipo_valor');
 Route::get('caja/tesoreria-crown/valor/tipo/crear', 'Caja\TesoreriaCrownValorController@crearTipo')->name('crear_tesoreria_crown_tipo_valor');
 Route::post('caja/tesoreria-crown/valor/tipo', 'Caja\TesoreriaCrownValorController@guardarTipo')->name('guardar_tesoreria_crown_tipo_valor');
@@ -3250,6 +3259,12 @@ Route::get('caja/tesoreria-crown/resultado-online/editar', 'Caja\TesoreriaCrownR
 Route::get('caja/tesoreria-crown/resultado-online/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownResultadoOnlineController@listar')->name('listar_tesoreria_crown_resultado_online');
 Route::post('caja/tesoreria-crown/resultado-online', 'Caja\TesoreriaCrownResultadoOnlineController@guardar')->name('guardar_tesoreria_crown_resultado_online');
 Route::delete('caja/tesoreria-crown/resultado-online/{id}', 'Caja\TesoreriaCrownResultadoOnlineController@eliminar')->name('eliminar_tesoreria_crown_resultado_online');
+Route::get('caja/tesoreria-crown/bingo', 'Caja\TesoreriaCrownBingoController@index')->name('tesoreria_crown_bingo');
+Route::get('caja/tesoreria-crown/bingo/crear', 'Caja\TesoreriaCrownBingoController@crear')->name('crear_tesoreria_crown_bingo');
+Route::get('caja/tesoreria-crown/bingo/editar', 'Caja\TesoreriaCrownBingoController@editar')->name('editar_tesoreria_crown_bingo');
+Route::get('caja/tesoreria-crown/bingo/listar/{formato?}', 'Caja\TesoreriaCrownBingoController@listar')->name('listar_tesoreria_crown_bingo');
+Route::post('caja/tesoreria-crown/bingo', 'Caja\TesoreriaCrownBingoController@guardar')->name('guardar_tesoreria_crown_bingo');
+Route::delete('caja/tesoreria-crown/bingo/{id}', 'Caja\TesoreriaCrownBingoController@eliminar')->name('eliminar_tesoreria_crown_bingo');
 Route::post('caja/tesoreria-crown/resultado-online/workbench/vista', 'Caja\TesoreriaCrownResultadoOnlineController@guardarVistaListado')->name('guardar_vista_tesoreria_crown_resultado_online');
 Route::delete('caja/tesoreria-crown/resultado-online/workbench/vista/{id}', 'Caja\TesoreriaCrownResultadoOnlineController@eliminarVistaListado')->name('eliminar_vista_tesoreria_crown_resultado_online');
 Route::post('caja/tesoreria-crown/resultado-online/workbench/columnas', 'Caja\TesoreriaCrownResultadoOnlineController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_resultado_online');
@@ -3260,6 +3275,7 @@ Route::get('caja/tesoreria-crown/jornada', 'Caja\TesoreriaCrownJornadaController
 Route::get('caja/tesoreria-crown/jornada/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownJornadaController@listar')->name('listar_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada', 'Caja\TesoreriaCrownJornadaController@abrir')->name('abrir_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/{id}/cerrar', 'Caja\TesoreriaCrownJornadaController@cerrar')->name('cerrar_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/{id}/datos-anexo', 'Caja\TesoreriaCrownJornadaController@actualizarDatosAnexo')->name('datos_anexo_tesoreria_crown_jornada');
 Route::delete('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@eliminar')->name('eliminar_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/{id}/asignar', 'Caja\TesoreriaCrownJornadaController@asignar')->name('asignar_tesoreria_crown_jornada');
 Route::delete('caja/tesoreria-crown/jornada/asignacion/{id}', 'Caja\TesoreriaCrownJornadaController@quitar')->name('quitar_tesoreria_crown_asignacion');
@@ -3289,6 +3305,28 @@ Route::post('caja/tesoreria-crown/mesa/{id}/anular', 'Caja\TesoreriaCrownMesaCon
 Route::post('caja/tesoreria-crown/mesa/{id}/revertir', 'Caja\TesoreriaCrownMesaController@revertir')->name('revertir_tesoreria_crown_mesa');
 Route::delete('caja/tesoreria-crown/mesa/{id}', 'Caja\TesoreriaCrownMesaController@eliminar')->name('eliminar_tesoreria_crown_mesa');
 Route::get('caja/tesoreria-crown/boveda', 'Caja\TesoreriaCrownBovedaController@index')->name('tesoreria_crown_boveda');
+Route::get('caja/tesoreria-crown/kardex-valores', 'Caja\TesoreriaCrownKardexValoresController@index')->name('tesoreria_crown_kardex_valores');
+Route::get('caja/tesoreria-crown/kardex-valores/listar/{formato}', 'Caja\TesoreriaCrownKardexValoresController@exportar')->name('listar_tesoreria_crown_kardex_valores');
+Route::get('caja/tesoreria-crown/kardex-valores/subtipos', 'Caja\TesoreriaCrownKardexValoresController@subtipos')->name('subtipos_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/consulta-deposito', 'Caja\TesoreriaCrownKardexValoresController@consultaDeposito')->name('consulta_deposito_tesoreria_crown_kardex_valores');
+Route::get('caja/tesoreria-crown/kardex-valores/resolver-deposito', 'Caja\TesoreriaCrownKardexValoresController@resolverDeposito')->name('resolver_deposito_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/consulta-valor', 'Caja\TesoreriaCrownKardexValoresController@consultaValor')->name('consulta_valor_tesoreria_crown_kardex_valores');
+Route::get('caja/tesoreria-crown/kardex-valores/resolver-valor', 'Caja\TesoreriaCrownKardexValoresController@resolverValor')->name('resolver_valor_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/consulta-subtipo', 'Caja\TesoreriaCrownKardexValoresController@consultaSubtipo')->name('consulta_subtipo_tesoreria_crown_kardex_valores');
+Route::get('caja/tesoreria-crown/kardex-valores/resolver-subtipo', 'Caja\TesoreriaCrownKardexValoresController@resolverSubtipo')->name('resolver_subtipo_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/workbench/vista', 'Caja\TesoreriaCrownKardexValoresController@guardarVistaListado')->name('guardar_vista_tesoreria_crown_kardex_valores');
+Route::delete('caja/tesoreria-crown/kardex-valores/workbench/vista/{id}', 'Caja\TesoreriaCrownKardexValoresController@eliminarVistaListado')->name('eliminar_vista_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/workbench/columnas', 'Caja\TesoreriaCrownKardexValoresController@guardarColumnasListado')->name('guardar_columnas_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/workbench/etiquetas', 'Caja\TesoreriaCrownKardexValoresController@guardarEtiquetasListado')->name('guardar_etiquetas_tesoreria_crown_kardex_valores');
+Route::post('caja/tesoreria-crown/kardex-valores/workbench/preview', 'Caja\TesoreriaCrownKardexValoresController@previewWorkbench')->name('preview_tesoreria_crown_kardex_valores');
+Route::get('caja/tesoreria-crown/boveda/arqueo', 'Caja\TesoreriaCrownBovedaArqueoController@index')->name('tesoreria_crown_boveda_arqueo');
+Route::get('caja/tesoreria-crown/boveda/arqueo/crear', 'Caja\TesoreriaCrownBovedaArqueoController@crear')->name('nueva_tesoreria_crown_boveda_arqueo');
+Route::post('caja/tesoreria-crown/boveda/arqueo', 'Caja\TesoreriaCrownBovedaArqueoController@guardar')->name('crear_tesoreria_crown_boveda_arqueo');
+Route::get('caja/tesoreria-crown/boveda/arqueo/{id}/pdf', 'Caja\TesoreriaCrownBovedaArqueoController@imprimir')->name('pdf_tesoreria_crown_boveda_arqueo');
+Route::get('caja/tesoreria-crown/boveda/arqueo/{id}', 'Caja\TesoreriaCrownBovedaArqueoController@editar')->name('editar_tesoreria_crown_boveda_arqueo');
+Route::post('caja/tesoreria-crown/boveda/arqueo/{id}/pedir-firmas', 'Caja\TesoreriaCrownBovedaArqueoController@pedirFirmas')->name('pedir_firmas_tesoreria_crown_boveda_arqueo');
+Route::post('caja/tesoreria-crown/boveda/arqueo/{id}/firmar', 'Caja\TesoreriaCrownBovedaArqueoController@firmar')->name('firmar_tesoreria_crown_boveda_arqueo');
+Route::delete('caja/tesoreria-crown/boveda/arqueo/{id}', 'Caja\TesoreriaCrownBovedaArqueoController@eliminar')->name('eliminar_tesoreria_crown_boveda_arqueo');
 Route::get('caja/tesoreria-crown/boveda/crear', 'Caja\TesoreriaCrownBovedaController@formulario')->name('nueva_tesoreria_crown_boveda');
 Route::post('caja/tesoreria-crown/boveda/consulta-tipo', 'Caja\TesoreriaCrownBovedaController@consultaTipo')->name('consulta_tipo_tesoreria_crown_boveda');
 Route::get('caja/tesoreria-crown/boveda/resolver-tipo', 'Caja\TesoreriaCrownBovedaController@resolverTipoCodigo')->name('resolver_tipo_tesoreria_crown_boveda');
@@ -3323,6 +3361,9 @@ Route::post('caja/tesoreria-crown/slot/{id}', 'Caja\TesoreriaCrownSlotController
 Route::post('caja/tesoreria-crown/slot/{id}/confirmar', 'Caja\TesoreriaCrownSlotController@confirmar')->name('confirmar_tesoreria_crown_slot');
 Route::delete('caja/tesoreria-crown/slot/{id}', 'Caja\TesoreriaCrownSlotController@eliminar')->name('eliminar_tesoreria_crown_slot');
 Route::get('caja/tesoreria-crown/jornada/slots/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarSlots')->name('listar_slots_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/bingo/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarBingo')->name('listar_bingo_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/{id}/bingo', 'Caja\TesoreriaCrownJornadaController@guardarBingo')->name('guardar_bingo_tesoreria_crown_jornada');
+Route::post('caja/tesoreria-crown/jornada/{id}/bingo/eliminar', 'Caja\TesoreriaCrownJornadaController@eliminarBingo')->name('eliminar_bingo_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/poder', 'Caja\TesoreriaCrownPoderPublicoController@index')->name('tesoreria_crown_poder_publico');
 Route::get('caja/tesoreria-crown/jornada/poder-publico/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarPoderPublico')->name('listar_poder_publico_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/anexo', 'Caja\TesoreriaCrownAnexo1Controller@index')->name('tesoreria_crown_anexo1');
@@ -3330,6 +3371,7 @@ Route::get('caja/tesoreria-crown/jornada/anexo/listar/{formato?}', 'Caja\Tesorer
 Route::get('caja/tesoreria-crown/jornada/anexo2/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo2')->name('listar_anexo2_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/rescajero/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarRescajero')->name('listar_rescajero_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/anexo3/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo3')->name('listar_anexo3_tesoreria_crown_jornada');
+Route::get('caja/tesoreria-crown/jornada/{id}/anexo3/auditoria', 'Caja\TesoreriaCrownAnexoController@auditoriaAnexo3')->name('auditoria_anexo3_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/anexo7/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo7')->name('listar_anexo7_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/anexo8/listar/{formato?}', 'Caja\TesoreriaCrownAnexoController@listarAnexo8')->name('listar_anexo8_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@ver')->name('ver_tesoreria_crown_jornada');
@@ -3529,6 +3571,21 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/bingo/carton/{id}/editar', 'Caja\Bingo\BingoCartonController@editar')->name('editar_bingo_carton');
     Route::put('caja/bingo/carton/{id}', 'Caja\Bingo\BingoCartonController@actualizar')->name('actualizar_bingo_carton');
     Route::delete('caja/bingo/carton/{id}', 'Caja\Bingo\BingoCartonController@eliminar')->name('eliminar_bingo_carton');
+
+    // Flash Crown (directivos) — solo útil en EMPRESA=CROWN
+    Route::get('caja/flash-crown', 'Caja\Flash\FlashCrownController@index')->name('flash_crown');
+    Route::get('caja/lista-flash-crown/{formato?}', 'Caja\Flash\FlashCrownController@listar')->name('lista_flash_crown');
+    Route::get('caja/flash-crown/reporte', 'Caja\Flash\FlashCrownReporteController@index')->name('flash_reporte_crown');
+    Route::get('caja/flash-crown/reporte/exportar', 'Caja\Flash\FlashCrownReporteController@exportar')->name('exportar_flash_reporte_crown');
+    Route::post('caja/flash-crown/reporte/suscripciones', 'Caja\Flash\FlashCrownReporteController@guardarSuscripcion')->name('guardar_suscripcion_flash_reporte_crown');
+    Route::put('caja/flash-crown/reporte/suscripciones/{id}', 'Caja\Flash\FlashCrownReporteController@actualizarSuscripcion')->name('actualizar_suscripcion_flash_reporte_crown');
+    Route::delete('caja/flash-crown/reporte/suscripciones/{id}', 'Caja\Flash\FlashCrownReporteController@eliminarSuscripcion')->name('eliminar_suscripcion_flash_reporte_crown');
+    Route::post('caja/flash-crown/reporte/suscripciones/{id}/probar', 'Caja\Flash\FlashCrownReporteController@probarSuscripcion')->name('probar_suscripcion_flash_reporte_crown');
+    Route::get('caja/flash-crown/{id}/editar', 'Caja\Flash\FlashCrownController@editar')->name('editar_flash_crown');
+    Route::put('caja/flash-crown/{id}', 'Caja\Flash\FlashCrownController@actualizar')->name('actualizar_flash_crown');
+    Route::post('caja/flash-crown/{id}/recalcular', 'Caja\Flash\FlashCrownController@recalcular')->name('recalcular_flash_crown');
+    Route::post('caja/flash-crown/{id}/validar', 'Caja\Flash\FlashCrownController@validar')->name('validar_flash_crown');
+    Route::post('caja/flash-crown/{id}/quitar-validacion', 'Caja\Flash\FlashCrownController@quitarValidacion')->name('quitar_validacion_flash_crown');
 
     Route::get('caja/flash', 'Caja\Flash\FlashCajaController@index')->name('flash_caja');
     Route::get('caja/lista-flash-caja/{formato?}/{busqueda?}', 'Caja\Flash\FlashCajaController@listar')->name('lista_flash_caja');
@@ -4688,6 +4745,10 @@ Route::get('stock/manual-stock-gastronomia/descargar-word', 'Stock\ManualStockGa
 Route::get('caja/manual', 'Caja\ManualCajaController@index')->name('manual_caja');
 Route::get('caja/manual/descargar-pdf', 'Caja\ManualCajaController@descargarPdf')->name('manual_caja_pdf');
 Route::get('caja/manual/descargar-word', 'Caja\ManualCajaController@descargarWord')->name('manual_caja_word');
+
+Route::get('caja/tesoreria-crown/manual', 'Caja\ManualTesoreriaCrownController@index')->name('manual_tesoreria_crown');
+Route::get('caja/tesoreria-crown/manual/descargar-pdf', 'Caja\ManualTesoreriaCrownController@descargarPdf')->name('manual_tesoreria_crown_pdf');
+Route::get('caja/tesoreria-crown/manual/descargar-word', 'Caja\ManualTesoreriaCrownController@descargarWord')->name('manual_tesoreria_crown_word');
 
 Route::get('sueldos/manual', 'Sueldos\ManualSueldosController@index')->name('manual_sueldos');
 Route::get('sueldos/manual/descargar-pdf', 'Sueldos\ManualSueldosController@descargarPdf')->name('manual_sueldos_pdf');

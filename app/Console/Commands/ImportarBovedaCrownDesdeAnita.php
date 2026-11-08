@@ -18,8 +18,8 @@ class ImportarBovedaCrownDesdeAnita extends Command
     {
         $fecha = trim((string) $this->option('fecha'));
         $corte = trim((string) $this->option('corte'));
-        if ($fecha === '' || $corte === '') {
-            $this->error('Hacen falta --fecha y --corte.');
+        if ($fecha === '') {
+            $this->error('Hace falta --fecha. --corte vacío importa todo el día.');
 
             return self::FAILURE;
         }
@@ -32,7 +32,11 @@ class ImportarBovedaCrownDesdeAnita extends Command
             return self::FAILURE;
         }
 
-        $this->info('Corte en la operación '.$plan['corte'].'. No entra ni lo anterior.');
+        if ($plan['corte'] !== null) {
+            $this->info('Corte en la operación '.$plan['corte'].'. No entra ni lo anterior.');
+        } else {
+            $this->info('Sin corte: se importa toda la bóveda del día.');
+        }
         $filas = [];
         foreach ($plan['crear'] as $fila) {
             $partes = [];

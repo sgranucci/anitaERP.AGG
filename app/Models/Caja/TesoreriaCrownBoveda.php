@@ -29,6 +29,8 @@ class TesoreriaCrownBoveda extends Model implements Auditable
         'jornada_id',
         'deposito_id',
         'tipo_id',
+        'subtipo_id',
+        'subtipo_texto',
         'numero',
         'estado',
         'comentario',
@@ -37,6 +39,7 @@ class TesoreriaCrownBoveda extends Model implements Auditable
         'legajo',
         'cliente_id',
         'comprobante_id',
+        'par_id',
         'revierte_id',
         'usuario_id',
         'confirmado_at',
@@ -70,6 +73,16 @@ class TesoreriaCrownBoveda extends Model implements Auditable
     public function tipo(): BelongsTo
     {
         return $this->belongsTo(TesoreriaCrownBovedaTipo::class, 'tipo_id');
+    }
+
+    public function subtipo(): BelongsTo
+    {
+        return $this->belongsTo(TesoreriaCrownBovedaSubtipo::class, 'subtipo_id');
+    }
+
+    public function par(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'par_id');
     }
 
     public function comprobante(): BelongsTo

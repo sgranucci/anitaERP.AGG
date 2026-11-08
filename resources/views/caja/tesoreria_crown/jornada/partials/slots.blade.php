@@ -1,19 +1,23 @@
 @php
     $resumenSlots = $resumenSlots ?? ['drops' => 0, 'drop_total' => 0, 'recuentos' => 0, 'recuento_total' => 0];
+    $slotsIndexUrl = $slotsIndexUrl ?? route('ver_tesoreria_crown_jornada', $jornada->id);
+    $slotsIndexQuery = $slotsIndexQuery ?? ['panel' => 'slots'];
     $textoImporte = function (float $monto): string {
         return number_format($monto, 2, ',', '.');
     };
-    $urlSlot = function (?int $id = null) use ($jornada): string {
-        $query = ['panel' => 'slots'];
+    $urlSlot = function (?int $id = null) use ($slotsIndexUrl, $slotsIndexQuery): string {
+        $query = $slotsIndexQuery;
         $texto = trim((string) request('q', ''));
         if ($texto !== '') {
             $query['q'] = $texto;
         }
         if ($id !== null) {
             $query['slot'] = $id;
+        } else {
+            unset($query['slot']);
         }
 
-        return route('ver_tesoreria_crown_jornada', $jornada->id).'?'.http_build_query($query);
+        return $slotsIndexUrl.'?'.http_build_query($query);
     };
     $puedeCrearSlot = $jornada->estaAbierta() && can('crear-tesoreria-crown-slot', false);
     $puedeEliminarBorrador = $jornada->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false);
@@ -37,8 +41,12 @@
     @endif
 </div>
 
-<form method="get" action="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" class="form-inline mb-3">
-    <input type="hidden" name="panel" value="slots">
+<form method="get" action="{{ $slotsIndexUrl }}" class="form-inline mb-3">
+    @foreach ($slotsIndexQuery as $clave => $valor)
+        @if ($clave !== 'q' && $clave !== 'slot' && $valor !== null && $valor !== '')
+            <input type="hidden" name="{{ $clave }}" value="{{ $valor }}">
+        @endif
+    @endforeach
     <label for="q-slot" class="mr-2">Buscar</label>
     <input type="text" name="q" id="q-slot" class="form-control form-control-sm mr-2" value="{{ request('q') }}" placeholder="Máquina, nombre o número">
     <button type="submit" class="btn btn-outline-info btn-sm">Buscar</button>

@@ -67,8 +67,8 @@ class TesoreriaCrownAnitaSyncService
         );
 
         $mesasBanca = $this->planMesasBanca($this->consultar(
-            'mesaj_mesajuego,mesaj_tipoj_banca',
-            'SELECT mesaj_mesajuego, mesaj_tipoj_banca FROM mesajuego'
+            'mesaj_mesajuego,mesaj_tipoj_banca,mesaj_desc_tipoj',
+            'SELECT mesaj_mesajuego, mesaj_tipoj_banca, mesaj_desc_tipoj FROM mesajuego'
         ), $salaId);
 
         $boveda = $this->planBoveda($salaId, $contexto['empresa_id'], $tiposDeposito['BOVEDA'] ?? null);
@@ -624,6 +624,7 @@ class TesoreriaCrownAnitaSyncService
         foreach ($filas as $fila) {
             $numero = (int) ($fila->mesaj_mesajuego ?? 0);
             $banca = (int) ($fila->mesaj_tipoj_banca ?? 0);
+            $desc = trim((string) ($fila->mesaj_desc_tipoj ?? ''));
             if ($numero <= 0 || $banca <= 0) {
                 $plan['omitir']++;
 
@@ -639,7 +640,11 @@ class TesoreriaCrownAnitaSyncService
 
                 continue;
             }
-            $datos = ['deposito_id' => $depositoId, 'banca_codigo' => $banca];
+            $datos = [
+                'deposito_id' => $depositoId,
+                'banca_codigo' => $banca,
+                'desc_tipojuego' => $desc !== '' ? mb_substr($desc, 0, 40) : null,
+            ];
             $existente = TesoreriaCrownMesaJuego::query()->where('deposito_id', $depositoId)->first();
             if (! $existente) {
                 $plan['crear']++;
@@ -647,9 +652,12 @@ class TesoreriaCrownAnitaSyncService
 
                 continue;
             }
-            if ((int) $existente->banca_codigo !== $banca) {
+            $cambia = (int) $existente->banca_codigo !== $banca
+                || (string) ($existente->desc_tipojuego ?? '') !== (string) ($datos['desc_tipojuego'] ?? '');
+            if ($cambia) {
+                unset($datos['deposito_id']);
                 $plan['actualizar']++;
-                $plan['filas'][] = ['accion' => 'actualizar', 'id' => $existente->id, 'datos' => ['banca_codigo' => $banca]];
+                $plan['filas'][] = ['accion' => 'actualizar', 'id' => $existente->id, 'datos' => $datos];
 
                 continue;
             }

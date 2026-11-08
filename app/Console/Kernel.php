@@ -744,7 +744,17 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(20)
             ->appendOutputTo(storage_path('logs/flash-reporte-agg-distribucion.log'))
-            ->when(fn () => (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
+            ->when(fn () => EntornoEmpresaSupport::esAgg()
+                && (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
+
+        // Flash Report Crown: mails solo con días validados (suscripciones).
+        $schedule->command('flash-crown:distribuir-reportes')
+            ->everyFifteenMinutes()
+            ->runInBackground()
+            ->withoutOverlapping(20)
+            ->appendOutputTo(storage_path('logs/flash-reporte-crown-distribucion.log'))
+            ->when(fn () => EntornoEmpresaSupport::esCrown()
+                && (bool) config('caja.flash_reporte_crown.distribucion_habilitada', true));
 
         // El Bierzo: Anita → ERP pedidos del día (todos los repartos).
         $schedule->command('ventas:importar-pedido-anita --ejecutar')
@@ -779,13 +789,23 @@ class Kernel extends ConsoleKernel
                 && (bool) config('facturacion.ANITA_TRAS_RESPUESTA_PEDIDO', true)
                 && (bool) config('facturacion.ANITA_PEDIDO_REGRABAR_HABILITADO', true));
 
-        // Flash 14:30 de la jornada de ayer (cerrada). Omite empresa si un usuario ya la cargó.
+        // Flash AGG 14:30 de la jornada de ayer (cerrada). Omite empresa si un usuario ya la cargó.
         $schedule->command('flash:calcular-diario')
             ->dailyAt((string) config('caja.flash_calculo_diario.hora', '14:30'))
             ->runInBackground()
             ->withoutOverlapping(45)
             ->appendOutputTo(storage_path('logs/flash-calculo-diario-schedule.log'))
-            ->when(fn () => (bool) config('caja.flash_calculo_diario.habilitado', false));
+            ->when(fn () => EntornoEmpresaSupport::esAgg()
+                && (bool) config('caja.flash_calculo_diario.habilitado', false));
+
+        // Flash Crown: snapshot online de ayer (no pisa días validados).
+        $schedule->command('flash-crown:calcular-diario')
+            ->dailyAt((string) config('caja.flash_crown_calculo_diario.hora', '14:30'))
+            ->runInBackground()
+            ->withoutOverlapping(45)
+            ->appendOutputTo(storage_path('logs/flash-crown-calculo-diario-schedule.log'))
+            ->when(fn () => EntornoEmpresaSupport::esCrown()
+                && (bool) config('caja.flash_crown_calculo_diario.habilitado', true));
 
         $schedule->command('ventas:reenviar-impresion-pendiente --ejecutar')
             ->dailyAt((string) config('impresion_comprobante.cron_hora', '06:20'))

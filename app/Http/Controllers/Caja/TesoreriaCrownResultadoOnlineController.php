@@ -7,10 +7,12 @@ use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
+use App\Support\Caja\TesoreriaCrownPoderPublicoGenerador;
 use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas;
 use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoFiltros;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Caja\TesoreriaCrownWorkbenchSupport;
+use Throwable;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Listado\ListadoVistaSupport;
@@ -41,8 +43,7 @@ class TesoreriaCrownResultadoOnlineController extends Controller
             null,
             $armado['etiquetasColumnas'] ?? [],
             [
-                ['key' => 'resultado', 'column' => 'tesoreria_crown_resultado_online.resultado', 'label' => 'Resultado'],
-                ['key' => 'slot_resultado', 'column' => 'tesoreria_crown_resultado_online.slot_resultado', 'label' => 'Slots'],
+                ['key' => 'slot_resultado', 'column' => 'tesoreria_crown_resultado_online.slot_resultado', 'label' => 'Res. slots'],
             ]
         );
         $filas = (clone $consulta)->paginate(15)->appends($armado['filtrosQuery']);
@@ -107,9 +108,9 @@ class TesoreriaCrownResultadoOnlineController extends Controller
                 foreach ($claves as $clave) {
                     $celda[] = $clave === 'fecha'
                         ? $fila->fecha?->format('d/m/Y')
-                        : (in_array($clave, ['attendance', 'cantidad_slots'], true)
+                        : ($clave === 'cantidad_slots'
                             ? (int) $fila->{$clave}
-                            : (float) $fila->{$clave});
+                            : (float) ($fila->{$clave} ?? 0));
                 }
 
                 return $celda;
@@ -173,9 +174,19 @@ class TesoreriaCrownResultadoOnlineController extends Controller
             $fila = TesoreriaCrownResultadoOnline::query()->create($datos);
         }
 
+        $avisoPp = '';
+        try {
+            TesoreriaCrownPoderPublicoGenerador::generar(
+                (int) $fila->sala_id,
+                $fila->fecha->format('Y-m-d')
+            );
+        } catch (Throwable $e) {
+            $avisoPp = ' El poder público del día no se regeneró: '.$e->getMessage();
+        }
+
         return redirect()
             ->route('tesoreria_crown_resultado_online', ['sala_id' => $sala->id])
-            ->with('mensaje', 'Resultado online del '.$fila->fecha->format('d/m/Y').' guardado.');
+            ->with('mensaje', 'Resultado online del '.$fila->fecha->format('d/m/Y').' guardado.'.$avisoPp);
     }
 
     public function eliminar(int $id)
@@ -314,14 +325,14 @@ class TesoreriaCrownResultadoOnlineController extends Controller
         $filas = (clone $query)
             ->reorder()
             ->orderBy('tesoreria_crown_resultado_online.fecha')
-            ->get(['tesoreria_crown_resultado_online.fecha', 'tesoreria_crown_resultado_online.resultado']);
+            ->get(['tesoreria_crown_resultado_online.fecha', 'tesoreria_crown_resultado_online.slot_resultado']);
         $grupos = [];
         foreach ($filas as $fila) {
             $periodo = $fila->fecha?->format('m/Y') ?? '';
             if (! isset($grupos[$periodo])) {
                 $grupos[$periodo] = ['monto' => 0.0, 'cantidad' => 0];
             }
-            $grupos[$periodo]['monto'] += (float) $fila->resultado;
+            $grupos[$periodo]['monto'] += (float) $fila->slot_resultado;
             $grupos[$periodo]['cantidad']++;
         }
 
@@ -382,7 +393,6 @@ class TesoreriaCrownResultadoOnlineController extends Controller
     private function datos(Request $request, Sala $sala, int $id): array
     {
         $request->merge([
-            'attendance' => (int) $request->input('attendance', 0),
             'cantidad_slots' => (int) $request->input('cantidad_slots', 0),
         ]);
         $request->validate([
@@ -393,16 +403,15 @@ class TesoreriaCrownResultadoOnlineController extends Controller
                     ->where(fn ($q) => $q->where('sala_id', $sala->id))
                     ->ignore($id),
             ],
-            'attendance' => ['nullable', 'integer', 'min:0'],
             'cantidad_slots' => ['nullable', 'integer', 'min:0'],
         ]);
-        $apostado = $this->importe($request->input('apostado'));
-        $pagado = $this->importe($request->input('pagado'));
         $coinIn = $this->importe($request->input('coin_in'));
         $coinOut = $this->importe($request->input('coin_out'));
         $pagoManual = $this->importe($request->input('pago_manual'));
-        $resultado = round($apostado - $pagado, 2);
         $slot = round($coinIn - $coinOut - $pagoManual, 2);
+        $apostado = $this->importe($request->input('apostado'));
+        $pagado = $this->importe($request->input('pagado'));
+        $resultadoCasino = round($apostado - $pagado, 2);
 
         return [
             'empresa_id' => (int) $sala->empresa_id,
@@ -412,14 +421,19 @@ class TesoreriaCrownResultadoOnlineController extends Controller
             'apostado' => $apostado,
             'pagado' => $pagado,
             'drop' => $this->importe($request->input('drop')),
-            'resultado' => $resultado,
-            'porcentaje' => abs($apostado) < 0.0001 ? 0 : round($resultado / $apostado * 100, 4),
+            'resultado' => $resultadoCasino,
+            'porcentaje' => $apostado > 0.00001
+                ? round(($resultadoCasino / $apostado) * 100, 2)
+                : 0.0,
             'poder_publico' => $this->importe($request->input('poder_publico')),
             'coin_in' => $coinIn,
             'coin_out' => $coinOut,
             'pago_manual' => $pagoManual,
             'cantidad_slots' => (int) $request->input('cantidad_slots', 0),
             'slot_resultado' => $slot,
+            'subtotal_slot' => trim((string) $request->input('subtotal_slot', '')) === ''
+                ? null
+                : $this->importe($request->input('subtotal_slot')),
             'usuario_id' => auth()->id() ? (int) auth()->id() : null,
         ];
     }

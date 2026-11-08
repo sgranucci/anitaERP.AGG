@@ -8,7 +8,11 @@ use App\Models\Caja\TesoreriaCrownJornada;
  * Anexo VII / l-anexo7.c: fallos, anticipos y excedentes de cajeros.
  *
  * Fallo = diferencia negativa del cierre; excedente = positiva.
- * Anticipos de sueldos (ctactes Anita) no están en el ERP: quedan en cero.
+ * Concepto (como l-anexo7.c): "Fallo", "Excedente", "Excedente/Fallo"
+ * o "Anticipo de sueldo" — no el tipo de tarea/caja.
+ *
+ * Anticipos de sueldo: fuera de alcance. No hay maestro/proceso en Tesorería
+ * Crown ni lectura viva de Anita; la columna queda siempre en 0 a propósito.
  */
 final class TesoreriaCrownAnexo7Calculo
 {
@@ -45,7 +49,7 @@ final class TesoreriaCrownAnexo7Calculo
                 'caja' => $fila['caja'],
                 'cajero' => $fila['cajero'],
                 'legajo' => $fila['legajo'],
-                'concepto' => TesoreriaCrownAsignacionCatalogo::TAREAS[$fila['tarea']] ?? $fila['tarea'],
+                'concepto' => self::concepto($fallos, $excedentes, $anticipos),
                 'fallos' => $fallos,
                 'anticipos' => $anticipos,
                 'excedentes' => $excedentes,
@@ -55,14 +59,38 @@ final class TesoreriaCrownAnexo7Calculo
             $totales['excedentes'] = round($totales['excedentes'] + $excedentes, 2);
         }
 
-        $avisos = $filas === []
-            ? ['No hay fallos ni excedentes en esta jornada.']
-            : ['Los anticipos de sueldos de Anita (ctactes) no están cargados en el ERP: la columna queda en cero.'];
+        $avisos = [];
+        if ($filas === []) {
+            $avisos[] = 'No hay fallos ni excedentes en esta jornada.';
+        }
 
         return [
             'filas' => $filas,
             'totales' => $totales,
             'avisos' => $avisos,
         ];
+    }
+
+    /**
+     * Etiqueta de concepto de l-anexo7.c (FORM1 / Anticipo de sueldo).
+     */
+    private static function concepto(float $fallos, float $excedentes, float $anticipos): string
+    {
+        $hayFallo = $fallos > 0.001;
+        $hayExcedente = $excedentes > 0.001;
+        if ($hayFallo && $hayExcedente) {
+            return 'Excedente/Fallo';
+        }
+        if ($hayExcedente) {
+            return 'Excedente';
+        }
+        if ($hayFallo) {
+            return 'Fallo';
+        }
+        if ($anticipos > 0.001 || $anticipos < -0.001) {
+            return 'Anticipo de sueldo';
+        }
+
+        return '';
     }
 }

@@ -8,11 +8,29 @@
         'anexo7' => 'Anexo VII',
         'anexo8' => 'Anexo VIII',
     ];
+    $anexosBaseUrl = $anexosBaseUrl ?? route('ver_tesoreria_crown_jornada', $jornada->id);
+    $anexosBaseQuery = $anexosBaseQuery ?? [];
+    $urlPanelAnexo = function (string $clave) use ($anexosBaseUrl, $anexosBaseQuery): string {
+        return $anexosBaseUrl.'?'.http_build_query(array_merge($anexosBaseQuery, ['panel' => $clave]));
+    };
 @endphp
-<div class="btn-group btn-group-sm mb-2 flex-wrap" role="group" aria-label="Anexos del día">
+<div class="btn-group btn-group-sm mb-2 flex-wrap tc-anexos-tabs" role="group" aria-label="Anexos del día">
     @foreach ($tabs as $clave => $etiqueta)
-        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel={{ $clave }}"
+        <a href="{{ $urlPanelAnexo($clave) }}"
            class="btn {{ $activo === $clave ? 'btn-info' : 'btn-outline-info' }}">
+            @if ($clave === 'anexo')
+                <i class="fa fa-list-alt" aria-hidden="true"></i>
+            @elseif ($clave === 'anexo2')
+                <i class="fa fa-th" aria-hidden="true"></i>
+            @elseif ($clave === 'rescajero')
+                <i class="fa fa-user" aria-hidden="true"></i>
+            @elseif ($clave === 'anexo3')
+                <i class="fa fa-users" aria-hidden="true"></i>
+            @elseif ($clave === 'anexo7')
+                <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+            @elseif ($clave === 'anexo8')
+                <i class="fa fa-university" aria-hidden="true"></i>
+            @endif
             {{ $etiqueta }}
         </a>
     @endforeach

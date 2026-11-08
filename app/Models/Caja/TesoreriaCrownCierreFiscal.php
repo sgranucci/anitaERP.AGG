@@ -13,6 +13,7 @@ class TesoreriaCrownCierreFiscal extends Model implements Auditable
     protected $table = 'tesoreria_crown_cierre_fiscal';
 
     protected $fillable = [
+        'jornada_id',
         'comprobante_id',
         'sucursal',
         'fecha_jor',
@@ -39,6 +40,11 @@ class TesoreriaCrownCierreFiscal extends Model implements Auditable
         'tot_iva_cred' => 'decimal:2',
         'ult_fact_b' => 'integer',
     ];
+
+    public function jornada(): BelongsTo
+    {
+        return $this->belongsTo(TesoreriaCrownJornada::class, 'jornada_id');
+    }
 
     public function comprobante(): BelongsTo
     {

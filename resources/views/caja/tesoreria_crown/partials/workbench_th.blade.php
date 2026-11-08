@@ -21,7 +21,7 @@
         );
     }
 @endphp
-<th class="{{ $claseCol }}" @if ($esOrdenable) title="{{ $titulo }} — clic para ordenar" @endif>
+<th class="{{ trim($claseCol.' '.($thClass ?? '')) }}" @if ($esOrdenable) title="{{ $titulo }} — clic para ordenar" @endif>
     @if ($esOrdenable)
         <a href="{{ route($rutaListado, $qsSort) }}" class="lw-sort-link">
             {{ $titulo }}

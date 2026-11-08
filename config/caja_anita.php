@@ -19,5 +19,11 @@ return [
     /** CROWN: código sala (ej. CIP). Vacío = sin sala_id (AGG). */
     'sala_codigo' => env('CAJA_ANITA_SYNC_SALA_CODIGO', ''),
 
+    /**
+     * CROWN: sucursal Anita (ventas) de resultado online / resulol.
+     * CIP Cipolletti = 15.
+     */
+    'sucursal_resultado_online' => (int) env('CAJA_ANITA_SUCURSAL_RESULTADO_ONLINE', 15),
+
     'campos_listado' => 'caja_desc',
 ];

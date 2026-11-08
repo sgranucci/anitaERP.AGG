@@ -204,6 +204,10 @@ class ComprobanteProveedorAsientoService
 
         $this->eliminarCtamovAnitaDeComprobante($comprobante, null);
 
+        // armarPayloadAnitaDesdeModelo no trae la clave fiscal: sin esto el resync
+        // (bridge / auditoría) graba ctamov con tipo/letra/nro en blanco.
+        $payloadAnita = $this->enriquecerPayloadCtamovDesdeComprobante($comprobante, $payloadAnita);
+
         // ERP guarda la descripción completa; ctamov Informix solo admite 30 (a-compprov.c).
         if (isset($payloadAnita['observaciones']) && is_array($payloadAnita['observaciones'])) {
             $payloadAnita['observaciones'] = array_map(
@@ -213,6 +217,42 @@ class ComprobanteProveedorAsientoService
         }
 
         $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
+    }
+
+    /**
+     * Completa tipo/letra/sucursal/nro/sistema_ctav desde la factura cuando el payload
+     * salió solo del asiento ERP (resync bridge/auditoría).
+     *
+     * @param  array<string, mixed>  $payloadAnita
+     * @return array<string, mixed>
+     */
+    public function enriquecerPayloadCtamovDesdeComprobante(
+        Comprobante_Proveedor $comprobante,
+        array $payloadAnita,
+    ): array {
+        $comprobante->loadMissing('tipotransaccion_compras');
+
+        $tipoAbrev = substr((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? ''), 0, 3);
+        if (trim((string) ($payloadAnita['tipo'] ?? '')) === '' && $tipoAbrev !== '') {
+            $payloadAnita['tipo'] = $tipoAbrev;
+        }
+        if (trim((string) ($payloadAnita['letra'] ?? '')) === '') {
+            $payloadAnita['letra'] = (string) ($comprobante->letra ?? '');
+        }
+        if (! isset($payloadAnita['sucursal']) || (int) $payloadAnita['sucursal'] <= 0) {
+            $payloadAnita['sucursal'] = (int) ($comprobante->sucursal ?? 0);
+        }
+        if (! isset($payloadAnita['nro']) || (int) $payloadAnita['nro'] <= 0) {
+            $payloadAnita['nro'] = (int) ($comprobante->numerocomprobante ?? 0);
+        }
+        if (trim((string) ($payloadAnita['sistema_ctav'] ?? '')) === '') {
+            $payloadAnita['sistema_ctav'] = 'C';
+        }
+        if (! isset($payloadAnita['comprobante_proveedor_id']) || (int) $payloadAnita['comprobante_proveedor_id'] <= 0) {
+            $payloadAnita['comprobante_proveedor_id'] = (int) $comprobante->id;
+        }
+
+        return $payloadAnita;
     }
 
     /**

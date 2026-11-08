@@ -170,12 +170,11 @@ class TesoreriaCrownResultadoOnlineListadoFiltros
                     $q->orWhere('tesoreria_crown_resultado_online.fecha', $fecha);
                 }
                 if ($numero !== null && preg_match('/\d/', $valor)) {
-                    foreach (['apostado', 'pagado', 'drop', 'resultado', 'poder_publico', 'slot_resultado'] as $columna) {
+                    foreach (['coin_in', 'coin_out', 'pago_manual', 'slot_resultado', 'subtotal_slot'] as $columna) {
                         $q->orWhere('tesoreria_crown_resultado_online.'.$columna, $numero);
                     }
                     if (ctype_digit(str_replace(['.', ','], '', $valor))) {
                         $entero = (int) str_replace(['.', ','], '', $valor);
-                        $q->orWhere('tesoreria_crown_resultado_online.attendance', $entero);
                         $q->orWhere('tesoreria_crown_resultado_online.cantidad_slots', $entero);
                     }
                 }

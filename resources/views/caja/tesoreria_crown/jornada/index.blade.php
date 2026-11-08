@@ -34,6 +34,11 @@
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Jornadas</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center" style="gap:.4rem;">
+                    @if (can('listar-tesoreria-crown-bingo', false))
+                        <a href="{{ route('tesoreria_crown_bingo', ['sala_id' => $sala->id ?? '']) }}" class="btn btn-light btn-sm">
+                            <i class="fa fa-th"></i> Bingo
+                        </a>
+                    @endif
                     @if (can('listar-tesoreria-crown-resultado-online', false))
                         <a href="{{ route('tesoreria_crown_resultado_online', ['sala_id' => $sala->id ?? '']) }}" class="btn btn-light btn-sm">
                             <i class="fa fa-line-chart"></i> Resultado online

@@ -33,7 +33,7 @@
                     data: {
                         labels: datos.labels,
                         datasets: [{
-                            label: 'Resultado',
+                            label: 'Res. slots',
                             data: datos.montos,
                             backgroundColor: '#85C1E9',
                             borderColor: '#2471A3',
@@ -126,7 +126,7 @@
                                 data-toggle="collapse" data-target="#resultado-online-grafico-body"
                                 aria-expanded="false" aria-controls="resultado-online-grafico-body"
                                 title="Mostrar resultado por mes">
-                            <i class="fa fa-bar-chart"></i> Resultado por mes
+                            <i class="fa fa-bar-chart"></i> Res. slots por mes
                         </button>
                         <span class="text-muted small">Universo del filtro, no solo la página.</span>
                     </div>
@@ -148,7 +148,11 @@
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                                @include('caja.tesoreria_crown.partials.workbench_th', ['key' => $keyColumna, 'rutaListado' => 'tesoreria_crown_resultado_online'])
+                                @include('caja.tesoreria_crown.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'rutaListado' => 'tesoreria_crown_resultado_online',
+                                    'thClass' => \App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas::esNumero($keyColumna) ? 'text-right' : '',
+                                ])
                             @endforeach
                             <th class="text-left" style="width:90px;" data-orderable="false">Acciones</th>
                         </tr>

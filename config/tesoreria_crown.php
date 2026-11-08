@@ -1,16 +1,32 @@
 <?php
 
 /**
- * Tesorería Crown. La consulta PXSol de la rendición de hotel no tiene host
- * fijo en el código: el comando lo pone el entorno.
+ * Tesorería Crown. PXSol de la rendición hotel: API nativa (preferida) o comando.
  */
 return [
     /**
-     * Ejecutable que imprime una línea facturado=credito=iva_facturas=iva_nc.
-     * Recibe el código externo del cajero, el desde y el hasta (Y-m-d H:i:s).
-     * Vacío: el botón de la rendición avisa que PXSol no está configurado.
+     * Token Bearer de gateway-prod.pxsol.com (mismo que trae_comprob.php).
+     * Si está cargado, el ERP llama a la API directo; no hace falta SSH ni comando.
+     */
+    'pxsol_token' => env('TESORERIA_CROWN_PXSOL_TOKEN', ''),
+
+    'pxsol_url' => env(
+        'TESORERIA_CROWN_PXSOL_URL',
+        'https://gateway-prod.pxsol.com/v2/voucher/list/v2'
+    ),
+
+    /**
+     * Fallback legacy: ejecutable que imprime facturado=credito=iva_facturas=iva_nc.
+     * Solo se usa si no hay token de API.
      */
     'pxsol_comando' => env('TESORERIA_CROWN_PXSOL_COMANDO', ''),
 
     'pxsol_timeout' => (int) env('TESORERIA_CROWN_PXSOL_TIMEOUT', 20),
+
+    /** Destino SSH del bridge legacy (usuario@host). */
+    'pxsol_ssh' => env('TESORERIA_CROWN_PXSOL_SSH', 'sergio@ac-server1-interface'),
+
+    'pxsol_remote_dir' => env('TESORERIA_CROWN_PXSOL_REMOTE_DIR', 'pxsol'),
+
+    'pxsol_remote_php' => env('TESORERIA_CROWN_PXSOL_REMOTE_PHP', 'trae_comprob.php'),
 ];

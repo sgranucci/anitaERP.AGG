@@ -10,6 +10,11 @@
 
 @section('contenido')
 @include('includes.mensaje')
+@php
+    $queryMesa = array_filter([
+        'mesa_codigo' => $mesa->codigo ?? null,
+    ], fn ($v) => $v !== null && $v !== '');
+@endphp
 <div class="row">
     <div class="col-lg-12">
         <div class="card card-info">
@@ -18,6 +23,9 @@
                     Mesas
                     @if ($jornada)
                         · {{ $jornada->fecha->format('d/m/Y') }}
+                    @endif
+                    @if ($mesa)
+                        · {{ $mesa->codigo }}
                     @endif
                 </h3>
                 <div class="card-tools">
@@ -28,30 +36,57 @@
                     @endif
                     @if ($jornada)
                         <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=mesas{{ $mesa ? '&mesa='.urlencode($mesa->codigo) : '' }}#{{ $mesa ? 'detalle' : 'piso' }}" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-reply-all"></i> Volver a la jornada
+                            <i class="fa fa-reply-all"></i> Escritorio
                         </a>
                     @endif
                 </div>
             </div>
             @include('caja.tesoreria_crown.partials.sala_chips', ['ruta' => 'tesoreria_crown_mesa'])
+            @include('caja.tesoreria_crown.partials.jornada_selector', [
+                'ruta' => 'tesoreria_crown_mesa',
+                'queryExtra' => $queryMesa,
+            ])
             <div class="card-body">
                 <p class="text-muted">
                     El stock usa la banca que regía en la fecha de la jornada. Una banca cargada hoy no cambia el drop ni las fichas de un día anterior.
                 </p>
-                @if (! $jornada)
-                    <p>Esta sala no tiene jornada.</p>
+                @if (! $sala)
+                    <p class="mb-0">Elegí una sala.</p>
+                @elseif (! $jornada)
+                    <p class="mb-2">
+                        @if (trim((string) ($fechaPedida ?? '')) !== '')
+                            No hay jornada el {{ \Illuminate\Support\Carbon::parse($fechaPedida)->format('d/m/Y') }} en esta sala.
+                        @else
+                            Esta sala no tiene jornada.
+                        @endif
+                    </p>
+                    @if (can('crear-tesoreria-crown-jornada', false))
+                        <a href="{{ route('tesoreria_crown_jornada', ['sala_id' => $sala->id]) }}" class="btn btn-primary btn-sm">
+                            <i class="fa fa-plus-circle"></i> Ir a abrir jornada
+                        </a>
+                    @endif
                 @elseif ($mesas->isEmpty())
                     <p>Esta sala no tiene mesas. Se cargan como depósitos de tipo Mesa.</p>
                 @else
-                    <form method="GET" action="{{ route('tesoreria_crown_mesa') }}" class="form-inline mb-3">
-                        <input type="hidden" name="sala_id" value="{{ $sala->id }}">
-                        <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
-                        <label for="mesa_codigo" class="mr-2">Mesa</label>
-                        <input type="text" name="mesa_codigo" id="mesa_codigo" class="form-control mr-2" placeholder="Número" value="{{ $mesa->codigo ?? request('mesa_codigo') }}" style="width:8rem;">
-                        <button type="submit" class="btn btn-info">Ver</button>
-                    </form>
+                    <div class="mb-3">
+                        <span class="text-muted small mr-2"><i class="fa fa-th"></i> Mesa:</span>
+                        <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Mesa">
+                            <a href="{{ route('tesoreria_crown_mesa', ['sala_id' => $sala->id, 'jornada_id' => $jornada->id]) }}"
+                               class="btn {{ ! $mesa ? 'btn-info' : 'btn-outline-info' }} mb-1">
+                                Elegir…
+                            </a>
+                            @foreach ($mesas as $opcion)
+                                <a href="{{ route('tesoreria_crown_mesa', ['sala_id' => $sala->id, 'jornada_id' => $jornada->id, 'mesa_codigo' => $opcion->codigo]) }}"
+                                   class="btn {{ $mesa && (int) $mesa->id === (int) $opcion->id ? 'btn-info' : 'btn-outline-info' }} mb-1"
+                                   title="{{ $opcion->nombre }}">
+                                    {{ $opcion->codigo }}
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+
                     @if (! $mesa)
-                        <p class="text-muted">No hay una mesa con ese número.</p>
+                        <p class="text-muted mb-0">Elegí una mesa para ver stock, drop y movimientos del día.</p>
                     @else
                         <h5>{{ $mesa->codigo }} — {{ $mesa->nombre }}</h5>
                         @if ($stock && $stock['banca'])
@@ -106,43 +141,43 @@
                                 </tbody>
                             </table>
                         </div>
-                    @endif
 
-                    @if (can('editar-tesoreria-crown-mesa', false) && $juego)
-                        <h5 class="mt-4">Nueva vigencia de la banca {{ $juego->banca_codigo }}</h5>
-                        <p class="text-muted small">Rige desde la fecha que indiques, de hoy en adelante. No reescribe la banca de los días ya jugados.</p>
-                        <form method="POST" action="{{ route('guardar_banca_tesoreria_crown_mesa') }}" data-enter-campos="1">
-                            @csrf
-                            <input type="hidden" name="sala_id" value="{{ $sala->id }}">
-                            <input type="hidden" name="codigo" value="{{ $juego->banca_codigo }}">
-                            <div class="form-row">
-                                <div class="form-group col-md-4">
-                                    <label for="nombre">Nombre</label>
-                                    <input type="text" name="nombre" id="nombre" class="form-control" maxlength="40" required value="{{ old('nombre', $stock && $stock['banca'] ? $stock['banca']->nombre : '') }}">
+                        @if (can('editar-tesoreria-crown-mesa', false) && $juego)
+                            <h5 class="mt-4">Nueva vigencia de la banca {{ $juego->banca_codigo }}</h5>
+                            <p class="text-muted small">Rige desde la fecha que indiques, de hoy en adelante. No reescribe la banca de los días ya jugados.</p>
+                            <form method="POST" action="{{ route('guardar_banca_tesoreria_crown_mesa') }}" data-enter-campos="1">
+                                @csrf
+                                <input type="hidden" name="sala_id" value="{{ $sala->id }}">
+                                <input type="hidden" name="codigo" value="{{ $juego->banca_codigo }}">
+                                <div class="form-row">
+                                    <div class="form-group col-md-4">
+                                        <label for="nombre" class="control-label text-right pr-2 d-block">Nombre</label>
+                                        <input type="text" name="nombre" id="nombre" class="form-control" maxlength="40" required value="{{ old('nombre', $stock && $stock['banca'] ? $stock['banca']->nombre : '') }}">
+                                    </div>
+                                    <div class="form-group col-md-3">
+                                        <label for="vigencia_desde" class="control-label text-right pr-2 d-block">Desde</label>
+                                        <input type="date" name="vigencia_desde" id="vigencia_desde" class="form-control" required value="{{ old('vigencia_desde', now()->toDateString()) }}" min="{{ now()->toDateString() }}">
+                                    </div>
                                 </div>
-                                <div class="form-group col-md-3">
-                                    <label for="vigencia_desde">Desde</label>
-                                    <input type="date" name="vigencia_desde" id="vigencia_desde" class="form-control" required value="{{ old('vigencia_desde', now()->toDateString()) }}" min="{{ now()->toDateString() }}">
-                                </div>
-                            </div>
-                            @foreach ($gruposFichas as $grupo)
-                                <h6>{{ $grupo['titulo'] }}</h6>
-                                <div class="table-responsive mb-3">
-                                    <table class="table table-sm table-bordered">
-                                        <thead style="background:#85C1E9;color:#17202A;"><tr><th>Ficha</th><th style="width:120px;">Cantidad</th></tr></thead>
-                                        <tbody>
-                                            @foreach ($grupo['filas'] as $valor)
-                                                <tr>
-                                                    <td>{{ $valor->descripcion }}</td>
-                                                    <td><input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric"></td>
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
-                            @endforeach
-                            <button type="submit" class="btn btn-outline-primary">Guardar vigencia</button>
-                        </form>
+                                @foreach ($gruposFichas as $grupo)
+                                    <h6>{{ $grupo['titulo'] }}</h6>
+                                    <div class="table-responsive mb-3">
+                                        <table class="table table-sm table-bordered">
+                                            <thead style="background:#85C1E9;color:#17202A;"><tr><th>Ficha</th><th style="width:120px;">Cantidad</th></tr></thead>
+                                            <tbody>
+                                                @foreach ($grupo['filas'] as $valor)
+                                                    <tr>
+                                                        <td>{{ $valor->descripcion }}</td>
+                                                        <td><input type="number" name="cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric"></td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                @endforeach
+                                <button type="submit" class="btn btn-outline-primary">Guardar vigencia</button>
+                            </form>
+                        @endif
                     @endif
                 @endif
             </div>

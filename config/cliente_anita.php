@@ -6,6 +6,8 @@
  * Escritura ERP → Anita: ANITA_SYNC_CLIENTE_WRITE en .env (config app.anita_sync_cliente_write).
  *
  * Tabla origen: climae (sistema ventas).
+ * Esquema por instalación: App\Support\Ventas\ClienteAnitaEsquemaSupport
+ * (Crown: clim_nro_ing_br, 56 cols; sin climarch/movscli/stksuspcli/clicomi).
  */
 return [
     'tabla' => 'climae',

@@ -265,4 +265,19 @@ return [
             3 => ['hoja' => 'Rebisco S.A.', 'datos' => 'Datos Rebisco'],
         ],
     ],
+
+    /*
+     * Flash Crown (directivos): cálculo online + mail solo con días validados.
+     * Comandos: flash-crown:calcular-diario | flash-crown:distribuir-reportes
+     */
+    'flash_crown_calculo_diario' => [
+        'habilitado' => filter_var(env('FLASH_CROWN_CALCULO_DIARIO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('FLASH_CROWN_CALCULO_DIARIO_HORA', '14:30'),
+    ],
+    'flash_reporte_crown' => [
+        'distribucion_habilitada' => filter_var(
+            env('FLASH_REPORTE_CROWN_DISTRIBUCION', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+    ],
 ];

@@ -11,6 +11,7 @@ use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
 use App\Support\Caja\TesoreriaCrownCierreFiscalReader;
+use App\Support\Caja\TesoreriaCrownCierreFiscalSync;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
@@ -631,6 +632,17 @@ class TesoreriaCrownComprobanteController extends Controller
             return ['error' => null, 'filas' => []];
         }
 
+        $jornada = $comprobante->jornada;
+        if ($jornada !== null) {
+            try {
+                // Completa huecos Anita cierrefiscal→ERP (como a-transfefe / consulta_cierrefiscal).
+                // No toca X ya generados por gastronomía ni regenera desde venta.
+                TesoreriaCrownCierreFiscalSync::asegurarJornada($jornada);
+            } catch (\Throwable) {
+                // Reader solo ERP; sync Anita live desconectado (corte).
+            }
+        }
+
         return TesoreriaCrownCierreFiscalReader::paraRendicion($comprobante);
     }
 
@@ -639,25 +651,56 @@ class TesoreriaCrownComprobanteController extends Controller
      */
     private function sincronizarCierresFiscales(TesoreriaCrownComprobante $comprobante, array $filas): void
     {
-        EloquentAuditDeleteSupport::each(
-            TesoreriaCrownCierreFiscal::query()->where('comprobante_id', $comprobante->id)
-        );
+        $previos = TesoreriaCrownCierreFiscal::query()
+            ->where('comprobante_id', $comprobante->id)
+            ->get();
+        foreach ($previos as $previo) {
+            $previo->comprobante_id = null;
+            $previo->save();
+        }
+
+        $jornadaId = (int) $comprobante->jornada_id;
         foreach ($filas as $fila) {
-            TesoreriaCrownCierreFiscal::query()->create([
+            $fecha = (string) $fila['fecha'];
+            $existente = TesoreriaCrownCierreFiscal::query()
+                ->where('sucursal', (int) $fila['sucursal'])
+                ->whereDate('fecha_jor', $fecha)
+                ->where('hora', (string) $fila['hora'])
+                ->where('nro_x', (int) $fila['nro_x'])
+                ->where('nro_z', (int) $fila['nro_z'])
+                ->first();
+            if ($existente === null && (int) $fila['nro_z'] > 0) {
+                $existente = TesoreriaCrownCierreFiscal::query()
+                    ->where('sucursal', (int) $fila['sucursal'])
+                    ->whereDate('fecha_jor', $fecha)
+                    ->where('nro_z', (int) $fila['nro_z'])
+                    ->whereNull('comprobante_id')
+                    ->first();
+            }
+
+            $attrs = [
+                'jornada_id' => $jornadaId > 0 ? $jornadaId : null,
                 'comprobante_id' => $comprobante->id,
-                'sucursal' => $fila['sucursal'],
-                'fecha_jor' => $fila['fecha'],
-                'hora' => $fila['hora'],
-                'nro_x' => $fila['nro_x'],
-                'nro_z' => $fila['nro_z'],
-                'tipo' => $fila['tipo'],
+                'sucursal' => (int) $fila['sucursal'],
+                'fecha_jor' => $fecha,
+                'hora' => (string) $fila['hora'],
+                'nro_x' => (int) $fila['nro_x'],
+                'nro_z' => (int) $fila['nro_z'],
+                'tipo' => (string) $fila['tipo'],
                 'nombre_sucursal' => $fila['nombre'] !== '' ? $fila['nombre'] : null,
                 'tot_venta' => $fila['venta'],
                 'tot_cred' => $fila['credito'],
                 'tot_iva' => $fila['iva'],
                 'tot_iva_cred' => $fila['iva_credito'],
                 'ult_fact_b' => $fila['ult_ticket'],
-            ]);
+            ];
+
+            if ($existente !== null) {
+                $existente->fill($attrs);
+                $existente->save();
+            } else {
+                TesoreriaCrownCierreFiscal::query()->create($attrs);
+            }
         }
     }
 

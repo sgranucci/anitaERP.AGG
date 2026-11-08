@@ -5,6 +5,7 @@ namespace App\Support\Caja;
 use App\ApiAnita;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cheque;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor_Cuentacorriente;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Log;
  * - auxpag TES + tesmov por retenciones RGP/RIP/RSP/RTP (pago.c inserta_valores + graba_auxpag TES)
  * - auxpag FAC por factura aplicada (pago.c graba_auxpag(FAC))
  * - si hay cheques propios emitidos: cpromae + auxpag CHP + tesmov CHP
+ * - OP sin caja (monto 0 / solo aplicación de anticipos): pago + auxpag FAC, sin tesmov
  */
 final class IngresoEgresoAnitaTesmovSupport
 {
@@ -110,6 +112,36 @@ final class IngresoEgresoAnitaTesmovSupport
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
         self::grabarInterno($movimiento, 1.0, null, null, null);
+    }
+
+    /**
+     * OP confirmada sin movimiento de caja (neto 0: solo aplica OPA/anticipos a facturas).
+     * Espeja cabecera pago + auxpag de comprobantes aplicados. No escribe tesmov
+     * (no hubo salida de banco). Retenciones siguen por PagoproveedorAnitaRetencionEscrituraSupport.
+     */
+    public static function grabarCabeceraDesdePagoproveedor(Pagoproveedor $pago, bool $reemplazar = false): void
+    {
+        if (! self::estaHabilitada()) {
+            return;
+        }
+
+        $pago->loadMissing(['proveedores']);
+        $ctx = self::contextoDesdePagoproveedor($pago);
+        if ($ctx === null) {
+            return;
+        }
+
+        if ($reemplazar) {
+            self::eliminarTesoreriaPorClave(
+                (string) $ctx['tipo'],
+                (int) $ctx['nro'],
+                (int) $ctx['empresa'],
+                'caja IE delete OP sin caja '.$pago->id
+            );
+        }
+
+        self::insertPago($ctx);
+        self::insertAuxpagFacturasAplicadas($ctx, (int) $pago->id, 1.0);
     }
 
     /**
@@ -281,7 +313,7 @@ final class IngresoEgresoAnitaTesmovSupport
             $ctx['entregadoA'] = self::recortar($leyendaOverride, 30);
         }
 
-        self::insertPago($movimiento, $ctx);
+        self::insertPago($ctx);
 
         $esTra = self::esTransferenciaTipo((string) $ctx['tipo']);
         $lineasCajaDeTransferencia = [];
@@ -503,7 +535,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 'pago',
                 ' WHERE pag_tipo = '.self::escSql($tipoBorrar)
                     .' AND pag_rec = '.$nro
-                    .' AND pag_empresa = '.$empresa,
+                    .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaPago($empresa),
                 $contexto.' pago '.$tipoBorrar
             );
         }
@@ -920,6 +952,80 @@ final class IngresoEgresoAnitaTesmovSupport
             'spCodigo' => $spCodigo,
             'usuario' => $usuario,
             'cbuPago' => self::cbuPagoDesdeMovimiento($movimiento),
+            'codMonMe' => self::codMonMeCrown($movimiento),
+            'refId' => (int) $movimiento->id,
+        ];
+    }
+
+    /**
+     * Contexto Anita para una OP sin caja_movimiento (neto 0 / solo aplicaciones).
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function contextoDesdePagoproveedor(Pagoproveedor $pago): ?array
+    {
+        $tipo = strtoupper(substr(trim((string) ($pago->tipocomprobante ?: 'OPP')), 0, 3));
+        if ($tipo === '') {
+            $tipo = 'OPP';
+        }
+        $nro = (int) $pago->numerotransaccion;
+        if ($nro <= 0) {
+            return null;
+        }
+
+        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $pago->empresa_id);
+        if ($empresaAnita <= 0) {
+            $empresaAnita = (int) $pago->empresa_id;
+        }
+
+        $sucursalCfg = config('caja.ingresoegreso_anita_tesmov_sucursal');
+        $sucursal = $sucursalCfg === null || $sucursalCfg === ''
+            ? $empresaAnita
+            : (int) $sucursalCfg;
+        $letra = (string) config('caja.ingresoegreso_anita_tesmov_letra', ' ');
+        if ($letra === '') {
+            $letra = ' ';
+        }
+
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            $empresaAnita = PagoproveedorAnitaCrownClaveSupport::empresaAnita();
+            $sucursal = PagoproveedorAnitaCrownClaveSupport::sucursal();
+            $letra = PagoproveedorAnitaCrownClaveSupport::letra();
+        }
+
+        $proveedorCodigo = '000000';
+        $entregadoA = '';
+        if ($pago->proveedores) {
+            $proveedorCodigo = str_pad((string) $pago->proveedores->codigo, 6, '0', STR_PAD_LEFT);
+            $entregadoA = self::recortar((string) ($pago->proveedores->nombre ?? ''), 30);
+        }
+
+        $cotizacion = (float) ($pago->cotizacion ?: 1);
+        $usuario = self::recortar((string) (Auth::user()->nombre ?? Auth::user()->usuario ?? 'ERP'), 8);
+        $monedaId = (int) ($pago->moneda_id ?: 1);
+
+        return [
+            'tipo' => $tipo,
+            'nro' => $nro,
+            'empresa' => $empresaAnita,
+            'fecha' => date('Ymd', strtotime((string) ($pago->fecha ?? date('Y-m-d')))),
+            'sucursal' => $sucursal,
+            'letra' => $letra,
+            'proveedorCodigo' => $proveedorCodigo,
+            'entregadoA' => $entregadoA !== '' ? $entregadoA : self::recortar((string) ($pago->detalle ?? ''), 30),
+            'detalle' => self::recortar((string) ($pago->detalle ?? ('Orden de pago Nro. '.$nro)), 120),
+            'total' => round(abs((float) ($pago->monto ?? 0)), 2),
+            'cotizacion' => $cotizacion > 0 ? self::cotizacionTesmov($monedaId, $cotizacion) : 1.0,
+            'spCodigo' => 0,
+            'usuario' => $usuario,
+            'cbuPago' => \App\Support\Compras\ProveedorCbuPagoSupport::cbuDesdeDocumento(
+                (int) ($pago->proveedor_formapago_id ?? 0) ?: null,
+                (string) ($pago->cbu_pago ?? ''),
+                (int) ($pago->proveedor_id ?? 0),
+                (string) ($pago->detalle ?? '')
+            ),
+            'codMonMe' => self::codMonMeDesdeMonedaId($monedaId),
+            'refId' => (int) $pago->id,
         ];
     }
 
@@ -936,15 +1042,16 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /** @param  array<string, mixed>  $ctx */
-    private static function insertPago(Caja_Movimiento $movimiento, array $ctx): void
+    private static function insertPago(array $ctx): void
     {
         $tipoVale = ' ';
         $nroVale = 0;
-        if ($ctx['spCodigo'] > 0) {
+        if ((int) ($ctx['spCodigo'] ?? 0) > 0) {
             // a-movim.c SOLPAGO → pag_tipo_vale=SOL + pag_nro_vale=solicitud
             $tipoVale = 'SOL';
             $nroVale = (int) $ctx['spCodigo'];
         }
+        $refId = (int) ($ctx['refId'] ?? $ctx['nro'] ?? 0);
 
         if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli()) {
             $raw = (new ApiAnita)->apiCallEscritura([
@@ -1009,9 +1116,9 @@ final class IngresoEgresoAnitaTesmovSupport
                     '0',
                     '".self::esc($ctx['usuario'])."',
                     '".date('Ymd')."'",
-            ], 'caja IE pago insert '.$movimiento->id);
+            ], 'caja IE pago insert '.$refId);
 
-            self::assertOk($raw, 'pago', $movimiento->id);
+            self::assertOk($raw, 'pago', $refId);
 
             return;
         }
@@ -1023,7 +1130,7 @@ final class IngresoEgresoAnitaTesmovSupport
             $entregado = $movExt === 'I'
                 ? ' '
                 : (trim((string) $ctx['entregadoA']) !== '' ? (string) $ctx['entregadoA'] : ' ');
-            $codMonMe = self::codMonMeCrown($movimiento);
+            $codMonMe = (string) ($ctx['codMonMe'] ?? '0');
             $raw = (new ApiAnita)->apiCallEscritura([
                 'tabla' => 'pago',
                 'acc' => 'insert',
@@ -1078,9 +1185,9 @@ final class IngresoEgresoAnitaTesmovSupport
                     '".date('Ymd')."',
                     '".$ctx['empresa']."',
                     '0'",
-            ], 'caja IE pago insert '.$movimiento->id);
+            ], 'caja IE pago insert '.$refId);
 
-            self::assertOk($raw, 'pago', $movimiento->id);
+            self::assertOk($raw, 'pago', $refId);
 
             return;
         }
@@ -1143,9 +1250,9 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$ctx['empresa']."',
                 '0',
                 '0'",
-        ], 'caja IE pago insert '.$movimiento->id);
+        ], 'caja IE pago insert '.$refId);
 
-        self::assertOk($raw, 'pago', $movimiento->id);
+        self::assertOk($raw, 'pago', $refId);
     }
 
     /**
@@ -2347,6 +2454,11 @@ final class IngresoEgresoAnitaTesmovSupport
             }
         }
 
+        return self::codMonMeDesdeMonedaId($monedaId);
+    }
+
+    private static function codMonMeDesdeMonedaId(int $monedaId): string
+    {
         return $monedaId <= 1 ? '0' : (string) $monedaId;
     }
 

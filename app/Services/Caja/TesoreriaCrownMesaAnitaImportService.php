@@ -223,7 +223,9 @@ class TesoreriaCrownMesaAnitaImportService
                 $fechaYmd,
                 $comentario,
                 $lineas,
-                $mesaNro
+                $mesaNro,
+                0.0,
+                $voucher
             );
         }
 
@@ -284,6 +286,7 @@ class TesoreriaCrownMesaAnitaImportService
                     'estado' => TesoreriaCrownMesa::CONFIRMADO,
                     'comentario' => $fila['comentario'],
                     'propina' => round((float) ($fila['propina'] ?? 0), 2),
+                    'voucher' => round((float) ($fila['voucher'] ?? 0), 2),
                     'confirmado_at' => $fila['fecha'].' '.$fila['hora'].':00',
                 ]);
                 foreach ($fila['lineas'] as $linea) {
@@ -427,7 +430,8 @@ class TesoreriaCrownMesaAnitaImportService
         string $comentario,
         array $lineas,
         int $mesaNro,
-        float $propina = 0.0
+        float $propina = 0.0,
+        float $voucher = 0.0
     ): array {
         $banca = null;
         if ($juego !== null) {
@@ -456,6 +460,7 @@ class TesoreriaCrownMesaAnitaImportService
             'tipo_nombre' => TesoreriaCrownMesaSupport::tipo($tipo),
             'numero' => $numero,
             'propina' => round($propina, 2),
+            'voucher' => round($voucher, 2),
             'hora' => $hora,
             'comentario' => mb_substr($comentario, 0, 80),
             'lineas' => $detalle,

@@ -23,21 +23,6 @@
         <a href="{{ route('pdf_tesoreria_crown_boveda', (int) session('emitir_boveda')) }}" target="_blank" rel="noopener" id="emitir-boveda-link">Emitir comprobante</a>
     </div>
 @endif
-@if ($jornada && $escritorio)
-    @include('caja.tesoreria_crown.jornada.partials.desk_nav', [
-        'navActivo' => 'boveda',
-        'puedeMesas' => $escritorio['puedeMesas'],
-        'puedeBoveda' => $escritorio['puedeBoveda'],
-        'navAsignaciones' => $escritorio['asignaciones'],
-        'navMesas' => $escritorio['mesas'],
-        'navBorradoresMesa' => $escritorio['borradoresMesa'],
-        'navBoveda' => $escritorio['movimientosBoveda'],
-        'puedeSlots' => $escritorio['puedeSlots'],
-        'puedePoder' => $escritorio['puedePoder'],
-        'puedeAnexo' => $escritorio['puedeAnexo'],
-        'navSlots' => $escritorio['slots'],
-    ])
-@endif
 <div class="row">
     <div class="col-lg-12">
         <div class="card card-info">
@@ -52,9 +37,19 @@
                     @endif
                 </h3>
                 <div class="card-tools">
+                    @if ($jornada && $lugar && can('listar-tesoreria-crown-boveda-arqueo', false))
+                        <a href="{{ route('tesoreria_crown_boveda_arqueo', ['sala_id' => $sala->id ?? null, 'jornada_id' => $jornada->id, 'deposito_id' => $lugar->id]) }}" class="btn btn-sm tc-tool tc-tool-arqueo">
+                            <i class="fa fa-balance-scale"></i> Arqueo de turno
+                        </a>
+                    @endif
                     @if ($jornada && $lugar && $jornada->estaAbierta() && can('crear-tesoreria-crown-boveda', false))
-                        <a href="{{ route('nueva_tesoreria_crown_boveda', ['jornada_id' => $jornada->id, 'deposito_id' => $lugar->id]) }}" class="btn btn-primary btn-sm">
+                        <a href="{{ route('nueva_tesoreria_crown_boveda', ['jornada_id' => $jornada->id, 'deposito_id' => $lugar->id]) }}" class="btn btn-primary btn-sm tc-tool tc-tool-nuevo">
                             <i class="fa fa-plus-circle"></i> Nuevo movimiento
+                        </a>
+                    @endif
+                    @if ($jornada)
+                        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=boveda" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-desktop"></i> Escritorio
                         </a>
                     @endif
                 </div>
@@ -66,9 +61,21 @@
                     'columnas' => implode(',', $columnasVisibles ?? []),
                 ]),
             ])
+            @include('caja.tesoreria_crown.partials.jornada_selector', [
+                'ruta' => 'tesoreria_crown_boveda',
+                'queryExtra' => array_filter([
+                    'deposito_id' => $lugar->id ?? null,
+                ]),
+            ])
             <div class="card-body">
                 @if (! $jornada)
-                    <p>Esta sala no tiene jornada. Abrila para cargar movimientos.</p>
+                    <p>
+                        @if (trim((string) ($fechaPedida ?? '')) !== '')
+                            No hay jornada el {{ \Illuminate\Support\Carbon::parse($fechaPedida)->format('d/m/Y') }} en esta sala.
+                        @else
+                            Esta sala no tiene jornada. Abrila para cargar movimientos.
+                        @endif
+                    </p>
                 @elseif ($lugares->isEmpty())
                     <div class="alert alert-warning mb-0">
                         Esta sala no tiene un depósito de bóveda, pre-depósito o caja chica.

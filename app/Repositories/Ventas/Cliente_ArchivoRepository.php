@@ -5,6 +5,7 @@ namespace App\Repositories\Ventas;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Archivo;
 use App\Http\Requests\ValidacionCliente;
+use App\Support\Ventas\ClienteAnitaEsquemaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -28,7 +29,7 @@ class Cliente_ArchivoRepository implements Cliente_ArchivoRepositoryInterface
 
     private function usaClimarchAnita(): bool
     {
-        return (bool) config('cliente.SINCRONIZA_CLIMA_ANITA', true);
+        return ClienteAnitaEsquemaSupport::escribeClimarch();
     }
 
     public function create(ValidacionCliente $request, $id)

@@ -17,7 +17,7 @@ final class TesoreriaCrownRendicionCampos
         return [
             'gastro' => [
                 'titulo' => 'Gastronomía y hotel',
-                'ayuda' => 'Salen del cierre de ventas (p-cierrefact). El Z es el cierre fiscal de la barra. El X es el que la rendición de hotel toma. Se pueden corregir antes de guardar.',
+                'ayuda' => 'X: cierre de mozo gastronomía (POS) o, si aún no hay, informe X de cierrefiscal (Anita/a-transfefe). Z: cierre fiscal de facturación (p-cierrefact / cierrefiscal). No usa resvta. Se pueden corregir antes de guardar.',
                 'campos' => [
                     'total_x' => ['label' => 'Ventas / X', 'tipo' => 'importe', 'negativo' => false],
                     'invitacion' => ['label' => 'Invitaciones', 'tipo' => 'importe', 'negativo' => false],
@@ -36,7 +36,8 @@ final class TesoreriaCrownRendicionCampos
                     'pago_cash' => ['label' => 'Monto de pagos Z cashless', 'tipo' => 'importe', 'negativo' => true],
                     'venta_cash' => ['label' => 'Monto de ventas cashless', 'tipo' => 'importe', 'negativo' => true],
                     'pago_parcial' => ['label' => 'Total pagos parcial', 'tipo' => 'importe', 'negativo' => true],
-                    'vta_apuesta' => ['label' => 'Apuestas deportivas', 'tipo' => 'importe', 'negativo' => false],
+                    'vta_apuesta' => ['label' => 'Venta apuestas deportivas', 'tipo' => 'importe', 'negativo' => false],
+                    'pago_apuesta' => ['label' => 'Pago apuestas deportivas', 'tipo' => 'importe', 'negativo' => false],
                     'venta_online' => ['label' => 'Ventas de casino on-line', 'tipo' => 'importe', 'negativo' => true],
                     'pago_online' => ['label' => 'Pagos de casino on-line', 'tipo' => 'importe', 'negativo' => true],
                     'tarjeta_debito' => ['label' => 'Tarjeta de débito', 'tipo' => 'importe', 'negativo' => true],

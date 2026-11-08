@@ -10,11 +10,12 @@ use App\Models\Caja\TesoreriaCrownMesa;
 /**
  * Resumen de cajeros (l-rescajero.c) y base del anexo III (l-anexo3new.c).
  *
- * Columnas del listado Anita:
+ * Columnas del listado Anita (ENCAB1 de l-anexo3new.c):
  * - Egresos = efectivo habilitado
  * - Ingresos = efectivo rendido (billetes + tarjetas − recargo + débito + QR), sin fichas ni cashless
- * - Fichas / Pago·Vta cashless / voucher / online = detalle de la rendición
- * - Resultado = (ingresos − egresos) + cashless neto + fichas + online neto + voucher neto + apuestas
+ * - Fichas Casino = tot_rendicion_ficha (rescajero.fc)
+ * - Del Rio ONLINE = online (pago ± venta según listado; en C es pago − venta)
+ * - Resultado = (ingresos − egresos) + cashless neto + fichas + online + voucher neto + apuestas
  * - Dif. cajero = misma diferencia del cierre
  *
  * Orden: agrupa por tipo de caja (E → G → H → K → T), con subtítulo y subtotal por grupo.
@@ -34,6 +35,54 @@ final class TesoreriaCrownResumenCajeroCalculo
         'T' => 'Venta y Pago',
     ];
 
+    /** @var array<int, array{filas: list<array<string, mixed>>, grupos: list<array{tipo: string, titulo: string, filas: list<array<string, mixed>>, totales: array<string, float>}>, totales: array<string, float>, total_tarjetas: float, avisos: list<string>}> */
+    private static array $cachePorJornada = [];
+
+    /**
+     * Precarga el resumen de varias jornadas en un solo eager-load (Anexo I mes/año).
+     *
+     * @param  iterable<int, TesoreriaCrownJornada>  $jornadas
+     */
+    public static function precargarParaJornadas(iterable $jornadas): void
+    {
+        $porId = [];
+        foreach ($jornadas as $jornada) {
+            if ($jornada instanceof TesoreriaCrownJornada) {
+                $porId[(int) $jornada->id] = $jornada;
+            }
+        }
+        if ($porId === []) {
+            return;
+        }
+        $pendientes = array_diff_key($porId, self::$cachePorJornada);
+        if ($pendientes === []) {
+            return;
+        }
+
+        $asignaciones = TesoreriaCrownAsignacion::query()
+            ->whereIn('jornada_id', array_keys($pendientes))
+            ->with([
+                'deposito',
+                'cajero',
+                'cierre',
+                'comprobantes.lineas.valor.tipoValor',
+                'comprobantes.reversa',
+            ])
+            ->orderBy('deposito_id')
+            ->get()
+            ->groupBy('jornada_id');
+
+        foreach ($pendientes as $jornadaId => $jornada) {
+            $grupo = $asignaciones->get($jornadaId, collect());
+            self::$cachePorJornada[$jornadaId] = self::armarDesdeAsignaciones($jornada, $grupo);
+        }
+    }
+
+    public static function olvidarCache(): void
+    {
+        self::$cachePorJornada = [];
+    }
+
     /**
      * @return array{
      *     filas: list<array<string, mixed>>,
@@ -44,6 +93,11 @@ final class TesoreriaCrownResumenCajeroCalculo
      */
     public static function deJornada(TesoreriaCrownJornada $jornada): array
     {
+        $jornadaId = (int) $jornada->id;
+        if (isset(self::$cachePorJornada[$jornadaId])) {
+            return self::$cachePorJornada[$jornadaId];
+        }
+
         $asignaciones = $jornada->asignaciones()
             ->with([
                 'deposito',
@@ -55,6 +109,30 @@ final class TesoreriaCrownResumenCajeroCalculo
             ])
             ->orderBy('deposito_id')
             ->get();
+
+        return self::$cachePorJornada[$jornadaId] = self::armarDesdeAsignaciones($jornada, $asignaciones);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, TesoreriaCrownAsignacion>  $asignaciones
+     * @return array{
+     *     filas: list<array<string, mixed>>,
+     *     grupos: list<array{tipo: string, titulo: string, filas: list<array<string, mixed>>, totales: array<string, float>}>,
+     *     totales: array<string, float>,
+     *     total_tarjetas: float,
+     *     avisos: list<string>
+     * }
+     */
+    private static function armarDesdeAsignaciones(TesoreriaCrownJornada $jornada, $asignaciones): array
+    {
+        // Evita N+1: cada línea de comprobante pedía jornada por id.
+        foreach ($asignaciones as $asignacion) {
+            $asignacion->setRelation('jornada', $jornada);
+            foreach ($asignacion->comprobantes as $doc) {
+                $doc->setRelation('jornada', $jornada);
+                $doc->setRelation('asignacion', $asignacion);
+            }
+        }
 
         $porTipo = [];
         foreach ($asignaciones as $asignacion) {
@@ -117,10 +195,20 @@ final class TesoreriaCrownResumenCajeroCalculo
             ];
         }
 
+        // Pie de l-anexo3new.c: tot_tarjeta(neto) + débito + QR + recargo
+        // = crédito bruto (columna) + débito + QR. En ERP tarjeta_credito ya es bruto.
+        $totalTarjetas = round(
+            (float) $totales['tarjeta_credito']
+            + (float) $totales['tarjeta_debito']
+            + (float) $totales['total_qr'],
+            2
+        );
+
         return [
             'filas' => $filas,
             'grupos' => $grupos,
             'totales' => $totales,
+            'total_tarjetas' => $totalTarjetas,
             'avisos' => $filas === []
                 ? ['No hay cajas con rendición conforme en esta jornada.']
                 : [],
@@ -161,25 +249,18 @@ final class TesoreriaCrownResumenCajeroCalculo
         if (in_array($tarea, ['G', 'H'], true)) {
             $ingresos = round($ingresos + $detalle['fallo_mozo'] + $detalle['ctacte'], 2);
         }
-        $fichas = 0.0;
-        foreach ($calc['componentes']['filas'] ?? [] as $linea) {
-            if (($linea['clave'] ?? '') === 'fichas') {
-                $fichas = (float) $linea['importe'];
-            }
-        }
-        if (abs($fichas) < 0.001) {
-            $fichas = round($detalle['rend_fichas'] - $detalle['hab_fichas'], 2);
-        }
+        // l-anexo3new / rescajero.fc: Fichas Casino = tot_rendicion_ficha (columna Rend. Fichas).
+        $fichasCasino = round($detalle['rend_fichas'], 2);
         $cashlessNeto = round($detalle['pago_cashless'] - $detalle['vta_cashless'], 2);
-        // En el listado Anita la columna Online suma pago + venta (ambos entran al resultado).
-        // El cierre de caja sigue usando pago − venta.
+        // Del Rio ONLINE en C = pago − venta. En el listado usamos pago + venta cuando el
+        // importe quedó cargado en un solo lado (mismo aporte al resultado que Anita).
         $onlineListado = round($detalle['pago_online'] + $detalle['venta_online'], 2);
         $voucherNeto = round($detalle['pago_voucher'] - $detalle['venta_voucher'], 2);
         $apuestasNeto = round($detalle['pago_apuesta'] - $detalle['vta_apuesta'], 2);
 
-        // Anita: resultado listado = (ingresos − egresos) + extras (cashless, fichas, online, voucher, apuestas).
+        // Anita: *Ptot_resultado = (ingresos−egresos) + cashless + rend_ficha + online + voucher + apuestas.
         $resultado = round(
-            $ingresos - $egresos + $cashlessNeto + $fichas + $onlineListado + $voucherNeto + $apuestasNeto,
+            $ingresos - $egresos + $cashlessNeto + $fichasCasino + $onlineListado + $voucherNeto + $apuestasNeto,
             2
         );
         $diferencia = in_array($tarea, ['G', 'H'], true)
@@ -192,6 +273,7 @@ final class TesoreriaCrownResumenCajeroCalculo
         }
 
         return [
+            'asignacion_id' => (int) $asignacion->id,
             'caja' => $cajaEtiqueta,
             'caja_codigo' => (string) ($deposito->codigo ?? ''),
             'cajero' => (string) ($asignacion->cajero->nombre ?? ''),
@@ -209,7 +291,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             'ingresos' => $ingresos,
             'hab_fichas' => $detalle['hab_fichas'],
             'rend_fichas' => $detalle['rend_fichas'],
-            'fichas_casino' => $fichas,
+            'fichas_casino' => $fichasCasino,
             'pago_cashless' => $detalle['pago_cashless'],
             'vta_cashless' => $detalle['vta_cashless'],
             'pago_online' => $detalle['pago_online'],
@@ -293,7 +375,12 @@ final class TesoreriaCrownResumenCajeroCalculo
     {
         $efectivo = 0.0;
         $fichas = 0.0;
-        $fecha = $doc->jornada?->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $jornada = $doc->relationLoaded('jornada')
+            ? $doc->jornada
+            : ($doc->relationLoaded('asignacion') && $doc->asignacion?->relationLoaded('jornada')
+                ? $doc->asignacion->jornada
+                : $doc->jornada);
+        $fecha = $jornada?->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
         foreach ($doc->lineas as $linea) {
             $valor = $linea->valor;
             $tipo = $valor?->tipoValor;
@@ -325,10 +412,13 @@ final class TesoreriaCrownResumenCajeroCalculo
     }
 
     /**
-     * Fila sintética de l-rescajero.c: al cerrar el grupo de empleados suma
-     * fichmm_propina de los estados finales vigentes y la imprime con la
-     * caja y el cajero de la última asignación de ese grupo.
-     * Egresos = resultado = total; ingresos y diferencia quedan en cero.
+     * Fila sintética de l-anexo3new.c / rescajero: al cerrar el grupo de
+     * empleados suma fichmm_propina e imprime con caja/cajero de la última
+     * asignación. Egresos = resultado = propina; ingresos = 0.
+     *
+     * Anita no reinicia RESC_efectivo antes de esa fila: reimprime el efectivo
+     * de la última caja de empleados y lo suma otra vez al subtotal (p. ej.
+     * 102.700 + 102.700 = 205.400 el 30/10/26).
      *
      * @param  list<array<string, mixed>>  $filasEmpleados
      * @return array<string, mixed>|null
@@ -355,6 +445,7 @@ final class TesoreriaCrownResumenCajeroCalculo
         }
         $ultima = $filasEmpleados[array_key_last($filasEmpleados)];
         $fila = self::filaVacia();
+        $fila['asignacion_id'] = (int) ($ultima['asignacion_id'] ?? 0);
         $fila['caja'] = (string) $ultima['caja'];
         $fila['caja_codigo'] = (string) $ultima['caja_codigo'];
         $fila['cajero'] = (string) $ultima['cajero'];
@@ -362,6 +453,8 @@ final class TesoreriaCrownResumenCajeroCalculo
         $fila['tarea'] = 'E';
         $fila['egresos'] = $total;
         $fila['resultado'] = $total;
+        // Residual de RESC_efectivo en imprime_una_caja de la propina.
+        $fila['efectivo'] = round((float) ($ultima['efectivo'] ?? 0), 2);
         $fila['propina'] = true;
 
         return $fila;
@@ -371,6 +464,7 @@ final class TesoreriaCrownResumenCajeroCalculo
     private static function filaVacia(): array
     {
         $fila = [
+            'asignacion_id' => 0,
             'caja' => '',
             'caja_codigo' => '',
             'cajero' => '',

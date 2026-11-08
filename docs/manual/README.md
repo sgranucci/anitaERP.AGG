@@ -39,6 +39,7 @@ Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se so
 | Facturación Local (cambios e-commerce) | `config/manual_facturacion_local.php` | `public/docs/manual-facturacion-local/img/` | sin mockups (texto y tablas) |
 | Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `manual:generar-mockups vending` |
 | Caja (Flash, posición, máquinas, bingo) | `config/manual_caja.php` | `public/docs/manual-caja/img/` | `manual:generar-mockups caja` |
+| Tesorería Crown (solo EMPRESA=CROWN) | `config/manual_tesoreria_crown.php` | `public/docs/manual-tesoreria-crown/img/` | capturas reales: `manual:capturar-tesoreria-crown` (Chromium); mockup solo circuito |
 | Sueldos (sanciones) | `config/manual_sueldos.php` | `public/docs/manual-sueldos/img/` | (diagrama SVG; sin mockup de pantallas) |
 | Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `manual:generar-mockups solicitudpago` |
 | Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | `manual:generar-mockups propuesta-pago` |
@@ -71,6 +72,7 @@ php docs/interno-division-villafranca/generar.php
 php docs/manual-canjes-marketing/generar.php
 php docs/manual-vending/generar.php
 php docs/manual-caja/generar.php
+php docs/manual-tesoreria-crown/generar.php
 php docs/manual-sueldos/generar.php
 php docs/manual-solicitudpago/generar.php
 php docs/manual-propuesta-pago/generar.php

@@ -44,7 +44,8 @@ final class TesoreriaCrownCierreCalculo
     public static function de(TesoreriaCrownAsignacion $asignacion): array
     {
         $tolerancia = TesoreriaCrownCierreSupport::tolerancia();
-        $docs = $asignacion->comprobantes()->with(['lineas.valor.tipoValor', 'reversa'])->get();
+        $asignacion->loadMissing(['jornada', 'cierre', 'comprobantes.lineas.valor.tipoValor', 'comprobantes.reversa']);
+        $docs = $asignacion->comprobantes;
         $pendiente = $docs->first(fn (TesoreriaCrownComprobante $doc) => in_array($doc->estado, [
             TesoreriaCrownComprobanteSupport::BORRADOR,
             TesoreriaCrownComprobanteSupport::PENDIENTE,
@@ -505,8 +506,16 @@ final class TesoreriaCrownCierreCalculo
      *
      * @return array{tasa: float, fecha: ?string}
      */
+    /** @var array<string, array{tasa: float, fecha: ?string}> */
+    private static array $cotizacionCache = [];
+
     public static function cotizacionVenta(int $salaId, string $fecha, int $tipoValorId): array
     {
+        $clave = $salaId.'|'.$fecha.'|'.$tipoValorId;
+        if (isset(self::$cotizacionCache[$clave])) {
+            return self::$cotizacionCache[$clave];
+        }
+
         $fila = TesoreriaCrownCotizacion::query()
             ->where('sala_id', $salaId)
             ->where('tipo_valor_id', $tipoValorId)
@@ -516,14 +525,14 @@ final class TesoreriaCrownCierreCalculo
             ->first(['venta', 'jornada']);
 
         if ($fila === null) {
-            return ['tasa' => 0.0, 'fecha' => null];
+            return self::$cotizacionCache[$clave] = ['tasa' => 0.0, 'fecha' => null];
         }
 
         $fechaCot = $fila->jornada instanceof \DateTimeInterface
             ? $fila->jornada->format('Y-m-d')
             : substr((string) $fila->jornada, 0, 10);
 
-        return ['tasa' => (float) $fila->venta, 'fecha' => $fechaCot];
+        return self::$cotizacionCache[$clave] = ['tasa' => (float) $fila->venta, 'fecha' => $fechaCot];
     }
 
     /**

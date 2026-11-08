@@ -7,11 +7,13 @@
         return number_format((float) $importe, 2, ',', '.');
     };
     $variante = (string) ($anexoVariante ?? 'clasico');
-    $urlAnexo = function (string $formatoAnexo) use ($jornada): string {
-        return route('ver_tesoreria_crown_jornada', $jornada->id).'?'.http_build_query([
+    $anexoIndexUrl = $anexoIndexUrl ?? route('ver_tesoreria_crown_jornada', $jornada->id);
+    $anexoIndexQuery = $anexoIndexQuery ?? [];
+    $urlAnexo = function (string $formatoAnexo) use ($anexoIndexUrl, $anexoIndexQuery): string {
+        return $anexoIndexUrl.'?'.http_build_query(array_merge($anexoIndexQuery, [
             'panel' => 'anexo',
             'formato_anexo' => $formatoAnexo,
-        ]);
+        ]));
     };
 @endphp
 <div class="card card-outline card-info mb-3">
@@ -34,7 +36,7 @@
             @else
                 Formato de <code>l-anexo1.c</code>: concepto con día, mes y anual. Se arma con la jornada.
             @endif
-            <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=anexo&amp;formato_anexo={{ $variante }}&amp;recalcular=1">Recalcular</a>
+           
         </p>
         @if ($anexo === null)
             <div class="alert alert-warning mb-0">No se pudo armar el anexo. {{ $anexoError }}</div>
@@ -42,50 +44,53 @@
             @foreach ($anexo['avisos'] as $aviso)
                 <div class="alert alert-warning py-2">{{ $aviso }}</div>
             @endforeach
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered mb-0" id="tabla-paginada">
-                    <thead style="background:#85C1E9;color:#17202A;">
-                        @if ($variante === 'nuevo')
-                            <tr>
-                                <th>Concepto</th>
-                                <th>Fecha</th>
-                                <th class="text-right">Débito</th>
-                                <th class="text-right">Crédito</th>
-                                <th class="text-right">Saldo</th>
-                            </tr>
-                        @else
-                            <tr>
-                                <th>Concepto</th>
-                                <th class="text-right">Día</th>
-                                <th class="text-right">Mes</th>
-                                <th class="text-right">Anual</th>
-                            </tr>
-                        @endif
-                    </thead>
-                    <tbody>
-                        @foreach ($anexo['filas'] as $fila)
-                            @if ($fila['seccion'])
-                                <tr style="background:#D6EAF8;font-weight:bold;">
-                            @elseif (! empty($fila['total']))
-                                <tr style="font-weight:bold;">
+            <div class="tc-orden-wrap">
+                @include('caja.tesoreria_crown.jornada.partials.anexo_orden_barra')
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0 tc-tabla-ordenable" id="tabla-paginada">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            @if ($variante === 'nuevo')
+                                <tr>
+                                    <th>Concepto</th>
+                                    <th>Fecha</th>
+                                    <th class="text-right">Débito</th>
+                                    <th class="text-right">Crédito</th>
+                                    <th class="text-right">Saldo</th>
+                                </tr>
                             @else
                                 <tr>
+                                    <th>Concepto</th>
+                                    <th class="text-right">Día</th>
+                                    <th class="text-right">Mes</th>
+                                    <th class="text-right">Anual</th>
+                                </tr>
                             @endif
-                                <td>{{ $fila['concepto'] }}</td>
-                                @if ($variante === 'nuevo')
-                                    <td>{{ $fila['fecha'] ?? '' }}</td>
-                                    <td class="text-right">{{ $pesos($fila['debito'] ?? null) }}</td>
-                                    <td class="text-right">{{ $pesos($fila['credito'] ?? null) }}</td>
-                                    <td class="text-right">{{ $pesos($fila['saldo'] ?? null) }}</td>
+                        </thead>
+                        <tbody>
+                            @foreach ($anexo['filas'] as $fila)
+                                @if ($fila['seccion'])
+                                    <tr style="background:#D6EAF8;font-weight:bold;" data-tc-fija="1">
+                                @elseif (! empty($fila['total']))
+                                    <tr style="font-weight:bold;" data-tc-fija="1">
                                 @else
-                                    <td class="text-right">{{ $pesos($fila['dia']) }}</td>
-                                    <td class="text-right">{{ $pesos($fila['mes']) }}</td>
-                                    <td class="text-right">{{ $pesos($fila['anio']) }}</td>
+                                    <tr>
                                 @endif
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+                                    <td>{{ $fila['concepto'] }}</td>
+                                    @if ($variante === 'nuevo')
+                                        <td>{{ $fila['fecha'] ?? '' }}</td>
+                                        <td class="text-right">{{ $pesos($fila['debito'] ?? null) }}</td>
+                                        <td class="text-right">{{ $pesos($fila['credito'] ?? null) }}</td>
+                                        <td class="text-right">{{ $pesos($fila['saldo'] ?? null) }}</td>
+                                    @else
+                                        <td class="text-right">{{ $pesos($fila['dia']) }}</td>
+                                        <td class="text-right">{{ $pesos($fila['mes']) }}</td>
+                                        <td class="text-right">{{ $pesos($fila['anio']) }}</td>
+                                    @endif
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             </div>
         @endif
     </div>

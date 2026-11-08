@@ -31,6 +31,7 @@ class TesoreriaCrownResultadoOnline extends Model implements Auditable
         'pago_manual',
         'cantidad_slots',
         'slot_resultado',
+        'subtotal_slot',
         'usuario_id',
     ];
 
@@ -48,6 +49,7 @@ class TesoreriaCrownResultadoOnline extends Model implements Auditable
         'pago_manual' => 'decimal:2',
         'cantidad_slots' => 'integer',
         'slot_resultado' => 'decimal:2',
+        'subtotal_slot' => 'decimal:2',
     ];
 
     public function empresa(): BelongsTo

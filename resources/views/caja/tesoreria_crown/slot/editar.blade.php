@@ -51,6 +51,7 @@
         'puedeSlots' => $escritorio['puedeSlots'],
         'puedePoder' => $escritorio['puedePoder'],
         'puedeAnexo' => $escritorio['puedeAnexo'],
+        'puedeKardex' => $escritorio['puedeKardex'] ?? false,
         'navAsignaciones' => $escritorio['asignaciones'],
         'navMesas' => $escritorio['mesas'],
         'navBorradoresMesa' => $escritorio['borradoresMesa'],

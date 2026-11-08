@@ -278,6 +278,25 @@ final class TesoreriaCrownBovedaSupport
             $grupos[$titulo]['monto'] = ($grupos[$titulo]['monto'] ?? 0.0) + $monto;
         }
 
+        $ordenMoneda = ['ARS' => 0, 'USD' => 1, 'EUR' => 2, 'Pesos' => 0, 'Dólares' => 1, 'Euros' => 2];
+        foreach ($grupos as &$grupo) {
+            usort($grupo['filas'], static function (array $a, array $b): int {
+                return (float) $b['valor']->denominacion <=> (float) $a['valor']->denominacion;
+            });
+            $grupo['monto'] = round((float) ($grupo['monto'] ?? 0), 2);
+        }
+        unset($grupo);
+
+        uasort($grupos, static function (array $a, array $b) use ($ordenMoneda): int {
+            $ca = $ordenMoneda[$a['titulo'] ?? ''] ?? 9;
+            $cb = $ordenMoneda[$b['titulo'] ?? ''] ?? 9;
+            if ($ca !== $cb) {
+                return $ca <=> $cb;
+            }
+
+            return strcmp((string) ($a['titulo'] ?? ''), (string) ($b['titulo'] ?? ''));
+        });
+
         return array_values($grupos);
     }
 
@@ -431,6 +450,10 @@ final class TesoreriaCrownBovedaSupport
                     'valor_id' => $linea->valor_id,
                     'cantidad' => $linea->cantidad,
                 ]);
+            }
+            $jornada = TesoreriaCrownJornada::query()->find((int) $comprobante->jornada_id);
+            if ($jornada) {
+                TesoreriaCrownAnexo8Calculo::invalidarCache($jornada);
             }
         });
     }

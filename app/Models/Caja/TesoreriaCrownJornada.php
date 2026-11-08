@@ -24,10 +24,18 @@ class TesoreriaCrownJornada extends Model implements Auditable
         'empresa_id',
         'fecha',
         'estado',
+        'caja_final_dia',
+        'caja_final_mes',
+        'caja_final_viii',
+        'clientes',
     ];
 
     protected $casts = [
         'fecha' => 'date',
+        'caja_final_dia' => 'decimal:2',
+        'caja_final_mes' => 'decimal:2',
+        'caja_final_viii' => 'decimal:2',
+        'clientes' => 'integer',
     ];
 
     public function sala(): BelongsTo
@@ -48,6 +56,11 @@ class TesoreriaCrownJornada extends Model implements Auditable
     public function comprobantes(): HasMany
     {
         return $this->hasMany(TesoreriaCrownComprobante::class, 'jornada_id');
+    }
+
+    public function cierresFiscales(): HasMany
+    {
+        return $this->hasMany(TesoreriaCrownCierreFiscal::class, 'jornada_id');
     }
 
     public function estaAbierta(): bool

@@ -553,6 +553,24 @@ final class CobranzaAnitaCheBanEsquemaSupport
     }
 
     /**
+     * Filtro AND para list/update/delete pago.
+     * Crown mono: Anita guarda pag_empresa=0 (no el código Sicore 1).
+     * Filtrar por Sicore deja falsos "Sin pago Anita" con tesmov/ctamov OK.
+     */
+    public static function andFiltroEmpresaPago(int $empresaAnita): string
+    {
+        if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+            return ' AND pag_empresa = '.PagoproveedorAnitaCrownClaveSupport::empresaAnita();
+        }
+
+        if (self::omitirColumnasEmpresaAggCheBan() || $empresaAnita <= 0) {
+            return '';
+        }
+
+        return ' AND pag_empresa = '.$empresaAnita;
+    }
+
+    /**
      * Sufijo INSERT auxpag AGG (empresa/concepto/cbu). Vacío en Ferli.
      *
      * @return array{campos: string, valores: string}

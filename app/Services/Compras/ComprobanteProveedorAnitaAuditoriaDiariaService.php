@@ -210,6 +210,13 @@ final class ComprobanteProveedorAnitaAuditoriaDiariaService
                 $fila['problemas'] = $diag2['problemas'] !== []
                     ? $diag2['problemas']
                     : ['Reparación parcial: siguen fallas'];
+                // syncCreate marca SYNC_OK al grabar compra; si sigue faltando ctamov
+                // hay que dejar ERROR para que el bridge de las 13/16 lo retome.
+                $cp->forceFill([
+                    'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::ERROR,
+                    'anita_sync_error' => mb_substr(implode('; ', $fila['problemas']), 0, 2000),
+                    'anita_sync_at' => now(),
+                ])->save();
             }
         } catch (Throwable $e) {
             $fila['estado'] = 'discrepancia';
@@ -232,11 +239,13 @@ final class ComprobanteProveedorAnitaAuditoriaDiariaService
     private function reparar(Comprobante_Proveedor $cp, array $problemas, array &$acciones): void
     {
         $texto = mb_strtolower(implode(' | ', $problemas));
-        $necesitaSyncCompra = (int) ($cp->anita_nro_interno ?? 0) <= 0
+        $sinNroInterno = (int) ($cp->anita_nro_interno ?? 0) <= 0;
+        $necesitaSyncCompra = $sinNroInterno
             || str_contains($texto, 'compra')
             || str_contains($texto, 'concmov')
             || str_contains($texto, 'promov')
-            || str_contains($texto, 'sync anita');
+            || str_contains($texto, 'sync anita')
+            || str_contains($texto, 'anita_nro_interno');
 
         if ($necesitaSyncCompra) {
             if ((int) ($cp->anita_nro_interno ?? 0) > 0) {
@@ -254,7 +263,15 @@ final class ComprobanteProveedorAnitaAuditoriaDiariaService
             $acciones[] = 'resyncAplicped';
         }
 
-        if (str_contains($texto, 'ctamov') && (int) ($cp->asiento_id ?? 0) > 0) {
+        // Sin nro interno el diagnóstico corto no menciona "ctamov"; igual hay que
+        // empujarlo (mismo orden que el bridge). Caso: FIS C-10-18849/18850.
+        $debeCtamov = (int) ($cp->asiento_id ?? 0) > 0
+            && (
+                $sinNroInterno
+                || str_contains($texto, 'ctamov')
+                || $necesitaSyncCompra
+            );
+        if ($debeCtamov) {
             $asiento = Asiento::query()->with('asiento_movimientos')->find((int) $cp->asiento_id);
             if ($asiento !== null) {
                 $payload = $this->asientoRepository->armarPayloadAnitaDesdeModelo($asiento);

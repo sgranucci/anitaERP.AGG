@@ -45,6 +45,7 @@ class TesoreriaCrownSlot extends Model implements Auditable
         'sala_id',
         'empresa_id',
         'jornada_id',
+        'boveda_id',
         'numero',
         'maquina',
         'maquina_nombre',
@@ -72,6 +73,11 @@ class TesoreriaCrownSlot extends Model implements Auditable
     public function jornada(): BelongsTo
     {
         return $this->belongsTo(TesoreriaCrownJornada::class, 'jornada_id');
+    }
+
+    public function boveda(): BelongsTo
+    {
+        return $this->belongsTo(TesoreriaCrownBoveda::class, 'boveda_id');
     }
 
     public function lineas(): HasMany

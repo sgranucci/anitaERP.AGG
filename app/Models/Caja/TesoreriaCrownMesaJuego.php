@@ -15,6 +15,7 @@ class TesoreriaCrownMesaJuego extends Model implements Auditable
     protected $fillable = [
         'deposito_id',
         'banca_codigo',
+        'desc_tipojuego',
     ];
 
     protected $casts = [

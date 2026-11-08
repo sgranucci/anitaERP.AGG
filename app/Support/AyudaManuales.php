@@ -224,6 +224,16 @@ class AyudaManuales
             ];
         }
 
+        if (EntornoEmpresaSupport::esCrown()) {
+            $manuales[] = [
+                'modulo' => 'Tesorería Crown',
+                'bajada' => 'Circuito diario Crown: jornada, firmas de cajero, rendiciones hotel/gastro, bóveda, soft-count, propinas y anexos I–VIII.',
+                'url' => route('manual_tesoreria_crown'),
+                'icono' => 'fa-coins',
+                'disponible' => true,
+            ];
+        }
+
         return $manuales;
     }
 

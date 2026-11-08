@@ -25,6 +25,38 @@
     'monedas' => $monedas,
     'referencia' => $referencia,
 ])
+@php
+    $subtipos = $subtipos ?? collect();
+    $subtipoId = old('subtipo_id', $subtipoId ?? '');
+    $subtipoTexto = old('subtipo_texto', $subtipoTexto ?? '');
+@endphp
+<div class="form-group row tc-boveda-subtipo {{ $subtipos->isEmpty() ? 'd-none' : '' }}" id="tc-boveda-subtipo-wrap"
+     data-url="{{ route('subtipos_tesoreria_crown_kardex_valores') }}">
+    <label for="subtipo_id" class="col-lg-3 control-label text-right pr-2{{ $editable ? ' requerido' : '' }}">Subtipo</label>
+    <div class="col-lg-8">
+        @if ($editable)
+            <select name="subtipo_id" id="subtipo_id" class="form-control" {{ $subtipos->isEmpty() ? '' : 'required' }}>
+                <option value="">Elegí…</option>
+                @foreach ($subtipos as $st)
+                    <option value="{{ $st->id }}" data-codigo="{{ $st->codigo }}" @selected((int) $subtipoId === (int) $st->id)>
+                        {{ $st->etiqueta() }}
+                    </option>
+                @endforeach
+            </select>
+            <input type="text" name="subtipo_texto" id="subtipo_texto" class="form-control mt-2 {{ strtoupper((string) optional($subtipos->firstWhere('id', (int) $subtipoId))->codigo) === 'OTR' ? '' : 'd-none' }}"
+                   maxlength="80" placeholder="Detalle del subtipo (obligatorio si es Otro)"
+                   value="{{ $subtipoTexto }}">
+        @else
+            @php $stSel = $subtipos->firstWhere('id', (int) $subtipoId); @endphp
+            <p class="form-control-plaintext mb-0">
+                {{ $stSel?->etiqueta() ?? '—' }}
+                @if ($subtipoTexto !== '')
+                    · {{ $subtipoTexto }}
+                @endif
+            </p>
+        @endif
+    </div>
+</div>
 @if ((int) ($empresaLegajoId ?? 0) > 0)
     <input type="hidden" name="empresa_id" value="{{ (int) $empresaLegajoId }}">
 @endif

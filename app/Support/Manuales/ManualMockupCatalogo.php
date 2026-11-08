@@ -95,6 +95,11 @@ final class ManualMockupCatalogo
                 'img_dir' => 'docs/manual-cierres-rendiciones/img',
                 'label' => 'Cierres Rendiciones',
             ],
+            'tesoreria-crown' => [
+                'config' => 'manual_tesoreria_crown',
+                'img_dir' => 'docs/manual-tesoreria-crown/img',
+                'label' => 'Tesorería Crown',
+            ],
         ];
     }
 
@@ -122,6 +127,14 @@ final class ManualMockupCatalogo
                 'drill', 'publicacion', 'distribucion', 'notas', 'paridad', 'alertas', 'ejemplos',
             ],
             'sueldos' => ['flujo_sancion'],
+            // Circuito diario: diagrama; el resto de pantallas Crown se capturan con Chromium
+            // (manual:capturar-tesoreria-crown). No regenerar mockups sobre esas bajadas.
+            'tesoreria-crown' => [
+                'circuito_diario',
+                'jornada_listado', 'jornada_escritorio', 'habilitacion_firma', 'rendicion_firma',
+                'rendicion_externa', 'cierre_caja', 'mesas_propina', 'slots_softcount', 'boveda_stock',
+                'poder_publico', 'cotizacion', 'kardex_valores', 'anexo1', 'anexo8',
+            ],
             default => [],
         };
     }

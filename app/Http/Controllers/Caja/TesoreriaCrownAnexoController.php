@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAnexo2Calculo;
+use App\Support\Caja\TesoreriaCrownAnexo3AuditoriaSupport;
 use App\Support\Caja\TesoreriaCrownAnexo7Calculo;
 use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownResumenCajeroCalculo;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
@@ -21,57 +23,100 @@ class TesoreriaCrownAnexoController extends Controller
 {
     public function listarAnexo2(Request $request, $formato = null)
     {
-        return $this->exportar($request, $formato, 'anexo2', function (TesoreriaCrownJornada $jornada) {
-            $armado = TesoreriaCrownAnexo2Calculo::deJornada($jornada);
-            $filas = [];
-            foreach ($armado['filas'] as $fila) {
-                $filas[] = [
-                    $fila['juego'],
-                    $fila['mesa'],
-                    $fila['banca'],
-                    (float) $fila['creditos'],
-                    (float) $fila['reposiciones'],
-                    (float) $fila['estado_final'],
-                    (float) $fila['drop'],
-                    (float) $fila['pagos_manuales'],
-                    (float) $fila['recomp_banca'],
-                    (float) $fila['caja_empleado'],
-                    (float) $fila['resultado'],
-                    $fila['pct_mesa'] === null ? '' : (float) $fila['pct_mesa'],
-                    $fila['pct_prop'] === null ? '' : (float) $fila['pct_prop'],
-                ];
+        return $this->exportar($request, $formato, 'anexo2', function (TesoreriaCrownJornada $jornada) use ($request) {
+            $grupo = TesoreriaCrownAnexo2Calculo::resolverGrupoPermitido($request->query('grupo_anexo2'));
+            if ($grupo === null) {
+                abort(403, 'No tenés permiso para exportar ese grupo del anexo II.');
             }
-            if ($armado['filas'] !== []) {
-                $t = $armado['totales'];
-                $filas[] = [
-                    'Total', '', '',
-                    (float) $t['creditos'], (float) $t['reposiciones'], (float) $t['estado_final'],
-                    (float) $t['drop'], (float) $t['pagos_manuales'], (float) $t['recomp_banca'],
-                    (float) $t['caja_empleado'], (float) $t['resultado'], '', '',
-                ];
+            $armado = TesoreriaCrownAnexo2Calculo::deJornada($jornada, $grupo);
+            $etiqueta = TesoreriaCrownAnexo2Calculo::GRUPOS[$grupo] ?? $grupo;
+            $vacioMesas = array_fill(0, 21, '');
+            $filas = [];
+            foreach ($armado['secciones'] as $seccion) {
+                $filas[] = array_replace($vacioMesas, [0 => $seccion['titulo']]);
+                if (($seccion['tipo'] ?? '') === 'mesas') {
+                    foreach ($seccion['filas'] as $fila) {
+                        $filas[] = [
+                            $fila['juego'],
+                            $fila['mesa'],
+                            (float) ($fila['banca_tipo'] ?? 0),
+                            (float) $fila['creditos'],
+                            (float) $fila['reposiciones'],
+                            (float) $fila['estado_final'],
+                            (float) $fila['drop'],
+                            (float) $fila['pagos_manuales'],
+                            (float) $fila['recomp_banca'],
+                            (float) $fila['caja_empleado'],
+                            (float) $fila['resultado'],
+                            $fila['pct_mesa'] === null ? '' : (float) $fila['pct_mesa'],
+                            $fila['pct_prop'] === null ? '' : (float) $fila['pct_prop'],
+                            (float) ($fila['acum_estado_final'] ?? 0),
+                            (float) ($fila['acum_drop'] ?? 0),
+                            (float) ($fila['acum_pagos_manuales'] ?? 0),
+                            (float) ($fila['acum_recomp_banca'] ?? 0),
+                            (float) ($fila['acum_caja_empleado'] ?? 0),
+                            (float) ($fila['acum_resultado'] ?? 0),
+                            ($fila['acum_pct_mesa'] ?? null) === null ? '' : (float) $fila['acum_pct_mesa'],
+                            ($fila['acum_pct_prop'] ?? null) === null ? '' : (float) $fila['acum_pct_prop'],
+                        ];
+                    }
+                } elseif (($seccion['tipo'] ?? '') === 'maquinas') {
+                    foreach ($seccion['filas'] as $fila) {
+                        $filas[] = array_replace($vacioMesas, [
+                            0 => $fila['concepto'],
+                            3 => (float) $fila['diario'],
+                        ]);
+                    }
+                } elseif (($seccion['tipo'] ?? '') === 'gastronomia') {
+                    foreach ($seccion['filas'] as $fila) {
+                        $filas[] = array_replace($vacioMesas, [
+                            0 => (string) ($fila['etiqueta'] ?? ''),
+                            3 => (float) ($fila['ventas_z'] ?? 0),
+                            4 => (float) ($fila['rendiciones'] ?? 0),
+                            5 => (float) ($fila['anulados'] ?? 0),
+                            6 => (float) ($fila['invitaciones'] ?? 0),
+                            7 => (float) ($fila['tarjetas'] ?? 0),
+                            13 => (float) ($fila['acum_ventas_z'] ?? 0),
+                            14 => (float) ($fila['acum_rendiciones'] ?? 0),
+                            15 => (float) ($fila['acum_anulados'] ?? 0),
+                            16 => (float) ($fila['acum_invitaciones'] ?? 0),
+                            17 => (float) ($fila['acum_tarjetas'] ?? 0),
+                        ]);
+                    }
+                }
+                $filas[] = $vacioMesas;
             }
 
             return [
                 'titulo' => 'Anexo II '.$jornada->fecha->format('d/m/Y'),
-                'subtitulo' => 'Resultado de mesas · l-resmesa.c',
-                'archivo' => 'anexo2_'.$jornada->fecha->format('Ymd'),
+                'subtitulo' => 'l-resmesa.c · grupo '.$etiqueta.' · acumulado desde 1º del mes',
+                'archivo' => 'anexo2_'.$grupo.'_'.$jornada->fecha->format('Ymd'),
                 'titulo_corto' => 'Anexo II',
                 'columnas' => [
                     ['label' => 'Juego', 'ancho' => 18, 'wrap' => true],
-                    ['label' => 'Mesa', 'ancho' => 10],
-                    ['label' => 'Banca', 'ancho' => 10],
-                    ['label' => 'Créditos', 'ancho' => 12, 'numero' => true],
-                    ['label' => 'Reposiciones', 'ancho' => 12, 'numero' => true],
+                    ['label' => 'Mesa', 'ancho' => 8],
+                    ['label' => 'Banca tipo', 'ancho' => 12, 'numero' => true],
+                    ['label' => 'Créditos', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Reposiciones', 'ancho' => 11, 'numero' => true],
                     ['label' => 'Estado final', 'ancho' => 12, 'numero' => true],
-                    ['label' => 'Drop', 'ancho' => 12, 'numero' => true],
-                    ['label' => 'Pagos man.', 'ancho' => 12, 'numero' => true],
+                    ['label' => 'Drop', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Pagos man.', 'ancho' => 11, 'numero' => true],
                     ['label' => 'Recomp. banca', 'ancho' => 12, 'numero' => true],
-                    ['label' => 'Caja empl.', 'ancho' => 12, 'numero' => true],
-                    ['label' => 'Resultado', 'ancho' => 12, 'numero' => true],
-                    ['label' => '% Mesa', 'ancho' => 10, 'numero' => true],
-                    ['label' => '% Prop.', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Caja empl.', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Resultado', 'ancho' => 11, 'numero' => true],
+                    ['label' => '% Mesa', 'ancho' => 9, 'numero' => true],
+                    ['label' => '% Prop.', 'ancho' => 9, 'numero' => true],
+                    ['label' => 'Acum. estado final', 'ancho' => 12, 'numero' => true],
+                    ['label' => 'Acum. drop', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Acum. pagos', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Acum. recomp.', 'ancho' => 12, 'numero' => true],
+                    ['label' => 'Acum. caja', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Acum. resultado', 'ancho' => 12, 'numero' => true],
+                    ['label' => 'Acum. % mesa', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Acum. % prop.', 'ancho' => 10, 'numero' => true],
                 ],
                 'filas' => $filas,
+                'queryparams' => ['grupo_anexo2' => $grupo],
             ];
         });
     }
@@ -147,43 +192,53 @@ class TesoreriaCrownAnexoController extends Controller
     {
         return $this->exportar($request, $formato, 'anexo3', function (TesoreriaCrownJornada $jornada) {
             $armado = TesoreriaCrownResumenCajeroCalculo::deJornada($jornada);
+            $vacio = array_fill(0, 22, '');
+            $filaNums = static function (array $f): array {
+                return [
+                    $f['caja'] ?? '',
+                    $f['cajero'] ?? '',
+                    (float) ($f['cierre_x'] ?? 0),
+                    (float) ($f['egresos'] ?? 0),
+                    (float) ($f['efectivo'] ?? 0),
+                    (float) ($f['tarjeta_credito'] ?? 0),
+                    (float) ($f['tarjeta_debito'] ?? 0),
+                    (float) ($f['total_qr'] ?? 0),
+                    (float) ($f['recargo_fin'] ?? 0),
+                    (float) ($f['ctacte'] ?? 0),
+                    (float) ($f['ingresos'] ?? 0),
+                    (float) ($f['hab_fichas'] ?? 0),
+                    (float) ($f['rend_fichas'] ?? 0),
+                    (float) ($f['fichas_casino'] ?? 0),
+                    (float) ($f['pago_cashless'] ?? 0),
+                    (float) ($f['vta_cashless'] ?? 0),
+                    (float) ($f['pago_online'] ?? 0),
+                    (float) ($f['venta_online'] ?? 0),
+                    (float) ($f['online'] ?? 0),
+                    (float) ($f['apuestas'] ?? 0),
+                    (float) ($f['resultado'] ?? 0),
+                    (float) ($f['diferencia'] ?? 0),
+                ];
+            };
             $filas = [];
-            foreach ($armado['filas'] as $fila) {
-                $filas[] = [
-                    $fila['caja'],
-                    $fila['cajero'],
-                    (float) $fila['cierre_x'],
-                    (float) $fila['egresos'],
-                    (float) $fila['efectivo'],
-                    (float) $fila['tarjeta_credito'],
-                    (float) $fila['tarjeta_debito'],
-                    (float) $fila['total_qr'],
-                    (float) $fila['recargo_fin'],
-                    (float) $fila['ctacte'],
-                    (float) $fila['ingresos'],
-                    (float) $fila['hab_fichas'],
-                    (float) $fila['rend_fichas'],
-                    (float) $fila['pago_cashless'],
-                    (float) $fila['vta_cashless'],
-                    (float) $fila['pago_online'],
-                    (float) $fila['venta_online'],
-                    (float) $fila['apuestas'],
-                    (float) $fila['resultado'],
-                    (float) $fila['diferencia'],
-                ];
+            foreach ($armado['grupos'] as $grupo) {
+                $filas[] = array_replace($vacio, [0 => $grupo['titulo']]);
+                foreach ($grupo['filas'] as $fila) {
+                    $filas[] = $filaNums($fila);
+                }
+                $filas[] = $filaNums(array_merge($grupo['totales'], [
+                    'caja' => 'Total '.$grupo['titulo'],
+                    'cajero' => '',
+                ]));
             }
-            if ($armado['filas'] !== []) {
-                $t = $armado['totales'];
-                $filas[] = [
-                    'Total', '',
-                    (float) $t['cierre_x'], (float) $t['egresos'], (float) $t['efectivo'],
-                    (float) $t['tarjeta_credito'], (float) $t['tarjeta_debito'], (float) $t['total_qr'],
-                    (float) $t['recargo_fin'], (float) $t['ctacte'], (float) $t['ingresos'],
-                    (float) $t['hab_fichas'], (float) $t['rend_fichas'],
-                    (float) $t['pago_cashless'], (float) $t['vta_cashless'],
-                    (float) $t['pago_online'], (float) $t['venta_online'],
-                    (float) $t['apuestas'], (float) $t['resultado'], (float) $t['diferencia'],
-                ];
+            if ($armado['grupos'] !== []) {
+                $filas[] = $filaNums(array_merge($armado['totales'], [
+                    'caja' => 'Total general',
+                    'cajero' => '',
+                ]));
+                $filas[] = array_replace($vacio, [
+                    0 => 'Total de Tarj. Credito + Tarj. Debito + Total QR + Recargo fin.',
+                    2 => (float) ($armado['total_tarjetas'] ?? 0),
+                ]);
             }
 
             return [
@@ -193,25 +248,27 @@ class TesoreriaCrownAnexoController extends Controller
                 'titulo_corto' => 'Anexo III',
                 'columnas' => [
                     ['label' => 'Caja', 'ancho' => 10],
-                    ['label' => 'Cajero', 'ancho' => 22, 'wrap' => true],
-                    ['label' => 'Cierre X', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Egresos', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Efectivo', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'T. crédito', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'T. débito', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'QR', 'ancho' => 10, 'numero' => true],
-                    ['label' => 'Recargo', 'ancho' => 10, 'numero' => true],
-                    ['label' => 'Cta.cte.', 'ancho' => 10, 'numero' => true],
-                    ['label' => 'Ingresos', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Hab. fichas', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Rend. fichas', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Pago cashless', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Vta. cashless', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Pago online', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Vta. online', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Apuestas', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Resultado', 'ancho' => 11, 'numero' => true],
-                    ['label' => 'Dif.', 'ancho' => 11, 'numero' => true],
+                    ['label' => 'Cajero', 'ancho' => 20, 'wrap' => true],
+                    ['label' => 'Cierre X', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Egresos', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Efectivo', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'T. crédito', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'T. débito', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'QR', 'ancho' => 9, 'numero' => true],
+                    ['label' => 'Recargo', 'ancho' => 9, 'numero' => true],
+                    ['label' => 'Cta.cte.', 'ancho' => 9, 'numero' => true],
+                    ['label' => 'Ingresos', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Hab. fichas', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Rend. fichas', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Fichas Casino', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Pago cashless', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Vta. cashless', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Pagos online', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Ventas online', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Del Rio ONLINE', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Apuestas Dep.', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Resultado', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Dif. cajero', 'ancho' => 10, 'numero' => true],
                 ],
                 'filas' => $filas,
             ];
@@ -266,6 +323,53 @@ class TesoreriaCrownAnexoController extends Controller
         return $this->exportar($request, $formato, 'anexo8', function (TesoreriaCrownJornada $jornada) {
             $armado = TesoreriaCrownAnexo8Calculo::deJornada($jornada);
             $filas = [];
+            $fichas = $armado['fichas'] ?? null;
+            if (is_array($fichas) && ($fichas['filas'] ?? []) !== []) {
+                $filas[] = ['Stock de fichas (no entra al total)', '', '', ''];
+                foreach ($fichas['filas'] as $fila) {
+                    $filas[] = [
+                        $fila['serie'].' '.$fila['descripcion'],
+                        (float) $fila['valor'],
+                        (float) $fila['cantidad'],
+                        (float) $fila['monto'],
+                    ];
+                }
+                $filas[] = ['', 'Total conversión valorizado', '', (float) $fichas['conversion_valorizada']];
+                $filas[] = ['', 'Total poder público valorizado', '', (float) $fichas['poder_valorizado']];
+                $filas[] = ['', 'Total poder público diario', '', (float) $fichas['diario_valorizado']];
+                $filas[] = ['', '', '', ''];
+            }
+            $c = $armado['componentes'] ?? null;
+            if (is_array($c)) {
+                $filas[] = ['Componentes', '', '', ''];
+                $filas[] = ['', 'Pesos en bóveda', '', (float) ($c['pesos'] ?? 0)];
+                $filas[] = ['', 'Slots (recuento)', '', (float) ($c['slots'] ?? 0)];
+                $filas[] = ['', 'Drops de mesa', '', (float) ($c['drops_mesa'] ?? 0)];
+                $filas[] = ['', 'Items resumen final', '', (float) ($c['resumen'] ?? 0)];
+                foreach ($c['resumen_detalle'] ?? [] as $item) {
+                    $filas[] = ['', '  '.$item['descripcion'], '', (float) $item['monto']];
+                }
+                $filas[] = ['', 'Propina acumulada', '', (float) ($c['propina'] ?? 0)];
+                if (((float) ($c['usd_pesos'] ?? 0)) > 0.001) {
+                    $filas[] = [
+                        '',
+                        'Total dolares convertidos a pesos (equiv. '.(float) ($c['usd_face'] ?? 0).' u$s)',
+                        '',
+                        (float) ($c['usd_pesos'] ?? 0),
+                    ];
+                }
+                if (((float) ($c['eur_pesos'] ?? 0)) > 0.001) {
+                    $filas[] = [
+                        '',
+                        'Total euros convertidos a pesos (equiv. '.(float) ($c['eur_face'] ?? 0).' EUR)',
+                        '',
+                        (float) ($c['eur_pesos'] ?? 0),
+                    ];
+                }
+                $filas[] = ['', 'Otras monedas segun cotiz.', '', (float) ($c['moneda_extranjera'] ?? 0)];
+                $filas[] = ['', 'Total Anexo VIII', '', (float) $armado['total']];
+                $filas[] = ['', '', '', ''];
+            }
             foreach ($armado['lugares'] as $lugar) {
                 $filas[] = [$lugar['lugar'], '', '', ''];
                 foreach ($lugar['grupos'] as $grupo) {
@@ -300,6 +404,28 @@ class TesoreriaCrownAnexoController extends Controller
                 'filas' => $filas,
             ];
         });
+    }
+
+    public function auditoriaAnexo3(Request $request, int $id): JsonResponse
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-anexo');
+
+        $jornada = $this->jornadaEnAlcance($id);
+        $columna = (string) $request->query('columna', '');
+        $scope = (string) $request->query('scope', 'fila');
+        $asignacionId = $request->query('asignacion_id');
+        $tipoGrupo = $request->query('tipo');
+
+        $detalle = TesoreriaCrownAnexo3AuditoriaSupport::deRequest(
+            $jornada,
+            $columna,
+            $scope,
+            $asignacionId !== null && $asignacionId !== '' ? (int) $asignacionId : null,
+            $tipoGrupo !== null && $tipoGrupo !== '' ? (string) $tipoGrupo : null
+        );
+
+        return response()->json($detalle);
     }
 
     /**

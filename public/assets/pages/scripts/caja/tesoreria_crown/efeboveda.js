@@ -41,6 +41,47 @@
         recalcularTodo();
     }
 
+    function cargarSubtipos(tipoId) {
+        var wrap = document.getElementById('tc-boveda-subtipo-wrap');
+        var select = document.getElementById('subtipo_id');
+        var texto = document.getElementById('subtipo_texto');
+        if (!wrap || !select) {
+            return;
+        }
+        var url = wrap.getAttribute('data-url') || '';
+        select.innerHTML = '<option value="">Elegí…</option>';
+        if (texto) {
+            texto.value = '';
+            texto.classList.add('d-none');
+        }
+        if (!tipoId || !url) {
+            wrap.classList.add('d-none');
+            select.removeAttribute('required');
+            return;
+        }
+        fetch(url + '?tipo_id=' + encodeURIComponent(tipoId), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            var filas = data.data || [];
+            if (!filas.length) {
+                wrap.classList.add('d-none');
+                select.removeAttribute('required');
+                return;
+            }
+            filas.forEach(function (fila) {
+                var opt = document.createElement('option');
+                opt.value = fila.id;
+                opt.textContent = fila.etiqueta;
+                opt.setAttribute('data-codigo', fila.codigo || '');
+                select.appendChild(opt);
+            });
+            wrap.classList.remove('d-none');
+            select.setAttribute('required', 'required');
+        }).catch(function () {
+            wrap.classList.add('d-none');
+        });
+    }
+
     function totalPanel(panel) {
         var total = 0;
         panel.querySelectorAll('input[data-denom]').forEach(function (input) {
@@ -109,7 +150,25 @@
     });
     var campo = hiddenTipo();
     if (campo) {
-        campo.addEventListener('change', aplicarTipo);
+        campo.addEventListener('change', function () {
+            aplicarTipo();
+            cargarSubtipos(campo.value || '');
+        });
+    }
+    var selectSubtipo = document.getElementById('subtipo_id');
+    if (selectSubtipo) {
+        selectSubtipo.addEventListener('change', function () {
+            var texto = document.getElementById('subtipo_texto');
+            if (!texto) {
+                return;
+            }
+            var opt = selectSubtipo.options[selectSubtipo.selectedIndex];
+            var codigo = opt ? (opt.getAttribute('data-codigo') || '') : '';
+            texto.classList.toggle('d-none', String(codigo).toUpperCase() !== 'OTR');
+            if (String(codigo).toUpperCase() !== 'OTR') {
+                texto.value = '';
+            }
+        });
     }
     aplicarTipo();
 

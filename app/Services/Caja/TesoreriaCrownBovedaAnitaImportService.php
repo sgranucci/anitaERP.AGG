@@ -45,16 +45,20 @@ class TesoreriaCrownBovedaAnitaImportService
             'efeb_nro_oper,efeb_cod_trans,efeb_hora,efeb_legajo,efeb_comentario',
             'SELECT efeb_nro_oper, efeb_cod_trans, efeb_hora, efeb_legajo, efeb_comentario FROM efeboveda WHERE efeb_fecha = '.$fechaInt.' ORDER BY efeb_nro_oper'
         );
+        // Corte vacío = importa todo el día (histórico / MTD sin pruebas ERP).
         $corte = trim($corteComentario);
-        $indiceCorte = null;
-        foreach ($cabeceras as $i => $fila) {
-            if (trim((string) $fila->efeb_comentario) === $corte) {
-                $indiceCorte = $i;
-                break;
+        $indiceCorte = -1;
+        if ($corte !== '') {
+            $indiceCorte = null;
+            foreach ($cabeceras as $i => $fila) {
+                if (trim((string) $fila->efeb_comentario) === $corte) {
+                    $indiceCorte = $i;
+                    break;
+                }
             }
-        }
-        if ($indiceCorte === null) {
-            throw new RuntimeException('En esa fecha no está el comentario de corte «'.$corte.'».');
+            if ($indiceCorte === null) {
+                throw new RuntimeException('En esa fecha no está el comentario de corte «'.$corte.'».');
+            }
         }
 
         $tipos = TesoreriaCrownBovedaTipo::query()
@@ -128,7 +132,9 @@ class TesoreriaCrownBovedaAnitaImportService
         return [
             'crear' => $crear,
             'omitir' => $omitir,
-            'corte' => (int) $cabeceras[$indiceCorte]->efeb_nro_oper,
+            'corte' => $indiceCorte >= 0 && isset($cabeceras[$indiceCorte])
+                ? (int) $cabeceras[$indiceCorte]->efeb_nro_oper
+                : null,
         ];
     }
 

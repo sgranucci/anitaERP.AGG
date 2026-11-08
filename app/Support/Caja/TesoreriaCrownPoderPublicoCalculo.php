@@ -2,11 +2,21 @@
 
 namespace App\Support\Caja;
 
-use App\ApiAnita;
+use App\Models\Caja\TesoreriaCrownConversionFicha;
+use App\Models\Caja\TesoreriaCrownFicha;
+use App\Models\Caja\TesoreriaCrownFichaBanca;
+use App\Models\Caja\TesoreriaCrownFichaCierre;
+use App\Models\Caja\TesoreriaCrownFichaMovimiento;
+use App\Models\Caja\TesoreriaCrownPoderPublico;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
  * Poder del público de fichas, como l-stockfichm.c.
+ *
+ * Solo tablas ERP (`tesoreria_crown_ficha*`). Si falta catálogo o conversión
+ * del día anterior, devuelve estructura en cero con aviso para importar fichas
+ * (sin lectura live a Anita).
  *
  * Por ficha, si hay conversión del día anterior:
  *   conversión inicial = conversión final de ayer + asignación inicial de hoy + otros movimientos de ficha de hoy
@@ -17,8 +27,8 @@ use RuntimeException;
  * El importe del día que entra al anexo I es la suma de
  * (conversión inicial − conversión final) × valor. No se trunca a cero:
  * si la conversión final sube, el día da negativo.
- * El mes y el acumulado arrancan en el ppublico del día anterior y suman ese día.
- * El 1 del mes, el mes arranca en cero.
+ * El mes y el acumulado arrancan en tesoreria_crown_poder_publico del día anterior y suman ese día.
+ * El 1 del mes, el mes arranca en cero. Sin lectura Anita.
  */
 final class TesoreriaCrownPoderPublicoCalculo
 {
@@ -35,47 +45,141 @@ final class TesoreriaCrownPoderPublicoCalculo
      *     poder_valorizado: float,
      *     diario_valorizado: float,
      *     diario_canje: float,
+     *     origen: string,
      *     avisos: list<string>
      * }
      */
     public static function delDia(string $fechaYmd): array
     {
-        $fecha = (int) str_replace('-', '', $fechaYmd);
-        $ayer = (int) date('Ymd', strtotime($fechaYmd.' -1 day'));
         $avisos = [];
+        if (self::erpDisponible($fechaYmd, $avisos)) {
+            $armado = self::delDiaErp($fechaYmd, $avisos);
+            $armado['origen'] = 'erp';
 
-        $fichas = self::fichas();
-        $ayerFinal = self::mapa('codigo', 'final', self::consultar(
-            'codigo,final',
-            'SELECT conv_codigo_ficha, conv_conv_final FROM conversion WHERE conv_fecha = '.$ayer
-        ));
-        $mesa = self::mapaDoble(self::consultar(
-            'codigo,tipo,cantidad',
-            'SELECT fichmv_codigo, fichmv_tipo_oper, SUM(fichmv_cantidad) FROM fichammov WHERE fichmv_fecha = '.$fecha.' GROUP BY fichmv_codigo, fichmv_tipo_oper'
-        ));
-        $cajero = self::mapaDoble(self::consultar(
-            'codigo,tipo,cantidad',
-            'SELECT fichcv_codigo, fichcv_tipo_oper, SUM(fichcv_cantidad) FROM fichacmov WHERE fichcv_fecha = '.$fecha.' GROUP BY fichcv_codigo, fichcv_tipo_oper'
-        ));
-        $canje = self::mapa('codigo', 'cantidad', self::consultar(
-            'codigo,cantidad',
-            'SELECT fcanjm_codigo, SUM(fcanjm_cantidad) FROM fcanjemesa WHERE fcanjm_fecha = '.$fecha.' GROUP BY fcanjm_codigo'
-        ));
-        $otrosMov = self::mapa('codigo', 'cantidad', self::consultar(
-            'codigo,cantidad',
-            'SELECT fichv_codigo_ficha, SUM(fichv_cantidad) FROM fichamov WHERE fichv_fecha = '.$fecha.' GROUP BY fichv_codigo_ficha'
-        ));
-        $reservaDia = self::mapa('codigo', 'cantidad', self::consultar(
-            'codigo,cantidad',
-            'SELECT fichmv_codigo, SUM(fichmv_cantidad) FROM fichammov WHERE fichmv_tipo_oper = "I" AND fichmv_fecha = '.$fecha.' GROUP BY fichmv_codigo'
-        ));
-        $cierre = self::cierres($fecha, array_column($fichas, 'codigo'));
-        $asignacion = self::asignacionInicial($fecha, $cierre);
-        $banca = self::mapa('codigo', 'cantidad', self::consultar(
-            'codigo,cantidad',
-            'SELECT b.bant_codigo, SUM(b.bant_cantidad) FROM bancatipo b, mesajuego m WHERE m.mesaj_estado = "A" AND b.bant_tipojuego = m.mesaj_tipoj_banca GROUP BY b.bant_codigo'
-        ));
+            return $armado;
+        }
 
+        $avisos[] = 'Poder público de fichas sin datos ERP: importá con tesoreria-crown:importar-fichas-anita.';
+
+        return [
+            'filas' => [],
+            'diario' => 0,
+            'mes' => 0,
+            'acumulado' => 0,
+            'anita_dia' => null,
+            'anita_mes' => null,
+            'anita_acumulado' => null,
+            'conversion_valorizada' => 0.0,
+            'poder_valorizado' => 0.0,
+            'diario_valorizado' => 0.0,
+            'diario_canje' => 0.0,
+            'origen' => 'erp',
+            'avisos' => array_values(array_unique($avisos)),
+        ];
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     */
+    private static function erpDisponible(string $fechaYmd, array &$avisos): bool
+    {
+        if (! Schema::hasTable('tesoreria_crown_ficha')
+            || ! Schema::hasTable('tesoreria_crown_conversion_ficha')) {
+            return false;
+        }
+        if (TesoreriaCrownFicha::query()->where('orden_carga', '>=', 1)->count() === 0) {
+            $avisos[] = 'Sin catálogo de fichas ERP.';
+
+            return false;
+        }
+        $ayer = date('Y-m-d', strtotime($fechaYmd.' -1 day'));
+        $tieneAyer = TesoreriaCrownConversionFicha::query()->whereDate('fecha', $ayer)->exists();
+        if (! $tieneAyer) {
+            $avisos[] = 'Sin conversión ERP del '.$ayer.'.';
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     * @return array<string, mixed>
+     */
+    private static function delDiaErp(string $fechaYmd, array $avisos): array
+    {
+        $ayer = date('Y-m-d', strtotime($fechaYmd.' -1 day'));
+        $fichas = self::fichasErp();
+        $ayerFinal = TesoreriaCrownConversionFicha::query()
+            ->whereDate('fecha', $ayer)
+            ->pluck('conv_final', 'codigo_ficha')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+        $mesa = self::mapaDobleErp($fechaYmd, TesoreriaCrownFichaMovimiento::ORIGEN_MESA);
+        $cajero = self::mapaDobleErp($fechaYmd, TesoreriaCrownFichaMovimiento::ORIGEN_CAJERO);
+        $canje = self::mapaSimpleErp($fechaYmd, TesoreriaCrownFichaMovimiento::ORIGEN_CANJE);
+        $otrosMov = self::mapaSimpleErp($fechaYmd, TesoreriaCrownFichaMovimiento::ORIGEN_OTROS);
+        $reservaDia = [];
+        foreach ($mesa as $codigo => $tipos) {
+            if (isset($tipos['I'])) {
+                $reservaDia[$codigo] = (int) $tipos['I'];
+            }
+        }
+        $codigos = array_column($fichas, 'codigo');
+        $cierre = self::cierresErp($fechaYmd, $codigos);
+        $asignacion = self::asignacionInicialErp($fechaYmd, $codigos, $cierre, $avisos);
+        $banca = TesoreriaCrownFichaBanca::query()
+            ->pluck('cantidad', 'codigo_ficha')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+
+        return self::armarFilas(
+            $fechaYmd,
+            $ayer,
+            $fichas,
+            $ayerFinal,
+            $mesa,
+            $cajero,
+            $canje,
+            $otrosMov,
+            $reservaDia,
+            $cierre,
+            $asignacion,
+            $banca,
+            $avisos
+        );
+    }
+
+    /**
+     * @param  list<array{codigo: int, serie: string, descripcion: string, valor: float, canje: bool}>  $fichas
+     * @param  array<int, int>  $ayerFinal
+     * @param  array<int, array<string, int>>  $mesa
+     * @param  array<int, array<string, int>>  $cajero
+     * @param  array<int, int>  $canje
+     * @param  array<int, int>  $otrosMov
+     * @param  array<int, int>  $reservaDia
+     * @param  array<int, array{reserva: int, cierre: int}>  $cierre
+     * @param  array<int, int>  $asignacion
+     * @param  array<int, int>  $banca
+     * @param  list<string>  $avisos
+     * @return array<string, mixed>
+     */
+    private static function armarFilas(
+        string $fechaYmd,
+        string $ayerYmd,
+        array $fichas,
+        array $ayerFinal,
+        array $mesa,
+        array $cajero,
+        array $canje,
+        array $otrosMov,
+        array $reservaDia,
+        array $cierre,
+        array $asignacion,
+        array $banca,
+        array $avisos
+    ): array {
         $filas = [];
         $diarioValor = 0.0;
         $poderValor = 0.0;
@@ -90,14 +194,18 @@ final class TesoreriaCrownPoderPublicoCalculo
             $f = (int) ($mesa[$codigo]['F'] ?? 0);
             $variacionMesas = $f - ($a + $r - $c) + (int) ($canje[$codigo] ?? 0);
             $habilitacion = (int) ($cajero[$codigo]['H'] ?? 0);
-            $variacionCajero = (int) ($cajero[$codigo]['P'] ?? 0) + (int) ($cajero[$codigo]['V'] ?? 0) - $habilitacion;
-            $reserva = (int) ($cierre[$codigo]['reserva'] ?? 0) + (int) ($asignacion[$codigo] ?? 0);
+            $pagosCaja = (int) ($cajero[$codigo]['P'] ?? 0);
+            $ventasCaja = (int) ($cajero[$codigo]['V'] ?? 0);
+            $variacionCajero = $pagosCaja + $ventasCaja - $habilitacion;
+            $reservaBase = (int) ($cierre[$codigo]['reserva'] ?? 0);
+            $reservaInicialDia = (int) ($asignacion[$codigo] ?? 0) + (int) ($reservaDia[$codigo] ?? 0);
+            $reserva = $reservaBase + (int) ($asignacion[$codigo] ?? 0);
             $mesas = (int) ($banca[$codigo] ?? 0);
             if (array_key_exists($codigo, $ayerFinal)) {
                 $inicial = (int) $ayerFinal[$codigo] + (int) ($reservaDia[$codigo] ?? 0) + (int) ($otrosMov[$codigo] ?? 0);
             } else {
                 $inicial = $reserva - $mesas;
-                $avisos[] = 'La ficha '.$ficha['serie'].' no tiene conversión del '.$ayer.'. La inicial salió de reserva menos mesas.';
+                $avisos[] = 'La ficha '.$ficha['serie'].' no tiene conversión del '.$ayerYmd.'. La inicial salió de reserva menos mesas.';
             }
             $final = $inicial + $variacionMesas + $variacionCajero;
             $otros = $final > $inicial ? -($inicial - $final) : 0;
@@ -116,10 +224,12 @@ final class TesoreriaCrownPoderPublicoCalculo
                 'descripcion' => $ficha['descripcion'],
                 'valor' => $valor,
                 'reserva' => $reserva,
+                'reserva_inicial' => $reservaInicialDia,
                 'otros' => $otros,
                 'inicial' => $inicial,
                 'final' => $final,
                 'habilitacion' => $habilitacion,
+                'pagos_caja' => $pagosCaja,
                 'pp_diario' => $ppDiario,
                 'poder' => $poder,
                 'mesas' => $mesas,
@@ -129,20 +239,20 @@ final class TesoreriaCrownPoderPublicoCalculo
         }
 
         $dia = self::entero($diarioValor);
-        $anterior = self::ppublico($ayer);
-        $esPrimero = substr((string) $fecha, 6, 2) === '01';
+        $fechaInt = (int) str_replace('-', '', $fechaYmd);
+        $anterior = self::poderPublicoErpCadena($ayerYmd);
+        $esPrimero = substr((string) $fechaInt, 6, 2) === '01';
         $mes = ($esPrimero ? 0 : (int) ($anterior['mes'] ?? 0)) + $dia;
         $acumulado = (int) ($anterior['acumulado'] ?? 0) + $dia;
-        $grabado = self::ppublico($fecha);
 
         return [
             'filas' => $filas,
             'diario' => $dia,
             'mes' => $mes,
             'acumulado' => $acumulado,
-            'anita_dia' => $grabado['dia'] ?? null,
-            'anita_mes' => $grabado['mes'] ?? null,
-            'anita_acumulado' => $grabado['acumulado'] ?? null,
+            'anita_dia' => null,
+            'anita_mes' => null,
+            'anita_acumulado' => null,
             'conversion_valorizada' => round($conversionValor, 2),
             'poder_valorizado' => round($poderValor, 2),
             'diario_valorizado' => round($diarioValor, 2),
@@ -154,22 +264,16 @@ final class TesoreriaCrownPoderPublicoCalculo
     /**
      * @return list<array{codigo: int, serie: string, descripcion: string, valor: float, canje: bool}>
      */
-    private static function fichas(): array
+    private static function fichasErp(): array
     {
         $filas = [];
-        foreach (self::consultar(
-            'fichm_codigo,fichm_serie,fichm_valor,fichm_orden_carga,fichm_ficha_canje,fichm_desc_color',
-            'SELECT fichm_codigo, fichm_serie, fichm_valor, fichm_orden_carga, fichm_ficha_canje, fichm_desc_color FROM fichamae ORDER BY fichm_orden_carga'
-        ) as $fila) {
-            if ((int) $fila->fichm_orden_carga < 1) {
-                continue;
-            }
+        foreach (TesoreriaCrownFicha::query()->where('orden_carga', '>=', 1)->orderBy('orden_carga')->get() as $ficha) {
             $filas[] = [
-                'codigo' => (int) $fila->fichm_codigo,
-                'serie' => trim((string) $fila->fichm_serie),
-                'descripcion' => trim((string) $fila->fichm_desc_color),
-                'valor' => (float) $fila->fichm_valor,
-                'canje' => strtoupper(trim((string) $fila->fichm_ficha_canje)) === 'S',
+                'codigo' => (int) $ficha->codigo,
+                'serie' => (string) $ficha->serie,
+                'descripcion' => (string) $ficha->desc_color,
+                'valor' => (float) $ficha->valor,
+                'canje' => (bool) $ficha->ficha_canje,
             ];
         }
 
@@ -177,22 +281,66 @@ final class TesoreriaCrownPoderPublicoCalculo
     }
 
     /**
+     * @return array<int, array<string, int>>
+     */
+    private static function mapaDobleErp(string $fechaYmd, string $origen): array
+    {
+        $out = [];
+        $rows = TesoreriaCrownFichaMovimiento::query()
+            ->whereDate('fecha', $fechaYmd)
+            ->where('origen', $origen)
+            ->get(['codigo_ficha', 'tipo_oper', 'cantidad']);
+        foreach ($rows as $row) {
+            $tipo = strtoupper(trim((string) ($row->tipo_oper ?? '')));
+            if ($tipo === '') {
+                continue;
+            }
+            $out[(int) $row->codigo_ficha][$tipo] = (int) $row->cantidad;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private static function mapaSimpleErp(string $fechaYmd, string $origen): array
+    {
+        $out = [];
+        $rows = TesoreriaCrownFichaMovimiento::query()
+            ->whereDate('fecha', $fechaYmd)
+            ->where('origen', $origen)
+            ->get(['codigo_ficha', 'cantidad']);
+        foreach ($rows as $row) {
+            $out[(int) $row->codigo_ficha] = (int) $row->cantidad;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<int>  $codigos
      * @return array<int, array{reserva: int, cierre: int}>
      */
-    private static function cierres(int $fecha, array $codigos): array
+    private static function cierresErp(string $fechaYmd, array $codigos): array
     {
         $out = [];
-        if ($codigos === []) {
+        if ($codigos === [] || ! Schema::hasTable('tesoreria_crown_ficha_cierre')) {
             return $out;
         }
-        foreach (self::consultar(
-            'codigo,reserva,ultimo',
-            'SELECT cief_codigo_ficha, SUM(cief_reserva), MAX(cief_fecha) FROM cierreficha WHERE cief_fecha <= '.$fecha.' AND cief_codigo_ficha IN ('.implode(',', $codigos).') GROUP BY cief_codigo_ficha'
-        ) as $fila) {
-            $out[(int) $fila->codigo] = [
-                'reserva' => (int) $fila->reserva,
-                'cierre' => (int) $fila->ultimo,
+        $rows = TesoreriaCrownFichaCierre::query()
+            ->whereDate('fecha', '<=', $fechaYmd)
+            ->whereIn('codigo_ficha', $codigos)
+            ->orderByDesc('fecha')
+            ->get(['codigo_ficha', 'fecha', 'reserva']);
+        foreach ($rows as $row) {
+            $codigo = (int) $row->codigo_ficha;
+            if (isset($out[$codigo])) {
+                continue;
+            }
+            $out[$codigo] = [
+                'reserva' => (int) $row->reserva,
+                'cierre' => (int) $row->fecha->format('Ymd'),
             ];
         }
 
@@ -200,115 +348,74 @@ final class TesoreriaCrownPoderPublicoCalculo
     }
 
     /**
-     * Asignación inicial (tipo I) posterior al último cierre de esa ficha.
+     * Asignaciones iniciales (tipo I) desde el último cierre + 1 (o desde siempre si no hay cierre).
      *
+     * @param  list<int>  $codigos
      * @param  array<int, array{reserva: int, cierre: int}>  $cierres
+     * @param  list<string>  $avisos
      * @return array<int, int>
      */
-    private static function asignacionInicial(int $fecha, array $cierres): array
+    private static function asignacionInicialErp(string $fechaYmd, array $codigos, array $cierres, array &$avisos = []): array
     {
-        $cortes = [0];
-        foreach ($cierres as $cierre) {
-            $cortes[$cierre['cierre']] = $cierre['cierre'];
-        }
-        $porCorte = [];
-        foreach ($cortes as $corte) {
-            $porCorte[$corte] = self::mapa('codigo', 'cantidad', self::consultar(
-                'codigo,cantidad',
-                'SELECT fichmv_codigo, SUM(fichmv_cantidad) FROM fichammov WHERE fichmv_tipo_oper = "I" AND fichmv_fecha > '.$corte.' AND fichmv_fecha <= '.$fecha.' GROUP BY fichmv_codigo'
-            ));
-        }
         $out = [];
-        $codigos = array_unique(array_merge(array_keys($cierres), ...array_map('array_keys', $porCorte)));
+        $hayI = TesoreriaCrownFichaMovimiento::query()
+            ->where('origen', TesoreriaCrownFichaMovimiento::ORIGEN_MESA)
+            ->where('tipo_oper', 'I')
+            ->exists();
+        if (! $hayI) {
+            $avisos[] = 'Sin asignaciones iniciales ERP (tipo I): importá fichas/movimientos; se usan ceros.';
+
+            return [];
+        }
         foreach ($codigos as $codigo) {
-            $corte = $cierres[$codigo]['cierre'] ?? 0;
-            $out[$codigo] = (int) ($porCorte[$corte][$codigo] ?? 0);
+            $codigo = (int) $codigo;
+            $corte = (int) ($cierres[$codigo]['cierre'] ?? 0);
+            $reservaCierre = (int) ($cierres[$codigo]['reserva'] ?? 0);
+            if ($reservaCierre <= 0) {
+                $corte = 0;
+            }
+            $desde = $corte > 0
+                ? date('Y-m-d', strtotime(sprintf('%04d-%02d-%02d', intdiv($corte, 10000), intdiv($corte % 10000, 100), $corte % 100).' +1 day'))
+                : '1900-01-01';
+            $suma = (int) TesoreriaCrownFichaMovimiento::query()
+                ->where('origen', TesoreriaCrownFichaMovimiento::ORIGEN_MESA)
+                ->where('tipo_oper', 'I')
+                ->where('codigo_ficha', $codigo)
+                ->whereDate('fecha', '>=', $desde)
+                ->whereDate('fecha', '<=', $fechaYmd)
+                ->sum('cantidad');
+            $out[$codigo] = $suma;
         }
 
         return $out;
     }
 
     /**
-     * @return array{dia: int, mes: int, acumulado: int}|null
+     * Cadena mes/acumulado desde fila ERP del día (cualquier sala; CIP tiene una).
+     *
+     * @return array{mes: int, acumulado: int}|null
      */
-    private static function ppublico(int $fecha): ?array
+    private static function poderPublicoErpCadena(string $fechaYmd): ?array
     {
-        $filas = self::consultar(
-            'ppub_fecha,ppub_ppublico,ppub_ppublico_mes,ppub_ppublico_acum',
-            'SELECT ppub_fecha, ppub_ppublico, ppub_ppublico_mes, ppub_ppublico_acum FROM ppublico WHERE ppub_fecha = '.$fecha
-        );
-        if ($filas === []) {
+        if (! Schema::hasTable('tesoreria_crown_poder_publico')) {
             return null;
         }
-        $fila = $filas[0];
+        $fila = TesoreriaCrownPoderPublico::query()
+            ->whereDate('fecha', $fechaYmd)
+            ->orderByDesc('id')
+            ->first();
+        if ($fila === null) {
+            return null;
+        }
 
         return [
-            'dia' => (int) $fila->ppub_ppublico,
-            'mes' => (int) $fila->ppub_ppublico_mes,
-            'acumulado' => (int) $fila->ppub_ppublico_acum,
+            'mes' => (int) round((float) $fila->ficha_mes),
+            'acumulado' => (int) round((float) $fila->ficha_acum),
         ];
-    }
-
-    /**
-     * @param  list<object>  $filas
-     * @return array<int, int>
-     */
-    private static function mapa(string $codigo, string $cantidad, array $filas): array
-    {
-        $out = [];
-        foreach ($filas as $fila) {
-            $out[(int) $fila->{$codigo}] = (int) $fila->{$cantidad};
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param  list<object>  $filas
-     * @return array<int, array<string, int>>
-     */
-    private static function mapaDoble(array $filas): array
-    {
-        $out = [];
-        foreach ($filas as $fila) {
-            $out[(int) $fila->codigo][strtoupper(trim((string) $fila->tipo))] = (int) $fila->cantidad;
-        }
-
-        return $out;
     }
 
     private static function entero(float $importe): int
     {
         return (int) $importe;
-    }
-
-    /**
-     * @return list<object>
-     */
-    private static function consultar(string $campos, string $sql): array
-    {
-        $api = new ApiAnita;
-        $payload = [
-            'acc' => 'customSql',
-            'campos' => $campos,
-            'customSql' => $sql,
-            'sistema' => config('caja_anita.sistema'),
-        ];
-        $ifx = trim((string) config('caja_anita.ifx_server', ''));
-        if ($ifx !== '') {
-            $payload['ifx_server'] = $ifx;
-        }
-        $path = rtrim(trim((string) config('caja_anita.path_sistema', '')), '/');
-        if ($path !== '') {
-            $payload['path_sistema'] = $path;
-        }
-        $raw = $api->apiCall($payload);
-        $error = ApiAnita::extraerMensajeError(is_string($raw) ? $raw : null);
-        if ($error !== null && $error !== '') {
-            throw new RuntimeException($error);
-        }
-        $filas = json_decode(is_string($raw) ? $raw : '[]');
-
-        return is_array($filas) ? $filas : [];
     }
 }

@@ -8,10 +8,13 @@ use App\Models\Caja\TesoreriaCrownSlot;
 use App\Models\Caja\TesoreriaCrownSlotLinea;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
+use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
+use App\Support\Caja\TesoreriaCrownSlotBovedaSupport;
 use App\Support\Caja\TesoreriaCrownSlotSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Http\Request;
@@ -20,33 +23,39 @@ use Illuminate\Validation\Rule;
 
 class TesoreriaCrownSlotController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('listar-tesoreria-crown-slot');
 
         $salas = TesoreriaCrownSalaSupport::salas();
-        $sala = $salas->first();
-        $jornada = null;
-        if ($sala) {
-            $jornada = TesoreriaCrownJornada::query()
-                ->where('sala_id', $sala->id)
-                ->where('estado', TesoreriaCrownJornada::ABIERTA)
-                ->first()
-                ?? TesoreriaCrownJornada::query()
-                    ->where('sala_id', $sala->id)
-                    ->orderByDesc('fecha')
-                    ->first();
-        }
+        $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $fechaPedida = trim((string) $request->input('fecha', ''));
+        $jornada = TesoreriaCrownJornadaConsultaSupport::pedida($request, $sala ? (int) $sala->id : 0);
+        $slots = collect();
+        $slotDetalle = null;
+        $resumenSlots = ['drops' => 0, 'drop_total' => 0, 'recuentos' => 0, 'recuento_total' => 0];
         if ($jornada) {
-            return redirect()->route('ver_tesoreria_crown_jornada', [
-                'id' => $jornada->id,
-                'panel' => 'slots',
-            ]);
+            $slots = TesoreriaCrownSlotSupport::delDia($jornada, (string) $request->query('q', ''));
+            $resumenSlots = TesoreriaCrownSlotSupport::resumen(TesoreriaCrownSlotSupport::delDia($jornada));
+            $slotId = (int) $request->query('slot', 0);
+            if ($slotId > 0) {
+                $slotDetalle = TesoreriaCrownSlot::query()
+                    ->with(['lineas.valor.tipoValor'])
+                    ->where('jornada_id', $jornada->id)
+                    ->whereKey($slotId)
+                    ->first();
+            }
         }
 
         return view('caja.tesoreria_crown.slot.index', [
+            'salas' => $salas,
             'sala' => $sala,
+            'jornada' => $jornada,
+            'fechaPedida' => $fechaPedida,
+            'slots' => $slots,
+            'slotDetalle' => $slotDetalle,
+            'resumenSlots' => $resumenSlots,
         ]);
     }
 
@@ -167,10 +176,26 @@ class TesoreriaCrownSlotController extends Controller
         $slot->estado = TesoreriaCrownSlot::RECIBIDO;
         $slot->hora = now()->format('H:i:s');
         $slot->save();
+        $slot->loadMissing('jornada');
+        if ($slot->jornada) {
+            TesoreriaCrownAnexo8Calculo::invalidarCache($slot->jornada);
+        }
+
+        $errorBoveda = TesoreriaCrownSlotBovedaSupport::asentarDesdeRecuento($slot->fresh(['lineas']), $usuario);
+        if ($errorBoveda !== null) {
+            return redirect()
+                ->route('ver_tesoreria_crown_jornada', ['id' => $slot->jornada_id, 'panel' => 'slots'])
+                ->with('mensaje-error', 'Recuento confirmado, pero no se asentó en bóveda: '.$errorBoveda);
+        }
+
+        $slot->refresh();
+        $extra = (int) ($slot->boveda_id ?? 0) > 0
+            ? ' Quedó asentado en bóveda.'
+            : '';
 
         return redirect()
             ->route('ver_tesoreria_crown_jornada', ['id' => $slot->jornada_id, 'panel' => 'slots'])
-            ->with('mensaje', 'Recuento confirmado '.$TesoreriaCrownNumeradorSupport::visible($slot->numero).'.');
+            ->with('mensaje', 'Recuento confirmado '.TesoreriaCrownNumeradorSupport::visible($slot->numero).'.'.$extra);
     }
 
     public function eliminar(int $id)

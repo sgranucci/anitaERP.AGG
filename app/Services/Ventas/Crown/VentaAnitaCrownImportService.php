@@ -300,11 +300,18 @@ final class VentaAnitaCrownImportService
             ->orderBy('id')
             ->get(['id', 'codigo', 'total', 'nombre']);
 
-        $conEmision = Venta_Emision::query()
-            ->whereIn('venta_id', $ventas->pluck('id'))
-            ->distinct()
-            ->pluck('venta_id')
-            ->all();
+        // MySQL limita placeholders (~65k); no meter todos los venta_id de un golpe.
+        $conEmision = [];
+        foreach ($ventas->pluck('id')->chunk(1000) as $ids) {
+            $conEmision = array_merge(
+                $conEmision,
+                Venta_Emision::query()
+                    ->whereIn('venta_id', $ids->all())
+                    ->distinct()
+                    ->pluck('venta_id')
+                    ->all()
+            );
+        }
         $conEmisionFlip = array_fill_keys(array_map('intval', $conEmision), true);
 
         foreach ($ventas as $venta) {

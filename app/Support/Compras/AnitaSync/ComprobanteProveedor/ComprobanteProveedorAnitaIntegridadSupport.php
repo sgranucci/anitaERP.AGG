@@ -42,13 +42,36 @@ final class ComprobanteProveedorAnitaIntegridadSupport
         $problemas = [];
         $nroInterno = (int) ($comprobante->anita_nro_interno ?? 0);
         if ($nroInterno <= 0) {
+            // Seguir checando ctamov: si no, la auditoría repara solo compra y deja
+            // SYNC_OK sin asiento en Anita (FIS C-10-18849/18850).
+            $ctamovSinInterno = 0;
+            $problemasSinInterno = ['Sin anita_nro_interno'];
+            if ((int) ($comprobante->asiento_id ?? 0) > 0) {
+                $asiento = $comprobante->asientos ?? Asiento::query()->find((int) $comprobante->asiento_id);
+                $nroAsiento = (int) ($asiento?->numeroasiento ?? 0);
+                $empresaCodigo = (int) ($comprobante->empresas?->codigo
+                    ?? $comprobante->empresa_id
+                    ?? 0);
+                if ($nroAsiento > 0 && $empresaCodigo > 0) {
+                    $ctamovSinInterno = self::contar(
+                        self::SISTEMA_CONTAB,
+                        'ctamov',
+                        'ctav_nro_asiento',
+                        ' WHERE ctav_empresa = '.$empresaCodigo.' AND ctav_nro_asiento = '.$nroAsiento
+                    );
+                    if ($ctamovSinInterno <= 0) {
+                        $problemasSinInterno[] = 'Falta ctamov del asiento '.$nroAsiento;
+                    }
+                }
+            }
+
             return [
                 'compra' => false,
                 'concmov' => 0,
                 'promov' => 0,
                 'aplicped' => 0,
-                'ctamov' => 0,
-                'problemas' => ['Sin anita_nro_interno'],
+                'ctamov' => $ctamovSinInterno,
+                'problemas' => $problemasSinInterno,
             ];
         }
 

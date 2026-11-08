@@ -36,6 +36,7 @@ class TesoreriaCrownMesa extends Model implements Auditable
         'estado',
         'comentario',
         'propina',
+        'voucher',
         'motivo',
         'usuario_id',
         'confirmado_at',
@@ -44,6 +45,7 @@ class TesoreriaCrownMesa extends Model implements Auditable
     protected $casts = [
         'numero' => 'integer',
         'propina' => 'decimal:2',
+        'voucher' => 'decimal:2',
         'confirmado_at' => 'datetime',
     ];
 

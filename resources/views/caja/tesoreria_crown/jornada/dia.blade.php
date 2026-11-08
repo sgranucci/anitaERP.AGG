@@ -7,9 +7,11 @@
 @section('styles')
     <link rel="stylesheet" href="{{ asset('assets/css/tesoreria-crown-jornada.css') }}?v={{ filemtime(public_path('assets/css/tesoreria-crown-jornada.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ filemtime(public_path('assets/css/tabla-ancha-reporte.css')) }}">
 @endsection
 
 @section('scripts')
+    <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/jornada.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-orden.js')) }}"></script>
@@ -19,6 +21,7 @@
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/workbench.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/workbench.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js')) }}"></script>
 @endsection
 
 @section('contenido')
@@ -36,12 +39,14 @@
 @if ($jornada)
     @include('caja.tesoreria_crown.jornada.partials.desk_nav', [
         'navActivo' => $panel,
-        'navAsignaciones' => $asignacionesTodas->count(),
-        'navMesas' => count($tableroMesas['mesas'] ?? []),
-        'navBorradoresMesa' => collect($tableroMesas['movimientos'] ?? [])->where('estado', 'B')->count(),
-        'navBoveda' => ($boveda['movimientos'] ?? collect())->count(),
+        'navAsignaciones' => $navAsignaciones ?? $asignacionesTodas->count(),
+        'navMesas' => $navMesas ?? count($tableroMesas['mesas'] ?? []),
+        'navBorradoresMesa' => $navBorradoresMesa ?? collect($tableroMesas['movimientos'] ?? [])->where('estado', 'B')->count(),
+        'navBoveda' => $navBoveda ?? ($boveda['movimientos'] ?? collect())->count(),
         'puedeSlots' => $puedeSlots ?? false,
         'navSlots' => $navSlots ?? 0,
+        'puedeBingo' => $puedeBingo ?? false,
+        'navBingo' => $navBingo ?? false,
     ])
 @endif
 <div class="row">
@@ -51,11 +56,11 @@
                 <h3 class="card-title">Jornada {{ $jornada->fecha->format('d/m/Y') }}</h3>
                 <div class="card-tools">
                     @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
-                        <button type="button" class="btn btn-primary btn-sm mr-1" data-toggle="collapse" data-target="#panel-abrir-caja" aria-expanded="{{ $abrirCaja ? 'true' : 'false' }}">
-                            Abrir caja
+                        <button type="button" class="btn btn-primary btn-sm mr-1 tc-tool tc-tool-nuevo" data-toggle="collapse" data-target="#panel-abrir-caja" aria-expanded="{{ $abrirCaja ? 'true' : 'false' }}">
+                            <i class="fa fa-folder-open"></i> Abrir caja
                         </button>
                     @endif
-                    <a href="{{ route('tesoreria_crown_jornada', ['sala_id' => $sala->id]) }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('tesoreria_crown_jornada', ['sala_id' => $sala->id]) }}" class="btn btn-sm tc-tool tc-tool-volver">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
@@ -67,6 +72,7 @@
                     $exportDeskRuta = match ($panel ?? '') {
                         'mesas' => 'listar_mesas_tesoreria_crown_jornada',
                         'slots' => 'listar_slots_tesoreria_crown_jornada',
+                        'bingo' => 'listar_bingo_tesoreria_crown_jornada',
                         'poder' => 'listar_poder_publico_tesoreria_crown_jornada',
                         'anexo' => 'listar_anexo1_tesoreria_crown_jornada',
                         'anexo2' => 'listar_anexo2_tesoreria_crown_jornada',
@@ -83,7 +89,11 @@
                         : (
                             ($panel ?? '') === 'anexo'
                                 ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'clasico']
-                                : ['id' => $jornada->id]
+                                : (
+                                    ($panel ?? '') === 'anexo2'
+                                        ? ['id' => $jornada->id, 'grupo_anexo2' => $anexo2['grupo'] ?? 'todo']
+                                        : ['id' => $jornada->id]
+                                )
                         );
                 }
             @endphp
@@ -106,7 +116,19 @@
                         @if ($jornada->estaAbierta() && can('editar-tesoreria-crown-jornada', false))
                             <form action="{{ route('cerrar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Cerrar esta jornada?');">
                                 @csrf
-                                <button type="submit" class="btn btn-outline-danger btn-sm">Cerrar jornada</button>
+                                <button type="submit" class="btn btn-sm tc-tool tc-tool-cerrar"><i class="fa fa-lock"></i> Cerrar jornada</button>
+                            </form>
+                        @endif
+                        @if (can('editar-tesoreria-crown-jornada', false) && \Illuminate\Support\Facades\Schema::hasColumn('tesoreria_crown_jornada', 'clientes'))
+                            <form method="POST" action="{{ route('datos_anexo_tesoreria_crown_jornada', $jornada->id) }}"
+                                  class="form-inline ml-auto mb-0" data-enter-campos="1">
+                                @csrf
+                                <label for="jornada_clientes" class="mr-2 mb-0">Clientes (anexo I)</label>
+                                <input type="number" min="0" step="1" name="clientes" id="jornada_clientes"
+                                       class="form-control form-control-sm mr-2" style="width:7rem"
+                                       value="{{ old('clientes', $clientesFormulario ?? $jornada->clientes ?? 0) }}"
+                                       title="Cantidad de ingresos del día (informativo del anexo I). Si está vacío se precarga Anita del día.">
+                                <button type="submit" class="btn btn-outline-info btn-sm">Guardar</button>
                             </form>
                         @endif
                     </div>
@@ -203,6 +225,8 @@
                         @include('caja.tesoreria_crown.jornada.partials.mesa')
                     @elseif ($panel === 'slots')
                         @include('caja.tesoreria_crown.jornada.partials.slots')
+                    @elseif ($panel === 'bingo')
+                        @include('caja.tesoreria_crown.jornada.partials.bingo')
                     @elseif ($panel === 'poder')
                         @include('caja.tesoreria_crown.jornada.partials.poder_publico')
                     @elseif ($panel === 'anexo')

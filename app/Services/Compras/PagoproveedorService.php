@@ -1644,7 +1644,9 @@ class PagoproveedorService
                 'pagoproveedor_id' => $pago->id,
                 'numero' => $pago->numerotransaccion,
             ]);
-            // Sin tesorería local igual hay que espejar CC (promov/aplmovp) y retenciones.
+            // Sin caja local (neto 0 / solo aplicación de anticipos): igual espeja pago + auxpag FAC,
+            // CC (promov/aplmovp) y retenciones. No hay tesmov de banco.
+            IngresoEgresoAnitaTesmovSupport::grabarCabeceraDesdePagoproveedor($pago, $reemplazar);
             $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
             PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
 

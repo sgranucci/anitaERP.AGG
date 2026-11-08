@@ -434,6 +434,35 @@ class TesoreriaCrownCajaAnitaImportService
      */
     private function cierresFiscales(int $fechaInt): array
     {
+        $fechaYmd = sprintf(
+            '%04d-%02d-%02d',
+            intdiv($fechaInt, 10000),
+            intdiv($fechaInt % 10000, 100),
+            $fechaInt % 100
+        );
+        $out = [];
+        $nombres = [];
+
+        // Primario: tabla ERP; Anita solo completa claves faltantes.
+        foreach (TesoreriaCrownCierreFiscal::query()->whereDate('fecha_jor', $fechaYmd)->get() as $erp) {
+            $sucursal = (int) $erp->sucursal;
+            $clave = $sucursal.'|'.(int) $erp->nro_x.'|'.(int) $erp->nro_z;
+            $obj = (object) [
+                'sucursal' => $sucursal,
+                'nro_x' => (int) $erp->nro_x,
+                'nro_z' => (int) $erp->nro_z,
+                'hora' => trim((string) $erp->hora),
+                'tot_venta' => (float) $erp->tot_venta,
+                'tot_cred' => (float) $erp->tot_cred,
+                'tot_iva' => (float) $erp->tot_iva,
+                'tot_iva_cred' => (float) $erp->tot_iva_cred,
+                'ult_fact_b' => (int) $erp->ult_fact_b,
+                'nombre' => trim((string) $erp->nombre_sucursal),
+            ];
+            $out[$clave] = $obj;
+            $nombres[$sucursal] = true;
+        }
+
         try {
             $filas = $this->consultar(
                 'sucursal,nro_x,nro_z,hora,tot_venta,tot_cred,tot_iva,tot_iva_cred,ult_fact_b',
@@ -441,29 +470,35 @@ class TesoreriaCrownCajaAnitaImportService
                 'ventas'
             );
         } catch (RuntimeException) {
-            return [];
+            $filas = [];
         }
-        $nombres = [];
-        $out = [];
         foreach ($filas as $fila) {
             $sucursal = (int) $fila->sucursal;
+            $clave = $sucursal.'|'.(int) $fila->nro_x.'|'.(int) $fila->nro_z;
+            if (isset($out[$clave])) {
+                continue;
+            }
             $fila->nombre = '';
             $nombres[$sucursal] = true;
-            $out[$sucursal.'|'.(int) $fila->nro_x.'|'.(int) $fila->nro_z] = $fila;
+            $out[$clave] = $fila;
         }
         if ($nombres === []) {
             return $out;
         }
-        foreach ($this->consultar(
-            'numero,empresa',
-            'SELECT suc_numero, suc_empresa FROM sucursal WHERE suc_numero IN ('.implode(',', array_keys($nombres)).')',
-            'ventas'
-        ) as $suc) {
-            foreach ($out as $fila) {
-                if ((int) $fila->sucursal === (int) $suc->numero) {
-                    $fila->nombre = trim((string) $suc->empresa);
+        try {
+            foreach ($this->consultar(
+                'numero,empresa',
+                'SELECT suc_numero, suc_empresa FROM sucursal WHERE suc_numero IN ('.implode(',', array_keys($nombres)).')',
+                'ventas'
+            ) as $suc) {
+                foreach ($out as $fila) {
+                    if ((int) $fila->sucursal === (int) $suc->numero && trim((string) ($fila->nombre ?? '')) === '') {
+                        $fila->nombre = trim((string) $suc->empresa);
+                    }
                 }
             }
+        } catch (RuntimeException) {
+            // nombres opcionales
         }
 
         return $out;

@@ -11,7 +11,19 @@ use App\Models\Caja\TesoreriaCrownSlot;
 final class TesoreriaCrownEscritorioNav
 {
     /**
-     * @return array{puedeMesas: bool, puedeBoveda: bool, puedeSlots: bool, puedePoder: bool, puedeAnexo: bool, asignaciones: int, mesas: int, borradoresMesa: int, movimientosBoveda: int, slots: int}
+     * @return array{
+     *     puedeMesas: bool,
+     *     puedeBoveda: bool,
+     *     puedeSlots: bool,
+     *     puedePoder: bool,
+     *     puedeAnexo: bool,
+     *     puedeKardex: bool,
+     *     asignaciones: int,
+     *     mesas: int,
+     *     borradoresMesa: int,
+     *     movimientosBoveda: int,
+     *     slots: int
+     * }
      */
     public static function armar(TesoreriaCrownJornada $jornada): array
     {
@@ -20,6 +32,7 @@ final class TesoreriaCrownEscritorioNav
         $puedeSlots = can('listar-tesoreria-crown-slot', false);
         $puedePoder = can('listar-tesoreria-crown-poder-publico', false);
         $puedeAnexo = can('listar-tesoreria-crown-anexo', false);
+        $puedeKardex = can('listar-tesoreria-crown-kardex-valores', false);
 
         return [
             'puedeMesas' => $puedeMesas,
@@ -27,6 +40,7 @@ final class TesoreriaCrownEscritorioNav
             'puedeSlots' => $puedeSlots,
             'puedePoder' => $puedePoder,
             'puedeAnexo' => $puedeAnexo,
+            'puedeKardex' => $puedeKardex,
             'asignaciones' => TesoreriaCrownAsignacion::query()->where('jornada_id', $jornada->id)->count(),
             'mesas' => $puedeMesas ? TesoreriaCrownMesaSupport::mesas((int) $jornada->sala_id)->count() : 0,
             'borradoresMesa' => $puedeMesas

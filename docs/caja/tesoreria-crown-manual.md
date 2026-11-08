@@ -223,7 +223,9 @@ La solapa lista el día y, al abrir un número, muestra las denominaciones que l
 
 ## Poder del público
 
-Está en la jornada, solapa **Poder público**. Sale de `l-stockfichm.c`.
+Está en la jornada, solapa **Poder público**. El ERP lo **genera y persiste** en `tesoreria_crown_poder_publico` (día / mes / acumulado de fichas y de slot). El anexo I lee esa tabla; ya no depende de que Anita grabe `ppublico`.
+
+### Fichas (`l-stockfichm.c`)
 
 Por cada ficha, la conversión inicial es la conversión final de ayer, más la asignación inicial de hoy y los otros movimientos de ficha del día. La conversión final le suma la variación de mesas y la de cajeros:
 
@@ -232,23 +234,33 @@ Por cada ficha, la conversión inicial es la conversión final de ayer, más la 
 
 El poder público del día es (conversión inicial − conversión final) × valor, sumado de todas las fichas. Si la conversión final sube, el día da negativo: volvió ficha de la sala. Ese importe es la línea **Fichas poder público** del anexo I. El mes y el acumulado arrancan en el día anterior y le suman este día. El 1 del mes, el mes arranca en cero.
 
-La reserva es la de los cierres de ficha más las asignaciones iniciales posteriores a ese cierre. El poder público en cantidad es reserva − conversión final − mesas de la banca − habilitación del cajero. La pantalla no graba en Anita.
+La reserva es la de los cierres de ficha más las asignaciones iniciales posteriores a ese cierre. El poder público en cantidad es reserva − conversión final − mesas de la banca − habilitación del cajero.
 
 El 30/10/2026 el cálculo da −6.500, el mismo día, mes y acumulado que Anita tiene en `ppublico`.
 
+### Slot (`l-anexo1.c`)
+
+`slot día = subtotal soft count − resultado slots online − voucher de mesa`.
+
+- **Resultado slots** sale de resultado online (`coin_in − coin_out − pago_manual`).
+- **Voucher de mesa** suma `tesoreria_crown_mesa.voucher` (importado de `efem_voucher`).
+- **Subtotal soft count** se carga en resultado online (`subtotal_slot`). Sin ese dato el poder público de slot queda en cero (no se lee `ppublico` de Anita).
+
+## Flash Crown
+
+Pantalla `caja/flash-crown` (permiso `listar-flash-crown`). Un flash por sala/fecha armado desde Anexo I/II + resultado online (`FlashCrownCalculoSupport`). Cron `flash-crown:calcular-diario`. Reportes y suscripciones en `caja/flash-crown/reporte`. No usa el Flash AGG (`caja/flash`).
+
 ## Anexos
 
-Están en la jornada, botón **Anexos** del escritorio (aparte de la carga). Pestañas: I, II, resumen de cajeros, III, VII y VIII. El permiso es `listar-tesoreria-crown-anexo`. Pdf, Excel y Csv salen de la barra de la sala. No graban en Anita.
+Están en la jornada, botón **Anexos** del escritorio (aparte de la carga). Pestañas: I, II, resumen de cajeros, III, VII y VIII. El permiso es `listar-tesoreria-crown-anexo`. Pdf, Excel y Csv salen de la barra de la sala. No graban en Anita. El cálculo es **ERP-first**: los imports Anita son carga histórica, no fuente viva del día.
 
 ### Anexo I
 
-Sigue `l-anexo1.c` (día / mes / anual) y `l-anexo1new.c` (débito / crédito / saldo). Incluye **apuestas deportivas** como ingreso (`efe_vta_apu_dep − efe_pago_apu_dep`, ítem 331 cuando Anita lo grabó).
-
-Si Anita cerró el día, el listado sale de `acumanexo1` y el poder público de `ppublico`. Octubre de 2026 solo dejó la caja final: el resto se calcula de efectivo, bóveda y poder público. No inventa recaudación de mesas, slots, gastronomía ni hotel.
+Sigue `l-anexo1.c` (día / mes / anual) y `l-anexo1new.c` (débito / crédito / saldo). Incluye **apuestas deportivas** como ingreso cuando hay dato ERP. Caja inicial = `caja_final_viii` de la jornada anterior. Poder público / propina / drop / clientes salen de tablas Crown (no de `acumanexo1` / `ppublico` en vivo).
 
 ### Anexo II
 
-`l-resmesa.c`: por mesa, créditos, reposiciones, estado final, drop, recomposición de banca y resultado. Sale de los movimientos de mesa del ERP.
+`l-resmesa.c`: selector **Mesas / Máquinas / Gastronomía / Todo** (`grupo_anexo2`). Cada botón pide su permiso (`listar-tesoreria-crown-anexo2-mesas`, `-maquinas`, `-gastronomia`, `-todo`); no vienen asignados a ningún rol — Sistemas los tilda en Permiso - Rol. Mesas agrupadas por juego; máquinas = cashless + validadoras + resultado; gastronomía = cierres fiscales ERP (G/H). El MTD usa solo días con jornada ERP.
 
 ### Resumen de cajeros y Anexo III
 
@@ -256,15 +268,26 @@ Si Anita cerró el día, el listado sale de `acumanexo1` y el poder público de 
 
 ### Anexo VII
 
-`l-anexo7.c`: fallos (diferencia negativa + fallo de mozo) y excedentes. Los anticipos de sueldos de Anita no están en el ERP: la columna queda en cero.
+`l-anexo7.c`: fallos (diferencia negativa + fallo de mozo) y excedentes. **Anticipos de sueldo: fuera de alcance** — no hay proceso ERP ni lectura Anita; la columna queda en cero a propósito.
 
 ### Anexo VIII
 
-`l-estboveda.c`: saldo de bóveda por denominación al cierre del día.
+`l-estboveda.c`: total de caja final (ítem 130 del anexo I) =
+
+- stock pesos = `tesoreria_crown_boveda_stock_dia` / último arqueo conforme ERP + slots de recuento sin CashBox a bóveda + drops de mesa confirmados
+- + ítems resumen final (pre-depósito, fondos, cajas chicas, diferencias) desde bóveda ERP
+- + propina acumulada (`tesoreria_crown_propina_dia` o Σ mesas F)
+- + moneda extranjera convertida (`tesoreria_crown_moneda_extranjera` × cotización de ingreso)
+
+Histórico Anita → ERP: `php artisan tesoreria-crown:importar-anexo8-anita --desde=… --hasta=…` (y reserva de fichas / cierre vía imports propios). Tras el import, el cálculo **no** vuelve a Anita.
+
+Las fichas / poder público se listan aparte y **no** entran en ese total. La reserva de fichas alimenta el poder público / stock de fichas, no el total de caja final del VIII.
+
+El total del VIII se persiste en `tesoreria_crown_jornada.caja_final_viii` al calcular el anexo (panel o export). El Anexo I lo lee de ahí para la fila «Caja final (anexo VIII)» y para la caja inicial del día siguiente. `caja_final_dia` / `caja_final_mes` son otra cosa: la caja final **por variación** del Anexo I. Si confirman bóveda, slots o mesas, se invalida `caja_final_viii` y se recalcula la próxima vez que se abra el VIII o lo pida el I.
 
 ## Ajuste de auditoría
 
-Está en el cierre de la caja, **Ajuste de caja**. El permiso es `ajustar-tesoreria-crown-caja`. No se asigna a ningún rol al instalarlo: Sistemas lo tilda en Permiso - Rol. El rol administrador entra igual. Es la corrección habitual después del cierre, cuando el cajero ya no está.
+Está en el cierre de la caja, **Ajuste de caja** (pantalla del cierre, con caja ya cerrada). El permiso es `ajustar-tesoreria-crown-caja`. No se asigna a ningún rol al instalarlo: Sistemas lo tilda en Permiso - Rol. El rol administrador entra igual. Es la corrección habitual después del cierre, cuando el cajero ya no está.
 
 El ajuste es un comprobante nuevo. No reescribe la habilitación, la rendición ni los números originales del cierre.
 

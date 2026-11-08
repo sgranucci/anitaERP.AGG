@@ -16,6 +16,7 @@ use App\Support\Manuales\Escenas\ReporteDefinibleEscenas;
 use App\Support\Manuales\Escenas\SolicitudpagoEscenas;
 use App\Support\Manuales\Escenas\StockEscenas;
 use App\Support\Manuales\Escenas\StockGastronomiaEscenas;
+use App\Support\Manuales\Escenas\TesoreriaCrownEscenas;
 use App\Support\Manuales\Escenas\UifEscenas;
 use App\Support\Manuales\Escenas\VendingEscenas;
 use App\Support\Manuales\Escenas\VentasEscenas;
@@ -194,6 +195,7 @@ final class ManualMockupGeneradorService
             'stock-gastronomia' => StockGastronomiaEscenas::todas(),
             'caja' => CajaEscenas::todas(),
             'cierres-rendiciones' => CierresRendicionesEscenas::todas(),
+            'tesoreria-crown' => TesoreriaCrownEscenas::todas(),
             default => throw new InvalidArgumentException('Sin escenas para: '.$manual),
         };
     }

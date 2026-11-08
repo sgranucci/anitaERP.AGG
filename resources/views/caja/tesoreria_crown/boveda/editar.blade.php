@@ -23,6 +23,7 @@
         'puedeSlots' => $escritorio['puedeSlots'],
         'puedePoder' => $escritorio['puedePoder'],
         'puedeAnexo' => $escritorio['puedeAnexo'],
+        'puedeKardex' => $escritorio['puedeKardex'] ?? false,
         'navSlots' => $escritorio['slots'],
     ])
 @endif

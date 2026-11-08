@@ -48,6 +48,7 @@ use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
 use App\Support\Ventas\ClienteCoeficienteExtraSupport;
+use App\Support\Ventas\ClienteAnitaEsquemaSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
@@ -227,9 +228,9 @@ class ClienteRepository implements ClienteRepositoryInterface
     {
     	$cliente = Cliente::find($id);
 
-		// Elimina anita
-		if ($cliente)
+		if ($cliente && config('app.anita_sync_cliente_write', false)) {
 			self::eliminarAnita($cliente->codigo);
+		}
 
         $cliente = $this->model->destroy($id);
 
@@ -1709,6 +1710,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 	 */
 	private function sincronizarClileyAnita(ApiAnita $apiAnita, string $codigoCliente, mixed $leyenda): void
 	{
+		if (! ClienteAnitaEsquemaSupport::escribeCliley()) {
+			return;
+		}
+
 		$codigoNorm = ltrim(trim($codigoCliente), '0');
 		$codigoPad = str_pad($codigoNorm !== '' ? $codigoNorm : '0', 6, '0', STR_PAD_LEFT);
 
@@ -1848,9 +1853,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$documento = $this->sqlLit($tipodocumento->abreviatura.' '.($request['numerodocumento'] ?? ''));
 		}
 
-		$campo_ing_bruto = (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING')
-			? 'clim_nro_ing_br'
-			: 'clim_nro_ing_bruto';
+		$campo_ing_bruto = ClienteAnitaEsquemaSupport::campoNroIngBr();
 
 		$horarioAtencion = $this->sqlLit($request['horarioatencion'] ?? '');
 		$urlweb = $this->sqlLit($request['urlweb'] ?? '');
@@ -1868,12 +1871,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 					clim_proveedor, clim_minimo_fact, clim_estado_cli, clim_dias_cobranza, clim_dias_atencion, clim_hs_atencion,clim_pais,
 					clim_perc_ing_br, '.$campo_ing_bruto.', clim_dir_postal, clim_loc_postal, clim_cp_postal, clim_fantasia, clim_fecha_alta,
 					clim_ley_liberado, clim_regimen, clim_leyenda_fact, clim_prov_postal, clim_lugar_de_pago, clim_excl_perc_iva, clim_fe_excl_piva,
-					clim_dto_integrado, clim_fecha_boletin, clim_e_mail, clim_fax'.(config('app.empresa') == 'EL BIERZO' ?
+					clim_dto_integrado, clim_fecha_boletin, clim_e_mail, clim_fax'.(ClienteAnitaEsquemaSupport::escribeCamposBierzo() ?
 					($esVillafranca
 						? ',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra'
 						: ',clim_abasto, clim_distribuidor, clim_coef, clim_logistica, clim_emite_cert, clim_emite_nc, clim_coef_extra,clim_referencia,
 					clim_cod_localidad, clim_cod_provincia, clim_agrega_bonif, clim_e_mail2, clim_dfexcl_piva, clim_hfexcl_piva') : '').
-					(config('app.empresa') == 'INTERFORMING' ? ', clim_url, clim_hs_atencion2' : ''),
+					(ClienteAnitaEsquemaSupport::escribeCamposInterforming() ? ', clim_url, clim_hs_atencion2' : ''),
 			'valores' => "
 				'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."',
 				'".$this->sqlLit($nombre)."',
@@ -1908,7 +1911,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
 				' ',
 				'0',
-				'".$this->sqlLit($request['estado'] ?? '0')."',
+				'".$this->mapEstadoClienteHaciaAnita($request['estado'] ?? '0')."',
 				' ',
 				' ',
 				' ',
@@ -1931,7 +1934,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'0',
 				'".substr($this->sqlLit($request['email'] ?? ''), 0, 40)."',
 				'FAX'".
-				(config('app.empresa') == 'EL BIERZO' ? ",
+				(ClienteAnitaEsquemaSupport::escribeCamposBierzo() ? ",
 				'".$codigoabasto."',
 				'".$codigodistribuidor."',
 				'".$codigocoeficiente."',
@@ -1947,7 +1950,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".substr($this->sqlLit($request['email'] ?? ''), 40, 40)."',
 				'".$dfexcl_piva."',
 				'".$hfexcl_piva."' ") : '').
-				(config('app.empresa') == 'INTERFORMING' ? ",
+				(ClienteAnitaEsquemaSupport::escribeCamposInterforming() ? ",
 				'".$urlweb."',
 				'".$horarioAtencion."' " : ''),
 		];
@@ -2189,11 +2192,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$documento = $tipodocumento->abreviatura.' '.$request['numerodocumento'];
 		}
 
-		if (config('app.empresa') == 'AGG' || config('app.empresa') == 'INTERFORMING') {
-			$campo_ing_bruto = 'clim_nro_ing_br';
-		} else {
-			$campo_ing_bruto = 'clim_nro_ing_bruto';
-		}
+		$campo_ing_bruto = ClienteAnitaEsquemaSupport::campoNroIngBr();
 		$horarioAtencion = $request['horarioatencion'] ?? '';
 
 		return [
@@ -2236,7 +2235,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 clim_fantasia 	                = '".$request['fantasia']."',
                 clim_fecha_alta 	            = '".$fecha."',
                 clim_e_mail 	                = '".substr($request['email'], 0, 40)."'".
-				(config('app.empresa') == 'EL BIERZO' ? ",
+				(ClienteAnitaEsquemaSupport::escribeCamposBierzo() ? ",
 				clim_abasto                     = '".$codigoabasto."',
 				clim_distribuidor               = '".$codigodistribuidor."',
 				clim_coef                       = '".$codigocoeficiente."',
@@ -2252,7 +2251,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				clim_e_mail2                    = '".substr($request['email'], 40, 40)."',
 				clim_dfexcl_piva                = '".$dfexcl_piva."',
 				clim_hfexcl_piva                = '".$hfexcl_piva."' ") : '').
-				(config('app.empresa') == 'INTERFORMING' ? ",
+				(ClienteAnitaEsquemaSupport::escribeCamposInterforming() ? ",
 				clim_url                        = '".$request['urlweb']."',
 				clim_hs_atencion2               = '".$horarioAtencion."' " : ''),
 			'whereArmado' => " WHERE clim_cliente = '".str_pad($id, 6, '0', STR_PAD_LEFT)."' ",
@@ -2730,7 +2729,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	 */
 	private function sincronizarCm05Anita(ApiAnita $apiAnita, array $request, $codigoCliente): void
 	{
-		if (config('app.empresa') !== 'INTERFORMING') {
+		if (! ClienteAnitaEsquemaSupport::escribeCliibr()) {
 			return;
 		}
 

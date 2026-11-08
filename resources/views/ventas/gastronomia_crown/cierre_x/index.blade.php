@@ -13,9 +13,10 @@
             </div>
             <div class="card-body">
                 <p class="text-muted mb-3">
-                    El <strong>total X</strong> es lo que cada mozo tiene que rendir en tesorería antes del Z fiscal.
-                    Sale de las cuentas <strong>cerradas</strong> del POS Crown de la jornada de la sala.
-                    Al crear la rendición se continúa en <strong>Caja → Rendición gastronomía</strong>.
+                    El <strong>total X</strong> sale de las cuentas <strong>cerradas</strong> del POS Crown.
+                    Al crear, se abre de una la <strong>rendición de cajero G en Tesorería Crown</strong>
+                    (como <code>a-transfefe</code> en Anita): ahí se carga el dinero y se firma.
+                    El Z fiscal de facturación es otro proceso (Cierre fiscal Z).
                 </p>
 
                 <form method="get" action="{{ route('gastronomia_crown_cierre_x') }}" class="form-inline mb-4" id="form-filtros-cierre-x">
@@ -110,10 +111,10 @@
                                             @endif
                                         </td>
                                         <td class="text-nowrap">
-                                            @if ($fila['ya_rendido'])
-                                                <a href="{{ route('editar_rendiciongastronomia', ['id' => $fila['rendicion_id']]) }}"
+                                            @if ($fila['ya_rendido'] && (int) ($fila['comprobante_id'] ?? $fila['rendicion_id'] ?? 0) > 0)
+                                                <a href="{{ route('editar_tesoreria_crown_movimiento', (int) ($fila['comprobante_id'] ?? $fila['rendicion_id'])) }}"
                                                    class="btn btn-outline-info btn-sm" target="_blank" rel="noopener">
-                                                    <i class="fa fa-eye"></i> Ver rendición
+                                                    <i class="fa fa-eye"></i> Ver en tesorería
                                                 </a>
                                             @elseif ($puede_crear)
                                                 <form method="post" action="{{ route('gastronomia_crown_cierre_x_crear_rendicion') }}" class="d-inline">
@@ -123,8 +124,8 @@
                                                     <input type="hidden" name="jornada_gastronomia_id" value="{{ $jornada->id }}"/>
                                                     <input type="hidden" name="mozo_gastronomia_id" value="{{ $fila['mozo_gastronomia_id'] }}"/>
                                                     <button type="submit" class="btn btn-primary btn-sm"
-                                                            onclick="return confirm('¿Crear la rendición de tesorería del mozo {{ $fila['mozo_nombre'] }}?');">
-                                                        <i class="fa fa-cash-register"></i> Crear rendición
+                                                            onclick="return confirm('¿Crear la rendición de cajero en tesorería para {{ $fila['mozo_nombre'] }}?');">
+                                                        <i class="fa fa-cash-register"></i> Cerrar y rendir
                                                     </button>
                                                 </form>
                                             @else

@@ -86,7 +86,7 @@ class GastronomiaCrownCierreXController extends Controller
         $this->assertSalaPermitida((int) ($jornada->sala_id ?? 0));
 
         try {
-            $rendicion = $this->cierreXService->crearRendicion(
+            $comprobante = $this->cierreXService->crearRendicion(
                 $jornada,
                 $mozoId,
                 $jornada->sala_id !== null ? (int) $jornada->sala_id : null,
@@ -98,8 +98,8 @@ class GastronomiaCrownCierreXController extends Controller
         }
 
         return redirect()
-            ->route('editar_rendiciongastronomia', ['id' => $rendicion->id])
-            ->with('mensaje', 'Cierre X creado. Complete los medios de pago para rendir en tesorería.');
+            ->route('editar_tesoreria_crown_movimiento', $comprobante->id)
+            ->with('mensaje', 'Cierre X creado en tesorería (rendición cajero). Complete efectivo/medios y firme.');
     }
 
     /**

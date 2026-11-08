@@ -12,13 +12,17 @@ use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownBovedaListadoColumnas;
 use App\Support\Caja\TesoreriaCrownBovedaListadoFiltros;
+use App\Support\Caja\TesoreriaCrownBovedaPredepositoSupport;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
+use App\Support\Caja\TesoreriaCrownKardexValoresSupport;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
+use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -41,7 +45,8 @@ class TesoreriaCrownBovedaController extends Controller
 
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
-        $jornada = $this->jornadaPedida($request, $sala ? (int) $sala->id : 0);
+        $fechaPedida = trim((string) $request->input('fecha', ''));
+        $jornada = TesoreriaCrownJornadaConsultaSupport::pedida($request, $sala ? (int) $sala->id : 0);
         $lugares = $sala ? TesoreriaCrownBovedaSupport::lugares((int) $sala->id) : collect();
         $depositoId = (int) $request->input('deposito_id', 0);
         $lugar = $lugares->firstWhere('id', $depositoId) ?? $lugares->first(
@@ -99,12 +104,12 @@ class TesoreriaCrownBovedaController extends Controller
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
+            'fechaPedida' => $fechaPedida,
             'lugares' => $lugares,
             'lugar' => $lugar,
             'saldo' => $saldo,
             'inicio' => $inicio,
             'apertura' => $apertura,
-            'escritorio' => $jornada ? TesoreriaCrownEscritorioNav::armar($jornada) : null,
             'movimientos' => $movimientos,
             'totalesMonedas' => $totalesMonedas,
             'tieneCriterios' => $armado !== []
@@ -422,8 +427,21 @@ class TesoreriaCrownBovedaController extends Controller
                 if ($error = $this->persistirBorrador($request, $movimiento)) {
                     throw new \RuntimeException($error);
                 }
-                if ($puedeConfirmar && ($error = $this->aplicarConfirmacion($request, $movimiento))) {
-                    throw new \RuntimeException($error);
+                $movimiento->load(['tipo', 'lineas', 'deposito.tipoDeposito', 'jornada']);
+                if ($puedeConfirmar) {
+                    if ($error = TesoreriaCrownBovedaPredepositoSupport::validarRdep($movimiento)) {
+                        throw new \RuntimeException($error);
+                    }
+                    if ($error = $this->aplicarConfirmacion($request, $movimiento)) {
+                        throw new \RuntimeException($error);
+                    }
+                    $movimiento->refresh()->load(['tipo', 'lineas', 'deposito.tipoDeposito', 'jornada']);
+                    if ($error = TesoreriaCrownBovedaPredepositoSupport::asentarEspejoPdep($movimiento)) {
+                        throw new \RuntimeException($error);
+                    }
+                    if ($error = TesoreriaCrownBovedaPredepositoSupport::asentarBajaPredepositoRdep($movimiento)) {
+                        throw new \RuntimeException($error);
+                    }
                 }
 
                 return $movimiento;
@@ -525,8 +543,19 @@ class TesoreriaCrownBovedaController extends Controller
             }
             $movimiento->unsetRelation('lineas');
         }
+        $movimiento->load(['tipo', 'lineas', 'deposito.tipoDeposito', 'jornada']);
+        if ($error = TesoreriaCrownBovedaPredepositoSupport::validarRdep($movimiento)) {
+            return back()->withInput()->with('mensaje-error', $error);
+        }
         if ($error = $this->aplicarConfirmacion($request, $movimiento)) {
             return back()->withInput()->with('mensaje-error', $error);
+        }
+        $movimiento->refresh()->load(['tipo', 'lineas', 'deposito.tipoDeposito', 'jornada']);
+        if ($error = TesoreriaCrownBovedaPredepositoSupport::asentarEspejoPdep($movimiento)) {
+            return back()->with('mensaje-error', $error);
+        }
+        if ($error = TesoreriaCrownBovedaPredepositoSupport::asentarBajaPredepositoRdep($movimiento)) {
+            return back()->with('mensaje-error', $error);
         }
 
         return back()->with('mensaje', 'Movimiento grabado. El saldo de '.$movimiento->deposito->nombre.' quedó actualizado.');
@@ -663,28 +692,6 @@ class TesoreriaCrownBovedaController extends Controller
     private function filtrosDe(Request $request, int $salaId, int $jornadaId, int $depositoId): array
     {
         return TesoreriaCrownBovedaListadoFiltros::resolverDesdeRequest($request, $salaId, $jornadaId, $depositoId);
-    }
-
-    private function jornadaPedida(Request $request, int $salaId): ?TesoreriaCrownJornada
-    {
-        if ($salaId <= 0) {
-            return null;
-        }
-        $id = (int) $request->input('jornada_id', 0);
-        if ($id > 0) {
-            $jornada = TesoreriaCrownJornada::query()->whereKey($id)->where('sala_id', $salaId)->first();
-            if ($jornada === null) {
-                abort(404);
-            }
-
-            return $jornada;
-        }
-
-        return TesoreriaCrownJornada::query()
-            ->where('sala_id', $salaId)
-            ->where('estado', TesoreriaCrownJornada::ABIERTA)
-            ->first()
-            ?? TesoreriaCrownJornada::query()->where('sala_id', $salaId)->orderByDesc('fecha')->first();
     }
 
     private function jornadaEnAlcance(int $id): TesoreriaCrownJornada
@@ -869,6 +876,11 @@ class TesoreriaCrownBovedaController extends Controller
             'clienteId' => $cliente?->id ?? '',
             'clienteCodigo' => $cliente?->codigo ?? '',
             'clienteNombre' => $cliente?->nombre ?? '',
+            'subtipoId' => old('subtipo_id', $movimiento?->subtipo_id ?? ''),
+            'subtipoTexto' => old('subtipo_texto', $movimiento?->subtipo_texto ?? ''),
+            'subtipos' => $tipo
+                ? TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id)
+                : collect(),
         ];
     }
 
@@ -995,7 +1007,11 @@ class TesoreriaCrownBovedaController extends Controller
     public function consultaTipo(Request $request)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        if (! can('listar-tesoreria-crown-boveda', false) && ! can('crear-tesoreria-crown-boveda', false)) {
+        if (
+            ! can('listar-tesoreria-crown-boveda', false)
+            && ! can('crear-tesoreria-crown-boveda', false)
+            && ! can('listar-tesoreria-crown-kardex-valores', false)
+        ) {
             abort(403);
         }
         $salaId = (int) $request->input('sala_id');
@@ -1019,7 +1035,11 @@ class TesoreriaCrownBovedaController extends Controller
     public function resolverTipoCodigo(Request $request)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        if (! can('listar-tesoreria-crown-boveda', false) && ! can('crear-tesoreria-crown-boveda', false)) {
+        if (
+            ! can('listar-tesoreria-crown-boveda', false)
+            && ! can('crear-tesoreria-crown-boveda', false)
+            && ! can('listar-tesoreria-crown-kardex-valores', false)
+        ) {
             abort(403);
         }
         $salaId = (int) $request->input('sala_id');
@@ -1058,6 +1078,10 @@ class TesoreriaCrownBovedaController extends Controller
         $movimiento->usuario_id = $usuario->id;
         $movimiento->confirmado_at = now();
         $movimiento->save();
+        $movimiento->loadMissing('jornada');
+        if ($movimiento->jornada) {
+            TesoreriaCrownAnexo8Calculo::invalidarCache($movimiento->jornada);
+        }
 
         return null;
     }
@@ -1082,6 +1106,8 @@ class TesoreriaCrownBovedaController extends Controller
         $datos = $request->validate([
             'comentario' => ['required', 'string', 'max:80'],
             'tipo_id' => ['required', 'integer', 'min:1'],
+            'subtipo_id' => ['nullable', 'integer', 'min:0'],
+            'subtipo_texto' => ['nullable', 'string', 'max:80'],
             'legajo' => ['nullable', 'integer', 'min:0'],
             'cliente_id' => ['nullable', 'integer', 'min:0'],
             'comprobante_tipo' => ['nullable', 'string', 'max:1'],
@@ -1095,6 +1121,21 @@ class TesoreriaCrownBovedaController extends Controller
         $tipo = $this->tipoPorId((int) $movimiento->sala_id, (int) $datos['tipo_id']);
         if (is_string($tipo)) {
             return $tipo;
+        }
+        $subtipoId = (int) ($datos['subtipo_id'] ?? 0);
+        $subtipoTexto = trim((string) ($datos['subtipo_texto'] ?? ''));
+        $subtiposTipo = TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id);
+        if ($subtiposTipo->isNotEmpty()) {
+            if ($subtipoId <= 0 || ! $subtiposTipo->contains('id', $subtipoId)) {
+                return 'Elegí el subtipo del movimiento.';
+            }
+            $subtipo = $subtiposTipo->firstWhere('id', $subtipoId);
+            if ($subtipo && strtoupper((string) $subtipo->codigo) === 'OTR' && $subtipoTexto === '') {
+                return 'Completá el detalle del subtipo «Otro».';
+            }
+        } else {
+            $subtipoId = 0;
+            $subtipoTexto = '';
         }
         $referencia = TesoreriaCrownBovedaSupport::referenciaDelTipo($tipo);
         $legajo = null;
@@ -1145,8 +1186,10 @@ class TesoreriaCrownBovedaController extends Controller
             $comprobanteId = $comprobante?->id;
         }
 
-        DB::transaction(function () use ($movimiento, $datos, $tipo, $legajo, $clienteId, $lineas, $comprobanteId) {
+        DB::transaction(function () use ($movimiento, $datos, $tipo, $legajo, $clienteId, $lineas, $comprobanteId, $subtipoId, $subtipoTexto) {
             $movimiento->tipo_id = $tipo->id;
+            $movimiento->subtipo_id = $subtipoId > 0 ? $subtipoId : null;
+            $movimiento->subtipo_texto = $subtipoTexto !== '' ? mb_substr($subtipoTexto, 0, 80) : null;
             $movimiento->comentario = $this->comentario($datos['comentario']);
             if (trim((string) $movimiento->hora) === '') {
                 $movimiento->hora = ($movimiento->created_at ?? now())->format('H:i');

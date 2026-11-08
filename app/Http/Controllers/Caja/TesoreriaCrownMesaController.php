@@ -11,10 +11,13 @@ use App\Models\Caja\TesoreriaCrownMesaJuego;
 use App\Models\Caja\TesoreriaCrownMesaLinea;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
+use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
+use App\Support\Caja\TesoreriaCrownPropinaDiaSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Http\Request;
@@ -31,7 +34,8 @@ class TesoreriaCrownMesaController extends Controller
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
         $salaId = $sala ? (int) $sala->id : 0;
-        $jornada = $this->jornadaPedida($request, $salaId);
+        $fechaPedida = trim((string) $request->input('fecha', ''));
+        $jornada = TesoreriaCrownJornadaConsultaSupport::pedida($request, $salaId);
         $mesas = $salaId > 0 ? TesoreriaCrownMesaSupport::mesas($salaId) : collect();
         $mesa = $this->mesaPedida($mesas, (string) $request->input('mesa_codigo'));
         $fecha = $jornada?->fecha?->format('Y-m-d') ?? now()->toDateString();
@@ -41,6 +45,7 @@ class TesoreriaCrownMesaController extends Controller
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
+            'fechaPedida' => $fechaPedida,
             'mesas' => $mesas,
             'mesa' => $mesa,
             'stock' => $stock,
@@ -207,6 +212,12 @@ class TesoreriaCrownMesaController extends Controller
         $movimiento->usuario_id = $usuario->id;
         $movimiento->confirmado_at = now();
         $movimiento->save();
+        if ($movimiento->jornada) {
+            TesoreriaCrownAnexo8Calculo::invalidarCache($movimiento->jornada);
+            if ($movimiento->tipo === 'F') {
+                TesoreriaCrownPropinaDiaSupport::sincronizarDesdeMesas($movimiento->jornada);
+            }
+        }
 
         return back()->with('mensaje', 'Movimiento confirmado. Quedó con la banca del '.$movimiento->jornada->fecha->format('d/m/Y').'.');
     }
@@ -394,25 +405,6 @@ class TesoreriaCrownMesaController extends Controller
         return back()->with('mensaje', 'La banca rige desde el '.$vigencia.'. Los días anteriores no cambian.');
     }
 
-    private function jornadaPedida(Request $request, int $salaId): ?TesoreriaCrownJornada
-    {
-        if ($salaId <= 0) {
-            return null;
-        }
-        $id = (int) $request->input('jornada_id', 0);
-        if ($id > 0) {
-            $jornada = TesoreriaCrownJornada::query()->whereKey($id)->where('sala_id', $salaId)->first();
-            if ($jornada === null) {
-                abort(404);
-            }
-
-            return $jornada;
-        }
-
-        return TesoreriaCrownJornada::query()->where('sala_id', $salaId)->where('estado', TesoreriaCrownJornada::ABIERTA)->first()
-            ?? TesoreriaCrownJornada::query()->where('sala_id', $salaId)->orderByDesc('fecha')->first();
-    }
-
     private function jornadaEnAlcance(int $id): TesoreriaCrownJornada
     {
         $jornada = TesoreriaCrownJornada::query()->find($id);
@@ -431,7 +423,7 @@ class TesoreriaCrownMesaController extends Controller
     {
         $codigo = strtoupper(trim($codigo));
         if ($codigo === '') {
-            return $mesas->first();
+            return null;
         }
         if (ctype_digit($codigo)) {
             $codigo = 'M'.$codigo;

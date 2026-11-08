@@ -1,11 +1,23 @@
+@php
+    /** @var array<string, mixed> $queryExtra */
+    $queryExtra = $queryExtra ?? [];
+    $mostrarTodas = ! empty($mostrarTodas);
+    $etiquetaTodas = $etiquetaTodas ?? 'Todas';
+@endphp
 @if (($salas ?? collect())->isNotEmpty() || ! empty($exportRuta))
     <div class="card-body py-2 border-bottom bg-white">
         <div class="d-flex flex-wrap align-items-center">
             @if (($salas ?? collect())->isNotEmpty())
                 <span class="text-muted small mr-2"><i class="fa fa-building"></i> Sala:</span>
                 <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Sala">
+                    @if ($mostrarTodas)
+                        <a href="{{ route($ruta, array_merge($queryExtra, ['sala_id' => 0])) }}"
+                           class="btn {{ empty($sala) ? 'btn-info' : 'btn-outline-info' }}">
+                            {{ $etiquetaTodas }}
+                        </a>
+                    @endif
                     @foreach ($salas as $opcion)
-                        <a href="{{ route($ruta, ['sala_id' => $opcion->id]) }}"
+                        <a href="{{ route($ruta, array_merge($queryExtra, ['sala_id' => $opcion->id])) }}"
                            class="btn {{ $sala && (int) $sala->id === (int) $opcion->id ? 'btn-info' : 'btn-outline-info' }}">
                             {{ $opcion->codigo }} — {{ $opcion->nombre }}
                         </a>

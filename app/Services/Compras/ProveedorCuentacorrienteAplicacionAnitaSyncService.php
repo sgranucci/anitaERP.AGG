@@ -721,12 +721,12 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             return;
         }
 
-        $monto = abs((float) ($ccPago->pagoproveedores?->monto ?? 0));
-        if ($monto >= 0.0001) {
-            $lado = AplicacionCuentacorrienteAnitaLadoSupport::alinearMonedaDesdePago(
-                $lado,
-                $ccPago->pagoproveedores
-            );
+        // Cabecera OPP/OPA: manda el monto del pago (puede ser 0 en compensación
+        // solo con aplicación de anticipos). No sustituir por el total de una línea CC.
+        $pagoCab = $ccPago->pagoproveedores;
+        if ($pagoCab !== null) {
+            $monto = abs((float) ($pagoCab->monto ?? 0));
+            $lado = AplicacionCuentacorrienteAnitaLadoSupport::alinearMonedaDesdePago($lado, $pagoCab);
         } else {
             $monto = abs((float) $ccPago->total);
         }

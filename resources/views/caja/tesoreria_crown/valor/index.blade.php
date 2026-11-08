@@ -42,6 +42,11 @@
                            title="Configurar tipos de valor">
                             <i class="fa fa-cog"></i> Tipos de valor
                         </a>
+                        <a href="{{ route('conversion_tesoreria_crown_valor') }}"
+                           class="btn btn-outline-secondary btn-sm ml-1"
+                           title="Conversión diaria para poder público">
+                            <i class="fa fa-exchange"></i> Conversión fichas
+                        </a>
                     @endif
                 </div>
             </div>
