@@ -271,20 +271,34 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
     /**
      * @param  array<string, mixed>  $informe
      */
-    public function enviarMailInforme(array $informe): void
+    public function enviarMailInforme(array $informe, bool $forzarUrgente = false): void
     {
-        $destinatarios = CierreJornadaProcesoAutomaticoSupport::destinatariosEmail();
+        $urgente = $forzarUrgente || CierreJornadaProcesoAutomaticoSupport::informeTieneErrores($informe);
+        $destinatarios = $urgente
+            ? CierreJornadaProcesoAutomaticoSupport::destinatariosEmailUrgente()
+            : CierreJornadaProcesoAutomaticoSupport::destinatariosEmail();
+
         if ($destinatarios === []) {
-            Log::warning('gastronomia.cierre_jornada_automatico.mail_sin_destinatarios');
+            Log::warning('gastronomia.cierre_jornada_automatico.mail_sin_destinatarios', [
+                'urgente' => $urgente,
+            ]);
 
             return;
         }
 
         try {
             \Illuminate\Support\Facades\Mail::to($destinatarios)
-                ->send(new \App\Mail\Caja\WaitryCierreJornadaProcesoAutomatico($informe));
+                ->send(new \App\Mail\Caja\WaitryCierreJornadaProcesoAutomatico($informe, $urgente));
+
+            if ($urgente) {
+                Log::warning('gastronomia.cierre_jornada_automatico.mail_urgente_enviado', [
+                    'destinatarios' => $destinatarios,
+                    'errores' => (int) ($informe['resumen']['errores'] ?? 0),
+                ]);
+            }
         } catch (Throwable $e) {
             Log::error('gastronomia.cierre_jornada_automatico.mail_fallo', [
+                'urgente' => $urgente,
                 'error' => $e->getMessage(),
             ]);
         }
@@ -306,7 +320,7 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
             return $jornada;
         }
 
-        return CierreJornadaProcesoAutomaticoSupport::jornadaPendienteMasReciente($empresaId);
+        return CierreJornadaProcesoAutomaticoSupport::jornadaPendienteMasAntigua($empresaId);
     }
 
     private function assertEntornoPermiteCierreAutomatico(): void

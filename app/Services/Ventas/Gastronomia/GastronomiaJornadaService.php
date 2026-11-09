@@ -16,6 +16,7 @@ use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\DbContencionSupport;
 use App\Support\Database\EloquentActualizacionPorLotesSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
@@ -456,6 +457,11 @@ final class GastronomiaJornadaService
                     .'Cada turno que se abrió debe cerrarse (en su terminal o cierre remoto en Saneamiento). '
                     .'Las PCs que no habilitaron turno en esta jornada no bloquean el cierre.';
             }
+        }
+
+        $bloqueoProceso = CierreJornadaProcesoAutomaticoSupport::mensajeBloqueoCierrePorProcesoPendiente($empresaId);
+        if ($bloqueoProceso !== null) {
+            $errores[] = $bloqueoProceso;
         }
 
         return $errores;

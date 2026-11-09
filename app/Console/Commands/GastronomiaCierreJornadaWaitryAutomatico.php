@@ -11,11 +11,11 @@ class GastronomiaCierreJornadaWaitryAutomatico extends Command
 {
     protected $signature = 'gastronomia:cierre-jornada-waitry-automatico
                             {--empresa= : ID empresa (default: todas las habilitadas en config)}
-                            {--fecha-jornada= : Y-m-d (default: última jornada cerrada pendiente por empresa)}
-                            {--sin-mail : No envía correo con el resultado}
-                            {--enviar-mail : Envía correo (default en schedule)}';
+                            {--fecha-jornada= : Y-m-d (default: jornada pendiente mas antigua por empresa)}
+                            {--sin-mail : No envia correo OK; el URGENTE por fallo se manda igual}
+                            {--enviar-mail : Envia correo (default en schedule)}';
 
-    protected $description = 'Ejecuta el proceso completo de cierre Waitry (recalcular %, facturas post-cierre y asientos) sin intervención';
+    protected $description = 'Ejecuta el proceso completo de cierre Waitry (recalcular %, facturas post-cierre y asientos) sin intervencion';
 
     public function handle(GastronomiaCierreJornadaProcesoAutomaticoService $service): int
     {
@@ -64,14 +64,25 @@ class GastronomiaCierreJornadaWaitryAutomatico extends Command
                     }
                 }
                 $informe['ok'] = $informe['resumen']['errores'] === 0;
-                if ($enviarMail) {
-                    $service->enviarMailInforme($informe);
-                }
+                $this->enviarMailSegunResultado($service, $informe, $enviarMail);
             } else {
-                $informe = $service->ejecutarTodasEmpresas($enviarMail);
+                $informe = $service->ejecutarTodasEmpresas(false);
+                $this->enviarMailSegunResultado($service, $informe, $enviarMail);
             }
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
+            $informeFallo = [
+                'ejecutado_en' => now()->toIso8601String(),
+                'empresas' => [[
+                    'empresa_id' => $empresaOpt !== '' ? (int) $empresaOpt : null,
+                    'estado' => 'error',
+                    'fecha_jornada' => $fechaJornada,
+                    'error' => $e->getMessage(),
+                ]],
+                'resumen' => ['procesadas' => 0, 'omitidas' => 0, 'errores' => 1],
+                'ok' => false,
+            ];
+            $service->enviarMailInforme($informeFallo, true);
 
             return self::FAILURE;
         }
@@ -101,5 +112,31 @@ class GastronomiaCierreJornadaWaitryAutomatico extends Command
         ));
 
         return ($resumen['errores'] ?? 0) > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * OK: mail solo si --enviar-mail.
+     * Error: mail URGENTE siempre (salvo que config lo apague), aunque vaya --sin-mail.
+     *
+     * @param  array<string, mixed>  $informe
+     */
+    private function enviarMailSegunResultado(
+        GastronomiaCierreJornadaProcesoAutomaticoService $service,
+        array $informe,
+        bool $enviarMail,
+    ): void {
+        $hayError = \App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport::informeTieneErrores($informe);
+        $urgenteSiempre = (bool) config('gastronomia.cierre_jornada_automatico.mail_urgente_siempre_en_error', true);
+
+        if ($hayError && $urgenteSiempre) {
+            $service->enviarMailInforme($informe, true);
+            $this->warn('Mail URGENTE enviado por fallo del proceso.');
+
+            return;
+        }
+
+        if ($enviarMail) {
+            $service->enviarMailInforme($informe);
+        }
     }
 }

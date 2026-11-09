@@ -4,6 +4,7 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Soporte para el cierre automático del proceso Waitry (jornadas pendientes).
@@ -11,9 +12,14 @@ use App\Models\Ventas\JornadaGastronomia;
 final class CierreJornadaProcesoAutomaticoSupport
 {
     /**
-     * Última jornada cerrada de la empresa cuyo proceso Waitry no está completo.
+     * Jornada cerrada pendiente de proceso más antigua dentro del lookback.
+     *
+     * Si falla un día y al siguiente hay otra jornada, hay que reintentar primero
+     * la pendiente vieja del tramo reciente: si se toma solo la más reciente, la
+     * fallida queda huérfana (incidente Biyemas 2026-11-07). El lookback evita
+     * jornadas históricas anteriores al proceso automático.
      */
-    public static function jornadaPendienteMasReciente(int $empresaId): ?JornadaGastronomia
+    public static function jornadaPendienteMasAntigua(int $empresaId): ?JornadaGastronomia
     {
         if ($empresaId <= 0) {
             return null;
@@ -23,8 +29,9 @@ final class CierreJornadaProcesoAutomaticoSupport
             ->where('empresa_id', $empresaId)
             ->where('estado', JornadaGastronomia::ESTADO_CERRADA)
             ->whereNotNull('cierre_en')
-            ->orderByDesc('fecha_jornada')
-            ->orderByDesc('id')
+            ->whereDate('fecha_jornada', '>=', self::fechaDesdeLookbackPendientes())
+            ->orderBy('fecha_jornada')
+            ->orderBy('id')
             ->get();
 
         foreach ($jornadas as $jornada) {
@@ -36,6 +43,21 @@ final class CierreJornadaProcesoAutomaticoSupport
         return null;
     }
 
+    /**
+     * Alias histórico: ahora resuelve la pendiente más antigua del lookback.
+     */
+    public static function jornadaPendienteMasReciente(int $empresaId): ?JornadaGastronomia
+    {
+        return self::jornadaPendienteMasAntigua($empresaId);
+    }
+
+    public static function fechaDesdeLookbackPendientes(): string
+    {
+        $dias = max(1, (int) config('gastronomia.cierre_jornada_automatico.pendiente_dias_lookback', 14));
+
+        return now()->subDays($dias)->toDateString();
+    }
+
     public static function procesoCompletado(JornadaGastronomia $jornada): bool
     {
         $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
@@ -45,6 +67,44 @@ final class CierreJornadaProcesoAutomaticoSupport
         $ctx = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
 
         return (bool) ($ctx['proceso_cierre_completado'] ?? false);
+    }
+
+    /**
+     * Bloquea el cierre de la jornada abierta si hay una cerrada anterior sin proceso completo.
+     * Evita acumular días sin asientos/facturas de proceso (como el 7/11 Biyemas).
+     */
+    public static function mensajeBloqueoCierrePorProcesoPendiente(int $empresaId): ?string
+    {
+        if ($empresaId <= 0) {
+            return null;
+        }
+
+        if (! filter_var(config('gastronomia.cierre_jornada_automatico.bloquear_cierre_si_proceso_pendiente', true), FILTER_VALIDATE_BOOLEAN)) {
+            return null;
+        }
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            return null;
+        }
+
+        // El bloqueo aplica cuando el proceso Waitry está en uso (cierre tótem / automático).
+        if (! filter_var(config('gastronomia.cierre_totem_jornada_habilitado', true), FILTER_VALIDATE_BOOLEAN)
+            && ! filter_var(config('gastronomia.cierre_jornada_automatico.habilitado', false), FILTER_VALIDATE_BOOLEAN)) {
+            return null;
+        }
+
+        $pendiente = self::jornadaPendienteMasAntigua($empresaId);
+        if ($pendiente === null) {
+            return null;
+        }
+
+        $fecha = $pendiente->fecha_jornada?->format('d/m/Y') ?? (string) $pendiente->id;
+
+        return 'No se puede cerrar esta jornada: el proceso Waitry de la jornada '.$fecha
+            .' (id '.$pendiente->id.') quedó incompleto (faltan facturas, asientos o rendición Anita). '
+            .'Reintente con: php artisan gastronomia:cierre-jornada-waitry-automatico --empresa='
+            .$empresaId.' --fecha-jornada='.($pendiente->fecha_jornada?->format('Y-m-d') ?? '')
+            .' — o complete el proceso en Caja → Cierre jornada Waitry.';
     }
 
     /**
@@ -98,8 +158,47 @@ final class CierreJornadaProcesoAutomaticoSupport
      */
     public static function destinatariosEmail(): array
     {
-        $raw = (string) config('gastronomia.cierre_jornada_automatico.email', '');
-        if ($raw === '') {
+        return self::parseEmails((string) config('gastronomia.cierre_jornada_automatico.email', ''));
+    }
+
+    /**
+     * Destinatarios del aviso urgente (falla del proceso). Une email + email_urgente.
+     *
+     * @return list<string>
+     */
+    public static function destinatariosEmailUrgente(): array
+    {
+        $normal = self::destinatariosEmail();
+        $urgente = self::parseEmails((string) config('gastronomia.cierre_jornada_automatico.email_urgente', ''));
+
+        return array_values(array_unique(array_merge($normal, $urgente)));
+    }
+
+    public static function informeTieneErrores(array $informe): bool
+    {
+        if ((int) ($informe['resumen']['errores'] ?? 0) > 0) {
+            return true;
+        }
+
+        foreach ($informe['empresas'] ?? [] as $empresa) {
+            if (! is_array($empresa)) {
+                continue;
+            }
+            $estado = (string) ($empresa['estado'] ?? '');
+            if (in_array($estado, ['error', 'parcial'], true) || ! empty($empresa['error'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function parseEmails(string $raw): array
+    {
+        if (trim($raw) === '') {
             return [];
         }
 

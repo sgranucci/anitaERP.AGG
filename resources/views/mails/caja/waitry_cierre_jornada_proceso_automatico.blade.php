@@ -10,7 +10,19 @@
     $fmt = static fn ($n) => number_format((float) $n, 2, ',', '.');
     $resumen = $informe['resumen'] ?? [];
     $hayError = (int) ($resumen['errores'] ?? 0) > 0;
+    $esUrgente = (bool) ($urgente ?? false) || $hayError;
 @endphp
+
+@if ($esUrgente)
+    <div style="background:#dc3545;color:#fff;padding:14px 16px;margin:0 0 16px 0;border-radius:4px;">
+        <strong style="font-size:16px;">URGENTE — Falló el proceso de cierre Waitry</strong>
+        <p style="margin:8px 0 0 0;">
+            Hay jornada(s) sin facturas / asientos / rendición del proceso.
+            No se podrá cerrar la jornada siguiente hasta completar el proceso pendiente.
+            Reintentar: <code style="background:rgba(0,0,0,.2);padding:2px 6px;">php artisan gastronomia:cierre-jornada-waitry-automatico --empresa=ID --fecha-jornada=YYYY-MM-DD</code>
+        </p>
+    </div>
+@endif
 
 <h2 style="margin:0 0 8px 0;">Cierre automático proceso Waitry</h2>
 <p style="margin:0 0 16px 0;">

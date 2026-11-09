@@ -725,6 +725,31 @@ return [
             'GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_EMAIL',
             'sergiogranucci@gmail.com,ofalqui@grupoagg.com',
         ),
+        /** Destinatarios extra del mail URGENTE (se suman a email). Vacío = mismos que email. */
+        'email_urgente' => env(
+            'GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_EMAIL_URGENTE',
+            env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_EMAIL', 'sergiogranucci@gmail.com,ofalqui@grupoagg.com'),
+        ),
+        /** Si el proceso falla, manda mail urgente aunque el comando vaya con --sin-mail. */
+        'mail_urgente_siempre_en_error' => filter_var(
+            env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_MAIL_URGENTE_SIEMPRE', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        /**
+         * Si hay jornada cerrada con proceso incompleto, no deja cerrar la jornada abierta siguiente.
+         */
+        'bloquear_cierre_si_proceso_pendiente' => filter_var(
+            env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_BLOQUEAR_CIERRE_SI_PENDIENTE', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+        /**
+         * Solo mirar pendientes / bloqueo dentro de los últimos N días
+         * (evita jornadas históricas anteriores al proceso automático).
+         */
+        'pendiente_dias_lookback' => max(1, (int) env(
+            'GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_PENDIENTE_DIAS_LOOKBACK',
+            14,
+        )),
         'usuario_id' => max(1, (int) env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_USUARIO_ID', 1)),
     ],
 
