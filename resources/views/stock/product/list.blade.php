@@ -199,7 +199,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                             <td class="text-nowrap">
 								@if ($articulo->usoarticulo_id == 1)
                        				@if (can('editar-articulos-combinaciones', false))
-          								<a class="btn-accion-tabla tooltipsC" href="{{ route('combinacion.index', ['id' => $articulo->id]) }}" title="Combinaciones">
+          								<a class="btn-accion-tabla tooltipsC" href="{{ route('combinacion.index', ['id' => $articulo->id] + $retornoListadoQuery) }}" title="Combinaciones">
                                             <i class="fa fa-layer-group text-primary"></i>
                                         </a>
 									@endif

@@ -34,6 +34,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Support\Stock\CombinacionEstadoCanalSupport;
+use App\Support\Stock\ArticuloFerliListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Jurosh\PDFMerge\PDFMerger;
 use Carbon\Carbon;
 use App;
@@ -76,7 +78,7 @@ class CombinacionController extends Controller
         echo json_encode($combinaciones);
     }
 
-    public function index($articulo_id = null)
+    public function index(Request $request, $articulo_id = null)
     {
         $hay_combinacion = Combinacion::first();
 
@@ -125,7 +127,9 @@ class CombinacionController extends Controller
         	}
 		}
 
-        return view('stock.combinacion.index',compact('combinaciones','articulo'));
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ArticuloFerliListadoFiltros::class);
+
+        return view('stock.combinacion.index', compact('combinaciones', 'articulo', 'filtrosQuery'));
     }
 
 	public function leerCombinacionesActivas($id)
@@ -175,11 +179,12 @@ class CombinacionController extends Controller
             ->toArray();
     }
 
-    public function create($id = null)
+    public function create(Request $request, $id = null)
     {
         $articulo = Articulo::where("id",$id)->first();
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ArticuloFerliListadoFiltros::class);
 
-        return view('stock.combinacion.diseno.create', compact('articulo'));
+        return view('stock.combinacion.diseno.create', compact('articulo', 'filtrosQuery'));
     }
 
     public function save(ValidacionCombinacion $request)
@@ -284,14 +289,18 @@ class CombinacionController extends Controller
 		$Combinacion = new Combinacion();
         $Combinacion->guardarAnita($combinacion);
 
-        return redirect()->route('combinacion.index',$data['articulo_id'])->with('status', 'Combinación creada');   
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('combinacion.index', array_merge(['id' => $data['articulo_id']], $filtrosQuery))
+            ->with('status', 'Combinación creada');
     }
 
-    public function edit($id, $type = null)
+    public function edit(Request $request, $id, $type = null)
     {
         $combinacion = Combinacion::where("id",$id)->with("articulos:id,sku,descripcion")->with("capearts")->with("avioarts")->get()->first();
 
 		$articulo = Articulo::all();
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ArticuloFerliListadoFiltros::class);
 
         if( $type == "tecnica" ){
 			// Arma totales de control combinacion->capearts->consumo1
@@ -341,9 +350,9 @@ class CombinacionController extends Controller
  
             return view('stock.combinacion.tecnica.edit',compact('combinacion','id','plvista','plarmado',
 							'fondo','color','horma','serigrafia','capelladas','avios','articulo',
-							'tipos','tipos_avios', 'totControlConsumo'));
+							'tipos','tipos_avios', 'totControlConsumo', 'filtrosQuery'));
         }else{
-            return view('stock.combinacion.diseno.edit',compact('combinacion','id','articulo'));
+            return view('stock.combinacion.diseno.edit',compact('combinacion','id','articulo', 'filtrosQuery'));
         }
         
     }
@@ -372,7 +381,10 @@ class CombinacionController extends Controller
 		}
         Combinacion::where('id', $data['id'])->update($update);
 
-        return redirect()->route('combinacion.index',$data['articulo_id'])->with('status', 'Combinación editada');   
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('combinacion.index', array_merge(['id' => $data['articulo_id']], $filtrosQuery))
+            ->with('status', 'Combinación editada');
     }
 
     public function updateTecnica(ValidacionCombinacionTecnica $request)
@@ -487,7 +499,10 @@ class CombinacionController extends Controller
 		$Combinacion = new Combinacion();
         $Combinacion->actualizarAnita($combinacion, 'tecnica');
 
-        return redirect()->route('combinacion.index',$request->articulo_id)->with('status', 'Combinación actualizada con exito');   
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('combinacion.index', array_merge(['id' => $request->articulo_id], $filtrosQuery))
+            ->with('status', 'Combinación actualizada con exito');
     }
 
     public function updateState(Request $request){

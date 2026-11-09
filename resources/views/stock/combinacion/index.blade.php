@@ -73,6 +73,7 @@ function cambiarEstado(id, index, ambito){
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 @php
     $uiFerliCombo = \App\Support\Stock\CombinacionEstadoCanalSupport::uiFerliActiva();
+    $retornoListadoQuery = $filtrosQuery ?? [];
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -81,14 +82,14 @@ function cambiarEstado(id, index, ambito){
             <div class="card-header">
                 <h3 class="card-title">Combinaciones</h3>
                 <div class="card-tools">
-                    <a href="{{route('combinacion.create', ['id' => $articulo->id] )}}" class="btn btn-outline-secondary btn-sm">
+                    <a href="{{ route('combinacion.create', ['id' => $articulo->id] + $retornoListadoQuery) }}" class="btn btn-outline-secondary btn-sm">
             						{{ $combinacion->articulos->sku ?? '' }} {{ $combinacion->articulos->descripcion ?? '' }}
                        	@if (can('crear-combinaciones', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
-                    <a href="{{ route('products.index') }}" class="btn btn-outline-secondary btn-sm">
-                        	<i class="fa fa-fw fa-plus-circle"></i> Volver a art&iacute;culos
+                    <a href="{{ route('products.index', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
+                        	<i class="fa fa-fw fa-reply-all"></i> Volver a art&iacute;culos
                     </a>
                 </div>
             </div>
@@ -172,10 +173,10 @@ function cambiarEstado(id, index, ambito){
                                     @endif
 								@endif
                        			@if (can('editar-combinaciones-disenio', false))
-          							<a href="{{ route('combinacion.edit', ['id' => $combinacion->id]) }}" type="button" class="btn-xs btn-primary ml-2">Dise&ntilde;o</a>
+          							<a href="{{ route('combinacion.edit', ['id' => $combinacion->id] + $retornoListadoQuery) }}" type="button" class="btn-xs btn-primary ml-2">Dise&ntilde;o</a>
 								@endif
                        			@if (can('editar-combinaciones-tecnica', false))
-          							<a href="{{ route('combinacion.edit', ['id' => $combinacion->id, 'tipo' => 'tecnica']) }}" type="button" class="btn-xs btn-primary ml-2">T&eacute;cnica</a>
+          							<a href="{{ route('combinacion.edit', ['id' => $combinacion->id, 'tipo' => 'tecnica'] + $retornoListadoQuery) }}" type="button" class="btn-xs btn-primary ml-2">T&eacute;cnica</a>
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
           							<a href="{{ route('product.download', ['sku' => $combinacion->articulos->sku, 'codigo' => $combinacion->codigo]) }}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">

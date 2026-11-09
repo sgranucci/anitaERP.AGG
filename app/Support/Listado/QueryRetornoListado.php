@@ -51,6 +51,13 @@ class QueryRetornoListado
             'sala_todas',
             'sala_sin',
             'sala_scope',
+            // Workbench: vista / QBE / orden / columnas
+            'vista_id',
+            'vista_estandar',
+            'columnas',
+            'qbe',
+            'sort',
+            'group',
             // Pedidos Tiendanube
             'desde',
             'hasta',
@@ -105,6 +112,29 @@ class QueryRetornoListado
         $page = (int) $request->query('page', 0);
         if ($page > 1) {
             $query['page'] = $page;
+        }
+
+        // Meta del workbench: paraQueryString de filtros no las incluye.
+        return self::conservarMetaWorkbench($request, $query);
+    }
+
+    /**
+     * Conserva vista / columnas del listado al volver del ABM.
+     *
+     * @param  array<string, string|int|array>  $query
+     * @return array<string, string|int|array>
+     */
+    public static function conservarMetaWorkbench(Request $request, array $query): array
+    {
+        if ($request->query->has('vista_id') && $request->query('vista_id') !== '' && $request->query('vista_id') !== null) {
+            $query['vista_id'] = (int) $request->query('vista_id');
+        } elseif ($request->boolean('vista_estandar')) {
+            $query['vista_estandar'] = 1;
+        }
+
+        $columnas = $request->query('columnas');
+        if (is_string($columnas) && $columnas !== '') {
+            $query['columnas'] = $columnas;
         }
 
         return $query;

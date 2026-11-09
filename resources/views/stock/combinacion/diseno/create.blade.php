@@ -21,12 +21,12 @@ $(document).ready(function () {
             <div class="card-header">
                 <h3 class="card-title">Crear Combinaci&oacute;n - Datos Diseño</h3>
                 <div class="card-tools">
-                    <a href="{{  URL::previous() }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('combinacion.index', ['id' => $articulo->id] + ($filtrosQuery ?? [])) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('combinacion.save')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('combinacion.save', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("put")
                 @include('stock.combinacion.diseno.partials.form')
             </form>

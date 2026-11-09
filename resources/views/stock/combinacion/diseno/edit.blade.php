@@ -16,12 +16,12 @@
             <div class="card-header">
                 <h3 class="card-title">Editar Combinaci&oacute;n - Datos Diseño</h3>
                 <div class="card-tools">
-                    <a href="{{  URL::previous() }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('combinacion.index', ['id' => $combinacion->articulo_id] + ($filtrosQuery ?? [])) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('combinacion.update', ['id' => $combinacion->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('combinacion.update', ['id' => $combinacion->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("put")
                 <input type="hidden" name="id" class="form-control" value="{{ $id }}" />
                 <input type="hidden" name="codigo" class="form-control" value="{{ $combinacion->codigo }}" />
