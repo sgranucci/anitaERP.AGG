@@ -27,14 +27,22 @@ class ProveedorFacturaAnticipadaRecepcionAuditorMail extends Mailable
             $empresa = 'Empresa #'.(int) ($this->informe['empresa_id'] ?? 0);
         }
         $fecha = (string) ($this->informe['fecha_fmt'] ?? $this->informe['fecha'] ?? '');
-        $desvios = (int) ($this->informe['desvios_total'] ?? 0);
+        $nuevos = (int) ($this->informe['desvios_nuevos_total'] ?? 0);
+        $informados = (int) ($this->informe['desvios_informados_total'] ?? 0);
 
-        if ($desvios > 0) {
+        if ($nuevos > 0) {
             $asunto = sprintf(
-                '%s — Factura anticipada vs recepción — %s — ALERTA (%d OC)',
+                '%s — Factura anticipada vs recepción — %s — ALERTA (%d nuevas)',
                 $empresa,
                 $fecha,
-                $desvios
+                $nuevos
+            );
+        } elseif ($informados > 0) {
+            $asunto = sprintf(
+                '%s — Factura anticipada vs recepción — %s — OK (%d ya informadas)',
+                $empresa,
+                $fecha,
+                $informados
             );
         } else {
             $asunto = sprintf(

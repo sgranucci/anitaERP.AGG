@@ -3,6 +3,7 @@
     $empresa = trim((string) ($informe['empresa_nombre'] ?? ''));
     $fecha = (string) ($informe['fecha_fmt'] ?? $informe['fecha'] ?? '');
     $desvios = $informe['desvios'] ?? [];
+    $desviosInformados = $informe['desvios_informados'] ?? [];
     $pendientes = $informe['pendientes'] ?? [];
     $bannerBg = $alerta ? '#fadbd8' : '#d5f5e3';
     $bannerBorder = $alerta ? '#c0392b' : '#1e8449';
@@ -22,9 +23,13 @@
     <div style="font-size:20px; font-weight:700; margin:0 0 4px 0;">{{ $empresa }}</div>
     <div style="font-size:15px; margin:0;">
         @if ($alerta)
-            ALERTA — hay OC con recepción en anticipos mayor que la factura anticipada al {{ $fecha }}
-        @else
+            ALERTA — hay OC con desvío nuevo o exceso distinto al {{ $fecha }}
+        @elseif (! empty($informe['hay_base_anterior']) && (int) ($informe['desvios_informados_total'] ?? 0) > 0)
+            OK — sin desvíos nuevos; {{ (int) $informe['desvios_informados_total'] }} ya informada(s) al {{ $fecha }}
+        @elseif (! empty($informe['hay_base_anterior']))
             OK — ninguna recepción supera la factura anticipada al {{ $fecha }}
+        @else
+            OK — base inicial de desvíos al {{ $fecha }} (sin alerta)
         @endif
     </div>
 </div>
@@ -33,6 +38,8 @@
     Control <strong>factura anticipada vs recepción</strong> en la cuenta de anticipos.
     Por cada OC se suma el Debe de facturas anticipadas y el Haber de recepciones.
     Si la recepción acredita más de lo facturado, es desvío.
+    La alerta es solo por desvío <strong>nuevo</strong> o por cambio del exceso respecto de la base del día anterior;
+    los que ya se informaron siguen en el mail como información.
     Si FA y COM están en la misma moneda extranjera y el importe en ME cierra, la diferencia
     en pesos por cotización se informa y no alerta.
     El pendiente (factura sin recepción completa) se informa y no alerta.
@@ -54,12 +61,20 @@
             style="background:#fadbd8;"
         @endif
     >
-        <td>Desvíos (recepción &gt; factura)</td>
-        <td align="right"><strong>{{ (int) ($informe['desvios_total'] ?? 0) }}</strong></td>
+        <td>Desvíos nuevos / con exceso distinto</td>
+        <td align="right"><strong>{{ (int) ($informe['desvios_nuevos_total'] ?? 0) }}</strong></td>
     </tr>
     <tr>
-        <td>Suma exceso recepción</td>
+        <td>Desvíos ya informados (sin alerta)</td>
+        <td align="right">{{ (int) ($informe['desvios_informados_total'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Suma exceso (todos)</td>
         <td align="right">{{ $fmt($informe['exceso_recepcion'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Suma exceso nuevos</td>
+        <td align="right">{{ $fmt($informe['exceso_recepcion_nuevo'] ?? 0) }}</td>
     </tr>
     <tr>
         <td>Pendientes de recepción (info)</td>
@@ -70,16 +85,25 @@
         <td align="right">{{ (int) ($informe['diff_cotizacion_total'] ?? 0) }}</td>
     </tr>
     <tr>
+        <td>Base anterior</td>
+        <td align="right">
+            @if (! empty($informe['fecha_anterior_fmt']))
+                {{ $informe['fecha_anterior_fmt'] }}
+            @else
+                (primera medición)
+            @endif
+        </td>
+    </tr>
+    <tr>
         <td>Tolerancia</td>
         <td align="right">{{ $fmt($informe['tolerancia'] ?? 1) }}</td>
     </tr>
 </table>
 
 @if ($desvios !== [])
-    <h3 style="margin:18px 0 6px 0;">Desvíos</h3>
+    <h3 style="margin:18px 0 6px 0;">Desvíos nuevos</h3>
     <p style="margin:0 0 8px 0; color:#7b241c; font-size:13px;">
-        La recepción acreditó anticipos por encima de lo facturado anticipado en esa OC.
-        Es el caso que antes ensuciaba el delta conjunto (tope de recepción).
+        Aparecieron hoy o el exceso cambió respecto de la base anterior.
     </p>
     <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#f5b7b1; color:#17202A;">
@@ -89,6 +113,7 @@
             <th align="right">Recepción</th>
             <th align="right">Neto</th>
             <th align="right">Exceso</th>
+            <th align="right">Exceso ant.</th>
         </tr>
         @foreach ($desvios as $fila)
             <tr>
@@ -98,12 +123,52 @@
                 <td align="right">{{ $fmt($fila['recepcion'] ?? 0) }}</td>
                 <td align="right">{{ $fmt($fila['neto'] ?? 0) }}</td>
                 <td align="right"><strong>{{ $fmt($fila['exceso_recepcion'] ?? 0) }}</strong></td>
+                <td align="right">
+                    @if (array_key_exists('exceso_anterior', $fila) && $fila['exceso_anterior'] !== null)
+                        {{ $fmt($fila['exceso_anterior']) }}
+                    @else
+                        —
+                    @endif
+                </td>
             </tr>
         @endforeach
     </table>
     @if ((int) ($informe['desvios_truncados'] ?? 0) > 0)
         <p style="margin:8px 0 0 0; color:#666; font-size:12px;">
             Se omitieron {{ (int) $informe['desvios_truncados'] }} fila(s) por límite de mail.
+        </p>
+    @endif
+@endif
+
+@if ($desviosInformados !== [])
+    <h3 style="margin:18px 0 6px 0;">Desvíos ya informados (sin alerta)</h3>
+    <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
+        El exceso es el mismo que en la base anterior (o es la medición inicial del día).
+        Quedan documentados; no se vuelven a alertar hasta que cambien.
+    </p>
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#FCF3CF; color:#17202A;">
+            <th align="left">OC</th>
+            <th align="left">Cuenta</th>
+            <th align="right">Factura anticipada</th>
+            <th align="right">Recepción</th>
+            <th align="right">Neto</th>
+            <th align="right">Exceso</th>
+        </tr>
+        @foreach ($desviosInformados as $fila)
+            <tr>
+                <td>{{ $fila['numeroordencompra'] ?? $fila['ordencompra_id'] ?? '' }}</td>
+                <td>{{ $fila['cuenta_codigo'] ?? '' }} {{ $fila['cuenta_nombre'] ?? '' }}</td>
+                <td align="right">{{ $fmt($fila['factura'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($fila['recepcion'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($fila['neto'] ?? 0) }}</td>
+                <td align="right">{{ $fmt($fila['exceso_recepcion'] ?? 0) }}</td>
+            </tr>
+        @endforeach
+    </table>
+    @if ((int) ($informe['desvios_informados_truncados'] ?? 0) > 0)
+        <p style="margin:8px 0 0 0; color:#666; font-size:12px;">
+            Se omitieron {{ (int) $informe['desvios_informados_truncados'] }} fila(s) por límite de mail.
         </p>
     @endif
 @endif
@@ -169,7 +234,7 @@
     @endif
 @endif
 
-@if (! $alerta && $desvios === [])
+@if (! $alerta && $desvios === [] && $desviosInformados === [])
     <p style="margin:18px 0 0 0; padding:12px; background:#d5f5e3; border:1px solid #1e8449; color:#145a32; border-radius:4px;">
         Ninguna OC tiene recepción en anticipos mayor que su factura anticipada.
     </p>
@@ -181,6 +246,7 @@
     · Destinatario: <code>COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_EMAIL</code>
     · Empresas: <code>COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_EMPRESAS</code>
     · Desactivar: <code>COMPRAS_FACTURA_ANTICIPADA_RECEPCION_AUDITOR_HABILITADA=false</code>
+    · Bitácora: <code>docs/compras/auditor-factura-anticipada-recepcion.md</code>
 </p>
 </body>
 </html>

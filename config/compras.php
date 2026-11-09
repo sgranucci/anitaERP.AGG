@@ -160,7 +160,9 @@ return [
     /*
     | Auditor diario factura anticipada vs recepción en cuenta de anticipos
     | (compras:auditar-factura-anticipada-recepcion).
-    | Alerta si la recepción acredita más que lo facturado anticipado por OC.
+    | Persiste desvíos en proveedor_factura_anticipada_recepcion_desvio.
+    | Alerta solo si el desvío es nuevo o cambió el exceso vs el día anterior.
+    | Bitácora: docs/compras/auditor-factura-anticipada-recepcion.md
     | No mezcla OPA: eso queda en deuda_ficha_auditor / delta conjunto.
     */
     'factura_anticipada_recepcion_auditor' => [

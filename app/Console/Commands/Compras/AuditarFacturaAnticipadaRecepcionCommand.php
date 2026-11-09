@@ -45,11 +45,12 @@ class AuditarFacturaAnticipadaRecepcionCommand extends Command
 
         foreach ($salida['empresas'] ?? [] as $emp) {
             $this->table(
-                ['Empresa', 'Órdenes', 'Desvíos', 'Diff cotiz.', 'Pendientes', 'Exceso recepción', 'Mail'],
+                ['Empresa', 'Órdenes', 'Nuevos', 'Ya informados', 'Diff cotiz.', 'Pendientes', 'Exceso', 'Mail'],
                 [[
                     (string) ($emp['empresa_nombre'] ?? $emp['empresa_id'] ?? ''),
                     (string) ($emp['ordenes_total'] ?? 0),
-                    (string) ($emp['desvios_total'] ?? 0),
+                    (string) ($emp['desvios_nuevos_total'] ?? 0),
+                    (string) ($emp['desvios_informados_total'] ?? 0),
                     (string) ($emp['diff_cotizacion_total'] ?? 0),
                     (string) ($emp['pendientes_total'] ?? 0),
                     number_format((float) ($emp['exceso_recepcion'] ?? 0), 2, ',', '.'),
@@ -61,10 +62,17 @@ class AuditarFacturaAnticipadaRecepcionCommand extends Command
 
             foreach (array_slice($emp['desvios'] ?? [], 0, 15) as $fila) {
                 $this->warn(sprintf(
-                    'OC %s | factura %s | recepción %s | exceso %s',
+                    'NUEVO OC %s | factura %s | recepción %s | exceso %s',
                     (string) ($fila['numeroordencompra'] ?? $fila['ordencompra_id'] ?? '?'),
                     number_format((float) ($fila['factura'] ?? 0), 2, ',', '.'),
                     number_format((float) ($fila['recepcion'] ?? 0), 2, ',', '.'),
+                    number_format((float) ($fila['exceso_recepcion'] ?? 0), 2, ',', '.'),
+                ));
+            }
+            foreach (array_slice($emp['desvios_informados'] ?? [], 0, 15) as $fila) {
+                $this->line(sprintf(
+                    '  (ya informada) OC %s | exceso %s',
+                    (string) ($fila['numeroordencompra'] ?? $fila['ordencompra_id'] ?? '?'),
                     number_format((float) ($fila['exceso_recepcion'] ?? 0), 2, ',', '.'),
                 ));
             }

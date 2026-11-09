@@ -6,6 +6,7 @@ namespace App\Services\Compras;
 
 use App\Mail\Compras\ProveedorFacturaAnticipadaRecepcionAuditorMail;
 use App\Models\Configuracion\Empresa;
+use App\Support\Compras\ProveedorFacturaAnticipadaRecepcionDesvioBaselineSupport;
 use App\Support\Compras\ProveedorFacturaAnticipadaRecepcionSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -14,11 +15,13 @@ use Throwable;
 
 /**
  * Auditor diario: recepción en anticipos no puede superar la factura anticipada de la OC.
+ * Persiste desvíos por día; alerta solo si hay desvío nuevo o el exceso cambió.
  */
 final class ProveedorFacturaAnticipadaRecepcionAuditorService
 {
     public function __construct(
         private readonly ProveedorFacturaAnticipadaRecepcionSupport $support,
+        private readonly ProveedorFacturaAnticipadaRecepcionDesvioBaselineSupport $baseline,
     ) {
     }
 
@@ -49,7 +52,15 @@ final class ProveedorFacturaAnticipadaRecepcionAuditorService
             $desvios = array_values($detalle['desvios'] ?? []);
             $pendientes = array_values($detalle['pendientes'] ?? []);
             $diffCotizacion = array_values($detalle['diff_cotizacion'] ?? []);
-            $requiereAlerta = $desvios !== [];
+            $base = $this->baseline->clasificarYGuardar(
+                (int) $empresa->id,
+                $fecha,
+                $desvios,
+                $tolerancia,
+            );
+            $nuevos = array_values($base['desvios_nuevos'] ?? []);
+            $informados = array_values($base['desvios_informados'] ?? []);
+            $requiereAlerta = ! empty($base['requiere_alerta']);
             $paquete = [
                 'fecha' => $fecha,
                 'fecha_fmt' => $salida['fecha_fmt'],
@@ -57,12 +68,19 @@ final class ProveedorFacturaAnticipadaRecepcionAuditorService
                 'empresa_nombre' => trim((string) $empresa->nombre),
                 'tolerancia' => $tolerancia,
                 'requiere_alerta' => $requiereAlerta,
+                'hay_base_anterior' => ! empty($base['hay_base_anterior']),
+                'fecha_anterior' => $base['fecha_anterior'] ?? null,
+                'fecha_anterior_fmt' => $base['fecha_anterior_fmt'] ?? null,
                 'ordenes_total' => (int) ($detalle['ordenes_total'] ?? 0),
                 'desvios_total' => count($desvios),
+                'desvios_nuevos_total' => count($nuevos),
+                'desvios_informados_total' => count($informados),
                 'pendientes_total' => count($pendientes),
                 'diff_cotizacion_total' => count($diffCotizacion),
-                'desvios' => array_slice($desvios, 0, $limite),
-                'desvios_truncados' => max(0, count($desvios) - $limite),
+                'desvios' => array_slice($nuevos, 0, $limite),
+                'desvios_truncados' => max(0, count($nuevos) - $limite),
+                'desvios_informados' => array_slice($informados, 0, $limite),
+                'desvios_informados_truncados' => max(0, count($informados) - $limite),
                 'pendientes' => array_slice($pendientes, 0, min(20, $limite)),
                 'pendientes_truncados' => max(0, count($pendientes) - min(20, $limite)),
                 'diff_cotizacion' => array_slice($diffCotizacion, 0, min(20, $limite)),
@@ -70,6 +88,10 @@ final class ProveedorFacturaAnticipadaRecepcionAuditorService
                 'exceso_recepcion' => round(array_sum(array_map(
                     static fn (array $f): float => (float) ($f['exceso_recepcion'] ?? 0),
                     $desvios
+                )), 2),
+                'exceso_recepcion_nuevo' => round(array_sum(array_map(
+                    static fn (array $f): float => (float) ($f['exceso_recepcion'] ?? 0),
+                    $nuevos
                 )), 2),
                 'mail_enviado' => false,
                 'mail_destino' => null,
