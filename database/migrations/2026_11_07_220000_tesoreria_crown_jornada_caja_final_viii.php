@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,6 +15,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+        if (! Schema::hasTable('tesoreria_crown_jornada')) {
+            return;
+        }
+
         Schema::table('tesoreria_crown_jornada', function (Blueprint $table) {
             if (! Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_viii')) {
                 $table->decimal('caja_final_viii', 16, 2)->nullable()->after('caja_final_mes');
@@ -23,6 +31,13 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+        if (! Schema::hasTable('tesoreria_crown_jornada')) {
+            return;
+        }
+
         Schema::table('tesoreria_crown_jornada', function (Blueprint $table) {
             if (Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_viii')) {
                 $table->dropColumn('caja_final_viii');
