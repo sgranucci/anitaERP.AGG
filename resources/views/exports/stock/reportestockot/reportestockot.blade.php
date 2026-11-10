@@ -1,6 +1,7 @@
 @php
     $conFoto = ($imprimefoto ?? '') === 'CON_FOTO';
     $medidasCols = $medidas_columnas ?? [];
+    $preciosCols = $precios_columnas ?? ['PRECIO'];
     $colspan = (int) ($total_columnas ?? (4 + count($medidasCols) + 7 + ($conFoto ? 1 : 0)));
     $totalParesGeneral = 0.0;
 @endphp
@@ -27,7 +28,9 @@
             <th>Q M</th>
             <th>N</th>
             <th>TT.PS.</th>
-            <th>PRECIO</th>
+            @foreach ($preciosCols as $etiquetaPrecio)
+                <th>{{ $etiquetaPrecio === 'PRECIO' ? 'PRECIO' : $etiquetaPrecio }}</th>
+            @endforeach
             <th>SITUACION</th>
             <th>NUMERO OT</th>
             <th>DEPOSITO</th>
@@ -43,6 +46,7 @@
                 'lote' => $lote,
                 'imprimefoto' => $imprimefoto,
                 'medidas_columnas' => $medidasCols,
+                'precios_columnas' => $preciosCols,
             ])
             @php
                 $totalParesGeneral += (float) ($lote['total_pares'] ?? 0);
@@ -62,7 +66,9 @@
             <td></td>
             <td></td>
             <td align="right"><strong>{{ number_format($totalParesGeneral, 0, ',', '.') }}</strong></td>
-            <td></td>
+            @foreach ($preciosCols as $etiquetaPrecio)
+                <td></td>
+            @endforeach
             <td></td>
             <td></td>
             <td></td>

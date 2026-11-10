@@ -930,6 +930,8 @@
 					{
 						letraCliente: window.facturacionLetraCliente,
 						codigoDocumento: window.facturacionCodigoDocumento || '',
+						ignorarTipoActual: true,
+						exigirEleccionPv: true,
 						preferPvId: $('#puntoventadefault_id').val(),
 						preferTipoId: $('#tipotransacciondefault_id').val()
 					}
@@ -1217,24 +1219,19 @@
 			var selectFormapago = $('#formapago_id');
 		}
 	
-		// Arma select de puntos de venta
+		// Arma todos los puntos de venta. El circuito muestra u oculta los de exportación (00102 Tierra del Fuego, etc.).
 		selectPuntoVenta.empty();
 		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
 		var ctxCircuitoFac = {
 			letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
 			codigoDocumento: (window.facturacionCodigoDocumento || ''),
-			preferPvId: puntoVentaDefault
+			preferPvId: puntoVentaDefault,
+			exigirEleccionPv: true
 		};
-		var listasCircuitoFac = (window.FacturacionCircuitoAfip
-			? window.FacturacionCircuitoAfip.filtrarListas(
-				(function () {
-					try { return JSON.parse(document.querySelector('#datosfactura').dataset.tipotransaccion || '[]'); } catch (e) { return []; }
-				})(),
-				sel_puntoventa,
-				ctxCircuitoFac
-			)
-			: { puntoventas: sel_puntoventa });
-		$.each(listasCircuitoFac.puntoventas || sel_puntoventa, function(obj, item) {
+		var puntoventasOrdenados = (sel_puntoventa || []).slice().sort(function (a, b) {
+			return String(a.codigo || '').localeCompare(String(b.codigo || ''));
+		});
+		$.each(puntoventasOrdenados, function(obj, item) {
 			op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id);
 			var attrsP = window.FacturacionCircuitoAfip
 				? window.FacturacionCircuitoAfip.attrsPvOption(item)
@@ -1309,9 +1306,15 @@
 
 		$('#puntoventa_id').on('change', function () {
 			let puntoventa_id = $('#puntoventa_id').val();
-	
-			// Lee punto de venta si es de exportacion
-			leePuntoVenta(puntoventa_id);
+
+			if (puntoventa_id) {
+				leePuntoVenta(puntoventa_id);
+			} else {
+				$('#div_formapago, #div_mercaderia, #div_incoterm, #div_leyendaexportacion').hide();
+				if (!window.pedidoSinRemitoObligatorio) {
+					$('#div_peso_neto_exportacion').hide();
+				}
+			}
 			guardarPreferenciasFactura();
 		});
 
@@ -1319,6 +1322,17 @@
 			guardarPreferenciasFactura();
 			if (typeof window.sincronizarConceptoVentaDesdeTipo === 'function') {
 				window.sincronizarConceptoVentaDesdeTipo();
+			}
+			if (window.facturaCircuitoListo && window.FacturacionCircuitoAfip) {
+				window.FacturacionCircuitoAfip.aplicar($('#tipotransaccion_id'), $('#puntoventa_id'), {
+					letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
+					codigoDocumento: window.facturacionCodigoDocumento || '',
+					tipoAbreviatura: $(this).attr('data-abreviatura') || '',
+					tipoCodigo: $(this).attr('data-codigo') || '',
+					exigirEleccionPv: true,
+					preferPvId: $('#puntoventadefault_id').val(),
+					preferTipoId: $(this).val()
+				});
 			}
 		});
 		$('#puntoventa_id').on('change.conceptoVentaMtxca', function () {

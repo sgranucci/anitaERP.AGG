@@ -1,6 +1,7 @@
 @php
     $conFoto = ($imprimefoto ?? '') === 'CON_FOTO';
     $medidasCols = $medidas_columnas ?? [];
+    $preciosCols = $precios_columnas ?? ['PRECIO'];
     $esMovimientos = ! empty($es_movimientos);
     $conHerramientas = ! empty($con_herramientas);
     $puedeVerOt = $conHerramientas && can('editar-ordenes-de-trabajo', false);
@@ -24,7 +25,9 @@
             <th>Q M</th>
             <th class="text-right">N</th>
             <th class="text-right">TT</th>
-            <th class="text-right">Precio</th>
+            @foreach ($preciosCols as $etiquetaPrecio)
+                <th class="text-right">{{ $etiquetaPrecio === 'PRECIO' ? 'Precio' : $etiquetaPrecio }}</th>
+            @endforeach
             <th>Situación</th>
             <th>OT / lote</th>
             <th>Depósito</th>
@@ -53,6 +56,7 @@
                     'lote' => $lote,
                     'imprimefoto' => $imprimefoto ?? '',
                     'medidas_columnas' => $medidasCols,
+                    'precios_columnas' => $preciosCols,
                     'es_movimientos' => $esMovimientos,
                 ])
                 @if ($conHerramientas)

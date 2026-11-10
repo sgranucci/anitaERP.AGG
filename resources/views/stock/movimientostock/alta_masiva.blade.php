@@ -32,14 +32,15 @@
                 @csrf
                 <div class="card-body">
                     <p class="text-muted small mb-3">
-                        El Excel trae la curva: SKU, combinación, color y una columna por talle.
-                        Puede haber más de un bloque (por ejemplo femenino y masculino) y filas de total, que se ignoran.
-                        Empresa, tipo de transacción, depósito, fecha, lote y leyenda no vienen en el archivo.
+                        Sirve una curva (SKU, combinación, color y una columna por talle)
+                        o un pedido de fábrica de Brasil: artículo con código, combinación, curva por talle y módulos.
+                        En ese pedido cada talle se multiplica por los módulos. Las hojas y las filas de total se leen solas.
+                        Empresa, tipo, depósito, fecha, lote y leyenda no vienen en el archivo.
                     </p>
                     @if ($esFerli)
                         <div class="alert alert-info py-2">
-                            En Ferli el depósito tiene que ser un <strong>local</strong>.
-                            Los artículos y las combinaciones se resuelven en el catálogo de locales.
+                            La curva común va a un depósito de <strong>local</strong>.
+                            El pedido de fábrica (Brasil) va a un depósito de <strong>fábrica</strong>: los colores se resuelven en ese catálogo.
                         </div>
                     @else
                         <div class="alert alert-info py-2">
@@ -134,12 +135,14 @@
                         <table class="table table-sm table-bordered mb-0" id="alta-masiva-tabla">
                             <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
+                                    <th>Hoja</th>
                                     <th>Fila</th>
                                     <th>SKU</th>
                                     <th>Artículo</th>
                                     <th>Comb.</th>
                                     <th>Color Excel</th>
                                     <th>Color maestro</th>
+                                    <th class="text-right">Mód.</th>
                                     <th>Talles</th>
                                     <th class="text-right">Pares</th>
                                     <th>Estado</th>

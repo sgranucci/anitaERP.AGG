@@ -102,6 +102,23 @@
 			|| c.indexOf('FAF') === 0;
 	}
 
+	function tipoActualEsExport(ctx) {
+		ctx = ctx || {};
+		if (ctx.ignorarTipoActual) {
+			return false;
+		}
+		var abrev = ctx.tipoAbreviatura;
+		var codigo = ctx.tipoCodigo;
+		if (abrev === undefined && codigo === undefined) {
+			var $tipo = $('#tipotransaccion_id');
+			if ($tipo.length) {
+				abrev = $tipo.attr('data-abreviatura');
+				codigo = $tipo.attr('data-codigo');
+			}
+		}
+		return esTipoExportExclusivoItem({ abreviatura: abrev, codigo: codigo });
+	}
+
 	function resolverCircuito(ctx) {
 		ctx = ctx || {};
 		if (documentoEsExport(ctx.codigoDocumento)) {
@@ -110,10 +127,15 @@
 		if (norm(ctx.letraCliente) === 'E') {
 			return 'exportacion';
 		}
-		if (ctx.tipoForceExport) {
+		if (ctx.tipoForceExport || tipoActualEsExport(ctx)) {
 			return 'exportacion';
 		}
 		return 'local';
+	}
+
+	function formularioPermiteElegirExport() {
+		var node = document.querySelector('#datosfactura');
+		return !!(node && node.dataset && node.dataset.circuitoElegirExport === '1');
 	}
 
 	function filtrarSelect($select, circuito, esOkFn) {
@@ -171,11 +193,21 @@
 	function idsPermitidosPagina() {
 		var ctx = {
 			letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
-			codigoDocumento: (window.facturacionCodigoDocumento || '')
+			codigoDocumento: (window.facturacionCodigoDocumento || ''),
+			ignorarTipoActual: true
 		};
 		var circuito = resolverCircuito(ctx);
+		var clienteExport = norm(ctx.letraCliente) === 'E' || documentoEsExport(ctx.codigoDocumento);
+		var elegirExport = formularioPermiteElegirExport() && !clienteExport;
 		return catalogoTiposPagina().filter(function (item) {
-			return item && tipoPermitidoEnCircuito(item, circuito);
+			if (!item) {
+				return false;
+			}
+			if (tipoPermitidoEnCircuito(item, circuito)) {
+				return true;
+			}
+			// Alta de comprobante: FAF/FAE se puede tipear antes del cliente.
+			return elegirExport && esTipoExportExclusivoItem(item);
 		}).map(function (item) {
 			return parseInt(item.id, 10) || 0;
 		});
@@ -213,6 +245,11 @@
 			elegido = lista.find(function (item) {
 				return String(item.id) === actual;
 			}) || null;
+			if (!elegido && ctx.preferTipoId) {
+				elegido = lista.find(function (item) {
+					return String(item.id) === String(ctx.preferTipoId);
+				}) || null;
+			}
 			if (!elegido) {
 				elegido = lista[0];
 			}
@@ -233,6 +270,18 @@
 	 */
 	function aplicar($tipoSelect, $pvSelect, ctx) {
 		ctx = ctx || {};
+		if (window.__aplicandoCircuitoFactura) {
+			return resolverCircuito(ctx);
+		}
+		window.__aplicandoCircuitoFactura = true;
+		try {
+			return aplicarCircuito($tipoSelect, $pvSelect, ctx);
+		} finally {
+			window.__aplicandoCircuitoFactura = false;
+		}
+	}
+
+	function aplicarCircuito($tipoSelect, $pvSelect, ctx) {
 		var circuito = resolverCircuito(ctx);
 		var esSelect = $tipoSelect && $tipoSelect.length && $tipoSelect.is('select');
 		if (esSelect) {
@@ -244,6 +293,7 @@
 		} else if ($tipoSelect && $tipoSelect.length) {
 			aplicarTipoEnCampoConsulta($tipoSelect, circuito, ctx);
 		}
+		var pvAntes = $pvSelect && $pvSelect.length ? String($pvSelect.val() || '') : '';
 		filtrarSelect($pvSelect, circuito, function ($o) {
 			var exp = esPvExportFromData($o);
 			return circuito === 'exportacion' ? exp : !exp;
@@ -275,11 +325,21 @@
 			$tipoSelect.trigger('change');
 		}
 
-		if (circuito === 'exportacion') {
-			if (ctx.preferPvId && $pvSelect.find('option[value="' + ctx.preferPvId + '"]:not(:disabled)').length) {
+		if ($pvSelect && $pvSelect.length) {
+			var preferOk = ctx.preferPvId
+				&& $pvSelect.find('option[value="' + ctx.preferPvId + '"]:not(:disabled)').length;
+			if (preferOk) {
 				$pvSelect.val(String(ctx.preferPvId));
+			} else if (ctx.exigirEleccionPv) {
+				var antesOk = pvAntes
+					&& $pvSelect.find('option[value="' + pvAntes + '"]:not(:disabled)').length;
+				if (!antesOk) {
+					$pvSelect.val('');
+				}
 			}
-			$pvSelect.trigger('change');
+			if (circuito === 'exportacion' || String($pvSelect.val() || '') !== pvAntes) {
+				$pvSelect.trigger('change');
+			}
 		}
 
 		return circuito;

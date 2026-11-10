@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\DB;
  * pueden traer la lista web (WEB / OFERTA / LUGANO) y el MAX del lote se queda
  * con ese importe aunque el saldo sea de la lista de fábrica.
  *
+ * La curva no se parte. Las listas de fábrica de la numeración (niños: 16/26,
+ * 27/33 y 34/41) salen juntas, una columna por lista, sin importar qué talles
+ * tenga el saldo.
+ *
  * Misma preferencia que PrecioServiceFerli::resuelvePrecio: combinación, salvo
  * que el genérico tenga vigencia estrictamente posterior.
  */
@@ -43,14 +47,303 @@ final class ReporteStockOtPrecioSupport
         $listas = self::listasFabrica();
         $indice = self::indexarPrecios(self::filasPrecio(array_values($articuloIds), $fecha));
 
-        foreach ($filas as $i => $fila) {
+        $out = [];
+        foreach ($filas as $fila) {
+            unset($fila['_presentacion']);
+            $fila['precios_fabrica'] = self::preciosFabricaDeFila($fila, $tipoPorArticulo, $listas, $indice);
+            $out[] = $fila;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Las listas de fábrica de la numeración del artículo, en orden de talle.
+     * La curva de la fila no se toca.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array<int, int>  $tipoPorArticulo
+     * @param  list<array{id: int, tiponumeracion_id: int, desde: int, hasta: int}>  $listas
+     * @param  array<int, array<int, array{g: ?array{fecha: string, precio: float}, c: array<int, array{fecha: string, precio: float}>}>>  $indice
+     * @return list<array{id: int, etiqueta: string, precio: float}>
+     */
+    public static function preciosFabricaDeFila(
+        array $fila,
+        array $tipoPorArticulo,
+        array $listas,
+        array $indice,
+    ): array {
+        $articuloId = (int) ($fila['articulo_id'] ?? 0);
+        $tipo = (int) ($tipoPorArticulo[$articuloId] ?? 0);
+        if ($articuloId <= 0 || $tipo <= 0) {
+            return [];
+        }
+
+        $combinacionId = (int) ($fila['combinacion_id'] ?? 0);
+        $propias = [];
+        foreach ($listas as $lista) {
+            if ((int) $lista['tiponumeracion_id'] !== $tipo) {
+                continue;
+            }
+            $propias[] = $lista;
+        }
+        usort($propias, static function (array $a, array $b): int {
+            return ((int) $a['desde']) <=> ((int) $b['desde']);
+        });
+
+        $out = [];
+        foreach ($propias as $lista) {
+            $precio = self::elegirVigente($indice[$articuloId][(int) $lista['id']] ?? null, $combinacionId);
+            $out[] = [
+                'id' => (int) $lista['id'],
+                'etiqueta' => (int) $lista['desde'].'/'.(int) $lista['hasta'],
+                'precio' => ($precio !== null && $precio > 0) ? (float) $precio : 0.0,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Encabezados de las columnas de precio del reporte, de menor talle a mayor.
+     * Sin listas de fábrica queda la columna única de antes.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<string>
+     */
+    public static function etiquetasPrecio(array $filas): array
+    {
+        $out = [];
+        foreach ($filas as $fila) {
+            foreach ($fila['precios_fabrica'] ?? [] as $precio) {
+                if (! is_array($precio)) {
+                    continue;
+                }
+                $etiqueta = trim((string) ($precio['etiqueta'] ?? ''));
+                if ($etiqueta !== '' && ! in_array($etiqueta, $out, true)) {
+                    $out[] = $etiqueta;
+                }
+            }
+        }
+        usort($out, static function (string $a, string $b): int {
+            return ((int) $a) <=> ((int) $b);
+        });
+
+        return $out === [] ? ['PRECIO'] : $out;
+    }
+
+    /**
+     * Parte la fila si hay talles en más de una lista de fábrica.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array<int, int>  $tipoPorArticulo
+     * @param  list<array{id: int, tiponumeracion_id: int, desde: int, hasta: int}>  $listas
+     * @param  array<int, array<int, array{g: ?array{fecha: string, precio: float}, c: array<int, array{fecha: string, precio: float}>}>>  $indice
+     * @return list<array<string, mixed>>
+     */
+    public static function expandirPorLista(
+        array $fila,
+        array $tipoPorArticulo,
+        array $listas,
+        array $indice,
+    ): array {
+        $grupos = self::medidasPorLista($fila, $tipoPorArticulo, $listas);
+        if (count($grupos) <= 1) {
             $precio = self::precioDeFila($fila, $tipoPorArticulo, $listas, $indice);
             if ($precio !== null && $precio > 0) {
-                $filas[$i]['precio'] = $precio;
+                $fila['precio'] = $precio;
+            }
+            unset($fila['_presentacion']);
+
+            return [$fila];
+        }
+
+        $articuloId = (int) ($fila['articulo_id'] ?? 0);
+        $combinacionId = (int) ($fila['combinacion_id'] ?? 0);
+        $presentacion = is_array($fila['_presentacion'] ?? null) ? $fila['_presentacion'] : null;
+        $partes = [];
+        foreach ($grupos as $grupo) {
+            $parte = $fila;
+            unset($parte['_presentacion']);
+            $parte['medidas'] = $grupo['medidas'];
+            $parte['total_pares'] = $grupo['total_pares'];
+            $listaId = (int) $grupo['listaprecio_id'];
+            if ($listaId > 0) {
+                $precio = self::elegirVigente($indice[$articuloId][$listaId] ?? null, $combinacionId);
+                if ($precio !== null && $precio > 0) {
+                    $parte['precio'] = $precio;
+                }
+            }
+            $curva = self::curvaDelTramo($grupo['medidas'], $presentacion);
+            if ($curva !== null) {
+                $parte['curva_presentada'] = $curva;
+            }
+            $partes[] = $parte;
+        }
+
+        if (self::mismoPrecio($partes)) {
+            $precio = $partes[0]['precio'] ?? null;
+            if ($precio !== null && (float) $precio > 0) {
+                $fila['precio'] = $precio;
+            }
+            unset($fila['_presentacion']);
+
+            return [$fila];
+        }
+
+        return $partes;
+    }
+
+    /**
+     * El tramo hereda la curva de la fila entera. Si no había módulo, muestra
+     * el saldo de ese tramo y no busca otro módulo más chico.
+     *
+     * @param  list<array{medida?: mixed, cantidad?: mixed}>  $medidasTramo
+     * @param  array{medidas?: array<int|string, int|float>, modulos?: int, coincide?: bool}|null  $presentacion
+     * @return array{medidas: array<int|string, int|float>, pares_modulo: float, modulos: int}|null
+     */
+    public static function curvaDelTramo(array $medidasTramo, ?array $presentacion): ?array
+    {
+        if ($presentacion === null || ! is_array($presentacion['medidas'] ?? null)) {
+            return null;
+        }
+
+        $coincide = ! empty($presentacion['coincide']);
+        $unidad = [];
+        $pares = 0.0;
+        foreach ($medidasTramo as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $nombre = trim((string) ($item['medida'] ?? ''));
+            if ($nombre === '') {
+                continue;
+            }
+            $clave = ctype_digit($nombre) ? (int) $nombre : $nombre;
+            if ($coincide) {
+                $cant = $presentacion['medidas'][$clave] ?? $presentacion['medidas'][$nombre] ?? null;
+                if ($cant === null) {
+                    continue;
+                }
+            } else {
+                $cant = (float) ($item['cantidad'] ?? 0);
+            }
+            $unidad[$clave] = $cant;
+            $pares += (float) $cant;
+        }
+
+        $modulos = $coincide ? (int) ($presentacion['modulos'] ?? 1) : 1;
+        if ($modulos < 1) {
+            $modulos = 1;
+        }
+
+        return [
+            'medidas' => $unidad,
+            'pares_modulo' => $pares,
+            'modulos' => $modulos,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $partes
+     */
+    private static function mismoPrecio(array $partes): bool
+    {
+        $visto = null;
+        foreach ($partes as $parte) {
+            $precio = round((float) ($parte['precio'] ?? 0), 2);
+            if ($visto === null) {
+                $visto = $precio;
+                continue;
+            }
+            if ($precio !== $visto) {
+                return false;
             }
         }
 
-        return $filas;
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @param  array<int, int>  $tipoPorArticulo
+     * @param  list<array{id: int, tiponumeracion_id: int, desde: int, hasta: int}>  $listas
+     * @return list<array{listaprecio_id: int, medidas: list<array{medida: string, cantidad: float}>, total_pares: float}>
+     */
+    public static function medidasPorLista(
+        array $fila,
+        array $tipoPorArticulo,
+        array $listas,
+    ): array {
+        $articuloId = (int) ($fila['articulo_id'] ?? 0);
+        $tipo = (int) ($tipoPorArticulo[$articuloId] ?? 0);
+        if ($articuloId <= 0 || $tipo <= 0 || $listas === []) {
+            return [];
+        }
+
+        /** @var array<int, array{listaprecio_id: int, medidas: list<array{medida: string, cantidad: float}>, total_pares: float, orden: int}> $buckets */
+        $buckets = [];
+        $orden = 0;
+        foreach ($fila['medidas'] ?? [] as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+            $medida = trim((string) ($item['medida'] ?? ''));
+            $cantidad = (float) ($item['cantidad'] ?? 0);
+            if ($medida === '' || abs($cantidad) < 0.0001) {
+                continue;
+            }
+            $listaId = self::listaParaTalle($medida, $tipo, $listas);
+            if (! isset($buckets[$listaId])) {
+                $buckets[$listaId] = [
+                    'listaprecio_id' => $listaId,
+                    'medidas' => [],
+                    'total_pares' => 0.0,
+                    'orden' => $orden++,
+                ];
+            }
+            $buckets[$listaId]['medidas'][] = ['medida' => $medida, 'cantidad' => $cantidad];
+            $buckets[$listaId]['total_pares'] += $cantidad;
+        }
+
+        if ($buckets === []) {
+            return [];
+        }
+
+        uasort($buckets, static function (array $a, array $b) use ($listas): int {
+            $desdeA = self::desdeLista((int) $a['listaprecio_id'], $listas);
+            $desdeB = self::desdeLista((int) $b['listaprecio_id'], $listas);
+            if ($desdeA !== $desdeB) {
+                return $desdeA <=> $desdeB;
+            }
+
+            return $a['orden'] <=> $b['orden'];
+        });
+
+        $out = [];
+        foreach ($buckets as $bucket) {
+            unset($bucket['orden']);
+            $out[] = $bucket;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array{id: int, tiponumeracion_id: int, desde: int, hasta: int}>  $listas
+     */
+    private static function desdeLista(int $listaId, array $listas): int
+    {
+        if ($listaId <= 0) {
+            return PHP_INT_MAX;
+        }
+        foreach ($listas as $lista) {
+            if ((int) $lista['id'] === $listaId) {
+                return (int) $lista['desde'];
+            }
+        }
+
+        return PHP_INT_MAX;
     }
 
     /**

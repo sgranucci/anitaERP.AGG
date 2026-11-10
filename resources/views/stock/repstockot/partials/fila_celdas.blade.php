@@ -6,6 +6,14 @@
     $ps = (float) $presentacion['pares_modulo'];
     $nModulos = (int) $presentacion['modulos'];
     $tt = (float) ($lote['total_pares'] ?? $presentacion['total']);
+    $preciosCols = $precios_columnas ?? ['PRECIO'];
+    $precioPorEtiqueta = [];
+    foreach ($lote['precios_fabrica'] ?? [] as $precioLista) {
+        if (! is_array($precioLista)) {
+            continue;
+        }
+        $precioPorEtiqueta[(string) ($precioLista['etiqueta'] ?? '')] = (float) ($precioLista['precio'] ?? 0);
+    }
     if ($nModulos < 1) {
         $nModulos = 1;
     }
@@ -38,11 +46,18 @@
 <td>X</td>
 <td align="right">{{ $nModulos }}</td>
 <td align="right">{{ $fmt($tt) }}</td>
-<td align="right">
-    @if ($precio > 0)
-        $ {{ number_format($precio, 0, ',', '.') }}
-    @endif
-</td>
+@foreach ($preciosCols as $etiquetaPrecio)
+    @php
+        $precioCol = $etiquetaPrecio === 'PRECIO'
+            ? $precio
+            : (float) ($precioPorEtiqueta[$etiquetaPrecio] ?? 0);
+    @endphp
+    <td align="right">
+        @if ($precioCol > 0)
+            $ {{ number_format($precioCol, 0, ',', '.') }}
+        @endif
+    </td>
+@endforeach
 <td>{{ $lote['situacion'] ?? '' }}</td>
 <td>{{ $lote['lote'] ?? '' }}</td>
 <td>{{ $deposito }}</td>

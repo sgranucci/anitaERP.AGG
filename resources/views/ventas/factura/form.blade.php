@@ -270,7 +270,8 @@
 	</div>
 	<div class="card-body pb-2 factura-datos-compactos">
 <div class="row">
-	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query ?? ''}}" data-formapago="{{$formapago_query ?? ''}}" data-layout-items-pedido="{{ $layoutItemsPedido ? '1' : '0' }}">
+	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query ?? ''}}" data-formapago="{{$formapago_query ?? ''}}" data-layout-items-pedido="{{ $layoutItemsPedido ? '1' : '0' }}" data-circuito-elegir-export="1">
+		<input type="hidden" id="letra_cliente_factura" value="">
 		<input type="hidden" id="codigofactura" class="form-control" value="{{old('codigofactura', $data->codigo ?? '')}}" />
 		@include('ventas.partials.campo_consulta_tipotransaccion', [
 			'prefix' => 'factura',

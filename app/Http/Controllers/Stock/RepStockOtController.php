@@ -15,6 +15,7 @@ use App\Support\Listado\ReporteResultadoTextoSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
 use App\Support\Stock\ReporteStockOtListadoFiltros;
+use App\Support\Stock\ReporteStockOtPrecioSupport;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Maatwebsite\Excel\Excel;
@@ -41,6 +42,7 @@ class RepStockOtController extends Controller
         $consultado = $request->boolean('consultar');
         $filas = null;
         $medidasColumnas = [];
+        $preciosColumnas = ['PRECIO'];
         $totalPares = 0.0;
         $totalFilas = 0;
         $avisoNegativos = null;
@@ -60,6 +62,7 @@ class RepStockOtController extends Controller
                 $totalPares += (float) ($fila['total_pares'] ?? 0);
             }
             $medidasColumnas = $this->medidasColumnas($visibles);
+            $preciosColumnas = ReporteStockOtPrecioSupport::etiquetasPrecio($visibles);
 
             $page = max(1, (int) $request->input('page', 1));
             $perPage = 30;
@@ -89,6 +92,7 @@ class RepStockOtController extends Controller
             'consultado' => $consultado,
             'filas' => $filas,
             'medidas_columnas' => $medidasColumnas,
+            'precios_columnas' => $preciosColumnas,
             'total_pares' => $totalPares,
             'total_filas' => $totalFilas,
             'aviso_negativos' => ($filtros['avisar_negativos'] ?? 'SI') === 'SI' ? $avisoNegativos : null,
@@ -144,6 +148,7 @@ class RepStockOtController extends Controller
                 'titulo' => $titulo,
                 'subtitulo' => $subtitulo,
                 'medidas_columnas' => $medidas,
+                'precios_columnas' => ReporteStockOtPrecioSupport::etiquetasPrecio($visibles),
                 'es_movimientos' => ($filtros['apertura'] ?? '') === 'MOVIMIENTOS',
                 'total_filas' => count($visibles),
             ])->render();

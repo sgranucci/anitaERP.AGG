@@ -144,6 +144,7 @@
                     @include('stock.repstockot.partials.tabla_datos', [
                         'filas' => $filas,
                         'medidas_columnas' => $medidas_columnas ?? [],
+                        'precios_columnas' => $precios_columnas ?? ['PRECIO'],
                         'imprimefoto' => 'SIN_FOTO',
                         'es_movimientos' => ($filtros['apertura'] ?? '') === 'MOVIMIENTOS',
                         'con_herramientas' => true,

@@ -119,12 +119,14 @@
             } else if (tieneAviso) {
                 tr.className = 'table-warning';
             }
+            celda(tr, linea.hoja);
             celda(tr, linea.fila);
             celda(tr, linea.sku_excel);
             celda(tr, linea.articulo);
             celda(tr, linea.combinacion);
             celda(tr, linea.color_excel);
             celda(tr, linea.color_maestro);
+            celda(tr, linea.modulos === null || linea.modulos === undefined || linea.modulos === '' ? '' : linea.modulos, 'text-right');
             celda(tr, linea.talles_txt);
             celda(tr, linea.pares, 'text-right');
             var estado = tieneError
@@ -167,7 +169,8 @@
                 errores: Number(r.errores) || 0,
                 avisos: Number(r.avisos) || 0
             };
-            resumen.textContent = 'Catálogo ' + texto(res.json.canal_etiqueta)
+            resumen.textContent = texto(res.json.formato_etiqueta || 'Excel')
+                + ' · catálogo ' + texto(res.json.canal_etiqueta)
                 + ' · ' + texto(r.ok) + ' líneas OK'
                 + ' · ' + texto(r.errores) + ' con error'
                 + ' · ' + texto(r.avisos) + ' con aviso'

@@ -95,7 +95,7 @@ $puedeNuevaTransferencia = ! $modoSurmar && can('crear-transferencia-mercaderia'
                         </a>
                     @endif
                     @if (! $modoSurmar && can('crear-movimientos-de-stock', false))
-                        <a href="{{ route('alta_masiva_movimientostock') }}" class="btn btn-light btn-sm mr-1">
+                        <a href="{{ route('alta_masiva_movimientostock') }}" class="btn btn-light btn-sm mr-1" title="Curva de talles o pedido de fábrica Brasil">
                             <i class="fa fa-file-excel-o"></i> Alta masiva
                         </a>
                     @endif

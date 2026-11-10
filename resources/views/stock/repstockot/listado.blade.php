@@ -16,8 +16,9 @@
 <body>
 @php
     $medidasCols = $medidas_columnas ?? [];
+    $preciosCols = $precios_columnas ?? ['PRECIO'];
     $esMovimientos = ! empty($es_movimientos);
-    $colspan = 10 + count($medidasCols) + ($esMovimientos ? 2 : 0);
+    $colspan = 10 + count($preciosCols) + count($medidasCols) + ($esMovimientos ? 2 : 0);
 @endphp
 <table class="data">
     <thead>
@@ -38,7 +39,9 @@
             <th>QM</th>
             <th>N</th>
             <th>TT</th>
-            <th>Precio</th>
+            @foreach ($preciosCols as $etiquetaPrecio)
+                <th>{{ $etiquetaPrecio === 'PRECIO' ? 'Precio' : $etiquetaPrecio }}</th>
+            @endforeach
             <th>Situación</th>
             <th>OT / lote</th>
             <th>Depósito</th>
@@ -61,6 +64,7 @@
                     'lote' => $lote,
                     'imprimefoto' => 'SIN_FOTO',
                     'medidas_columnas' => $medidasCols,
+                    'precios_columnas' => $preciosCols,
                     'es_movimientos' => $esMovimientos,
                 ])
             </tr>

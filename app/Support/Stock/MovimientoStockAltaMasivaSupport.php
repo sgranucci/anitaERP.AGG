@@ -14,11 +14,11 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 /**
- * Alta masiva de un movimiento de stock desde un Excel de curva de talles
- * (SKU, combinación, color y una columna por talle).
+ * Alta masiva de un movimiento de stock desde Excel.
  *
- * Ferli: el depósito tiene que ser un local y el artículo se mira en el catálogo de locales.
- * El resto de las instalaciones usa el catálogo estándar del movimiento.
+ * Curva: SKU, combinación, color y una columna por talle. En Ferli va a un depósito de local.
+ * Pedido de fábrica (Brasil): el código va en el artículo (43-0000-00), la combinación es el color
+ * y los pares de cada talle son la curva por los módulos. El catálogo sigue al depósito.
  */
 final class MovimientoStockAltaMasivaSupport
 {
@@ -39,8 +39,16 @@ final class MovimientoStockAltaMasivaSupport
         ?Tipotransaccion_Stock $tipo = null
     ): array {
         $filas = self::leerFilas($archivo);
-        $cabeceraErrores = self::erroresCabecera($depositoId, $empresaId, $tipo);
-        $cabeceraAvisos = self::avisosCabecera($tipo);
+        $pedidoFabrica = false;
+        foreach ($filas as $fila) {
+            if (! empty($fila['pedido_fabrica'])) {
+                $pedidoFabrica = true;
+                break;
+            }
+        }
+        $ambito = self::ambitoCatalogo($depositoId, $pedidoFabrica);
+        $cabeceraErrores = self::erroresCabecera($depositoId, $empresaId, $tipo, $pedidoFabrica);
+        $cabeceraAvisos = self::avisosCabecera($tipo, $depositoId, $pedidoFabrica);
         $talles = self::mapaTalles();
         $lineas = [];
         $ok = 0;
@@ -49,7 +57,7 @@ final class MovimientoStockAltaMasivaSupport
         $pares = 0.0;
 
         foreach ($filas as $fila) {
-            $resuelta = self::resolverFila($fila, $talles);
+            $resuelta = self::resolverFila($fila, $talles, $ambito);
             $lineas[] = $resuelta;
             if ($resuelta['errores'] !== []) {
                 $errores++;
@@ -63,8 +71,10 @@ final class MovimientoStockAltaMasivaSupport
         }
 
         return [
-            'canal' => self::canal(),
-            'canal_etiqueta' => self::etiquetaCanal(),
+            'formato' => $pedidoFabrica ? 'pedido_fabrica' : 'curva',
+            'formato_etiqueta' => $pedidoFabrica ? 'Pedido de fábrica' : 'Curva de talles',
+            'canal' => $ambito,
+            'canal_etiqueta' => self::etiquetaAmbito($ambito),
             'cabecera_errores' => $cabeceraErrores,
             'cabecera_avisos' => $cabeceraAvisos,
             'resumen' => [
@@ -186,8 +196,12 @@ final class MovimientoStockAltaMasivaSupport
     /**
      * @return list<string>
      */
-    public static function erroresCabecera(int $depositoId, int $empresaId, ?Tipotransaccion_Stock $tipo): array
-    {
+    public static function erroresCabecera(
+        int $depositoId,
+        int $empresaId,
+        ?Tipotransaccion_Stock $tipo,
+        bool $pedidoFabrica = false
+    ): array {
         $errores = [];
 
         if ($empresaId <= 0) {
@@ -198,8 +212,8 @@ final class MovimientoStockAltaMasivaSupport
             $errores[] = 'Falta el depósito.';
         } elseif ($empresaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId)) {
             $errores[] = 'El depósito no pertenece a la empresa o no está autorizado para su usuario.';
-        } elseif (self::esParaLocales() && ! MovimientoStockFerliSupport::depositoEsDeLocalVenta($depositoId)) {
-            $errores[] = 'En Ferli esta alta es para un depósito de local.';
+        } elseif (self::esParaLocales() && ! $pedidoFabrica && ! MovimientoStockFerliSupport::depositoEsDeLocalVenta($depositoId)) {
+            $errores[] = 'En Ferli la curva de talles va a un depósito de local. El pedido de fábrica se carga con la planilla que trae módulos.';
         }
 
         if ($tipo === null) {
@@ -227,18 +241,46 @@ final class MovimientoStockAltaMasivaSupport
     /**
      * @return list<string>
      */
-    public static function avisosCabecera(?Tipotransaccion_Stock $tipo): array
+    public static function avisosCabecera(?Tipotransaccion_Stock $tipo, int $depositoId = 0, bool $pedidoFabrica = false): array
     {
-        if ($tipo === null) {
-            return [];
+        $avisos = [];
+
+        if ($tipo !== null && (string) ($tipo->signo ?? '') === 'R') {
+            $avisos[] = 'El tipo elegido resta stock. Una recepción suele usar un tipo que suma.';
         }
 
-        $signo = (string) ($tipo->signo ?? '');
-        if ($signo === 'R') {
-            return ['El tipo elegido resta stock. Un alta de pedido suele usar un tipo que suma.'];
+        if ($pedidoFabrica && self::esParaLocales() && $depositoId > 0
+            && MovimientoStockFerliSupport::depositoEsDeLocalVenta($depositoId)) {
+            $avisos[] = 'Este archivo es un pedido de fábrica. El depósito elegido es un local: los colores se controlan en el catálogo de locales.';
         }
 
-        return [];
+        return $avisos;
+    }
+
+    /**
+     * Curva común en Ferli: catálogo de locales.
+     * Pedido de fábrica: el catálogo sigue al depósito (planta = fábrica).
+     */
+    public static function ambitoCatalogo(int $depositoId, bool $pedidoFabrica): string
+    {
+        if (! self::esParaLocales()) {
+            return 'NORMAL';
+        }
+
+        if (! $pedidoFabrica) {
+            return CombinacionEstadoCanalSupport::AMBITO_LOCAL;
+        }
+
+        return MovimientoStockFerliSupport::ambitoCatalogo($depositoId > 0 ? $depositoId : null);
+    }
+
+    public static function etiquetaAmbito(string $ambito): string
+    {
+        if (! self::esParaLocales()) {
+            return 'Estándar';
+        }
+
+        return $ambito === CombinacionEstadoCanalSupport::AMBITO_LOCAL ? 'Locales' : 'Fábrica';
     }
 
     /**
@@ -284,9 +326,18 @@ final class MovimientoStockAltaMasivaSupport
                 continue;
             }
 
-            $sku = self::texto($celdas[$layout['sku']] ?? null);
-            if ($sku === '' || self::esFilaTotal($sku)) {
+            $skuTexto = self::texto($celdas[$layout['sku']] ?? null);
+            if ($skuTexto === '' || self::esFilaTotal($skuTexto) || self::esTituloSeccion($skuTexto)) {
                 continue;
+            }
+
+            $pedidoFabrica = ($layout['modulos'] ?? 0) > 0;
+            $modulos = 1.0;
+            if ($pedidoFabrica) {
+                $modulos = self::cantidad($celdas[$layout['modulos']] ?? null);
+                if ($modulos < 0.000001) {
+                    continue;
+                }
             }
 
             $talles = [];
@@ -296,6 +347,7 @@ final class MovimientoStockAltaMasivaSupport
                 if ($cant < 0.000001) {
                     continue;
                 }
+                $cant *= $modulos;
                 $talles[(string) $medida] = ($talles[(string) $medida] ?? 0) + $cant;
                 $pares += $cant;
             }
@@ -309,15 +361,28 @@ final class MovimientoStockAltaMasivaSupport
                 $totalExcel = self::cantidad($celdas[$layout['total']] ?? null);
             }
 
+            $sku = self::codigoArticuloDesdeCelda($skuTexto);
+            $color = $layout['color'] > 0
+                ? self::texto($celdas[$layout['color']] ?? null)
+                : '';
+            $codigoCombinacion = $layout['combinacion'] > 0
+                ? self::texto($celdas[$layout['combinacion']] ?? null)
+                : '';
+            // En el pedido de fábrica la columna Combinación es el color, no el código.
+            if ($pedidoFabrica && $codigoCombinacion !== '') {
+                $color = $color !== '' ? $color : $codigoCombinacion;
+                $codigoCombinacion = '';
+            }
+
             $filas[] = [
                 'fila' => $r,
+                'hoja' => (string) $ws->getTitle(),
                 'sku_excel' => $sku,
-                'codigo_combinacion' => $layout['combinacion'] > 0
-                    ? self::texto($celdas[$layout['combinacion']] ?? null)
-                    : '',
-                'color' => $layout['color'] > 0
-                    ? self::texto($celdas[$layout['color']] ?? null)
-                    : '',
+                'articulo_excel' => $skuTexto,
+                'codigo_combinacion' => $codigoCombinacion,
+                'color' => $color,
+                'modulos' => $pedidoFabrica ? $modulos : null,
+                'pedido_fabrica' => $pedidoFabrica,
                 'talles' => $talles,
                 'pares' => $pares,
                 'total_excel' => $totalExcel,
@@ -329,7 +394,7 @@ final class MovimientoStockAltaMasivaSupport
 
     /**
      * @param  array<int, mixed>  $celdas
-     * @return array{sku:int,combinacion:int,color:int,total:int,talles:array<int,string>}|null
+     * @return array{sku:int,combinacion:int,color:int,total:int,modulos:int,talles:array<int,string>}|null
      */
     private static function detectarEncabezado(array $celdas): ?array
     {
@@ -337,17 +402,21 @@ final class MovimientoStockAltaMasivaSupport
         $combCol = 0;
         $colorCol = 0;
         $totalCol = 0;
+        $modulosCol = 0;
         $talles = [];
 
         foreach ($celdas as $col => $valor) {
             $txt = self::normEncabezado($valor);
-            if ($txt === 'sku' || $txt === 'articulo' || $txt === 'art') {
+            if ($txt === 'sku' || $txt === 'art' || str_starts_with($txt, 'articulo')) {
                 $skuCol = (int) $col;
-            } elseif ($txt === 'combinacion' || $txt === 'comb') {
+            } elseif ($txt === 'combinacion' || $txt === 'comb' || str_starts_with($txt, 'combinacion')) {
                 $combCol = (int) $col;
-            } elseif ($txt === 'color') {
+            } elseif ($txt === 'color' || str_starts_with($txt, 'color')) {
                 $colorCol = (int) $col;
-            } elseif (in_array($txt, ['ps', 'total', 'pares'], true)) {
+            } elseif ($txt === 'modulos' || $txt === 'modulo') {
+                $modulosCol = (int) $col;
+            } elseif (in_array($txt, ['ps', 'total', 'pares', 'totales'], true)) {
+                // Si hay dos totales (curva y gran total), queda el último.
                 $totalCol = (int) $col;
             } elseif (preg_match('/^(\d{1,2})$/', $txt, $m) === 1) {
                 $medida = (int) $m[1];
@@ -366,13 +435,34 @@ final class MovimientoStockAltaMasivaSupport
             'combinacion' => $combCol,
             'color' => $colorCol,
             'total' => $totalCol,
+            'modulos' => $modulosCol,
             'talles' => $talles,
         ];
     }
 
     private static function esFilaTotal(string $sku): bool
     {
-        return str_starts_with(self::normEncabezado($sku), 'total');
+        $norm = self::normEncabezado($sku);
+
+        return str_starts_with($norm, 'total') || str_starts_with($norm, 'totales');
+    }
+
+    private static function esTituloSeccion(string $sku): bool
+    {
+        return str_starts_with(self::normEncabezado($sku), 'numeracionespecial')
+            || str_starts_with(self::normEncabezado($sku), 'numeracion');
+    }
+
+    /**
+     * El pedido de fábrica trae el nombre y el código juntos: «NELLIE 01 43-5004-01».
+     */
+    private static function codigoArticuloDesdeCelda(string $texto): string
+    {
+        if (preg_match('/(\d{2})\s*-\s*(\d{4})\s*-\s*(\d{2})/', $texto, $m) === 1) {
+            return $m[1].$m[2].$m[3];
+        }
+
+        return trim($texto);
     }
 
     /**
@@ -380,7 +470,7 @@ final class MovimientoStockAltaMasivaSupport
      * @param  array<string, mixed>  $fila
      * @return array<string, mixed>
      */
-    private static function resolverFila(array $fila, array $talles): array
+    private static function resolverFila(array $fila, array $talles, string $ambito): array
     {
         $errores = [];
         $avisos = [];
@@ -392,9 +482,11 @@ final class MovimientoStockAltaMasivaSupport
         } elseif (! self::esParaLocales() && ! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
             $errores[] = 'El artículo no está activo en el catálogo estándar.';
         } elseif (self::esParaLocales()) {
-            $estadoLocal = strtoupper(trim((string) ($articulo->estado_local ?? '')));
-            if ($estadoLocal !== '' && ! in_array($estadoLocal, ['ACTIVO', 'A'], true)) {
-                $avisos[] = 'El artículo no está activo en el catálogo de locales.';
+            $estado = self::estadoArticuloEnAmbito($articulo, $ambito);
+            if ($estado !== '' && ! in_array($estado, ['ACTIVO', 'A'], true)) {
+                $avisos[] = $ambito === CombinacionEstadoCanalSupport::AMBITO_LOCAL
+                    ? 'El artículo no está activo en el catálogo de locales.'
+                    : 'El artículo no está activo en el catálogo de fábrica.';
             }
         }
 
@@ -405,7 +497,8 @@ final class MovimientoStockAltaMasivaSupport
                 (string) $fila['codigo_combinacion'],
                 (string) $fila['color'],
                 $errores,
-                $avisos
+                $avisos,
+                $ambito
             );
         }
 
@@ -440,6 +533,8 @@ final class MovimientoStockAltaMasivaSupport
 
         return [
             'fila' => (int) $fila['fila'],
+            'hoja' => (string) ($fila['hoja'] ?? ''),
+            'modulos' => $fila['modulos'] ?? null,
             'sku_excel' => $skuExcel,
             'sku' => $articulo?->sku ?? '',
             'articulo_id' => $articulo ? (int) $articulo->id : 0,
@@ -512,7 +607,8 @@ final class MovimientoStockAltaMasivaSupport
         string $codigo,
         string $color,
         array &$errores,
-        array &$avisos
+        array &$avisos,
+        string $ambito
     ): ?Combinacion {
         $codigo = trim($codigo);
         $combos = Combinacion::query()->where('articulo_id', $articuloId)->get();
@@ -563,10 +659,12 @@ final class MovimientoStockAltaMasivaSupport
             $avisos[] = 'El color del Excel ('.$color.') no coincide con '.$elegida->codigo.'-'.$elegida->nombre.'.';
         }
 
-        if ($elegida !== null && ! self::combinacionActivaEnCanal($elegida)) {
-            $avisos[] = self::esParaLocales()
+        if ($elegida !== null && ! self::combinacionActivaEnCanal($elegida, $ambito)) {
+            $avisos[] = $ambito === CombinacionEstadoCanalSupport::AMBITO_LOCAL
                 ? 'La combinación está inactiva en locales.'
-                : 'La combinación está inactiva.';
+                : ($ambito === CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                    ? 'La combinación está inactiva en fábrica.'
+                    : 'La combinación está inactiva.');
         }
 
         return $elegida;
@@ -599,15 +697,30 @@ final class MovimientoStockAltaMasivaSupport
         return null;
     }
 
-    private static function combinacionActivaEnCanal(Combinacion $combo): bool
+    private static function combinacionActivaEnCanal(Combinacion $combo, string $ambito): bool
     {
         if (self::esParaLocales() && CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
-            $estado = strtoupper(trim((string) ($combo->estado_local ?? '')));
+            $estado = $ambito === CombinacionEstadoCanalSupport::AMBITO_LOCAL
+                ? (string) ($combo->estado_local ?? '')
+                : (string) ($combo->estado_fabrica ?? $combo->estado ?? '');
         } else {
-            $estado = strtoupper(trim((string) ($combo->estado ?? '')));
+            $estado = (string) ($combo->estado ?? '');
         }
 
+        $estado = strtoupper(trim($estado));
+
         return in_array($estado, [CombinacionEstadoCanalSupport::ESTADO_ACTIVO, 'ACTIVO'], true);
+    }
+
+    private static function estadoArticuloEnAmbito(Articulo $articulo, string $ambito): string
+    {
+        if ($ambito === CombinacionEstadoCanalSupport::AMBITO_LOCAL) {
+            return strtoupper(trim((string) ($articulo->estado_local ?? '')));
+        }
+
+        $fabrica = trim((string) ($articulo->estado_fabrica ?? ''));
+
+        return strtoupper($fabrica !== '' ? $fabrica : (string) ($articulo->estado ?? ''));
     }
 
     private static function coloresIguales(string $a, string $b): bool
@@ -638,8 +751,12 @@ final class MovimientoStockAltaMasivaSupport
         $t = strtoupper(trim($t !== false ? $t : $s));
         $t = preg_replace('/[^A-Z0-9]/', '', $t) ?? '';
         $t = preg_replace('/^\d+/', '', $t) ?? $t;
-        // La planilla viene en portugués (PRETO, BRANCO) y el maestro en castellano.
-        $t = str_replace(['PRETO', 'BRANCO'], ['NEGRO', 'BLANCO'], $t);
+        // La planilla de Brasil viene en portugués y a veces con un typo del maestro.
+        $t = str_replace(
+            ['PRETO', 'BRANCO', 'CINZA', 'CREPPE', 'FLAMIGO'],
+            ['NEGRO', 'BLANCO', 'GRIS', 'CREPE', 'FLAMINGO'],
+            $t
+        );
 
         return $t;
     }

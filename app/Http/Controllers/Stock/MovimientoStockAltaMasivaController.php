@@ -84,6 +84,8 @@ class MovimientoStockAltaMasivaController extends Controller
         foreach ($preview['lineas'] as $linea) {
             $lineas[] = [
                 'fila' => $linea['fila'],
+                'hoja' => $linea['hoja'] ?? '',
+                'modulos' => $linea['modulos'] ?? null,
                 'sku_excel' => $linea['sku_excel'],
                 'sku' => $linea['sku'],
                 'articulo' => $linea['articulo'],
@@ -100,6 +102,8 @@ class MovimientoStockAltaMasivaController extends Controller
         return response()->json([
             'ok' => true,
             'puede_grabar' => MovimientoStockAltaMasivaSupport::puedeGrabar($preview),
+            'formato' => $preview['formato'] ?? 'curva',
+            'formato_etiqueta' => $preview['formato_etiqueta'] ?? 'Curva de talles',
             'canal' => $preview['canal'],
             'canal_etiqueta' => $preview['canal_etiqueta'],
             'cabecera_errores' => $preview['cabecera_errores'],
@@ -183,7 +187,7 @@ class MovimientoStockAltaMasivaController extends Controller
         $mensaje = 'Movimiento '.$data['codigo'].' grabado con '
             .(int) $preview['resumen']['ok'].' líneas y '
             .rtrim(rtrim(number_format($pares, 2, '.', ''), '0'), '.')
-            .' pares (catálogo '.MovimientoStockAltaMasivaSupport::etiquetaCanal().').';
+            .' pares (catálogo '.($preview['canal_etiqueta'] ?? MovimientoStockAltaMasivaSupport::etiquetaCanal()).').';
 
         if (can('editar-movimientos-de-stock', false)) {
             return redirect()

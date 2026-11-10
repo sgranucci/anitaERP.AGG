@@ -7,6 +7,7 @@ use App\Queries\Stock\ArticuloQueryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\ReporteStockOtDepositoAmbitoSupport;
+use App\Support\Stock\ReporteStockOtPrecioSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -75,6 +76,9 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
     /** @var list<int> */
     private array $medidasColumnas = [];
 
+    /** @var list<string> */
+    private array $preciosColumnas = ['PRECIO'];
+
     private int $filaCabecerasExcel = 2;
 
     private int $filaPrimeraDatosExcel = 3;
@@ -136,11 +140,13 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
 
         $this->filasDatos = is_array($data) ? $data : (method_exists($data, 'all') ? $data->all() : []);
         $this->medidasColumnas = $this->resolverMedidasColumnas($this->filasDatos);
+        $this->preciosColumnas = ReporteStockOtPrecioSupport::etiquetasPrecio($this->filasDatos);
         $columnasMovimiento = $this->apertura === 'MOVIMIENTOS' ? 2 : 0; // MODULO PEDIDO
         $this->totalColumnas = ($this->imprimeFoto === 'CON_FOTO' ? 1 : 0)
             + 3 // LINEA ART DESCRIPCION
             + count($this->medidasColumnas)
-            + 7 // PS QM N TT PRECIO SITUACION OT DEPOSITO
+            + 7 // PS QM N TT SITUACION OT DEPOSITO
+            + count($this->preciosColumnas)
             + $columnasMovimiento;
         $this->colUltima = $this->indiceAColumna($this->totalColumnas);
         $this->filaCabecerasExcel = 2;
@@ -157,6 +163,7 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
             'imprimefoto' => $this->imprimeFoto,
             'titulo' => $this->tituloHoja,
             'medidas_columnas' => $this->medidasColumnas,
+            'precios_columnas' => $this->preciosColumnas,
             'total_columnas' => $this->totalColumnas,
             'es_movimientos' => $this->apertura === 'MOVIMIENTOS',
         ]);
@@ -218,7 +225,9 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
         $widths[$this->indiceAColumna($col++)] = 5;  // QM
         $widths[$this->indiceAColumna($col++)] = 4;  // N
         $widths[$this->indiceAColumna($col++)] = 8;  // TT
-        $widths[$this->indiceAColumna($col++)] = 10; // PRECIO
+        foreach ($this->preciosColumnas as $_) {
+            $widths[$this->indiceAColumna($col++)] = 10;
+        }
         $widths[$this->indiceAColumna($col++)] = 18; // SITUACION
         $widths[$this->indiceAColumna($col++)] = 12; // OT
         $widths[$this->indiceAColumna($col++)] = 10; // DEPOSITO
