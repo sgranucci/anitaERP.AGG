@@ -65,24 +65,33 @@ class CobranzaAnularRevertirService
 
         $ventaNcIds = $this->idsNotasCreditoEmitidas((int) $cobranza->id);
 
-        $resultado = DB::transaction(function () use ($cobranza) {
+        $fechaBaja = $this->fechaYmd($cobranza->fecha);
+
+        $resultado = DB::transaction(function () use ($cobranza, $fechaBaja) {
             $actual = Cobranza::query()->whereKey((int) $cobranza->id)->lockForUpdate()->first();
             if ($actual === null) {
                 throw new RuntimeException('La cobranza ya no existe.');
             }
             $this->assertNoEsReversion((int) $actual->id, (int) $actual->tipotransaccion_caja_id, (string) $actual->estado);
 
-            $this->limpiarCascada(
+            $anitaChequesFallos = $this->limpiarCascada(
                 cobranzaId: (int) $actual->id,
                 empresaId: (int) $actual->empresa_id,
                 numeroTransaccion: (string) ($actual->numerotransaccion ?? ''),
                 borrarCabecera: $actual,
+                fechaBajaChequesYmd: $fechaBaja,
             );
 
-            return [
+            $salida = [
                 'mensaje' => 'ok',
                 'cobranza_id' => (int) $actual->id,
             ];
+            if ($anitaChequesFallos !== []) {
+                $salida['aviso'] = 'Los cheques se anularon en el ERP pero Anita no dio de baja: '
+                    .implode('; ', $anitaChequesFallos).'.';
+            }
+
+            return $salida;
         });
 
         return $this->conNotaDebitoDescuento($resultado, $ventaNcIds, date('Y-m-d'));
@@ -181,7 +190,10 @@ class CobranzaAnularRevertirService
                     $this->registrarEstado($reverso, 'REVERTIDA', $leyenda);
                     $this->compensarCuentaCorriente($actual, $reverso, $fechaOp, $numero);
                     $cajaReverso = $this->crearCajaCompensatoria($actual, $reverso, $fechaOp, $leyenda);
-                    ChequeOperacionActivaSupport::anularPorCobranza((int) $actual->id);
+                    $chequesAnula = ChequeOperacionActivaSupport::anularPorCobranza(
+                        (int) $actual->id,
+                        $fechaOp
+                    );
                     $this->revertirAsientos($actual, $reverso, $fechaOp, $leyenda, $cajaReverso);
                     $this->copiarRetencionesNegadas($actual, $reverso);
 
@@ -203,6 +215,7 @@ class CobranzaAnularRevertirService
                         'cotizacion' => (float) ($actual->cotizacion ?: 1),
                         'empresa_id' => (int) $actual->empresa_id,
                         'detalle' => $leyenda,
+                        'anita_cheques_fallos' => $chequesAnula['anita_fallos'],
                     ];
                 });
             }
@@ -219,8 +232,10 @@ class CobranzaAnularRevertirService
         ];
 
         $avisos = [];
-        if (Cheque::query()->where('cobranza_id', (int) $cobranza->id)->exists()) {
-            $avisos[] = 'Los cheques de la cobranza quedaron anulados en el ERP. La cartera en Anita no se da de baja sola: revisala.';
+        $anitaChequesFallos = $local['anita_cheques_fallos'] ?? [];
+        if ($anitaChequesFallos !== []) {
+            $avisos[] = 'Los cheques se anularon en el ERP pero Anita no dio de baja: '
+                .implode('; ', $anitaChequesFallos).'.';
         }
         try {
             foreach ($local['snapshots'] as $snapshot) {
@@ -274,30 +289,41 @@ class CobranzaAnularRevertirService
 
         $ventaNcIds = $this->idsNotasCreditoEmitidas($cobranzaId);
 
-        $resultado = DB::transaction(function () use ($cobranzaId, $empresaId, $numeroTransaccion) {
-            $this->limpiarCascada(
+        $resultado = DB::transaction(function () use ($cobranzaId, $empresaId, $numeroTransaccion, $fechaYmd) {
+            $anitaChequesFallos = $this->limpiarCascada(
                 cobranzaId: $cobranzaId,
                 empresaId: $empresaId,
                 numeroTransaccion: $numeroTransaccion,
                 borrarCabecera: null,
+                fechaBajaChequesYmd: $fechaYmd,
             );
 
-            return [
+            $salida = [
                 'mensaje' => 'ok',
                 'cobranza_id' => $cobranzaId,
                 'limpio' => true,
             ];
+            if ($anitaChequesFallos !== []) {
+                $salida['aviso'] = 'Los cheques se anularon en el ERP pero Anita no dio de baja: '
+                    .implode('; ', $anitaChequesFallos).'.';
+            }
+
+            return $salida;
         });
 
         return $this->conNotaDebitoDescuento($resultado, $ventaNcIds, date('Y-m-d'));
     }
 
+    /**
+     * @return list<string> Fallos al dar de baja CHT en Anita
+     */
     private function limpiarCascada(
         int $cobranzaId,
         int $empresaId,
         string $numeroTransaccion,
         ?Cobranza $borrarCabecera,
-    ): void {
+        ?string $fechaBajaChequesYmd = null,
+    ): array {
         $anticiposAnita = $this->cobranzaService->anticiposAnitaDeCobranza($cobranzaId);
         $this->cobranzaService->assertAnticiposAnitaSinCobrar($anticiposAnita);
 
@@ -390,7 +416,10 @@ class CobranzaAnularRevertirService
             ]);
         }
 
-        ChequeOperacionActivaSupport::anularPorCobranza($cobranzaId);
+        $chequesAnula = ChequeOperacionActivaSupport::anularPorCobranza(
+            $cobranzaId,
+            $fechaBajaChequesYmd
+        );
         EloquentAuditDeleteSupport::each(
             Cheque::query()->where('cobranza_id', $cobranzaId)
         );
@@ -413,6 +442,8 @@ class CobranzaAnularRevertirService
         );
 
         $borrarCabecera?->delete();
+
+        return $chequesAnula['anita_fallos'];
     }
 
     private function fechaYmd(mixed $fecha): string
@@ -438,8 +469,15 @@ class CobranzaAnularRevertirService
     {
         $ndp = $this->notaDebitoDescuentoService->emitirYAplicar($ventaNcIds, $fecha);
         $resultado['ndp'] = $ndp['codigos'];
+        $avisos = [];
+        if (! empty($resultado['aviso'])) {
+            $avisos[] = trim((string) $resultado['aviso']);
+        }
         if ($ndp['avisos'] !== []) {
-            $resultado['aviso'] = implode(' ', $ndp['avisos']);
+            $avisos = array_merge($avisos, $ndp['avisos']);
+        }
+        if ($avisos !== []) {
+            $resultado['aviso'] = implode(' ', $avisos);
         }
 
         return $resultado;

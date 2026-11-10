@@ -77,26 +77,35 @@ final class ChequeOperacionActivaSupport
         });
     }
 
-    public static function anularPorCobranza(int $cobranzaId): int
+    /**
+     * Anula en ERP (estado A) y da de baja en Anita (ctermae) los CHT de la cobranza.
+     *
+     * @return array{anulados: int, anita_fallos: list<string>}
+     */
+    public static function anularPorCobranza(int $cobranzaId, ?string $fechaBajaYmd = null): array
     {
         if ($cobranzaId <= 0) {
-            return 0;
+            return ['anulados' => 0, 'anita_fallos' => []];
         }
 
-        $n = 0;
-        Cheque::query()
+        $cheques = Cheque::query()
             ->where('cobranza_id', $cobranzaId)
-            ->where(function (Builder $w) {
-                $w->whereNull('estado')->orWhereNotIn('estado', ['A']);
-            })
-            ->get()
-            ->each(function (Cheque $cheque) use (&$n) {
-                $cheque->estado = 'A';
-                $cheque->save();
-                $n++;
-            });
+            ->get();
 
-        return $n;
+        // Anita primero: si después se borran en el ERP, ya no hay nro interno a leer.
+        $anitaFallos = ChequeTerceroBajaAnitaSupport::darDeBajaColeccion($cheques, $fechaBajaYmd);
+
+        $n = 0;
+        foreach ($cheques as $cheque) {
+            if (strtoupper(trim((string) ($cheque->estado ?? ''))) === 'A') {
+                continue;
+            }
+            $cheque->estado = 'A';
+            $cheque->save();
+            $n++;
+        }
+
+        return ['anulados' => $n, 'anita_fallos' => $anitaFallos];
     }
 
     public static function anularPorCajaMovimiento(Caja_Movimiento $movimiento): int
