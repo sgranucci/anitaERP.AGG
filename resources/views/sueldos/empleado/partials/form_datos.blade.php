@@ -17,6 +17,38 @@
             'col_input' => 'col-lg-6',
         ])
 
+        @php
+            $cuentaEmpresaId = old('cuenta_empresa_id', isset($data) ? ($data->cuenta_empresa_id ?? $data->empresa_id ?? null) : null);
+            $cuentaEnLista = false;
+            foreach ($empresa_query ?? [] as $empCuentaLista) {
+                if ((string) $empCuentaLista->id === (string) $cuentaEmpresaId) {
+                    $cuentaEnLista = true;
+                    break;
+                }
+            }
+            $cuentaFuera = null;
+            if ($cuentaEmpresaId && ! $cuentaEnLista) {
+                $cuentaFuera = \App\Models\Configuracion\Empresa::query()->whereKey($cuentaEmpresaId)->first(['id', 'codigo', 'nombre']);
+            }
+        @endphp
+        <div class="form-group row">
+            <label for="cuenta_empresa_id" class="col-lg-4 control-label text-right pr-2">Cuenta en</label>
+            <div class="col-lg-6">
+                <select name="cuenta_empresa_id" id="cuenta_empresa_id" class="form-control">
+                    <option value="">—</option>
+                    @if ($cuentaFuera)
+                        <option value="{{ $cuentaFuera->id }}" selected>{{ trim(($cuentaFuera->codigo ?? '').' '.$cuentaFuera->nombre) }}</option>
+                    @endif
+                    @foreach ($empresa_query ?? [] as $empCuenta)
+                        <option value="{{ $empCuenta->id }}" {{ (string) $cuentaEmpresaId === (string) $empCuenta->id ? 'selected' : '' }}>
+                            {{ trim(($empCuenta->codigo ?? '').' '.$empCuenta->nombre) }}
+                        </option>
+                    @endforeach
+                </select>
+                <small class="form-text text-muted">Empresa en la que cuenta si el mismo legajo está en varias.</small>
+            </div>
+        </div>
+
         <div class="form-group row">
             <label for="legajo" class="col-lg-4 control-label text-right pr-2">Legajo</label>
             <div class="col-lg-4">
@@ -91,18 +123,6 @@
                 </select>
             </div>
         </div>
-
-        <div class="form-group row">
-            <label for="estado_civil" class="col-lg-4 control-label text-right pr-2">Estado civil</label>
-            <div class="col-lg-5">
-                <select name="estado_civil" id="estado_civil" class="form-control">
-                    <option value="">—</option>
-                    @foreach ([1=>'Soltero',2=>'Casado',3=>'Divorciado',4=>'Viudo',5=>'Separado'] as $k=>$v)
-                        <option value="{{ $k }}" {{ (int) old('estado_civil', $data->estado_civil ?? 0) === $k ? 'selected' : '' }}>{{ $v }}</option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
     </div>
 
     {{-- ===================== Columna derecha: contacto / obra social ===================== --}}
@@ -170,6 +190,18 @@
                         <option value="{{ $sin->id }}" {{ (int) old('sindicato_id', $data->sindicato_id ?? 0) === (int) $sin->id ? 'selected' : '' }}>
                             {{ $sin->codigo }} — {{ $sin->descripcion ?? $sin->nombre ?? '' }}
                         </option>
+                    @endforeach
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label for="estado_civil" class="col-lg-4 control-label text-right pr-2">Estado civil</label>
+            <div class="col-lg-6">
+                <select name="estado_civil" id="estado_civil" class="form-control">
+                    <option value="">—</option>
+                    @foreach ([1=>'Soltero',2=>'Casado',3=>'Divorciado',4=>'Viudo',5=>'Separado'] as $k=>$v)
+                        <option value="{{ $k }}" {{ (int) old('estado_civil', $data->estado_civil ?? 0) === $k ? 'selected' : '' }}>{{ $v }}</option>
                     @endforeach
                 </select>
             </div>

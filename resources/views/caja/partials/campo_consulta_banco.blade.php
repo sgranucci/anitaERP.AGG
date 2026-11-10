@@ -16,6 +16,7 @@
     $colLabel = $col_label ?? 'col-lg-3';
     $colInput = $col_input ?? 'col-lg-8';
     $puedeAbrirAbm = can('editar-banco', false) || can('listar-banco', false);
+    $siguiente = $siguiente ?? '';
     $editUrl = ((int) $bancoId > 0 && $puedeAbrirAbm)
         ? route('editar_banco', [
             'id' => (int) $bancoId,
@@ -52,6 +53,7 @@
             <input type="text" class="form-control form-control-sm codigobanco"
                    id="{{ $inputId }}_codigo" value="{{ $codigo }}"
                    placeholder="C&oacute;d." autocomplete="off" title="{{ $titleCodigo }}"
+                   @if ($siguiente !== '') data-siguiente="{{ $siguiente }}" @endif
                    style="width: 4.5rem; flex-shrink: 0;">
             <input type="text" class="form-control form-control-sm nombrebanco text-truncate"
                    id="{{ $inputId }}_nombre" value="{{ $descripcion }}"
@@ -85,6 +87,7 @@
                 <input type="text" class="form-control codigobanco"
                        id="{{ $inputId }}_codigo" value="{{ $codigo }}"
                        placeholder="C&oacute;d." autocomplete="off" title="{{ $titleCodigo }}"
+                       @if ($siguiente !== '') data-siguiente="{{ $siguiente }}" @endif
                        style="width: 5.5rem; flex-shrink: 0;">
                 <input type="text" class="form-control nombrebanco text-truncate"
                        id="{{ $inputId }}_nombre" value="{{ $descripcion }}"

@@ -4,6 +4,11 @@ namespace App\Repositories\Sueldos;
 
 use App\Models\Sueldos\Empleado_Sancion_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Sueldos\SancionReporteListadoColumnas;
+use App\Support\Sueldos\SancionReporteListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Empleado_Sancion_SueldosRepository implements Empleado_Sancion_SueldosRepositoryInterface
@@ -16,52 +21,72 @@ class Empleado_Sancion_SueldosRepository implements Empleado_Sancion_SueldosRepo
 
     public function leeSancionesReporte(array $filtros, bool $flPaginando = false)
     {
+        $query = $this->querySanciones($filtros);
+        $perPage = (int) ($filtros['_per_page'] ?? 15);
+        if ($perPage < 1) {
+            $perPage = 15;
+        }
+
+        return $flPaginando ? $query->paginate($perPage) : $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesSanciones(array $filtros): array
+    {
+        $campos = SancionReporteListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            SancionReporteListadoColumnas::RECURSO,
+            SancionReporteListadoColumnas::catalogoActivo()
+        );
+
+        return ListadoCortesSupport::calcular(
+            $this->querySanciones($filtros),
+            $agrupar,
+            $campos,
+            'empleado_sancion_sueldos.id',
+            static fn (object $row, string $key): string => SancionReporteListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => SancionReporteListadoColumnas::sqlAgrupacion($key),
+            $etiquetas,
+            SancionReporteListadoColumnas::MEDIDAS
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function querySanciones(array $filtros)
+    {
         $query = $this->model->newQuery()
-            ->select('empleado_sancion_sueldos.*')
+            ->select([
+                'empleado_sancion_sueldos.*',
+                'empleado_sueldos.legajo as legajo',
+                'empleado_sueldos.nombre as nombreempleado',
+                'empresa.nombre as nombreempresa',
+                'centrocosto.nombre as nombrecentrocosto',
+                'tipo_sancion_sueldos.nombre as nombretipo',
+                'motivo_sancion_sueldos.nombre as nombremotivo',
+            ])
             ->with([
                 'empleado:id,empresa_id,legajo,nombre,centrocosto_id',
                 'empleado.empresa:id,nombre',
-                'empleado.centrocosto:id,codigo,nombre',
                 'tipo:id,codigo,nombre,clase',
                 'motivo:id,codigo,nombre',
             ])
-            ->join('empleado_sueldos', 'empleado_sueldos.id', '=', 'empleado_sancion_sueldos.empleado_id');
+            ->join('empleado_sueldos', 'empleado_sueldos.id', '=', 'empleado_sancion_sueldos.empleado_id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'empleado_sueldos.empresa_id')
+            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'empleado_sueldos.centrocosto_id')
+            ->leftJoin('tipo_sancion_sueldos', 'tipo_sancion_sueldos.id', '=', 'empleado_sancion_sueldos.tipo_sancion_id')
+            ->leftJoin('motivo_sancion_sueldos', 'motivo_sancion_sueldos.id', '=', 'empleado_sancion_sueldos.motivo_sancion_id');
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empleado_sueldos.empresa_id');
+        SancionReporteListadoFiltros::aplicar($query, $filtros);
+        SancionReporteListadoFiltros::aplicarOrden($query, $filtros);
 
-        if (! empty($filtros['empresa_id'])) {
-            $query->where('empleado_sueldos.empresa_id', (int) $filtros['empresa_id']);
-        }
-        if (! empty($filtros['fecha_desde'])) {
-            $query->whereDate('empleado_sancion_sueldos.fecha_hecho', '>=', $filtros['fecha_desde']);
-        }
-        if (! empty($filtros['fecha_hasta'])) {
-            $query->whereDate('empleado_sancion_sueldos.fecha_hecho', '<=', $filtros['fecha_hasta']);
-        }
-        if (! empty($filtros['tipo_sancion_id'])) {
-            $query->where('empleado_sancion_sueldos.tipo_sancion_id', (int) $filtros['tipo_sancion_id']);
-        }
-        if (! empty($filtros['motivo_sancion_id'])) {
-            $query->where('empleado_sancion_sueldos.motivo_sancion_id', (int) $filtros['motivo_sancion_id']);
-        }
-        if (($filtros['estado'] ?? '') !== '') {
-            $query->where('empleado_sancion_sueldos.estado', $filtros['estado']);
-        }
-        if (($filtros['legajo_desde'] ?? '') !== '') {
-            $query->where('empleado_sueldos.legajo', '>=', (int) $filtros['legajo_desde']);
-        }
-        if (($filtros['legajo_hasta'] ?? '') !== '') {
-            $query->where('empleado_sueldos.legajo', '<=', (int) $filtros['legajo_hasta']);
-        }
-        if (! empty($filtros['centrocosto_id'])) {
-            $query->where('empleado_sueldos.centrocosto_id', (int) $filtros['centrocosto_id']);
-        }
-
-        $query->orderBy('empleado_sueldos.legajo')
-            ->orderBy('empleado_sancion_sueldos.fecha_hecho')
-            ->orderBy('empleado_sancion_sueldos.id');
-
-        return $flPaginando ? $query->paginate(15) : $query->get();
+        return $query;
     }
 
     public function create(array $data)

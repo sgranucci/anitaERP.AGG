@@ -183,6 +183,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             ->select([
                 'empleado_sueldos.*',
                 'empresa.nombre as nombreempresa',
+                'empresa_cuenta.codigo as codigocuentaempresa',
+                'empresa_cuenta.nombre as nombrecuentaempresa',
                 'categoria_sueldos.descripcion as nombrecategoria',
                 'centrocosto.nombre as nombrecentrocosto',
                 'lugartrabajo_sueldos.nombre as nombrelugartrabajo',
@@ -193,6 +195,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'provincia.nombre as nombreprovincia',
             ])
             ->leftJoin('empresa', 'empresa.id', '=', 'empleado_sueldos.empresa_id')
+            ->leftJoin('empresa as empresa_cuenta', 'empresa_cuenta.id', '=', 'empleado_sueldos.cuenta_empresa_id')
             ->leftJoin('categoria_sueldos', 'categoria_sueldos.id', '=', 'empleado_sueldos.categoria_id')
             ->leftJoin('centrocosto', 'centrocosto.id', '=', 'empleado_sueldos.centrocosto_id')
             ->leftJoin('lugartrabajo_sueldos', 'lugartrabajo_sueldos.id', '=', 'empleado_sueldos.lugartrabajo_id')
@@ -251,6 +254,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $data['usuario_alta_id'] = Auth::id();
             if (empty($data['legajo'])) {
                 $data['legajo'] = $this->proximoLegajo($empresaId);
+            }
+            if (empty($data['cuenta_empresa_id'])) {
+                $data['cuenta_empresa_id'] = $empresaId;
             }
 
             $emp = $this->model->create($this->soloFillable($data));
@@ -585,7 +591,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
      * datos organizativos (centro de costo, categoría, lugar de trabajo, etc.)
      * y el CBU (con cuenta y banco) en los ya existentes. No genera auditoría ni observers.
      *
-     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, actualizados_banco:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
+     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, actualizados_banco:int, actualizados_cuenta:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
      */
     public function sincronizarConAnita(): array
     {
@@ -594,7 +600,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
         $res = [
             'en_anita' => 0, 'importados' => 0, 'ya_existia' => 0, 'actualizados_egreso' => 0,
-            'actualizados_datos' => 0, 'actualizados_banco' => 0,
+            'actualizados_datos' => 0, 'actualizados_banco' => 0, 'actualizados_cuenta' => 0,
             'sin_empresa' => 0,
             'omitidos' => 0, 'historia' => 0, 'leyendas' => 0, 'bases' => 0, 'errores' => [],
         ];
@@ -883,8 +889,76 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $api, $empresaIdPorCodigo, $idPorKey, $maps['motivoegreso_id'], $now, $meta, $seen
         );
         $res['leyendas'] = $this->importarEmpleyInicial($api, $empresaIdPorCodigo, $idPorKey, $now);
+        $res['actualizados_cuenta'] = $this->sincronizarCuentaEmpresaDesdeAnita($empresaPorCodigo);
 
         return $res;
+    }
+
+    /**
+     * Anita emp_coche (emp_cuenta_empresa): empresa en la que cuenta el legajo.
+     * Un 0 de Anita no pisa un valor ya cargado en el ERP.
+     *
+     * @param  array<string,int>|null  $empresaPorCodigo
+     */
+    public function sincronizarCuentaEmpresaDesdeAnita(?array $empresaPorCodigo = null): int
+    {
+        $empresaPorCodigo = $empresaPorCodigo ?? $this->mapaCodigoId('empresa');
+        if ($empresaPorCodigo === []) {
+            return 0;
+        }
+
+        $api = new ApiAnita();
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'sueldos',
+            'tabla' => 'empleado',
+            'campos' => 'emp_empresa, emp_legajo, emp_coche',
+            'orderBy' => 'emp_empresa, emp_legajo',
+        ]));
+        if (! empty($parsed['error_lectura'])) {
+            return 0;
+        }
+
+        $actual = [];
+        foreach (DB::table('empleado_sueldos')->select('id', 'empresa_id', 'legajo', 'cuenta_empresa_id')->get() as $e) {
+            $actual[$e->empresa_id.':'.$e->legajo] = [
+                'id' => (int) $e->id,
+                'cuenta_empresa_id' => $e->cuenta_empresa_id !== null ? (int) $e->cuenta_empresa_id : null,
+            ];
+        }
+
+        $porCuenta = [];
+        foreach ($parsed['filas'] as $f) {
+            $codEmp = $this->normCodigo($f->emp_empresa ?? null);
+            $empresaId = $codEmp !== null ? ($empresaPorCodigo[$codEmp] ?? null) : null;
+            $legajo = (int) ($f->emp_legajo ?? 0);
+            if ($empresaId === null || $legajo <= 0) {
+                continue;
+            }
+            $key = $empresaId.':'.$legajo;
+            if (! isset($actual[$key])) {
+                continue;
+            }
+            $cuentaId = $this->fk($empresaPorCodigo, $f->emp_coche ?? null);
+            if ($cuentaId === null || $cuentaId === $actual[$key]['cuenta_empresa_id']) {
+                continue;
+            }
+            $porCuenta[$cuentaId][] = $actual[$key]['id'];
+            $actual[$key]['cuenta_empresa_id'] = $cuentaId;
+        }
+
+        $actualizados = 0;
+        $now = now();
+        foreach ($porCuenta as $cuentaId => $ids) {
+            foreach (array_chunk($ids, 500) as $chunk) {
+                $actualizados += DB::table('empleado_sueldos')->whereIn('id', $chunk)->update([
+                    'cuenta_empresa_id' => $cuentaId,
+                    'updated_at' => $now,
+                ]);
+            }
+        }
+
+        return $actualizados;
     }
 
     /**

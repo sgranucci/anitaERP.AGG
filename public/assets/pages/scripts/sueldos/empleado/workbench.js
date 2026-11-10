@@ -84,7 +84,8 @@
     }
 
     $(function () {
-        if (!$('#form-filtros-empleado-sueldos').length || !$('.lw-workbench').length) {
+        var $form = $('#form-filtros-empleado-sueldos, #form-filtros-sancion-reporte').first();
+        if (!$form.length || !$('.lw-workbench').length) {
             return;
         }
 
@@ -95,7 +96,7 @@
                 $('#filtro_modo').val('todos');
                 $('#filtro_valor').val($(this).val());
                 syncColumnasHidden();
-                $('#form-filtros-empleado-sueldos').trigger('submit');
+                $form.trigger('submit');
             }
         });
 
@@ -104,7 +105,7 @@
             $('#filtro_modo').val('todos');
             $('#filtro_valor').val($('#lw-search-rapida').val());
             syncColumnasHidden();
-            $('#form-filtros-empleado-sueldos').trigger('submit');
+            $form.trigger('submit');
         });
 
         $('#btn-lw-aplicar-qbe').on('click', function () {
@@ -121,14 +122,30 @@
                 $('#filtro_busqueda_rapida').val('');
                 $('#lw-aplicar-qbe').val('1');
                 syncColumnasHidden();
-                $('#form-filtros-empleado-sueldos').trigger('submit');
+                $form.trigger('submit');
             }
         });
 
         function queryExternosEmpleado() {
+            if ($form.is('#form-filtros-sancion-reporte')) {
+                var claves = ['fecha_desde', 'fecha_hasta', 'apellido', 'estado', 'legajo_desde', 'legajo_hasta', 'tipo_sancion_id', 'motivo_sancion_id', 'consolidar_empresas'];
+                var extraSancion = [];
+                claves.forEach(function (k) {
+                    var val = $form.find('[name="' + k + '"]').val() || '';
+                    if (val !== '') {
+                        extraSancion.push(encodeURIComponent(k) + '=' + encodeURIComponent(val));
+                    }
+                });
+                if ($form.find('[name="incluir_comentario"]').is(':checked')) {
+                    extraSancion.push('incluir_comentario=1');
+                }
+                $form.find('input[name="empresa_ids[]"]:checked, input[type="hidden"][name="empresa_ids[]"]').each(function () {
+                    extraSancion.push('empresa_ids[]=' + encodeURIComponent($(this).val()));
+                });
+                return extraSancion.length ? '&' + extraSancion.join('&') : '';
+            }
             var keep = ['filtro_estado', 'empresa_id', 'empresa_todas'];
             var params = new URLSearchParams(window.location.search);
-            var $form = $('#form-filtros-empleado-sueldos');
             var extra = [];
             keep.forEach(function (k) {
                 var val = params.has(k) ? params.get(k) : '';
@@ -200,7 +217,7 @@
             }
         });
 
-        $('#form-filtros-empleado-sueldos').on('submit', function () {
+        $form.on('submit', function () {
             syncColumnasHidden();
             if (typeof window.lwOrdenEnsureInForm === 'function') {
                 window.lwOrdenEnsureInForm();

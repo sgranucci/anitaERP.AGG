@@ -275,7 +275,7 @@
                                     @php
                                         $ordenResumen = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
                                             $filtros['sort'] ?? [],
-                                            \App\Support\Sueldos\EmpleadoSueldosListadoFiltros::camposOrdenables()
+                                            $camposOrdenables ?? \App\Support\Sueldos\EmpleadoSueldosListadoFiltros::camposOrdenables()
                                         );
                                     @endphp
                                     @if ($ordenResumen !== [])

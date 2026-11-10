@@ -292,6 +292,17 @@ function activa_eventos_consultacentrocosto() {
                         $('#requisicionCentrocostoRetomeArbolConfirmar').focus();
                         return;
                     }
+                    var sig = String($(inputCodigo).attr('data-siguiente') || '').trim();
+                    if (sig && $(sig).length) {
+                        setTimeout(function () {
+                            var $sig = $(sig);
+                            $sig.trigger('focus');
+                            if ($sig.is('input, textarea, select')) {
+                                try { $sig.trigger('select'); } catch (err) { /* ignore */ }
+                            }
+                        }, 40);
+                        return;
+                    }
                     if (typeof window.afterCentrocostoEnterOk === 'function') {
                         window.afterCentrocostoEnterOk(data, inputCodigo);
                     }

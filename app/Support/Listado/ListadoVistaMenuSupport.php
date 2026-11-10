@@ -33,6 +33,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Empleados',
         ],
+        'sueldos.sancion_reporte' => [
+            'url_base' => 'sueldos/sancion-reporte',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Consultas de sanciones',
+        ],
         'logistica.solicitud' => [
             'url_base' => 'logistica/solicitud',
             'icono' => 'fa-bookmark',

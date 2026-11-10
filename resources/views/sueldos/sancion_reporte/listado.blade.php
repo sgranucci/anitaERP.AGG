@@ -1,14 +1,16 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
-    use App\Support\Sueldos\EmpleadoSancionSupport;
+    use App\Support\Sueldos\SancionReporteListadoColumnas;
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
     $totalFilas = is_countable($datas) ? count($datas) : 0;
+    $columnas = $columnasVisibles ?? SancionReporteListadoColumnas::defaultsVisibles();
+    $etiquetas = $etiquetasColumnas ?? [];
 @endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
 	<meta charset="UTF-8">
-	<title>Sanciones de empleados</title>
+	<title>Consultas de sanciones</title>
 	<style>
 		body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
 		table.data { border-collapse: collapse; width: 100%; }
@@ -30,7 +32,7 @@
 				@endforeach
 			</td>
 			<td style="width: 45%; text-align: center;">
-				<h2 style="margin: 0; font-size: 18px;">Sanciones de empleados</h2>
+				<h2 style="margin: 0; font-size: 18px;">Consultas de sanciones</h2>
 				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
 				@if (!empty($subtitulo))
 					<div class="meta">{{ $subtitulo }}</div>
@@ -42,31 +44,18 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th>Legajo</th>
-				<th>Nombre</th>
-				<th>Fecha</th>
-				<th>Tipo</th>
-				<th>Motivo</th>
-				<th>Días</th>
-				<th>Estado</th>
-				<th>Importe no cobrado</th>
+				@foreach ($columnas as $key)
+					<th>{{ $etiquetas[$key] ?? $key }}</th>
+				@endforeach
 			</tr>
 		</thead>
 		<tbody>
 			@foreach ($datas as $row)
 				<tr>
-					<td>{{ optional($row->empleado)->legajo }}</td>
-					<td>{{ optional($row->empleado)->nombre }}</td>
-					<td>{{ optional($row->fecha_hecho)->format('d/m/Y') }}</td>
-					<td>{{ optional($row->tipo)->nombre }}</td>
-					<td>{{ optional($row->motivo)->nombre }}</td>
-					<td>{{ $row->cant_dias }}</td>
-					<td>{{ EmpleadoSancionSupport::etiquetaEstado($row->estado) }}</td>
-					<td>{{ number_format((float) $row->importe_perdida, 2, ',', '.') }}</td>
+					@foreach ($columnas as $key)
+						<td>{{ SancionReporteListadoColumnas::valorCelda($row, $key) }}</td>
+					@endforeach
 				</tr>
-				@if (!empty($incluirComentario) && $row->comentario)
-					<tr><td colspan="8">Comentario: {{ $row->comentario }}</td></tr>
-				@endif
 			@endforeach
 		</tbody>
 	</table>

@@ -102,7 +102,7 @@ final class ReporteSueldosDefinibleCampoEmpleadoSupport
             28 => (string) ($emp?->banco_codigo ?? ''),
             29 => (string) ($emp?->tipo_empresa_sijp ?? ''),
             30 => self::fmtFecha($recibo?->fecha_ingreso ?? $emp?->fecha_ingreso),
-            31 => (string) ($emp?->empresa_id ?? ''),
+            31 => self::codigoCuentaEmpresa($emp),
             default => '',
         };
 
@@ -111,6 +111,27 @@ final class ReporteSueldosDefinibleCampoEmpleadoSupport
         }
 
         return $valor;
+    }
+
+    /**
+     * Anita LISC_CUENTA_EMPRESA: imprime el código de emp_cuenta_empresa.
+     */
+    private static function codigoCuentaEmpresa(?Empleado_Sueldos $emp): string
+    {
+        if ($emp === null) {
+            return '';
+        }
+
+        $cuenta = $emp->relationLoaded('cuentaEmpresa') ? $emp->cuentaEmpresa : null;
+        if ($cuenta !== null) {
+            $codigo = trim((string) ($cuenta->codigo ?? ''));
+
+            return $codigo !== '' ? $codigo : (string) $cuenta->id;
+        }
+
+        $id = (int) ($emp->cuenta_empresa_id ?? 0);
+
+        return $id > 0 ? (string) $id : '';
     }
 
     private static function fmtFecha(mixed $fecha): string

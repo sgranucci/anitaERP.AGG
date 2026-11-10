@@ -5548,6 +5548,19 @@ Route::get('sueldos/categoria/{id}/bases', 'Sueldos\Categoria_SueldosController@
 Route::get('sueldos/categoria/{id}/historial-bases', 'Sueldos\Categoria_SueldosController@historialBases')->name('historial_bases_categoria_sueldos');
 
 /*
+ * Consulta F1 de maestros de sueldos (categoría, agrupamiento, lugar, vacación, ART).
+ */
+Route::post('sueldos/maestro/{maestro}/consulta', 'Sueldos\ConsultaMaestro_SueldosController@consulta')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art')
+    ->name('consulta_maestro_sueldos');
+Route::get('sueldos/maestro/{maestro}/leerporcodigo/{codigo}', 'Sueldos\ConsultaMaestro_SueldosController@leerPorCodigo')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art')
+    ->name('leer_maestro_sueldos_por_codigo');
+Route::get('sueldos/maestro/{maestro}/leer/{id}', 'Sueldos\ConsultaMaestro_SueldosController@leer')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art')
+    ->name('leer_maestro_sueldos');
+
+/*
  * Obras sociales de sueldos (Anita sueldos / osocial). Sin imputación contable.
  */
 Route::get('sueldos/obrasocial', 'Sueldos\Obrasocial_SueldosController@index')->name('consultar_obrasocial_sueldos');
@@ -5816,6 +5829,11 @@ Route::put('sueldos/motivo-sancion/{id}', 'Sueldos\Motivo_Sancion_SueldosControl
 Route::delete('sueldos/motivo-sancion/{id}', 'Sueldos\Motivo_Sancion_SueldosController@eliminar')->name('eliminar_motivo_sancion_sueldos');
 
 Route::get('sueldos/sancion-reporte', 'Sueldos\SancionReporte_SueldosController@index')->name('sancion_reporte_sueldos');
+Route::post('sueldos/sancion-reporte/workbench/vista', 'Sueldos\SancionReporte_SueldosController@guardarVistaListado')->name('guardar_vista_listado_sancion_reporte_sueldos');
+Route::delete('sueldos/sancion-reporte/workbench/vista/{id}', 'Sueldos\SancionReporte_SueldosController@eliminarVistaListado')->name('eliminar_vista_listado_sancion_reporte_sueldos');
+Route::post('sueldos/sancion-reporte/workbench/columnas', 'Sueldos\SancionReporte_SueldosController@guardarColumnasListado')->name('guardar_columnas_listado_sancion_reporte_sueldos');
+Route::post('sueldos/sancion-reporte/workbench/etiquetas', 'Sueldos\SancionReporte_SueldosController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_sancion_reporte_sueldos');
+Route::post('sueldos/sancion-reporte/workbench/preview', 'Sueldos\SancionReporte_SueldosController@previewWorkbench')->name('preview_workbench_sancion_reporte_sueldos');
 Route::get('sueldos/listar-sancion-reporte/{formato}', 'Sueldos\SancionReporte_SueldosController@exportar')->name('listar_sancion_reporte_sueldos');
 
 /*

@@ -4,6 +4,7 @@ namespace App\Exports\Sueldos;
 
 use App\Repositories\Sueldos\Empleado_Sancion_SueldosRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Sueldos\SancionReporteListadoColumnas;
 use App\Support\Sueldos\SancionReporteListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,14 +26,18 @@ class SancionReporteExport implements FromView, ShouldAutoSize, WithColumnFormat
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'J';
-
     public function __construct(private Empleado_Sancion_SueldosRepositoryInterface $repository)
     {
     }
 
     /** @var array<string, mixed> */
     private array $filtros = [];
+
+    /** @var list<string> */
+    private array $columnas = [];
+
+    /** @var array<string, string> */
+    private array $etiquetas = [];
 
     private bool $flDesdeIndex = false;
 
@@ -52,9 +57,9 @@ class SancionReporteExport implements FromView, ShouldAutoSize, WithColumnFormat
         $datas = $this->flDesdeIndex
             ? $this->repository->leeSancionesReporte($this->filtros, false)
             : collect();
-        $datas->each(function ($row) {
-            $row->nombreempresa = optional(optional($row->empleado)->empresa)->nombre ?? '';
-        });
+        if ($this->columnas === []) {
+            $this->columnas = SancionReporteListadoColumnas::defaultsVisibles();
+        }
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $offset = $this->hayFilaLogos ? 1 : 0;
@@ -66,23 +71,20 @@ class SancionReporteExport implements FromView, ShouldAutoSize, WithColumnFormat
             'datas' => $datas,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'subtitulo' => SancionReporteListadoFiltros::subtitulo($this->filtros),
+            'columnasVisibles' => $this->columnas,
+            'etiquetasColumnas' => $this->etiquetas,
         ]);
     }
 
     public function columnFormats(): array
     {
-        return [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'B' => NumberFormat::FORMAT_TEXT,
-            'C' => NumberFormat::FORMAT_TEXT,
-            'D' => NumberFormat::FORMAT_TEXT,
-            'E' => NumberFormat::FORMAT_TEXT,
-            'F' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_TEXT,
-            'H' => NumberFormat::FORMAT_TEXT,
-            'I' => NumberFormat::FORMAT_TEXT,
-            'J' => NumberFormat::FORMAT_TEXT,
-        ];
+        $formats = [];
+        $n = max(1, count($this->columnas));
+        for ($i = 1; $i <= $n; $i++) {
+            $formats[$this->columnaLetra($i)] = NumberFormat::FORMAT_TEXT;
+        }
+
+        return $formats;
     }
 
     public function styles(Worksheet $sheet)
@@ -97,10 +99,12 @@ class SancionReporteExport implements FromView, ShouldAutoSize, WithColumnFormat
 
     public function columnWidths(): array
     {
-        return [
-            'A' => 10, 'B' => 28, 'C' => 12, 'D' => 22, 'E' => 22,
-            'F' => 8, 'G' => 12, 'H' => 14, 'I' => 12, 'J' => 14,
-        ];
+        $anchos = [];
+        foreach ($this->columnas as $i => $key) {
+            $anchos[$this->columnaLetra($i + 1)] = in_array($key, ['nombre', 'comentario', 'motivo', 'tipo'], true) ? 28 : 16;
+        }
+
+        return $anchos;
     }
 
     public function registerEvents(): array
@@ -126,10 +130,11 @@ class SancionReporteExport implements FromView, ShouldAutoSize, WithColumnFormat
                     }
                 }
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
-                $sheet->mergeCells('A'.($filaTit + 1).':'.self::COL_ULTIMA.($filaTit + 1));
+                $ultima = $this->columnaLetra(max(1, count($this->columnas)));
+                $sheet->mergeCells('A'.$filaTit.':'.$ultima.$filaTit);
+                $sheet->mergeCells('A'.($filaTit + 1).':'.$ultima.($filaTit + 1));
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$ultima.$filaTit)->applyFromArray([
                     'font' => ['bold' => true, 'size' => 16, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
                 ]);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
@@ -142,11 +147,30 @@ class SancionReporteExport implements FromView, ShouldAutoSize, WithColumnFormat
         return 'Sanciones';
     }
 
-    public function parametros(array $filtros)
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<string>|null  $columnas
+     * @param  array<string, string>|null  $etiquetas
+     */
+    public function parametros(array $filtros, ?array $columnas = null, ?array $etiquetas = null)
     {
         $this->filtros = $filtros;
+        $this->columnas = $columnas ?? [];
+        $this->etiquetas = $etiquetas ?? [];
         $this->flDesdeIndex = true;
 
         return $this;
+    }
+
+    private function columnaLetra(int $n): string
+    {
+        $letra = '';
+        while ($n > 0) {
+            $n--;
+            $letra = chr(65 + ($n % 26)).$letra;
+            $n = intdiv($n, 26);
+        }
+
+        return $letra !== '' ? $letra : 'A';
     }
 }

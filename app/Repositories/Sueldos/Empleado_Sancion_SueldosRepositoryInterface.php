@@ -9,4 +9,10 @@ interface Empleado_Sancion_SueldosRepositoryInterface extends RepositoryInterfac
      * @param  bool  $flPaginando
      */
     public function leeSancionesReporte(array $filtros, bool $flPaginando = false);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesSanciones(array $filtros): array;
 }

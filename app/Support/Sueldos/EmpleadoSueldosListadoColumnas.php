@@ -104,6 +104,16 @@ final class EmpleadoSueldosListadoColumnas
             'attr' => 'nombreempresa',
             'group' => self::GRUPO_ORGANIZACION,
         ],
+        'cuenta_empresa' => [
+            'label' => 'Cuenta en',
+            'default' => false,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'texto',
+            'source' => 'empresa_cuenta.nombre',
+            'attr' => 'nombrecuentaempresa',
+            'group' => self::GRUPO_ORGANIZACION,
+        ],
         'estado' => [
             'label' => 'Estado',
             'default' => true,
@@ -413,6 +423,15 @@ final class EmpleadoSueldosListadoColumnas
 
         if ($key === 'estado') {
             return EmpleadoEstados::label($data->estado ?? null);
+        }
+        if ($key === 'cuenta_empresa') {
+            $codigo = trim((string) ($data->codigocuentaempresa ?? ''));
+            $nombre = trim((string) ($data->nombrecuentaempresa ?? ''));
+            if ($codigo === '') {
+                return $nombre;
+            }
+
+            return trim($codigo.' '.$nombre);
         }
         if ($key === 'confidencial' || $key === 'debe_libreta_sanitaria') {
             $marca = $data->{$key} ?? null;

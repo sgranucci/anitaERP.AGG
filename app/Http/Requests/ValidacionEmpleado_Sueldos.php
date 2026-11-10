@@ -19,6 +19,7 @@ class ValidacionEmpleado_Sueldos extends FormRequest
 
         return [
             'empresa_id' => [$id ? 'nullable' : 'required', 'integer', 'exists:empresa,id'],
+            'cuenta_empresa_id' => 'nullable|integer|exists:empresa,id',
             'legajo' => [
                 'nullable',
                 'integer',
@@ -106,6 +107,7 @@ class ValidacionEmpleado_Sueldos extends FormRequest
     {
         return [
             'empresa_id' => 'empresa',
+            'cuenta_empresa_id' => 'cuenta en',
             'legajo' => 'legajo',
             'nombre' => 'nombre',
             'cuil' => 'CUIL',
@@ -131,6 +133,7 @@ class ValidacionEmpleado_Sueldos extends FormRequest
         }
 
         $this->merge([
+            'cuenta_empresa_id' => $this->input('cuenta_empresa_id') ?: null,
             'confidencial' => $this->boolean('confidencial'),
             'debe_libreta_sanitaria' => $this->boolean('debe_libreta_sanitaria'),
             'fecha_vencimiento_libreta_sanitaria' => $this->input('fecha_vencimiento_libreta_sanitaria') ?: null,

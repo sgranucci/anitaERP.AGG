@@ -7,7 +7,7 @@
      */
     var FOCUS_POR_SOLAPA = {
         '#tab-datos': '#cuil, #nombre, #legajo',
-        '#tab-laborales': '#fecha_ingreso, #categoria_id',
+        '#tab-laborales': '#fecha_ingreso, #categoria_id_codigo, #categoria_id',
         '#tab-bases': '#nombrebase_id, #host-bases input:not([type=hidden]):not([type=checkbox]), #host-bases select',
         '#tab-leyendas': '#leyendas',
         '#tab-foto': '#foto_archivo',
@@ -65,7 +65,19 @@
         tbody.appendChild(document.importNode(tpl.content, true));
     }
 
+    function sincronizarBancoCodigoEmpleado() {
+        var $hidden = $('#empleado_banco_codigo');
+        if (!$hidden.length) {
+            return;
+        }
+        var codigo = String($('#empleado_banco_id_codigo').val() || '').trim();
+        $hidden.val(codigo);
+    }
+
     $(function () {
+        $(document).on('change.bancoConsulta', '#empleado_banco_id', sincronizarBancoCodigoEmpleado);
+        $(document).on('input blur', '#empleado_banco_id_codigo', sincronizarBancoCodigoEmpleado);
+
         $(document).on('click', '.eliminar-archivo-empleado', function () {
             $(this).closest('.empleado-archivo-item').remove();
         });

@@ -27,6 +27,7 @@
     $colLabel = $col_label ?? 'col-lg-4';
     $colInput = $col_input ?? 'col-lg-7';
     $ayuda = $ayuda ?? null;
+    $siguiente = $siguiente ?? '';
     $puedeAbrirAbmCc = can('editar-centro-costo', false) || can('listar-centro-costo', false);
     $editUrl = ((int) $centrocostoId > 0 && $puedeAbrirAbmCc)
         ? route('editar_centrocosto', ['id' => (int) $centrocostoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -59,7 +60,9 @@
                     @endif
                     <input type="text" class="form-control codigocentrocosto"
                         id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                        placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
+                        placeholder="C&oacute;d." autocomplete="off"
+                        @if ($siguiente !== '') data-siguiente="{{ $siguiente }}" @endif
+                        style="width: 5.5rem; flex-shrink: 0;">
                     <input type="text" class="form-control descripcioncentrocosto text-truncate"
                         id="{{ $inputId }}_descripcion" value="{{ $descripcion }}"
                         placeholder="Descripci&oacute;n" readonly
@@ -91,7 +94,9 @@
                 @endif
                 <input type="text" class="form-control codigocentrocosto flex-shrink-0"
                     id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                    placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+                    placeholder="C&oacute;d." autocomplete="off"
+                    @if ($siguiente !== '') data-siguiente="{{ $siguiente }}" @endif
+                    style="width: 5.5rem;">
                 <input type="text" class="form-control descripcioncentrocosto text-truncate"
                     id="{{ $inputId }}_descripcion" value="{{ $descripcion }}"
                     placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">

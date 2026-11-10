@@ -6,6 +6,9 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/form.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/banco/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/maestro/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/maestro/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/localidad/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/localidad/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/domicilio.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/domicilio.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/arca-padron.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/arca-padron.js')) ?: time() }}"></script>
@@ -249,6 +252,9 @@
 
 @include('sueldos.empleado.modal_vigencias_base')
 @include('includes.configuracion.modalconsultalocalidad')
+@include('includes.caja.modalconsultabanco')
+@include('includes.sueldos.modalconsulta_maestro_sueldos')
+@include('includes.contable.modalconsultacentrocosto')
 @include('includes.sueldos.modalconsultaconcepto_sueldos')
 @include('includes.sueldos.modalconsultatipo_sancion')
 @include('includes.sueldos.modalconsultamotivo_sancion')

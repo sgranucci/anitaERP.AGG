@@ -255,7 +255,7 @@ class ReporteSueldosDefinibleProcesador
 
         $empleadoIds = $recibos->pluck('empleado_id')->filter()->unique()->all();
         $empleados = Empleado_Sueldos::query()
-            ->with(['categoria:id,descripcion', 'centrocosto:id,nombre,codigo', 'lugartrabajo:id,nombre', 'sindicato:id,descripcion,codigo', 'obrasocial:id,descripcion,codigo', 'agrupamiento:id,descripcion', 'motivoegreso:id,descripcion', 'leyendas:id,empleado_id,linea,leyenda'])
+            ->with(['categoria:id,descripcion', 'centrocosto:id,nombre,codigo', 'lugartrabajo:id,nombre', 'sindicato:id,descripcion,codigo', 'obrasocial:id,descripcion,codigo', 'agrupamiento:id,descripcion', 'motivoegreso:id,descripcion', 'leyendas:id,empleado_id,linea,leyenda', 'cuentaEmpresa:id,codigo,nombre'])
             ->whereIn('id', $empleadoIds)
             ->get()
             ->keyBy('id');
@@ -312,7 +312,7 @@ class ReporteSueldosDefinibleProcesador
     private function filasDesdeAbm(ReporteSueldosDefinible $reporte, ?int $empresaId, array $filtros): array
     {
         $q = Empleado_Sueldos::query()
-            ->with(['categoria:id,descripcion', 'centrocosto:id,nombre,codigo', 'lugartrabajo:id,nombre', 'sindicato:id,descripcion,codigo', 'obrasocial:id,descripcion,codigo', 'agrupamiento:id,descripcion', 'motivoegreso:id,descripcion', 'leyendas:id,empleado_id,linea,leyenda'])
+            ->with(['categoria:id,descripcion', 'centrocosto:id,nombre,codigo', 'lugartrabajo:id,nombre', 'sindicato:id,descripcion,codigo', 'obrasocial:id,descripcion,codigo', 'agrupamiento:id,descripcion', 'motivoegreso:id,descripcion', 'leyendas:id,empleado_id,linea,leyenda', 'cuentaEmpresa:id,codigo,nombre'])
             ->orderBy('legajo');
         if ($empresaId) {
             $q->where('empresa_id', $empresaId);

@@ -54,86 +54,126 @@
                 <h3 class="card-title mb-0"><i class="fa fa-sitemap"></i> Puesto y organización</h3>
             </div>
             <div class="card-body pb-2">
-                <div class="form-group row">
-                    <label for="categoria_id" class="col-lg-4 control-label">Categoría</label>
-                    <div class="col-lg-8">
-                        <select name="categoria_id" id="categoria_id" class="form-control">
-                            <option value="">—</option>
-                            @foreach ($categorias ?? [] as $cat)
-                                <option value="{{ $cat->id }}"
-                                    data-origen="{{ $cat->origen_bases ?? 'T' }}"
-                                    {{ (int) old('categoria_id', $data->categoria_id ?? 0) === (int) $cat->id ? 'selected' : '' }}>
-                                    {{ $cat->codigo }} — {{ $cat->descripcion }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="agrupamiento_id" class="col-lg-4 control-label">Agrupamiento</label>
-                    <div class="col-lg-8">
-                        <select name="agrupamiento_id" id="agrupamiento_id" class="form-control">
-                            <option value="">—</option>
-                            @foreach ($agrupamientos ?? [] as $ag)
-                                <option value="{{ $ag->id }}" {{ (int) old('agrupamiento_id', $data->agrupamiento_id ?? 0) === (int) $ag->id ? 'selected' : '' }}>
-                                    {{ $ag->codigo }} — {{ $ag->descripcion }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="lugartrabajo_id" class="col-lg-4 control-label">Lugar de trabajo</label>
-                    <div class="col-lg-8">
-                        <select name="lugartrabajo_id" id="lugartrabajo_id" class="form-control">
-                            <option value="">—</option>
-                            @foreach ($lugares ?? [] as $lug)
-                                <option value="{{ $lug->id }}" {{ (int) old('lugartrabajo_id', $data->lugartrabajo_id ?? 0) === (int) $lug->id ? 'selected' : '' }}>
-                                    {{ $lug->codigo }} — {{ $lug->descripcion ?? $lug->nombre ?? '' }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="centrocosto_id" class="col-lg-4 control-label">Centro de costo</label>
-                    <div class="col-lg-8">
-                        <select name="centrocosto_id" id="centrocosto_id" class="form-control">
-                            <option value="">—</option>
-                            @foreach ($centrocostos ?? [] as $cc)
-                                <option value="{{ $cc->id }}" {{ (int) old('centrocosto_id', $data->centrocosto_id ?? 0) === (int) $cc->id ? 'selected' : '' }}>
-                                    {{ $cc->codigo }} — {{ $cc->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group row">
-                    <label for="vacacion_id" class="col-lg-4 control-label">Vacaciones</label>
-                    <div class="col-lg-8">
-                        <select name="vacacion_id" id="vacacion_id" class="form-control">
-                            <option value="">—</option>
-                            @foreach ($vacaciones ?? [] as $vac)
-                                <option value="{{ $vac->id }}" {{ (int) old('vacacion_id', $data->vacacion_id ?? 0) === (int) $vac->id ? 'selected' : '' }}>
-                                    {{ $vac->codigo }} — {{ $vac->descripcion }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-                <div class="form-group row mb-0">
-                    <label for="art_id" class="col-lg-4 control-label">ART</label>
-                    <div class="col-lg-8">
-                        <select name="art_id" id="art_id" class="form-control">
-                            <option value="">—</option>
-                            @foreach ($arts ?? [] as $art)
-                                <option value="{{ $art->id }}" {{ (int) old('art_id', $data->art_id ?? 0) === (int) $art->id ? 'selected' : '' }}>
-                                    {{ $art->codigo }} — {{ $art->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
+                @php
+                    $catIdLab = (int) old('categoria_id', $data->categoria_id ?? 0);
+                    $catLab = isset($data) && $data->relationLoaded('categoria') && (int) ($data->categoria->id ?? 0) === $catIdLab
+                        ? $data->categoria
+                        : ($catIdLab > 0 ? \App\Models\Sueldos\Categoria_Sueldos::query()->find($catIdLab) : null);
+                    if ($catLab === null && isset($data) && (int) ($data->categoria_id ?? 0) === $catIdLab && $data->categoria) {
+                        $catLab = $data->categoria;
+                    }
+
+                    $agIdLab = (int) old('agrupamiento_id', $data->agrupamiento_id ?? 0);
+                    $agLab = $agIdLab > 0
+                        ? ((isset($data) && (int) ($data->agrupamiento_id ?? 0) === $agIdLab && $data->agrupamiento)
+                            ? $data->agrupamiento
+                            : \App\Models\Sueldos\Agrupamiento_Sueldos::query()->find($agIdLab))
+                        : null;
+
+                    $lugIdLab = (int) old('lugartrabajo_id', $data->lugartrabajo_id ?? 0);
+                    $lugLab = $lugIdLab > 0
+                        ? ((isset($data) && (int) ($data->lugartrabajo_id ?? 0) === $lugIdLab && $data->lugartrabajo)
+                            ? $data->lugartrabajo
+                            : \App\Models\Sueldos\Lugartrabajo_Sueldos::query()->find($lugIdLab))
+                        : null;
+
+                    $ccIdLab = (int) old('centrocosto_id', $data->centrocosto_id ?? 0);
+                    $ccLab = $ccIdLab > 0
+                        ? ((isset($data) && (int) ($data->centrocosto_id ?? 0) === $ccIdLab && $data->centrocosto)
+                            ? $data->centrocosto
+                            : \App\Models\Contable\Centrocosto::query()->find($ccIdLab))
+                        : null;
+
+                    $vacIdLab = (int) old('vacacion_id', $data->vacacion_id ?? 0);
+                    $vacLab = $vacIdLab > 0
+                        ? ((isset($data) && (int) ($data->vacacion_id ?? 0) === $vacIdLab && $data->vacacion)
+                            ? $data->vacacion
+                            : \App\Models\Sueldos\Vacacion_Sueldos::query()->find($vacIdLab))
+                        : null;
+
+                    $artIdLab = (int) old('art_id', $data->art_id ?? 0);
+                    $artLab = $artIdLab > 0
+                        ? ((isset($data) && (int) ($data->art_id ?? 0) === $artIdLab && $data->art)
+                            ? $data->art
+                            : \App\Models\Sueldos\Art_Sueldos::query()->find($artIdLab))
+                        : null;
+                @endphp
+
+                @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                    'maestro' => 'categoria',
+                    'registroId' => $catLab->id ?? $catIdLab ?: '',
+                    'codigo' => $catLab->codigo ?? '',
+                    'descripcion' => $catLab->descripcion ?? '',
+                    'label' => 'Categoría',
+                    'inputName' => 'categoria_id',
+                    'inputId' => 'categoria_id',
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#agrupamiento_id_codigo',
+                    'extraAttrs' => ['origen-bases' => $catLab->origen_bases ?? ''],
+                ])
+                @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                    'maestro' => 'agrupamiento',
+                    'registroId' => $agLab->id ?? $agIdLab ?: '',
+                    'codigo' => $agLab->codigo ?? '',
+                    'descripcion' => $agLab->descripcion ?? '',
+                    'label' => 'Agrupamiento',
+                    'inputName' => 'agrupamiento_id',
+                    'inputId' => 'agrupamiento_id',
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#lugartrabajo_id_codigo',
+                ])
+                @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                    'maestro' => 'lugartrabajo',
+                    'registroId' => $lugLab->id ?? $lugIdLab ?: '',
+                    'codigo' => $lugLab->codigo ?? '',
+                    'descripcion' => $lugLab->nombre ?? '',
+                    'label' => 'Lugar de trabajo',
+                    'inputName' => 'lugartrabajo_id',
+                    'inputId' => 'lugartrabajo_id',
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#centrocosto_id_codigo',
+                ])
+                @include('contable.partials.campo_consulta_centrocosto', [
+                    'prefix' => 'empleado_lab',
+                    'layout' => 'form_row',
+                    'centrocostoId' => $ccLab->id ?? $ccIdLab ?: '',
+                    'codigo' => $ccLab->codigo ?? '',
+                    'descripcion' => $ccLab->nombre ?? '',
+                    'label' => 'Centro de costo',
+                    'inputName' => 'centrocosto_id',
+                    'inputId' => 'centrocosto_id',
+                    'required' => false,
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#vacacion_id_codigo',
+                ])
+                @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                    'maestro' => 'vacacion',
+                    'registroId' => $vacLab->id ?? $vacIdLab ?: '',
+                    'codigo' => $vacLab->codigo ?? '',
+                    'descripcion' => $vacLab->descripcion ?? '',
+                    'label' => 'Vacaciones',
+                    'inputName' => 'vacacion_id',
+                    'inputId' => 'vacacion_id',
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#art_id_codigo',
+                ])
+                @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                    'maestro' => 'art',
+                    'registroId' => $artLab->id ?? $artIdLab ?: '',
+                    'codigo' => $artLab->codigo ?? '',
+                    'descripcion' => $artLab->nombre ?? '',
+                    'label' => 'ART',
+                    'inputName' => 'art_id',
+                    'inputId' => 'art_id',
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#a_cargo_de',
+                ])
             </div>
         </div>
 
@@ -217,13 +257,29 @@
                                value="{{ old('cuenta_bancaria', $data->cuenta_bancaria ?? '') }}">
                     </div>
                 </div>
-                <div class="form-group row mb-0">
-                    <label for="banco_codigo" class="col-lg-4 control-label">Cód. banco</label>
-                    <div class="col-lg-4">
-                        <input type="number" name="banco_codigo" id="banco_codigo" class="form-control"
-                               value="{{ old('banco_codigo', $data->banco_codigo ?? '') }}">
-                    </div>
-                </div>
+                @php
+                    $bancoCodigoEmp = old('banco_codigo', $data->banco_codigo ?? '');
+                    $bancoModelEmp = null;
+                    if ($bancoCodigoEmp !== null && (string) $bancoCodigoEmp !== '') {
+                        $bancoModelEmp = app(\App\Repositories\Caja\BancoRepositoryInterface::class)
+                            ->findPorCodigo($bancoCodigoEmp);
+                    }
+                @endphp
+                <input type="hidden" name="banco_codigo" id="empleado_banco_codigo"
+                       value="{{ $bancoCodigoEmp }}">
+                @include('caja.partials.campo_consulta_banco', [
+                    'bancoId' => $bancoModelEmp->id ?? '',
+                    'codigo' => $bancoModelEmp->codigo ?? $bancoCodigoEmp,
+                    'descripcion' => $bancoModelEmp->nombre ?? '',
+                    'label' => 'Banco',
+                    'inputName' => 'banco_consulta_id',
+                    'inputId' => 'empleado_banco_id',
+                    'layout' => 'form_row',
+                    'required' => false,
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                    'siguiente' => '#mano_obra',
+                ])
             </div>
         </div>
 

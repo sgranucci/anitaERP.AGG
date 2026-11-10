@@ -84,6 +84,29 @@ function actualizarLinkEditarBanco($campo, bancoId) {
     }
 }
 
+function enfocarSiguienteBanco($campo) {
+    if (!$campo || !$campo.length) {
+        return;
+    }
+    var sig = String(
+        $campo.find('.codigobanco, .codigobanco_recibido, .codigobanco_reemplazo').first().attr('data-siguiente') || ''
+    ).trim();
+    if (!sig || !$(sig).length) {
+        return;
+    }
+    setTimeout(function () {
+        var $sig = $(sig);
+        $sig.trigger('focus');
+        if ($sig.is('input, textarea, select')) {
+            try {
+                $sig.trigger('select');
+            } catch (e) {
+                // ignore
+            }
+        }
+    }, 40);
+}
+
 function limpiarBancoEnCampo($campo, mantenerCodigo) {
     if (!$campo || !$campo.length) {
         return;
@@ -123,7 +146,7 @@ function aplicarBancoEnCampo($campo, data) {
 window.aplicarBancoEnCampo = aplicarBancoEnCampo;
 window.limpiarBancoEnCampo = limpiarBancoEnCampo;
 
-function leeUnBanco(bancoId, codigoBanco, $campo) {
+function leeUnBanco(bancoId, codigoBanco, $campo, pasarSiguiente) {
     $campo = $campo && $campo.length ? $campo : ptrCampoBanco;
     if (!$campo || !$campo.length) {
         return;
@@ -145,6 +168,9 @@ function leeUnBanco(bancoId, codigoBanco, $campo) {
         .done(function (data) {
             if (data && data.id) {
                 aplicarBancoEnCampo($campo, data);
+                if (pasarSiguiente) {
+                    enfocarSiguienteBanco($campo);
+                }
                 return;
             }
             limpiarBancoEnCampo($campo, false);
@@ -165,9 +191,10 @@ function aceptarCodigoBancoDesdeInput($input) {
     var codigo = String($input.val() || '').trim();
     if (codigo === '') {
         limpiarBancoEnCampo($campo, false);
+        enfocarSiguienteBanco($campo);
         return;
     }
-    leeUnBanco(null, codigo, $campo);
+    leeUnBanco(null, codigo, $campo, true);
 }
 
 function abrirModalConsultaBanco($campo) {
@@ -296,7 +323,7 @@ function activa_eventos_consultabanco() {
                 return;
             }
             if (ptrCampoBanco && ptrCampoBanco.length) {
-                leeUnBanco(fila.id, null, ptrCampoBanco);
+                leeUnBanco(fila.id, null, ptrCampoBanco, true);
                 return;
             }
             // Legacy (cobranza / cheques): ptrs seteados por el caller

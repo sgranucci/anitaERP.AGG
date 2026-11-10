@@ -25,7 +25,7 @@ class ManualSueldosController extends ManualDocumentoController
         ['label' => 'Liquidación', 'route' => 'consultar_liquidacion_sueldos'],
         ['label' => 'Libro LSD', 'route' => 'consultar_lsd_sueldos'],
         ['label' => 'Reportes definibles', 'route' => 'reporte_sueldos_definible'],
-        ['label' => 'Sanciones', 'route' => 'sancion_reporte_sueldos'],
+        ['label' => 'Consultas de sanciones', 'route' => 'sancion_reporte_sueldos'],
     ];
 
     public function __construct(ManualSueldosService $manual)

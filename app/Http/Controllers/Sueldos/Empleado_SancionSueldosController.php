@@ -50,13 +50,13 @@ class Empleado_SancionSueldosController extends Controller
         $sancion = Empleado_Sancion_Sueldos::findOrFail($id);
         $empleado = Empleado_Sueldos::findOrFail($sancion->empleado_id);
         if (! $sancion->esEditable()) {
-            return $this->responderPanel($empleado, 'La sanción no admite edición en este estado', true);
+            return $this->responderTrasAccion($request, $empleado, 'La sanción no admite edición en este estado', true);
         }
         $sancion->update($this->normalizar($request, $empleado, $sancion));
         $this->guardarArchivos($request, $sancion);
         $this->novedadSync->sincronizar($sancion->fresh(['tipo.concepto', 'empleado']));
 
-        return $this->responderPanel($empleado, 'Sanción actualizada con éxito');
+        return $this->responderTrasAccion($request, $empleado, 'Sanción actualizada con éxito');
     }
 
     public function transicion(Request $request, $id)
@@ -123,7 +123,7 @@ class Empleado_SancionSueldosController extends Controller
         $sancion->delete();
         $this->novedadSync->anularPorSancion($sancionId);
 
-        return $this->responderPanel($empleado, 'Sanción eliminada');
+        return $this->responderTrasAccion($request, $empleado, 'Sanción eliminada');
     }
 
     public function notificacion($id)
@@ -232,6 +232,34 @@ class Empleado_SancionSueldosController extends Controller
         if ($archivo->path && $disk->exists($archivo->path)) {
             $disk->delete($archivo->path);
         }
+    }
+
+    private function responderTrasAccion(Request $request, Empleado_Sueldos $empleado, string $mensaje, bool $error = false)
+    {
+        if ($request->boolean('desde_reporte')) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'mensaje' => $error ? $mensaje : 'ok',
+                    'texto' => $mensaje,
+                    'error' => $error,
+                ], $error ? 422 : 200);
+            }
+
+            return redirect()->to($this->urlRetornoReporte($request))->with($error ? 'error' : 'mensaje', $mensaje);
+        }
+
+        return $this->responderPanel($empleado, $mensaje, $error);
+    }
+
+    private function urlRetornoReporte(Request $request): string
+    {
+        $retorno = (string) $request->input('retorno', '');
+        $base = url('/sueldos/sancion-reporte');
+        if ($retorno !== '' && str_starts_with($retorno, $base)) {
+            return $retorno;
+        }
+
+        return route('sancion_reporte_sueldos');
     }
 
     private function responderPanel(Empleado_Sueldos $empleado, ?string $mensaje = null, bool $error = false)

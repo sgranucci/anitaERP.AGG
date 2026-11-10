@@ -45,7 +45,8 @@ return [
                     ['Liquidación', 'Libro de Sueldos Digital (ARCA)', 'sueldos/libro-sueldos-digital'],
                     ['Tablas de liquidación', 'Conceptos, grupos, acumuladores, antigüedad, Ganancias', 'sueldos/concepto y relacionadas'],
                     ['Tablas de Sueldos', 'Categorías, obras sociales, sindicatos, ausencias, sanciones, imputación', 'sueldos/categoria y relacionadas'],
-                    ['Reportes de Sueldos', 'Vacaciones, fallos, reportes definibles, sanciones', 'sueldos/reporte-definible y relacionadas'],
+                    ['Personal', 'Empleados y consultas de sanciones', 'sueldos/empleado y sueldos/sancion-reporte'],
+                    ['Reportes de Sueldos', 'Vacaciones, fallos y reportes definibles', 'sueldos/reporte-definible y relacionadas'],
                     ['Indumentaria', 'Prendas, entregas, planificación, solicitudes, árbol', 'sueldos/prenda y relacionadas'],
                     ['Configuración → Sueldos', 'Parámetros de liquidación (detracción, tope SIPA)', 'sueldos/parametro'],
                 ],
@@ -386,7 +387,7 @@ return [
             ],
             'parrafos' => [
                 'El expediente se carga en el empleado. El concepto de liquidación se define en el tipo de sanción, no en cada carga. Importe no cobrado es el salario que no se paga (por ejemplo una suspensión: días × jornal). No es un porcentaje ni una multa. La ley no permite descontar una penalidad extra.',
-                'Menú: Tablas de Sueldos → Tipos de sanción y Motivos de sanción; ficha → Sanciones; Reportes de Sueldos → Sanciones de empleados.',
+                'Menú: Tablas de Sueldos → Tipos de sanción y Motivos de sanción; ficha → Sanciones; Personal → Consultas de sanciones.',
             ],
             'tabla' => [
                 'caption' => 'Tildes del tipo',
@@ -412,7 +413,7 @@ return [
                 'Al guardar se crea o actualiza la novedad solo si el tipo genera novedad, el estado liquida, y hay días o importe distinto de cero.',
                 'Si cambia el tipo o anula el expediente, la novedad ligada se actualiza o se anula sola.',
                 'El histórico importado de Anita quedó firme y sin novedad: es consulta, no descuento automático. Anita no trae el concepto: asígnelo en el tipo si las cargas nuevas deben descontar.',
-                'El reporte filtra por empresa, fechas, estado, legajo, tipo y motivo, y exporta PDF, Excel o CSV del filtro completo.',
+                'La consulta filtra por una o varias empresas, fechas, apellido, estado, legajo, tipo y motivo. QBE, vistas, columnas y gráficos cubren el resto. Exporta PDF, Excel o CSV del filtro completo.',
             ],
         ],
         [

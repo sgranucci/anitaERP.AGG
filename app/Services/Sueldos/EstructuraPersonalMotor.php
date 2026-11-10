@@ -4,6 +4,7 @@ namespace App\Services\Sueldos;
 
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Sueldos\EmpleadoCuentaEmpresaSupport;
 use App\Support\Sueldos\EmpleadoEstados;
 use App\Support\Sueldos\EstructuraPersonalCubo;
 use App\Support\Sueldos\EstructuraPersonalPresentacion;
@@ -19,7 +20,8 @@ use Illuminate\Support\Facades\Schema;
  * no del estado de hoy.
  *
  * Una persona (documento) cuenta una sola vez. Si tiene varios legajos activos,
- * se queda el alta más antigua y, si empatan, la empresa de menor id.
+ * cuenta en la empresa de «Cuenta en» (Anita emp_cuenta_empresa, l-board).
+ * Sin ese dato se queda el alta más antigua y, si empatan, la empresa de menor id.
  */
 class EstructuraPersonalMotor
 {
@@ -39,9 +41,9 @@ class EstructuraPersonalMotor
 
         $query = Empleado_Sueldos::query()
             ->select([
-                'id', 'legajo', 'documento', 'nombre', 'empresa_id', 'categoria_id', 'centrocosto_id',
+                'id', 'legajo', 'documento', 'nombre', 'empresa_id', 'cuenta_empresa_id', 'categoria_id', 'centrocosto_id',
                 'sindicato_id', 'motivoegreso_id', 'lugartrabajo_id', 'fecha_ingreso',
-                'fecha_egreso', 'fecha_nacimiento', 'sexo', 'email', 'estado', 'confidencial',
+                'fecha_egreso', 'fecha_nacimiento', 'sexo', 'email', 'estado', 'confidencial', 'sueldo_basico',
             ])
             ->with([
                 'empresa:id,nombre',
@@ -200,7 +202,9 @@ class EstructuraPersonalMotor
             }
         }
 
-        return $this->preferirAltaAntigua($vigentes);
+        $elegido = EmpleadoCuentaEmpresaSupport::elegir($vigentes);
+
+        return $elegido instanceof Empleado_Sueldos ? $elegido : null;
     }
 
     /**
@@ -227,36 +231,14 @@ class EstructuraPersonalMotor
      */
     private function elegirAltaDelMes(array $filas, CarbonImmutable $corte): ?Empleado_Sueldos
     {
-        $ordenadas = $filas;
-        usort($ordenadas, fn (Empleado_Sueldos $a, Empleado_Sueldos $b): int => $this->criterioAltaAntigua($a, $b));
-        $primera = $ordenadas[0] ?? null;
+        $elegida = EmpleadoCuentaEmpresaSupport::elegir($filas);
+        $primera = $elegida instanceof Empleado_Sueldos ? $elegida : null;
         $ingreso = $primera ? $this->fecha($primera->fecha_ingreso) : null;
         if ($ingreso === null || $ingreso->year !== $corte->year || $ingreso->month !== $corte->month || $ingreso->greaterThan($corte)) {
             return null;
         }
 
         return $primera;
-    }
-
-    /**
-     * @param  list<Empleado_Sueldos>  $filas
-     */
-    private function preferirAltaAntigua(array $filas): ?Empleado_Sueldos
-    {
-        if ($filas === []) {
-            return null;
-        }
-        usort($filas, fn (Empleado_Sueldos $a, Empleado_Sueldos $b): int => $this->criterioAltaAntigua($a, $b));
-
-        return $filas[0];
-    }
-
-    private function criterioAltaAntigua(Empleado_Sueldos $a, Empleado_Sueldos $b): int
-    {
-        $ingresoA = $this->fecha($a->fecha_ingreso)?->toDateString() ?? '9999-99-99';
-        $ingresoB = $this->fecha($b->fecha_ingreso)?->toDateString() ?? '9999-99-99';
-
-        return [$ingresoA, (int) $a->empresa_id, (int) $a->id] <=> [$ingresoB, (int) $b->empresa_id, (int) $b->id];
     }
 
     /**

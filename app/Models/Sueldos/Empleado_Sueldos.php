@@ -20,6 +20,7 @@ class Empleado_Sueldos extends Model implements Auditable
 
     protected $fillable = [
         'empresa_id',
+        'cuenta_empresa_id',
         'legajo',
         'nombre',
         'domicilio',
@@ -97,6 +98,7 @@ class Empleado_Sueldos extends Model implements Auditable
 
     protected $casts = [
         'empresa_id' => 'integer',
+        'cuenta_empresa_id' => 'integer',
         'legajo' => 'integer',
         'categoria_id' => 'integer',
         'centrocosto_id' => 'integer',
@@ -119,6 +121,11 @@ class Empleado_Sueldos extends Model implements Auditable
     public function empresa()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function cuentaEmpresa()
+    {
+        return $this->belongsTo(Empresa::class, 'cuenta_empresa_id');
     }
 
     public function paisNacimiento()

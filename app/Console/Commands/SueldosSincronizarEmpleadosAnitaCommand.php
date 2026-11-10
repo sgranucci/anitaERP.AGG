@@ -43,6 +43,7 @@ class SueldosSincronizarEmpleadosAnitaCommand extends Command
             .'; egreso/estado: '.($r['actualizados_egreso'] ?? 0)
             .'; datos organizativos: '.($r['actualizados_datos'] ?? 0)
             .'; CBU: '.($r['actualizados_banco'] ?? 0)
+            .'; cuenta en: '.($r['actualizados_cuenta'] ?? 0)
             .'; sin empresa ERP: '.($r['sin_empresa'] ?? 0)
             .'. Historia: '.($r['historia'] ?? 0)
             .' · Leyendas: '.($r['leyendas'] ?? 0)
