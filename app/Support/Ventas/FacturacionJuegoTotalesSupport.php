@@ -27,7 +27,10 @@ final class FacturacionJuegoTotalesSupport
         );
     }
 
-    /** Post 2019-09 Anita usa resul_slot_r (no soft_count + slot_r). */
+    /**
+     * p-resultado.c vigente (ventas/, 2024): resulol.slot_r; sin fila en resulol, resul_slot_r.
+     * El soft_count no entra desde 09/2019.
+     */
     public static function resultadoSlot(FlashCrown $flash): float
     {
         return round((float) $flash->slot_r, 2);
