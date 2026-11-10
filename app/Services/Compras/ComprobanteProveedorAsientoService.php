@@ -95,11 +95,28 @@ class ComprobanteProveedorAsientoService
         }
 
         try {
-            $this->armarPreview($comprobante, true);
+            $preview = $this->armarPreview($comprobante, true);
         } catch (\InvalidArgumentException $e) {
             throw $e;
         } catch (Throwable $e) {
             // Borrador incompleto u otras validaciones: no frenar el guardado acá.
+            return;
+        }
+
+        $mensajes = [];
+        foreach ($preview['avisos'] ?? [] as $aviso) {
+            if (($aviso['tipo'] ?? '') !== 'centrocosto_no_habilitado') {
+                continue;
+            }
+            $texto = trim((string) ($aviso['mensaje'] ?? ''));
+            if ($texto !== '') {
+                $mensajes[] = $texto;
+            }
+        }
+        if ($mensajes !== []) {
+            throw new \InvalidArgumentException(
+                'No se puede grabar el comprobante. '.implode(' ', $mensajes)
+            );
         }
     }
 
@@ -1126,11 +1143,20 @@ class ComprobanteProveedorAsientoService
 
         $mensajesCentro = CuentaCentrocostoHabilitadoSupport::mensajesPayload($payloadAsiento);
         if ($mensajesCentro !== []) {
-            // Siempre corta: alta/borrador, preview y contabilizar. El CC inválido no
-            // puede quedar grabado “para corregir después”.
-            throw new \InvalidArgumentException(
-                'No se puede grabar el comprobante. '.implode(' ', $mensajesCentro)
-            );
+            $textoCentro = 'No se puede grabar el comprobante. '.implode(' ', $mensajesCentro);
+            if (! $permitirCuentasPendientes) {
+                throw new \InvalidArgumentException($textoCentro);
+            }
+            // Vista previa sin OC: el neto todavía no tiene cuenta ni centro.
+            // Si se corta acá, la solapa no muestra las líneas y no pueden elegirlos.
+            // El guardado sigue rechazando el centro faltante o no habilitado.
+            foreach ($mensajesCentro as $mensajeCentro) {
+                $avisosPreview[] = [
+                    'tipo' => 'centrocosto_no_habilitado',
+                    'mensaje' => $mensajeCentro
+                        .' Elija el centro en esa línea del preview. Si el neto ya tiene centro, el IVA lo hereda.',
+                ];
+            }
         }
 
         return [

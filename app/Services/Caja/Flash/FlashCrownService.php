@@ -136,6 +136,8 @@ final class FlashCrownService
         $tot['cant_mesas'] = (int) round($tot['cant_mesas']);
         $tot['cant_slots'] = (int) round($tot['cant_slots']);
         $tot['cant_rul_el'] = (int) round($tot['cant_rul_el']);
+        $tot['ol_att'] = (int) round($tot['ol_att'] ?? 0);
+        $tot['bs_att'] = (int) round($tot['bs_att'] ?? 0);
 
         return $tot;
     }

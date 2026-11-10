@@ -4,16 +4,20 @@ namespace App\Http\Controllers\Caja\Flash;
 
 use App\Exports\Caja\Flash\FlashCrownPeriodoExport;
 use App\Http\Controllers\Controller;
+use App\Mail\Caja\Flash\FlashCrownInforme;
 use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\Flash\FlashCrownSuscripcion;
 use App\Models\Configuracion\Sala;
 use App\Services\Caja\Flash\FlashCrownDistribucionService;
+use App\Support\Caja\Flash\FlashCrownInformeDestinatariosSupport;
+use App\Support\Caja\Flash\FlashCrownInformeSupport;
 use App\Support\Caja\Flash\FlashCrownPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashCrownSuscripcionSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
 
 class FlashCrownReporteController extends Controller
@@ -21,6 +25,8 @@ class FlashCrownReporteController extends Controller
     public function __construct(
         private readonly FlashCrownSuscripcionSupport $suscripcionSupport,
         private readonly FlashCrownDistribucionService $distribucionService,
+        private readonly FlashCrownInformeSupport $informeSupport,
+        private readonly FlashCrownInformeDestinatariosSupport $destinatariosSupport,
     ) {}
 
     public function index(Request $request)
@@ -28,28 +34,77 @@ class FlashCrownReporteController extends Controller
         $this->assertCrown();
         can('listar-flash-reporte-crown');
 
-        $desde = $request->input('desde', now()->startOfMonth()->toDateString());
-        $hasta = $request->input('hasta', now()->subDay()->toDateString());
-        $perfil = FlashCrownPerfilVistaSupport::normalizar($request->input('perfil_vista'));
-
-        $editando = null;
-        if ($request->filled('editar')) {
-            $editando = FlashCrownSuscripcion::query()->find((int) $request->input('editar'));
+        $fecha = $this->fechaPedida($request);
+        $formato = FlashCrownInformeSupport::normalizarFormato($request->input('formato'));
+        $destinatarios = $this->textoDestinatarios($request);
+        $informe = null;
+        if ($request->boolean('consultar')) {
+            ini_set('memory_limit', '512M');
+            $informe = $this->informeSupport->armar($formato, $fecha);
         }
 
         return view('caja.flash_crown.reporte.index', [
-            'desde' => $desde,
-            'hasta' => $hasta,
-            'perfil_vista' => $perfil,
-            'perfiles_vista' => FlashCrownPerfilVistaSupport::etiquetas(),
-            'perfilesVistaDesc' => FlashCrownPerfilVistaSupport::descripciones(),
-            'suscripciones' => $this->suscripcionSupport->listar(),
-            'suscripcion_editar' => $editando,
-            'periodicidades' => FlashCrownSuscripcion::periodicidades(),
-            'periodos_relativos' => FlashCrownSuscripcion::periodosRelativos(),
-            'dias_semana' => FlashCrownSuscripcion::diasSemana(),
-            'puedeAdministrar' => can('administrar-flash-reporte-crown', false),
+            'fecha' => $fecha->toDateString(),
+            'formato' => $formato,
+            'formatos' => FlashCrownInformeSupport::formatos(),
+            'destinatarios' => $destinatarios,
+            'informe' => $informe,
+            'puedeEnviar' => can('administrar-flash-reporte-crown', false),
         ]);
+    }
+
+    public function enviar(Request $request)
+    {
+        $this->assertCrown();
+        can('administrar-flash-reporte-crown');
+
+        $fecha = $this->fechaPedida($request);
+        $formato = FlashCrownInformeSupport::normalizarFormato($request->input('formato'));
+        $texto = $this->textoDestinatarios($request);
+        $destinatarios = $this->destinatariosSupport->parsear($texto);
+        if ($destinatarios === []) {
+            return redirect()
+                ->route('flash_reporte_crown', $this->queryInforme($fecha, $formato))
+                ->with('mensaje_error', 'No hay mails válidos para enviar.');
+        }
+
+        ini_set('memory_limit', '512M');
+        $informe = $this->informeSupport->armar($formato, $fecha);
+        $this->destinatariosSupport->guardar($texto, Auth::id() ? (int) Auth::id() : null);
+
+        try {
+            Mail::to($destinatarios)->send(new FlashCrownInforme($informe, $formato));
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('flash_reporte_crown', $this->queryInforme($fecha, $formato, true))
+                ->with('mensaje_error', 'No se pudo enviar el mail: '.$e->getMessage());
+        }
+
+        return redirect()
+            ->route('flash_reporte_crown', $this->queryInforme($fecha, $formato, true))
+            ->with('mensaje', 'Informe enviado a '.implode(', ', $destinatarios).'.');
+    }
+
+    public function guardarDestinatarios(Request $request)
+    {
+        $this->assertCrown();
+        can('administrar-flash-reporte-crown');
+
+        $texto = trim((string) $request->input('destinatarios', ''));
+        if ($this->destinatariosSupport->parsear($texto) === []) {
+            return redirect()
+                ->route('flash_reporte_crown')
+                ->with('mensaje_error', 'No hay mails válidos para guardar.');
+        }
+
+        $this->destinatariosSupport->guardar($texto, Auth::id() ? (int) Auth::id() : null);
+
+        return redirect()
+            ->route('flash_reporte_crown', [
+                'fecha' => $this->fechaPedida($request)->toDateString(),
+                'formato' => FlashCrownInformeSupport::normalizarFormato($request->input('formato')),
+            ])
+            ->with('mensaje', 'Destinatarios guardados.');
     }
 
     public function exportar(Request $request)
@@ -123,6 +178,41 @@ class FlashCrownReporteController extends Controller
 
         return redirect()->route('flash_reporte_crown')
             ->with($resultado['estado'] === FlashCrownSuscripcion::ESTADO_ERROR ? 'mensaje_error' : 'mensaje', $resultado['mensaje']);
+    }
+
+    private function fechaPedida(Request $request): Carbon
+    {
+        $raw = trim((string) $request->input('fecha', ''));
+        if ($raw === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+            return now()->subDay()->startOfDay();
+        }
+
+        return Carbon::parse($raw)->startOfDay();
+    }
+
+    private function textoDestinatarios(Request $request): string
+    {
+        if ($request->exists('destinatarios')) {
+            return (string) $request->input('destinatarios');
+        }
+
+        return $this->destinatariosSupport->textoActual();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function queryInforme(Carbon $fecha, string $formato, bool $consultar = false): array
+    {
+        $query = [
+            'fecha' => $fecha->toDateString(),
+            'formato' => $formato,
+        ];
+        if ($consultar) {
+            $query['consultar'] = 1;
+        }
+
+        return $query;
     }
 
     private function assertCrown(): void

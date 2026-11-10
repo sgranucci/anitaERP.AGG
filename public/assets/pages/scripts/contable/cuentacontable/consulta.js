@@ -6,6 +6,8 @@ var consultaCuentaContableTimer = null;
 var consultaCuentaContableAjax = null;
 var CONSULTA_CUENTACONTABLE_DEBOUNCE_MS = 280;
 var abriendoModalCuentaContable = false;
+/** Apertura por tipeo en el asiento: no seleccionar el texto (el siguiente número lo pisaría). */
+var consultaCuentaContableCaretAlFinal = false;
 
 function cuentaContableEstaInhabilitada(data) {
     if (!data) {
@@ -514,7 +516,7 @@ function resolverPorCodigoCuentaContable(codigo, $ctx, onDone) {
     });
 }
 
-function abrirModalConsultaCuentaContableDesdeContexto($ctx) {
+function abrirModalConsultaCuentaContableDesdeContexto($ctx, opciones) {
     $ctx = contextoCuentaContableVivo($ctx);
     ptrCuentacontableContext = $ctx && $ctx.length ? $ctx : null;
     cuentacontablexcodigo = $ctx && $ctx.length ? $ctx.find('.cuentacontable_id').first() : $('#cuentacontable_id');
@@ -525,6 +527,7 @@ function abrirModalConsultaCuentaContableDesdeContexto($ctx) {
 
     if (empresaId > 0) {
         abriendoModalCuentaContable = true;
+        consultaCuentaContableCaretAlFinal = !!(opciones && opciones.caretAlFinal);
         $('#consultaempresa_id').val(empresaId);
         // Conservar el último texto de búsqueda y re-filtrar (no dejar texto ≠ grilla).
         clearTimeout(consultaCuentaContableTimer);
@@ -808,9 +811,22 @@ function activa_eventos_consulta_cuentacontable()
             var texto = String($buscar.val() || '').trim();
             // Reaplicar filtro por si el show llegó antes que el POST.
             buscar_datos(texto);
+            var caretAlFinal = consultaCuentaContableCaretAlFinal;
+            consultaCuentaContableCaretAlFinal = false;
             setTimeout(function () {
-                $buscar.trigger('focus');
-                if (texto !== '') {
+                var el = $buscar.get(0);
+                if (!el) {
+                    return;
+                }
+                el.focus();
+                if (caretAlFinal) {
+                    var len = String(el.value || '').length;
+                    try {
+                        el.setSelectionRange(len, len);
+                    } catch (e) {}
+                    return;
+                }
+                if (String(el.value || '').trim() !== '') {
                     $buscar.trigger('select');
                 }
             }, 0);
@@ -921,8 +937,8 @@ document.addEventListener('paste', function (e) {
     e.preventDefault();
     e.stopPropagation();
     target.value = codigo;
-    target.dispatchEvent(new Event('input', { bubbles: true }));
     $(target).data('cta-pegado-codigo', 1);
+    target.dispatchEvent(new Event('input', { bubbles: true }));
     $(target).trigger('change');
 }, true);
 

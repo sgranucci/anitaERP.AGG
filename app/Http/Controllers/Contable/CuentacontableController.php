@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Contable;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCuentacontable;
+use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Contable\Rubrocontable;
 use App\Repositories\Caja\ConceptogastoRepositoryInterface;
@@ -467,11 +468,61 @@ class CuentacontableController extends Controller
             'empresa_query' => $empresaQuery ?? $this->empresaRepository->allFiltrado(),
             'cuentacontable_query' => $this->cuentacontableRepository->all(),
             'conceptogasto_query' => $this->conceptogastoRepository->all(),
-            'centrocosto_query' => $this->centrocostoRepository->all(),
+            'filasCentrocosto' => $this->filasCentrocostoValidos($data),
             'ajustamonedaextranjera_enum' => Cuentacontable::$enumAjustaMonedaExtranjera,
             'tiposCuenta' => CuentacontableArbolSupport::etiquetasTipo(),
             'data' => $data,
         ];
+    }
+
+    /**
+     * @return list<array{id: string, codigo: string, nombre: string}>
+     */
+    private function filasCentrocostoValidos(?Cuentacontable $data): array
+    {
+        if (is_array(old('centrocosto_ids'))) {
+            return $this->filasCentrocostoDesdeIds(old('centrocosto_ids'));
+        }
+
+        $filas = [];
+        foreach ($data->cuentacontable_centrocostos ?? [] as $linea) {
+            $cc = $linea->centrocostos;
+            $filas[] = [
+                'id' => (string) ($linea->centrocosto_id ?? ''),
+                'codigo' => (string) ($cc->codigo ?? ''),
+                'nombre' => (string) ($cc->nombre ?? ''),
+            ];
+        }
+
+        if ($filas !== []) {
+            return $filas;
+        }
+
+        return $data ? [['id' => '', 'codigo' => '', 'nombre' => '']] : [];
+    }
+
+    /**
+     * @param  list<mixed>  $ids
+     * @return list<array{id: string, codigo: string, nombre: string}>
+     */
+    private function filasCentrocostoDesdeIds(array $ids): array
+    {
+        $numericos = array_values(array_filter(array_map('intval', $ids)));
+        $registros = $numericos === []
+            ? collect()
+            : Centrocosto::query()->whereIn('id', $numericos)->get(['id', 'codigo', 'nombre'])->keyBy('id');
+
+        $filas = [];
+        foreach ($ids as $id) {
+            $registro = $registros->get((int) $id);
+            $filas[] = [
+                'id' => $registro ? (string) $registro->id : '',
+                'codigo' => $registro ? (string) $registro->codigo : '',
+                'nombre' => $registro ? (string) $registro->nombre : '',
+            ];
+        }
+
+        return $filas !== [] ? $filas : [['id' => '', 'codigo' => '', 'nombre' => '']];
     }
 
     /**

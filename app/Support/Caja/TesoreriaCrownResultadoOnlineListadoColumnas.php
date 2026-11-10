@@ -17,12 +17,28 @@ final class TesoreriaCrownResultadoOnlineListadoColumnas
         'cantidad_slots' => ['label' => 'Slots', 'default' => true, 'filterable' => true, 'type' => 'entero', 'source' => 'tesoreria_crown_resultado_online.cantidad_slots', 'group' => 'slots'],
         'slot_resultado' => ['label' => 'Res. slots', 'default' => true, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.slot_resultado', 'group' => 'slots'],
         'subtotal_slot' => ['label' => 'Subtotal soft', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.subtotal_slot', 'group' => 'slots'],
+        'apostado' => ['label' => 'Apost. Del Río', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.apostado', 'group' => 'del_rio'],
+        'pagado' => ['label' => 'Pag. Del Río', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.pagado', 'group' => 'del_rio'],
+        'resultado' => ['label' => 'Res. Del Río', 'default' => true, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.resultado', 'group' => 'del_rio'],
+        'porcentaje' => ['label' => '% Del Río', 'default' => true, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.porcentaje', 'group' => 'del_rio'],
+        'attendance' => ['label' => 'Att. Del Río', 'default' => false, 'filterable' => true, 'type' => 'entero', 'source' => 'tesoreria_crown_resultado_online.attendance', 'group' => 'del_rio'],
+        'drop' => ['label' => 'Drop Del Río', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.drop', 'group' => 'del_rio'],
+        'poder_publico' => ['label' => 'PP Del Río', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.poder_publico', 'group' => 'del_rio'],
+        'betsur_apostado' => ['label' => 'Apost. Betsur', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.betsur_apostado', 'group' => 'betsur'],
+        'betsur_pagado' => ['label' => 'Pag. Betsur', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.betsur_pagado', 'group' => 'betsur'],
+        'betsur_resultado' => ['label' => 'Res. Betsur', 'default' => true, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.betsur_resultado', 'group' => 'betsur'],
+        'betsur_porcentaje' => ['label' => '% Betsur', 'default' => true, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.betsur_porcentaje', 'group' => 'betsur'],
+        'betsur_attendance' => ['label' => 'Att. Betsur', 'default' => false, 'filterable' => true, 'type' => 'entero', 'source' => 'tesoreria_crown_resultado_online.betsur_attendance', 'group' => 'betsur'],
+        'betsur_drop' => ['label' => 'Drop Betsur', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.betsur_drop', 'group' => 'betsur'],
+        'betsur_poder_publico' => ['label' => 'PP Betsur', 'default' => false, 'filterable' => true, 'type' => 'decimal', 'source' => 'tesoreria_crown_resultado_online.betsur_poder_publico', 'group' => 'betsur'],
     ];
 
     /** @var array<string, string> */
     public const GRUPOS = [
         'dia' => 'Día',
         'slots' => 'Slots online',
+        'del_rio' => 'Casinos del Río online',
+        'betsur' => 'Betsur online',
     ];
 
     public static function catalogoActivo(): array
@@ -70,7 +86,7 @@ final class TesoreriaCrownResultadoOnlineListadoColumnas
         if ($key === 'fecha') {
             return $fila->fecha?->format('d/m/Y') ?? '';
         }
-        if ($key === 'cantidad_slots') {
+        if (in_array($key, ['cantidad_slots', 'attendance', 'betsur_attendance'], true)) {
             return number_format((int) ($fila->{$key} ?? 0), 0, ',', '.');
         }
         if (! isset(self::COLUMNAS[$key])) {

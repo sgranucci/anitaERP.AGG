@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Contable;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contable\BienUsoIndice;
+use App\Models\Contable\BienUsoIndiceCoeficiente;
+use App\Services\Contable\AjusteInflacionIndiceService;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,8 +16,15 @@ class BienUsoIndiceController extends Controller
     {
         can('listar-bien-uso-indice');
         $datas = BienUsoIndice::query()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->paginate(20);
+        $ultimos = BienUsoIndiceCoeficiente::query()
+            ->whereIn('bien_uso_indice_id', $datas->pluck('id'))
+            ->orderByDesc('anio')
+            ->orderByDesc('mes')
+            ->get()
+            ->unique('bien_uso_indice_id')
+            ->keyBy('bien_uso_indice_id');
 
-        return view('contable.bien_uso_indice.index', compact('datas'));
+        return view('contable.bien_uso_indice.index', compact('datas', 'ultimos'));
     }
 
     public function crear()
@@ -46,12 +55,120 @@ class BienUsoIndiceController extends Controller
             can('editar-bien-uso-indice');
         }
         $data = BienUsoIndice::query()->findOrFail($id);
+        $anio = (int) $request->query('anio', (int) date('Y'));
+        if ($anio < 1900 || $anio > 2100) {
+            $anio = (int) date('Y');
+        }
+        $coeficientes = BienUsoIndiceCoeficiente::query()
+            ->where('bien_uso_indice_id', $data->id)
+            ->where('anio', $anio)
+            ->get()
+            ->keyBy(fn ($fila) => (int) $fila->mes);
+        $ultimo = BienUsoIndiceCoeficiente::query()
+            ->where('bien_uso_indice_id', $data->id)
+            ->orderByDesc('anio')
+            ->orderByDesc('mes')
+            ->first();
 
         return view('contable.bien_uso_indice.editar', [
             'data' => $data,
             'soloConsulta' => $soloConsulta,
             'tipos' => $this->tiposValor(),
+            'anio' => $anio,
+            'coeficientes' => $coeficientes,
+            'ultimo_coeficiente' => $ultimo,
+            'meses' => $this->meses(),
+            'puede_cargar' => ! $soloConsulta && can('actualizar-bien-uso-indice', false),
+            'es_serie_ajuste' => $data->tipo_valor === BienUsoIndice::TIPO_INDICES
+                && app(AjusteInflacionIndiceService::class)->sincronizaIndiceRevaluo(),
         ]);
+    }
+
+    public function guardarCoeficientes(Request $request, $id)
+    {
+        if ($request->input('origen') === 'modal_consulta') {
+            abort(403);
+        }
+        can('actualizar-bien-uso-indice');
+        $indice = BienUsoIndice::query()->findOrFail($id);
+        $datos = $request->validate([
+            'anio' => 'required|integer|min:1900|max:2100',
+            'coeficiente' => 'nullable|array',
+            'coeficiente.*' => 'nullable|numeric|min:0.000001',
+        ]);
+        $anio = (int) $datos['anio'];
+        $indiceService = app(AjusteInflacionIndiceService::class);
+        $esAjuste = $indice->tipo_valor === BienUsoIndice::TIPO_INDICES
+            && $indiceService->sincronizaIndiceRevaluo();
+        $guardados = 0;
+
+        foreach (range(1, 12) as $mes) {
+            $crudo = $datos['coeficiente'][$mes] ?? $datos['coeficiente'][(string) $mes] ?? null;
+            if ($crudo === null || $crudo === '') {
+                continue;
+            }
+            $valor = round((float) $crudo, 6);
+            if ($valor <= 0) {
+                continue;
+            }
+            $existente = BienUsoIndiceCoeficiente::query()
+                ->where('bien_uso_indice_id', $indice->id)
+                ->where('anio', $anio)
+                ->where('mes', $mes)
+                ->first();
+            if ($existente && abs((float) $existente->coeficiente - $valor) < 0.0000005) {
+                continue;
+            }
+            if ($esAjuste) {
+                $indiceService->guardar(
+                    sprintf('%04d-%02d', $anio, $mes),
+                    $valor,
+                    (int) auth()->id(),
+                    'Carga de índice de actualización',
+                    false
+                );
+            } else {
+                BienUsoIndiceCoeficiente::query()->updateOrCreate(
+                    [
+                        'bien_uso_indice_id' => $indice->id,
+                        'anio' => $anio,
+                        'mes' => $mes,
+                    ],
+                    ['coeficiente' => $valor]
+                );
+            }
+            $guardados++;
+        }
+
+        $mensaje = $guardados > 0
+            ? 'Se guardaron '.$guardados.' valores de '.$anio.'.'
+            : 'No había valores nuevos para guardar.';
+
+        return redirect()
+            ->route('editar_bien_uso_indice', ['id' => $indice->id, 'anio' => $anio])
+            ->with('mensaje', $mensaje);
+    }
+
+    public function quitarCoeficiente(Request $request, $id, $mes)
+    {
+        if ($request->input('origen') === 'modal_consulta') {
+            abort(403);
+        }
+        can('actualizar-bien-uso-indice');
+        $anio = (int) $request->input('anio');
+        $mes = (int) $mes;
+        $fila = BienUsoIndiceCoeficiente::query()
+            ->where('bien_uso_indice_id', (int) $id)
+            ->where('anio', $anio)
+            ->where('mes', $mes)
+            ->first();
+        if ($fila) {
+            $fila->delete();
+        }
+
+        return redirect()
+            ->route('editar_bien_uso_indice', ['id' => $id, 'anio' => $anio])
+            ->with('mensaje', 'Valor del mes quitado.');
     }
 
     public function actualizar(Request $request, $id)
@@ -150,6 +267,25 @@ class BienUsoIndiceController extends Controller
                 BienUsoIndice::TIPO_DIRECTO,
             ])],
         ]);
+    }
+
+    /** @return array<int, string> */
+    private function meses(): array
+    {
+        return [
+            1 => 'Enero',
+            2 => 'Febrero',
+            3 => 'Marzo',
+            4 => 'Abril',
+            5 => 'Mayo',
+            6 => 'Junio',
+            7 => 'Julio',
+            8 => 'Agosto',
+            9 => 'Septiembre',
+            10 => 'Octubre',
+            11 => 'Noviembre',
+            12 => 'Diciembre',
+        ];
     }
 
     /** @return list<array{valor: string, nombre: string}> */

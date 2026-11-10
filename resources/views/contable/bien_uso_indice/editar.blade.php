@@ -38,6 +38,7 @@
                 </div>
             </form>
         </div>
+        @include('contable.bien_uso_indice.partials.coeficientes')
     </div>
 </div>
 @endsection

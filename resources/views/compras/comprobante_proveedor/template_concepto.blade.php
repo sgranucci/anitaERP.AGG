@@ -6,7 +6,7 @@
             <div class="d-flex flex-wrap align-items-center">
                 <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                     value="" style="width:5.5rem;" autocomplete="off"
-                    title="Código + Enter · F1 consulta" placeholder="Cód.">
+                    title="Enter pasa al monto · F1 consulta" placeholder="Cód.">
                 <input type="text" class="form-control form-control-sm nombre_concepto_ivacompra mr-1"
                     value="" readonly style="min-width:8rem;flex:1;" placeholder="Descripción">
                 <button type="button" class="btn btn-outline-primary btn-sm consultaconcepto_ivacompra tooltipsC flex-shrink-0"

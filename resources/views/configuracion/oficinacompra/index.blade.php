@@ -18,7 +18,7 @@
                 <h3 class="card-title">Oficinas de Compra</h3>
                 <div class="card-tools">
                     <a href="{{route('crear_oficinacompra')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-oficina-de-compras', false))
+                       	@if (can('crear-oficina-de-compras', false) || can('crea-oficina-de-compras', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
@@ -39,12 +39,12 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>
-                       			@if (can('editar-oficina-de-compras', false))
+                       			@if (can('editar-oficina-de-compras', false) || can('edita-oficina-de-compras', false))
                                 	<a href="{{route('editar_oficinacompra', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-oficina-de-compras', false))
+                       			@if (can('borrar-oficina-de-compras', false) || can('borra-oficina-de-compras', false))
                                 <form action="{{route('eliminar_oficinacompra', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

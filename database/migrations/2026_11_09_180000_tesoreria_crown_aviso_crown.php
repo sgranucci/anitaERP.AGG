@@ -75,7 +75,8 @@ return new class extends Migration
         $menu->url = self::URL;
         $menu->icono = 'fa-bell';
         $menu->menu_id = $padre->id;
-        $menu->orden = 10;
+        // Debajo de Flash y del resto: no reutilizar un orden ya ocupado (empate inestable).
+        $menu->orden = (int) (DB::table('menu')->where('menu_id', $padre->id)->max('orden') ?? 0) + 1;
         $menu->save();
 
         $ahora = now();

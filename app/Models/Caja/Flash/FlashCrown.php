@@ -57,6 +57,24 @@ class FlashCrown extends Model implements Auditable
         'soft_rul_el',
         'cant_rul_el',
         'coin_in_rul',
+        'ol_att',
+        'ol_drop',
+        'ol_coin_in',
+        'ol_cage_bal',
+        'ol_win',
+        'bs_att',
+        'bs_coin_in',
+        'bs_cage_bal',
+        'bs_win',
+        'proc_mesa',
+        'proc_slot',
+        'proc_ruleta_el',
+        'venta_mesa_id',
+        'venta_slot_id',
+        'venta_ruleta_el_id',
+        'asiento_mesa_id',
+        'asiento_slot_id',
+        'asiento_ruleta_el_id',
         'ayb',
         'hotel',
         'comentario',
@@ -77,6 +95,8 @@ class FlashCrown extends Model implements Auditable
         'cant_mesas' => 'integer',
         'cant_slots' => 'integer',
         'cant_rul_el' => 'integer',
+        'ol_att' => 'integer',
+        'bs_att' => 'integer',
         'cashdrop' => 'float',
         'soft_mesas' => 'float',
         'caja_empleado' => 'float',
@@ -105,6 +125,13 @@ class FlashCrown extends Model implements Auditable
         'ruleta_el_r' => 'float',
         'soft_rul_el' => 'float',
         'coin_in_rul' => 'float',
+        'ol_drop' => 'float',
+        'ol_coin_in' => 'float',
+        'ol_cage_bal' => 'float',
+        'ol_win' => 'float',
+        'bs_coin_in' => 'float',
+        'bs_cage_bal' => 'float',
+        'bs_win' => 'float',
         'ayb' => 'float',
         'hotel' => 'float',
         'overrides_json' => 'array',
@@ -161,14 +188,16 @@ class FlashCrown extends Model implements Auditable
         );
     }
 
-    /** Gaming = mesas + slots OL − cashless + ruleta electrónica. */
+    /** Gaming = mesas + slots − cashless + ruleta el. + Del Río online + Betsur (l-consolida). */
     public function getGamingAttribute(): float
     {
         return round(
             $this->win_mesas
             + (float) $this->slot_r
             - (float) $this->cash_less
-            + (float) $this->ruleta_el_r,
+            + (float) $this->ruleta_el_r
+            + (float) $this->ol_win
+            + (float) $this->bs_win,
             2
         );
     }
@@ -197,6 +226,8 @@ class FlashCrown extends Model implements Auditable
             'slot_d', 'soft_count', 'hard_count', 'cant_slots',
             'coin_in', 'coin_out', 'pago_manual', 'slot_r', 'cash_less',
             'ruleta_el_d', 'ruleta_el_r', 'soft_rul_el', 'cant_rul_el', 'coin_in_rul',
+            'ol_att', 'ol_drop', 'ol_coin_in', 'ol_cage_bal', 'ol_win',
+            'bs_att', 'bs_coin_in', 'bs_cage_bal', 'bs_win',
             'ayb', 'hotel',
         ];
     }

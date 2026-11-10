@@ -8,7 +8,7 @@
 <style>
 .ro-form .form-group { margin-bottom: .45rem; }
 .ro-form .control-label { font-size: .85rem; padding-top: .35rem; }
-.ro-form .card-outline { margin-bottom: 0; }
+.ro-form .card-outline { margin-bottom: .75rem; }
 .ro-form .card-header { padding: .4rem .75rem; }
 .ro-form .card-header .card-title { font-size: .95rem; margin: 0; }
 .ro-form .card-body { padding: .65rem .75rem .35rem; }
@@ -52,21 +52,36 @@
                 el.textContent = texto(valor, decimales);
             }
         }
+        function setCalc(id, valor, decimales) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.value = texto(valor, decimales);
+            }
+        }
+        function porcentaje(apostado, resultado) {
+            if (Math.abs(apostado) < 0.00001) {
+                return 0;
+            }
+            return (resultado / apostado) * 100;
+        }
         function recalcular() {
             var slot = numero('coin_in') - numero('coin_out') - numero('pago_manual');
-            var slotEl = document.getElementById('slot_resultado');
-            if (slotEl) {
-                slotEl.value = texto(slot, 2);
-            }
+            setCalc('slot_resultado', slot, 2);
             setKpi('kpi-slot', slot, 2);
-            var casino = numero('apostado') - numero('pagado');
-            var casinoEl = document.getElementById('resultado_casino');
-            if (casinoEl) {
-                casinoEl.value = texto(casino, 2);
-            }
-            setKpi('kpi-casino', casino, 2);
+
+            var delRioRes = numero('apostado') - numero('pagado');
+            var delRioPct = porcentaje(numero('apostado'), delRioRes);
+            setCalc('resultado_casino', delRioRes, 2);
+            setCalc('porcentaje_casino', delRioPct, 2);
+            setKpi('kpi-del-rio', delRioRes, 2);
+
+            var betsurRes = numero('betsur_apostado') - numero('betsur_pagado');
+            var betsurPct = porcentaje(numero('betsur_apostado'), betsurRes);
+            setCalc('betsur_resultado_calc', betsurRes, 2);
+            setCalc('betsur_porcentaje_calc', betsurPct, 2);
+            setKpi('kpi-betsur', betsurRes, 2);
         }
-        document.querySelectorAll('.js-resultado-online, .js-casino-online').forEach(function (el) {
+        document.querySelectorAll('.js-resultado-online, .js-casino-online, .js-betsur-online').forEach(function (el) {
             el.addEventListener('input', recalcular);
         });
         recalcular();
@@ -79,7 +94,10 @@
 @include('includes.form-error')
 @php
     $slotIni = (float) ($fila->slot_resultado ?? 0);
-    $casinoIni = (float) ($fila->resultado ?? 0);
+    $delRioIni = (float) ($fila->resultado ?? 0);
+    $delRioPctIni = (float) ($fila->porcentaje ?? 0);
+    $betsurIni = (float) ($fila->betsur_resultado ?? 0);
+    $betsurPctIni = (float) ($fila->betsur_porcentaje ?? 0);
 @endphp
 <div class="row">
     <div class="col-12">
@@ -111,17 +129,22 @@
                                 <span class="val" id="kpi-slot">{{ number_format($slotIni, 2, ',', '.') }}</span>
                             </div>
                             <div class="kpi">
-                                <span class="lbl">Casino online</span>
-                                <span class="val" id="kpi-casino">{{ number_format($casinoIni, 2, ',', '.') }}</span>
+                                <span class="lbl">Del Río online</span>
+                                <span class="val" id="kpi-del-rio">{{ number_format($delRioIni, 2, ',', '.') }}</span>
+                            </div>
+                            <div class="kpi">
+                                <span class="lbl">Betsur online</span>
+                                <span class="val" id="kpi-betsur">{{ number_format($betsurIni, 2, ',', '.') }}</span>
                             </div>
                         </div>
                     </div>
                     <p class="text-muted small mb-2">
-                        Slots: coin in − coin out − pago manual (Anexo I tragamonedas). Casino online opcional: apostado − pagado (Anexo I on-line). Soft count nativo en subtotal.
+                        Slots: coin in − coin out − pago manual (Anexo I tragamonedas).
+                        Del Río (suc. 67) y Betsur (suc. 68): apostado − pagado; porcentaje = resultado / apostado × 100 (como a-resonline).
                     </p>
 
                     <div class="row">
-                        <div class="col-lg-6">
+                        <div class="col-lg-4">
                             <div class="card card-outline card-info">
                                 <div class="card-header"><h3 class="card-title"><i class="fa fa-gamepad mr-1"></i> Slots online</h3></div>
                                 <div class="card-body">
@@ -131,39 +154,40 @@
                                         'pago_manual' => 'Pago manual',
                                     ] as $campo => $etiqueta)
                                         <div class="form-group row">
-                                            <label for="{{ $campo }}" class="col-5 col-xl-4 control-label text-right pr-2">{{ $etiqueta }}</label>
-                                            <div class="col-7 col-xl-6">
+                                            <label for="{{ $campo }}" class="col-5 control-label text-right pr-2">{{ $etiqueta }}</label>
+                                            <div class="col-7">
                                                 <input type="text" inputmode="decimal" name="{{ $campo }}" id="{{ $campo }}" class="form-control form-control-sm text-right js-resultado-online" value="{{ old($campo, number_format((float) ($fila->{$campo} ?? 0), 2, ',', '.')) }}">
                                             </div>
                                         </div>
                                     @endforeach
                                     <div class="form-group row">
-                                        <label for="cantidad_slots" class="col-5 col-xl-4 control-label text-right pr-2">Cant. slots</label>
-                                        <div class="col-7 col-xl-6">
+                                        <label for="cantidad_slots" class="col-5 control-label text-right pr-2">Cant. slots</label>
+                                        <div class="col-7">
                                             <input type="number" name="cantidad_slots" id="cantidad_slots" class="form-control form-control-sm text-right" step="1" inputmode="numeric" min="0" value="{{ old('cantidad_slots', (int) ($fila->cantidad_slots ?? 0)) }}">
                                         </div>
                                     </div>
                                     <div class="form-group row">
-                                        <label for="slot_resultado" class="col-5 col-xl-4 control-label text-right pr-2">Resultado slots</label>
-                                        <div class="col-7 col-xl-6">
+                                        <label for="slot_resultado" class="col-5 control-label text-right pr-2">Resultado</label>
+                                        <div class="col-7">
                                             <input type="text" id="slot_resultado" class="form-control form-control-sm text-right ro-calc" readonly tabindex="-1" value="{{ number_format($slotIni, 2, ',', '.') }}">
                                         </div>
                                     </div>
                                     <div class="form-group row mb-0">
-                                        <label for="subtotal_slot" class="col-5 col-xl-4 control-label text-right pr-2" title="Soft count nativo. Si está cargado, el import de Anita no lo pisa. Anexo I: poder público slot = subtotal − resultado slots − voucher mesa.">Subtotal soft</label>
-                                        <div class="col-7 col-xl-6">
-                                            <input type="text" inputmode="decimal" name="subtotal_slot" id="subtotal_slot" class="form-control form-control-sm text-right" value="{{ old('subtotal_slot', $fila->subtotal_slot !== null ? number_format((float) $fila->subtotal_slot, 2, ',', '.') : '') }}" title="Soft count nativo (producción). Si lo cargás, el import desde Anita no lo reemplaza.">
-                                            <small class="text-muted" style="font-size:.7rem;">Soft count · no lo pisa Anita si está cargado</small>
+                                        <label for="subtotal_slot" class="col-5 control-label text-right pr-2" title="Soft count nativo. Si está cargado, el import de Anita no lo pisa.">Subtotal soft</label>
+                                        <div class="col-7">
+                                            <input type="text" inputmode="decimal" name="subtotal_slot" id="subtotal_slot" class="form-control form-control-sm text-right" value="{{ old('subtotal_slot', $fila->subtotal_slot !== null ? number_format((float) $fila->subtotal_slot, 2, ',', '.') : '') }}">
+                                            <small class="text-muted" style="font-size:.7rem;">No lo pisa Anita si está cargado</small>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-lg-6">
+
+                        <div class="col-lg-4">
                             <div class="card card-outline card-secondary">
-                                <div class="card-header"><h3 class="card-title"><i class="fa fa-globe mr-1"></i> Casino online</h3></div>
+                                <div class="card-header"><h3 class="card-title"><i class="fa fa-globe mr-1"></i> Casinos del Río online</h3></div>
                                 <div class="card-body">
-                                    <p class="small text-muted mb-2">Opcional. Si CIP opera casino on-line, cargá acá. Vacío = 0 (Anexo I on-line en cero; las ventas/pagos de caja siguen en la rendición).</p>
+                                    <p class="small text-muted mb-2">Sucursal Anita 67 (ac-server1).</p>
                                     @foreach ([
                                         'apostado' => 'Apostado',
                                         'pagado' => 'Pagado',
@@ -183,11 +207,60 @@
                                             <input type="number" name="attendance" id="attendance" class="form-control form-control-sm text-right" step="1" min="0" inputmode="numeric" value="{{ old('attendance', (int) ($fila->attendance ?? 0)) }}">
                                         </div>
                                     </div>
-                                    <div class="form-group row mb-0">
+                                    <div class="form-group row">
                                         <label for="resultado_casino" class="col-5 control-label text-right pr-2">Resultado</label>
                                         <div class="col-7">
-                                            <input type="text" id="resultado_casino" class="form-control form-control-sm text-right ro-calc" readonly tabindex="-1" value="{{ number_format($casinoIni, 2, ',', '.') }}">
+                                            <input type="text" id="resultado_casino" class="form-control form-control-sm text-right ro-calc" readonly tabindex="-1" value="{{ number_format($delRioIni, 2, ',', '.') }}">
                                             <small class="text-muted" style="font-size:.7rem;">apostado − pagado</small>
+                                        </div>
+                                    </div>
+                                    <div class="form-group row mb-0">
+                                        <label for="porcentaje_casino" class="col-5 control-label text-right pr-2">Porcentaje</label>
+                                        <div class="col-7">
+                                            <input type="text" id="porcentaje_casino" class="form-control form-control-sm text-right ro-calc" readonly tabindex="-1" value="{{ number_format($delRioPctIni, 2, ',', '.') }}">
+                                            <small class="text-muted" style="font-size:.7rem;">resultado / apostado × 100</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-4">
+                            <div class="card card-outline card-warning">
+                                <div class="card-header"><h3 class="card-title"><i class="fa fa-globe mr-1"></i> Betsur online</h3></div>
+                                <div class="card-body">
+                                    <p class="small text-muted mb-2">Sucursal Anita 68 (ac-server1).</p>
+                                    @foreach ([
+                                        'betsur_apostado' => 'Apostado',
+                                        'betsur_pagado' => 'Pagado',
+                                        'betsur_drop' => 'Drop',
+                                        'betsur_poder_publico' => 'Poder público',
+                                    ] as $campo => $etiqueta)
+                                        <div class="form-group row">
+                                            <label for="{{ $campo }}" class="col-5 control-label text-right pr-2">{{ $etiqueta }}</label>
+                                            <div class="col-7">
+                                                <input type="text" inputmode="decimal" name="{{ $campo }}" id="{{ $campo }}" class="form-control form-control-sm text-right js-betsur-online" value="{{ old($campo, number_format((float) ($fila->{$campo} ?? 0), 2, ',', '.')) }}">
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                    <div class="form-group row">
+                                        <label for="betsur_attendance" class="col-5 control-label text-right pr-2">Attendance</label>
+                                        <div class="col-7">
+                                            <input type="number" name="betsur_attendance" id="betsur_attendance" class="form-control form-control-sm text-right" step="1" min="0" inputmode="numeric" value="{{ old('betsur_attendance', (int) ($fila->betsur_attendance ?? 0)) }}">
+                                        </div>
+                                    </div>
+                                    <div class="form-group row">
+                                        <label for="betsur_resultado_calc" class="col-5 control-label text-right pr-2">Resultado</label>
+                                        <div class="col-7">
+                                            <input type="text" id="betsur_resultado_calc" class="form-control form-control-sm text-right ro-calc" readonly tabindex="-1" value="{{ number_format($betsurIni, 2, ',', '.') }}">
+                                            <small class="text-muted" style="font-size:.7rem;">apostado − pagado</small>
+                                        </div>
+                                    </div>
+                                    <div class="form-group row mb-0">
+                                        <label for="betsur_porcentaje_calc" class="col-5 control-label text-right pr-2">Porcentaje</label>
+                                        <div class="col-7">
+                                            <input type="text" id="betsur_porcentaje_calc" class="form-control form-control-sm text-right ro-calc" readonly tabindex="-1" value="{{ number_format($betsurPctIni, 2, ',', '.') }}">
+                                            <small class="text-muted" style="font-size:.7rem;">resultado / apostado × 100</small>
                                         </div>
                                     </div>
                                 </div>

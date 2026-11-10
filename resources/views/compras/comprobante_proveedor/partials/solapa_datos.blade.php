@@ -552,7 +552,8 @@
         <div class="form-group row mb-2">
             <label for="leyenda" class="{{ $cpColLabel }}">Leyenda</label>
             <div class="{{ $cpColInput }}">
-                <textarea name="leyenda" id="leyenda" class="form-control form-control-sm" rows="2">{{ old('leyenda', $data->leyenda ?? '') }}</textarea>
+                <textarea name="leyenda" id="leyenda" class="form-control form-control-sm" rows="2"
+                    title="Enter abre Conceptos IVA. Mayús+Enter agrega una línea.">{{ old('leyenda', $data->leyenda ?? '') }}</textarea>
             </div>
         </div>
         @php

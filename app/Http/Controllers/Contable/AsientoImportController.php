@@ -9,6 +9,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\AsientoImportPreviewService;
 use App\Services\Contable\AsientoImportService;
 use App\Services\Contable\AsientoPegadoTextoService;
+use App\Support\Contable\AsientoImportPreferenciasUsuario;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -43,12 +44,17 @@ class AsientoImportController extends Controller
         can('crear-asiento');
 
         $request->validate([
-            'file' => 'required|file|mimetypes:application/vnd.ms-office,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain',
+            'file' => 'required|file|mimetypes:application/vnd.ms-office,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/csv,text/comma-separated-values',
             'empresa_id' => 'nullable|integer|exists:empresa,id',
             'moneda_id' => 'nullable|integer|exists:moneda,id',
+            'modo_columnas' => 'nullable|string|in:titulo,numero',
+            'modo_importe' => 'nullable|string|in:debe_haber,monto_dh',
+            'csv_separador' => 'nullable|string|max:5',
             'col_cuenta' => 'nullable|string|max:80',
             'col_debe' => 'nullable|string|max:80',
             'col_haber' => 'nullable|string|max:80',
+            'col_monto' => 'nullable|string|max:80',
+            'col_dh' => 'nullable|string|max:80',
             'col_centrocosto' => 'nullable|string|max:80',
             'col_moneda' => 'nullable|string|max:80',
             'col_cotizacion' => 'nullable|string|max:80',
@@ -65,6 +71,8 @@ class AsientoImportController extends Controller
             ], 422);
         }
 
+        AsientoImportPreferenciasUsuario::persistirDesdeRequest($request);
+
         $preview = $this->previewService->previsualizar(
             $request->file('file'),
             $empresaId,
@@ -77,7 +85,12 @@ class AsientoImportController extends Controller
             $request->input('col_cotizacion'),
             $request->input('col_detalle'),
             $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
-            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null
+            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
+            $request->input('modo_columnas'),
+            $request->input('modo_importe'),
+            $request->input('col_monto'),
+            $request->input('col_dh'),
+            $request->input('csv_separador')
         );
 
         return response()->json($preview);
@@ -87,22 +100,36 @@ class AsientoImportController extends Controller
     {
         can('crear-asiento');
 
-        foreach (['fila_encabezado', 'observacion', 'col_centrocosto', 'col_moneda', 'col_cotizacion', 'col_detalle'] as $campoOpcional) {
+        foreach ([
+            'fila_encabezado',
+            'observacion',
+            'col_centrocosto',
+            'col_moneda',
+            'col_cotizacion',
+            'col_detalle',
+            'col_monto',
+            'col_dh',
+        ] as $campoOpcional) {
             if (! $request->filled($campoOpcional)) {
                 $request->merge([$campoOpcional => null]);
             }
         }
 
         $request->validate([
-            'file' => 'required|file|mimetypes:application/vnd.ms-office,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain',
+            'file' => 'required|file|mimetypes:application/vnd.ms-office,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,application/csv,text/comma-separated-values',
             'empresa_id' => 'required|integer|exists:empresa,id',
             'tipoasiento_id' => 'required|integer|exists:tipoasiento,id',
             'fecha' => 'required|date',
             'observacion' => 'nullable|string|max:500',
             'moneda_id' => 'required|integer|exists:moneda,id',
+            'modo_columnas' => 'nullable|string|in:titulo,numero',
+            'modo_importe' => 'nullable|string|in:debe_haber,monto_dh',
+            'csv_separador' => 'nullable|string|max:5',
             'col_cuenta' => 'nullable|string|max:80',
             'col_debe' => 'nullable|string|max:80',
             'col_haber' => 'nullable|string|max:80',
+            'col_monto' => 'nullable|string|max:80',
+            'col_dh' => 'nullable|string|max:80',
             'col_centrocosto' => 'nullable|string|max:80',
             'col_moneda' => 'nullable|string|max:80',
             'col_cotizacion' => 'nullable|string|max:80',
@@ -117,6 +144,7 @@ class AsientoImportController extends Controller
 
             session(['empresa_id' => (int) $request->input('empresa_id')]);
             session(['tipoasiento_id' => (int) $request->input('tipoasiento_id')]);
+            AsientoImportPreferenciasUsuario::persistirDesdeRequest($request);
 
             $resumen = $this->importService->importar(
                 $request->file('file'),
@@ -134,7 +162,12 @@ class AsientoImportController extends Controller
                 $request->input('col_detalle'),
                 $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
                 $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
-                $request->boolean('confirmar_pendiente_aprobacion')
+                $request->boolean('confirmar_pendiente_aprobacion'),
+                $request->input('modo_columnas'),
+                $request->input('modo_importe'),
+                $request->input('col_monto'),
+                $request->input('col_dh'),
+                $request->input('csv_separador')
             );
         } catch (\InvalidArgumentException $e) {
             $lineas = array_values(array_filter(
@@ -153,15 +186,23 @@ class AsientoImportController extends Controller
                 ->with('mensaje-error', $e->getMessage());
         }
 
-        $mensaje = 'Asiento importado: N° '.$resumen['numeroasiento']
-            .' con '.(int) $resumen['movimientos'].' movimiento(s).';
+        $mensaje = 'Asiento N° '.$resumen['numeroasiento']
+            .' cargado con '.(int) $resumen['movimientos'].' renglón(es).';
+        if (! empty($resumen['sin_importe'])) {
+            $mensaje .= ' '.(int) $resumen['sin_importe'].' sin importe: completalos en esta pantalla.';
+        }
+        if (! empty($resumen['incompleto'])) {
+            $mensaje .= ' No se envió a Anita hasta que el asiento balancee.';
+        }
+        if (! empty($resumen['filas_omitidas'])) {
+            $mensaje .= ' Quedaron '.(int) $resumen['filas_omitidas'].' fila(s) afuera.';
+        }
         if (! empty($resumen['pendiente_aprobacion'])) {
             $mensaje .= ' Quedó pendiente de aprobación.';
         }
 
         return redirect()
-            ->route('crear_importacion_asiento')
-            ->with('asiento_import_resultado', $resumen)
+            ->route('editar_asiento', ['id' => (int) $resumen['asiento_id']])
             ->with('mensaje', $mensaje);
     }
 

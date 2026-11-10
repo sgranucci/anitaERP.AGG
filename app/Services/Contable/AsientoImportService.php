@@ -2,7 +2,6 @@
 
 namespace App\Services\Contable;
 
-use App\Imports\Contable\AsientoImportLecturaCruda;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Asiento;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
@@ -13,7 +12,6 @@ use App\Support\Archivo\TextoUtf8Support;
 use App\Support\Contable\AsientoImportColumnasSupport;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Facades\Excel;
 use Throwable;
 
 class AsientoImportService
@@ -49,7 +47,12 @@ class AsientoImportService
         ?string $colDetalle,
         ?int $filaEncabezadoManual,
         ?int $hojaIndice1Based,
-        bool $confirmarPendienteAprobacion = false
+        bool $confirmarPendienteAprobacion = false,
+        ?string $modoColumnas = null,
+        ?string $modoImporte = null,
+        ?string $colMonto = null,
+        ?string $colDh = null,
+        ?string $csvSeparador = null
     ): array {
         if ($empresaId <= 0 || ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             throw new \InvalidArgumentException('Empresa no válida o no asignada al usuario.');
@@ -70,87 +73,207 @@ class AsientoImportService
             throw new \InvalidArgumentException('No hay moneda por defecto disponible.');
         }
 
+        $modoColumnas = AsientoImportColumnasSupport::normalizarModoColumnas($modoColumnas);
+        $modoImporte = AsientoImportColumnasSupport::normalizarModoImporte($modoImporte);
+        $separadorCsv = AsientoImportColumnasSupport::resolverSeparadorCsv($archivo, $csvSeparador)['delimiter'];
+        $porNumero = $modoColumnas === AsientoImportColumnasSupport::MODO_COLUMNAS_NUMERO;
+        $montoDh = $modoImporte === AsientoImportColumnasSupport::MODO_IMPORTE_MONTO_DH;
+
         $cols = [
-            'cuenta' => $this->nombreColumna($colCuenta, AsientoImportColumnasSupport::COL_CUENTA_DEFAULT),
-            'debe' => $this->nombreColumna($colDebe, AsientoImportColumnasSupport::COL_DEBE_DEFAULT),
-            'haber' => $this->nombreColumna($colHaber, AsientoImportColumnasSupport::COL_HABER_DEFAULT),
-            'centrocosto' => $this->nombreColumna($colCentrocosto, AsientoImportColumnasSupport::COL_CENTROCOSTO_DEFAULT),
-            'moneda' => $this->nombreColumna($colMoneda, AsientoImportColumnasSupport::COL_MONEDA_DEFAULT),
-            'cotizacion' => $this->nombreColumna($colCotizacion, AsientoImportColumnasSupport::COL_COTIZACION_DEFAULT),
-            'detalle' => $this->nombreColumna($colDetalle, AsientoImportColumnasSupport::COL_DETALLE_DEFAULT),
+            'cuenta' => $this->nombreColumna(
+                $colCuenta,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_CUENTA_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_CUENTA_DEFAULT
+            ),
+            'debe' => $this->nombreColumna(
+                $colDebe,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_DEBE_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_DEBE_DEFAULT
+            ),
+            'haber' => $this->nombreColumna(
+                $colHaber,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_HABER_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_HABER_DEFAULT
+            ),
+            'monto' => $this->nombreColumna(
+                $colMonto,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_MONTO_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_MONTO_DEFAULT
+            ),
+            'dh' => $this->nombreColumna(
+                $colDh,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_DH_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_DH_DEFAULT
+            ),
+            'centrocosto' => $this->nombreColumna(
+                $colCentrocosto,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_CENTROCOSTO_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_CENTROCOSTO_DEFAULT
+            ),
+            'moneda' => $this->nombreColumna(
+                $colMoneda,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_MONEDA_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_MONEDA_DEFAULT
+            ),
+            'cotizacion' => $this->nombreColumna(
+                $colCotizacion,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_COTIZACION_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_COTIZACION_DEFAULT
+            ),
+            'detalle' => $this->nombreColumna(
+                $colDetalle,
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_DETALLE_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_DETALLE_DEFAULT
+            ),
         ];
 
         $hojas = AsientoImportColumnasSupport::hojasParaSelector($archivo);
         $hojaIndice0 = AsientoImportColumnasSupport::indiceHojaDesdeRequest($hojaIndice1Based, count($hojas));
         $hojaSeleccionada = $hojas[$hojaIndice0] ?? ['indice' => 1, 'nombre' => 'Hoja1'];
 
-        $hoja = Excel::toArray(new AsientoImportLecturaCruda(), $archivo)[$hojaIndice0] ?? [];
+        $hoja = AsientoImportColumnasSupport::leerHojas($archivo, $separadorCsv)[$hojaIndice0] ?? [];
         if ($hoja === []) {
             throw new \InvalidArgumentException('La hoja seleccionada no tiene filas legibles.');
         }
 
-        $filaEncabezado = AsientoImportColumnasSupport::detectarFilaEncabezado(
-            $archivo,
-            $filaEncabezadoManual,
-            $hojaIndice0
-        );
-        $indiceEncabezado = $filaEncabezado - 1;
-        $encabezados = $hoja[$indiceEncabezado] ?? [];
+        if ($porNumero) {
+            $filaInicioDatos = ($filaEncabezadoManual !== null && $filaEncabezadoManual >= 1)
+                ? $filaEncabezadoManual
+                : 1;
+            $indiceInicioDatos = $filaInicioDatos - 1;
+            $filaEncabezado = 0;
+            $encabezados = [];
+        } else {
+            $filaEncabezado = AsientoImportColumnasSupport::detectarFilaEncabezado(
+                $archivo,
+                $filaEncabezadoManual,
+                $hojaIndice0,
+                $separadorCsv
+            );
+            $indiceEncabezado = $filaEncabezado - 1;
+            $encabezados = $hoja[$indiceEncabezado] ?? [];
 
-        if (! is_array($encabezados) || ! AsientoImportColumnasSupport::pareceFilaEncabezado($encabezados)) {
-            throw new \InvalidArgumentException(
-                'No se detectó fila de encabezados en la fila '.$filaEncabezado.'. Indique la fila manualmente.'
+            if (! is_array($encabezados) || ! AsientoImportColumnasSupport::pareceFilaEncabezado($encabezados)) {
+                throw new \InvalidArgumentException(
+                    'No se detectó fila de encabezados en la fila '.$filaEncabezado
+                    .'. Indique la fila manualmente, o use «Por número de columna» si el archivo no tiene títulos.'
+                );
+            }
+            $indiceInicioDatos = $indiceEncabezado + 1;
+        }
+
+        $colCuentaInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+            $modoColumnas,
+            $encabezados,
+            $cols['cuenta'],
+            $porNumero
+                ? AsientoImportColumnasSupport::COL_CUENTA_NUMERO_DEFAULT
+                : AsientoImportColumnasSupport::COL_CUENTA_DEFAULT,
+            AsientoImportColumnasSupport::ALIAS_ENCABEZADO_CUENTA
+        );
+        $colDebeInfo = null;
+        $colHaberInfo = null;
+        $colMontoInfo = null;
+        $colDhInfo = null;
+
+        if ($montoDh) {
+            $colMontoInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+                $modoColumnas,
+                $encabezados,
+                $cols['monto'],
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_MONTO_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_MONTO_DEFAULT,
+                AsientoImportColumnasSupport::ALIAS_ENCABEZADO_MONTO
+            );
+            $colDhInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+                $modoColumnas,
+                $encabezados,
+                $cols['dh'],
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_DH_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_DH_DEFAULT,
+                AsientoImportColumnasSupport::ALIAS_ENCABEZADO_DH
+            );
+        } else {
+            $colDebeInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+                $modoColumnas,
+                $encabezados,
+                $cols['debe'],
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_DEBE_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_DEBE_DEFAULT,
+                AsientoImportColumnasSupport::ALIAS_ENCABEZADO_DEBE
+            );
+            $colHaberInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+                $modoColumnas,
+                $encabezados,
+                $cols['haber'],
+                $porNumero
+                    ? AsientoImportColumnasSupport::COL_HABER_NUMERO_DEFAULT
+                    : AsientoImportColumnasSupport::COL_HABER_DEFAULT,
+                AsientoImportColumnasSupport::ALIAS_ENCABEZADO_HABER
             );
         }
 
-        $colCuentaInfo = AsientoImportColumnasSupport::resolverColumna(
-            $encabezados,
-            $cols['cuenta'],
-            AsientoImportColumnasSupport::COL_CUENTA_DEFAULT,
-            AsientoImportColumnasSupport::ALIAS_ENCABEZADO_CUENTA
-        );
-        $colDebeInfo = AsientoImportColumnasSupport::resolverColumna(
-            $encabezados,
-            $cols['debe'],
-            AsientoImportColumnasSupport::COL_DEBE_DEFAULT,
-            AsientoImportColumnasSupport::ALIAS_ENCABEZADO_DEBE
-        );
-        $colHaberInfo = AsientoImportColumnasSupport::resolverColumna(
-            $encabezados,
-            $cols['haber'],
-            AsientoImportColumnasSupport::COL_HABER_DEFAULT,
-            AsientoImportColumnasSupport::ALIAS_ENCABEZADO_HABER
-        );
-        $colCcInfo = AsientoImportColumnasSupport::resolverColumna(
+        $colCcInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+            $modoColumnas,
             $encabezados,
             $cols['centrocosto'],
-            AsientoImportColumnasSupport::COL_CENTROCOSTO_DEFAULT,
+            $porNumero
+                ? AsientoImportColumnasSupport::COL_CENTROCOSTO_NUMERO_DEFAULT
+                : AsientoImportColumnasSupport::COL_CENTROCOSTO_DEFAULT,
             AsientoImportColumnasSupport::ALIAS_ENCABEZADO_CENTROCOSTO
         );
-        $colMonedaInfo = AsientoImportColumnasSupport::resolverColumna(
+        $colMonedaInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+            $modoColumnas,
             $encabezados,
             $cols['moneda'],
-            AsientoImportColumnasSupport::COL_MONEDA_DEFAULT,
+            $porNumero
+                ? AsientoImportColumnasSupport::COL_MONEDA_NUMERO_DEFAULT
+                : AsientoImportColumnasSupport::COL_MONEDA_DEFAULT,
             AsientoImportColumnasSupport::ALIAS_ENCABEZADO_MONEDA
         );
-        $colCotizacionInfo = AsientoImportColumnasSupport::resolverColumna(
+        $colCotizacionInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+            $modoColumnas,
             $encabezados,
             $cols['cotizacion'],
-            AsientoImportColumnasSupport::COL_COTIZACION_DEFAULT,
+            $porNumero
+                ? AsientoImportColumnasSupport::COL_COTIZACION_NUMERO_DEFAULT
+                : AsientoImportColumnasSupport::COL_COTIZACION_DEFAULT,
             AsientoImportColumnasSupport::ALIAS_ENCABEZADO_COTIZACION
         );
-        $colDetalleInfo = AsientoImportColumnasSupport::resolverColumna(
+        $colDetalleInfo = AsientoImportColumnasSupport::resolverColumnaModo(
+            $modoColumnas,
             $encabezados,
             $cols['detalle'],
-            AsientoImportColumnasSupport::COL_DETALLE_DEFAULT,
+            $porNumero
+                ? AsientoImportColumnasSupport::COL_DETALLE_NUMERO_DEFAULT
+                : AsientoImportColumnasSupport::COL_DETALLE_DEFAULT,
             AsientoImportColumnasSupport::ALIAS_ENCABEZADO_DETALLE
         );
 
         if ($colCuentaInfo === null) {
-            throw new \InvalidArgumentException('Falta la columna de cuenta en el Excel (obligatoria).');
+            throw new \InvalidArgumentException('Falta la columna de cuenta (obligatoria).');
         }
-        if ($colDebeInfo === null && $colHaberInfo === null) {
-            throw new \InvalidArgumentException('Falta columna Debe o Haber en el Excel.');
+        if ($montoDh) {
+            if ($colMontoInfo === null) {
+                throw new \InvalidArgumentException('Falta la columna de monto.');
+            }
+            if ($colDhInfo === null) {
+                throw new \InvalidArgumentException('Falta la columna D/H.');
+            }
+        } elseif ($colDebeInfo === null && $colHaberInfo === null) {
+            throw new \InvalidArgumentException('Falta columna Debe o Haber.');
         }
 
         $movimientos = [];
@@ -163,7 +286,7 @@ class AsientoImportService
         $erroresFila = [];
         $filasOmitidas = [];
 
-        for ($i = $indiceEncabezado + 1; $i < count($hoja); $i++) {
+        for ($i = $indiceInicioDatos; $i < count($hoja); $i++) {
             $fila = $hoja[$i] ?? [];
             if (! is_array($fila)) {
                 continue;
@@ -183,7 +306,10 @@ class AsientoImportService
                 $colDetalleInfo,
                 $cacheCuentas,
                 $cacheCc,
-                $cacheMonedas
+                $cacheMonedas,
+                $modoImporte,
+                $colMontoInfo,
+                $colDhInfo
             );
 
             if ($evaluacion === null) {
@@ -216,16 +342,16 @@ class AsientoImportService
             throw new \InvalidArgumentException(implode("\n", $lineas));
         }
 
-        $diferencia = round($totalDebe - $totalHaber, 4);
-        if (abs($diferencia) > self::TOLERANCIA_BALANCE) {
-            throw new \InvalidArgumentException(implode("\n", $this->lineasDesbalance(
-                $totalDebe,
-                $totalHaber,
-                $diferencia,
-                $filasOmitidas,
-                $erroresFila
-            )));
+        $sinImporte = 0;
+        foreach ($movimientos as $mov) {
+            if (($mov['motivo'] ?? '') === 'sin_importe') {
+                $sinImporte++;
+            }
         }
+
+        $diferencia = round($totalDebe - $totalHaber, 4);
+        $balanceado = abs($diferencia) <= self::TOLERANCIA_BALANCE;
+        $incompleto = ! $balanceado || $sinImporte > 0;
 
         $cuentacontableIds = array_map(static fn ($m) => (int) $m['cuentacontable_id'], $movimientos);
         $evaluacionCuentas = $this->asientoAprobacionService->evaluarCuentas(
@@ -263,13 +389,23 @@ class AsientoImportService
         ];
 
         foreach ($movimientos as $mov) {
+            $detalle = (string) ($mov['detalle'] ?? '');
+            if (($mov['motivo'] ?? '') === 'sin_importe') {
+                $lado = ($mov['dh'] ?? '') === 'H' ? 'Haber' : (($mov['dh'] ?? '') === 'D' ? 'Debe' : '');
+                if ($lado !== '' && ! str_starts_with($detalle, $lado.' · ')) {
+                    $detalle = $lado.' · '.$detalle;
+                }
+            }
             $payloadMovimientos['cuentacontable_ids'][] = (int) $mov['cuentacontable_id'];
             $payloadMovimientos['centrocosto_ids'][] = $mov['centrocosto_id'] ?? null;
             $payloadMovimientos['moneda_ids'][] = (int) $mov['moneda_id'];
             $payloadMovimientos['debes'][] = (float) $mov['debe'] > 0 ? (float) $mov['debe'] : '';
             $payloadMovimientos['haberes'][] = (float) $mov['haber'] > 0 ? (float) $mov['haber'] : '';
             $payloadMovimientos['cotizaciones'][] = (float) ($mov['cotizacion'] ?? 0);
-            $payloadMovimientos['observaciones'][] = (string) ($mov['detalle'] ?? '');
+            $payloadMovimientos['observaciones'][] = $detalle;
+        }
+        if ($sinImporte > 0) {
+            $payloadMovimientos['conservar_sin_importe'] = true;
         }
 
         // Anita espera códigos de moneda en el payload de cabecera al grabar ctamov.
@@ -290,7 +426,7 @@ class AsientoImportService
 
             $this->asientoMovimientoRepository->create($payloadMovimientos, $asiento->id);
 
-            if (! $evaluacionCuentas['requiere_aprobacion']) {
+            if (! $evaluacionCuentas['requiere_aprobacion'] && ! $incompleto) {
                 $fresh = $this->asientoRepository->find($asiento->id);
                 $payloadSync = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
                 $this->asientoRepository->sincronizarCtamovAnita($payloadSync);
@@ -317,6 +453,9 @@ class AsientoImportService
             'tipoasiento' => $tipo ? (string) ($tipo->nombre ?? $tipo->abreviatura) : '',
             'movimientos' => count($movimientos),
             'filas_omitidas' => $omitidas,
+            'sin_importe' => $sinImporte,
+            'incompleto' => $incompleto,
+            'balanceado' => $balanceado,
             'total_debe' => round($totalDebe, 4),
             'total_haber' => round($totalHaber, 4),
             'total_debe_texto' => AsientoImportColumnasSupport::formatearImporte($totalDebe),

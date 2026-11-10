@@ -162,6 +162,8 @@
         }
         $totalDebeAsientoFormTxt = $tieneLineasAsientoForm ? number_format($totalDebeAsientoForm, 2, ',', '.') : '';
         $totalHaberAsientoFormTxt = $tieneLineasAsientoForm ? number_format($totalHaberAsientoForm, 2, ',', '.') : '';
+        $totalDifAsientoForm = round($totalDebeAsientoForm - $totalHaberAsientoForm, 2);
+        $totalDifAsientoFormTxt = $tieneLineasAsientoForm ? number_format($totalDifAsientoForm, 2, ',', '.') : '';
     @endphp
     <style>
         #cuenta-table tfoot.asiento-totales-pie td {
@@ -194,6 +196,9 @@
             border: 0;
             box-shadow: none;
             font-weight: 700;
+        }
+        #cuenta-table tfoot.asiento-totales-pie .asiento-total-diferencia.text-danger {
+            color: #c0392b;
         }
         #cuenta-table .form-control,
         #cuenta-table .form-control-sm,
@@ -435,7 +440,13 @@
                     <td>
                         <input type="text" id="totalhaber" name="totalhaber" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ old('totalhaber', $totalHaberAsientoFormTxt) }}" />
                     </td>
-                    <td colspan="4"></td>
+                    <td colspan="2">
+                        <div class="d-flex align-items-center" style="gap: 4px;">
+                            <span class="small font-weight-bold text-secondary text-nowrap" title="Debe menos Haber">Dif.</span>
+                            <input type="text" id="totaldiferencia" class="form-control form-control-sm text-right asiento-total-celda asiento-total-diferencia {{ abs($totalDifAsientoForm) > 0.009 ? 'text-danger' : '' }}" readonly title="Diferencia Debe − Haber" value="{{ $totalDifAsientoFormTxt }}" />
+                        </div>
+                    </td>
+                    <td colspan="2"></td>
                 </tr>
             </tfoot>
         </table>

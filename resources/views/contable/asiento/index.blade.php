@@ -9,11 +9,46 @@
 <script src="{{asset("assets/pages/scripts/contable/asiento/filtro.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/asiento/copiar_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/copiar_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script>
-    function eliminarAsiento(event) {
-        if (!confirm('¿Desea eliminar el asiento?')) {
+    $(function () {
+        $('#tabla-paginada').off('submit', '.form-eliminar');
+        $('#tabla-paginada').on('submit', '.form-eliminar', function (event) {
             event.preventDefault();
-        }
-    }
+            var form = $(this);
+            swal({
+                title: '¿Está seguro que desea eliminar el asiento?',
+                text: 'Esta acción no se puede deshacer.',
+                icon: 'warning',
+                buttons: {
+                    cancel: 'Cancelar',
+                    confirm: 'Aceptar'
+                },
+            }).then(function (value) {
+                if (!value) {
+                    return;
+                }
+                var $boton = form.find('button');
+                $boton.prop('disabled', true);
+                $.ajax({
+                    url: form.attr('action'),
+                    type: 'POST',
+                    data: form.serialize(),
+                    success: function (respuesta) {
+                        if (respuesta && respuesta.mensaje === 'ok') {
+                            window.location.reload();
+                            return;
+                        }
+                        $boton.prop('disabled', false);
+                        var texto = (respuesta && (respuesta.errores || respuesta.error)) || 'El asiento no pudo eliminarse.';
+                        Biblioteca.notificaciones(texto, 'anitaERP', 'error');
+                    },
+                    error: function () {
+                        $boton.prop('disabled', false);
+                        Biblioteca.notificaciones('El asiento no pudo eliminarse. Si ya se borró, recargue la pantalla.', 'anitaERP', 'error');
+                    }
+                });
+            });
+        });
+    });
 </script>
 @endsection
 
@@ -95,20 +130,8 @@
                                 ])
                             </td>
                             <td>{{$data->observacion ?? ''}}</td>
-                            <td>
-                                @php $totalAsiento = 0; @endphp
-                                @foreach($data->asiento_movimientos as $movimiento)
-                                    @php $totalAsiento += ($movimiento->monto > 0 ? $movimiento->monto : 0); @endphp
-                                @endforeach
-                                {{number_format($totalAsiento,2)}}
-                            </td>
-                            <td>
-                                <ul class="mb-0 pl-3">
-                                @foreach($data->asiento_movimientos as $movimiento)
-                                    <li>{{ $movimiento->cuentacontables->nombre }} {{ $movimiento->monto > 0 ? number_format($movimiento->monto,2) : '' }} {{ $movimiento->monto < 0 ? number_format($movimiento->monto,2) : ''}}</li>
-                                @endforeach
-                                </ul>
-                            </td>
+                            <td class="text-right">{{ number_format((float) ($data->total_debe ?? 0), 2, ',', '.') }}</td>
+                            <td class="text-right">{{ (int) ($data->asiento_movimientos_count ?? 0) }}</td>
                             <td>
                        			@if (($data->estado_aprobacion ?? 'confirmado') === 'pendiente')
                                     @if (can('listar-aprobacion-asiento', false) || can('aprobar-asiento-pendiente', false))
@@ -134,7 +157,7 @@
                        			@if (can('borrar-asiento', false) && ($data->estado_aprobacion ?? 'confirmado') !== 'pendiente')
                                 <form action="{{route('eliminar_asiento', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
-                                    <button type="submit" onclick="eliminarAsiento(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>
                                     </button>
                                 </form>

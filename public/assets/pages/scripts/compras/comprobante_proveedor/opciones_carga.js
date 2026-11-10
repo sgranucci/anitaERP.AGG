@@ -1,4 +1,18 @@
 $(function () {
+    var tipo = String($('#cp-opciones-carga').data('tipo') || '');
+    if (tipo === 'oc') {
+        var inputOc = document.getElementById('cp-numero-oc');
+        if (inputOc) {
+            inputOc.focus();
+        }
+    }
+    if (tipo === 'ia') {
+        var $modalIa = $('#modal-precarga-pdf-ia');
+        if ($modalIa.length) {
+            $modalIa.modal('show');
+        }
+    }
+
     var $form = $('#form-cp-desde-oc');
     if (!$form.length) {
         return;

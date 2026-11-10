@@ -62,6 +62,31 @@
 			}
 		});
 
+		$(document).on('input.asientoAbreCuenta', '#cuenta-table .codigocuentacontable', function () {
+			if (this.readOnly || this.disabled) {
+				return;
+			}
+			var texto = $.trim(this.value || '');
+			if (texto === '' || $(this).data('cta-pegado-codigo') === 1) {
+				return;
+			}
+			if (typeof abrirModalConsultaCuentaContableDesdeContexto !== 'function') {
+				return;
+			}
+			var $fila = $(this).closest('tr');
+			if (typeof empresaIdParaConsultaCuentaContable === 'function' && !(empresaIdParaConsultaCuentaContable($fila) > 0)) {
+				return;
+			}
+			$('#consultacuentacontable').val(texto);
+			if (typeof modalCuentaContableAbierto === 'function' && modalCuentaContableAbierto()) {
+				if (typeof buscar_datos === 'function') {
+					buscar_datos(texto);
+				}
+				return;
+			}
+			abrirModalConsultaCuentaContableDesdeContexto($fila, { caretAlFinal: true });
+		});
+
 		$("#tbody-cuenta-table tr.item-cuenta").each(function () {
 			asientoRefreshDetallePreview($(this));
 		});
@@ -590,6 +615,10 @@
 
 		$("#totaldebe").val(formateaMontoTotal(totDebe));
 		$("#totalhaber").val(formateaMontoTotal(totHaber));
+		var diferencia = Math.round((totDebe - totHaber) * 100) / 100;
+		var $diferencia = $("#totaldiferencia");
+		$diferencia.val(formateaMontoTotal(diferencia));
+		$diferencia.toggleClass("text-danger", Math.abs(diferencia) > 0.01);
 	}
 
 	function esTeclaEnterAsientoForm(e) {

@@ -354,12 +354,19 @@
                                 <i class="fas fa-file-excel"></i> Excel plano
                             </a>
                         </div>
+                        @php
+                            $diferenciaDebeHaber = round(
+                                (float) ($tot['total_debe'] ?? 0) - (float) ($tot['total_haber'] ?? 0),
+                                2
+                            );
+                        @endphp
                         <div class="small mb-1 mb-md-0 text-md-right">
                             <span class="text-muted">Totales filtro:</span>
                             <strong>{{ (int) ($tot['cantidad_cuentas'] ?? 0) }}</strong> cuentas
                             · <strong>{{ (int) ($tot['cantidad_filas'] ?? 0) }}</strong> líneas
                             · Debe <strong>{{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }}</strong>
                             · Haber <strong>{{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}</strong>
+                            · Diferencia (D−H) <strong>{{ number_format($diferenciaDebeHaber, 2, ',', '.') }}</strong>
                         </div>
                     </div>
 

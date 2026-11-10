@@ -1246,6 +1246,8 @@ Route::post('contable/bien-uso-indice', 'Contable\BienUsoIndiceController@guarda
 Route::post('contable/bien-uso-indice/consulta', 'Contable\BienUsoIndiceController@consulta')->name('consulta_bien_uso_indice');
 Route::get('contable/bien-uso-indice/resolver', 'Contable\BienUsoIndiceController@resolver')->name('resolver_bien_uso_indice');
 Route::get('contable/bien-uso-indice/{id}/editar', 'Contable\BienUsoIndiceController@editar')->name('editar_bien_uso_indice')->middleware('modo.consulta');
+Route::post('contable/bien-uso-indice/{id}/coeficientes', 'Contable\BienUsoIndiceController@guardarCoeficientes')->name('guardar_coeficientes_bien_uso_indice');
+Route::delete('contable/bien-uso-indice/{id}/coeficientes/{mes}', 'Contable\BienUsoIndiceController@quitarCoeficiente')->name('quitar_coeficiente_bien_uso_indice');
 Route::put('contable/bien-uso-indice/{id}', 'Contable\BienUsoIndiceController@actualizar')->name('actualizar_bien_uso_indice')->middleware('modo.consulta');
 Route::delete('contable/bien-uso-indice/{id}', 'Contable\BienUsoIndiceController@eliminar')->name('eliminar_bien_uso_indice');
 
@@ -2921,6 +2923,16 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
  * Comprobantes de venta
  */
 
+/*
+ * Facturación juego Crown (p-resultado.c)
+ */
+Route::get('ventas/facturacion-juego', 'Ventas\FacturacionJuegoController@index')->name('facturacion_juego');
+Route::post('ventas/facturacion-juego/ejecutar', 'Ventas\FacturacionJuegoController@ejecutar')->name('ejecutar_facturacion_juego');
+Route::get('ventas/facturacion-juego/configuracion', 'Ventas\FacturacionJuegoController@configuracion')->name('facturacion_juego_configuracion');
+Route::post('ventas/facturacion-juego/configuracion', 'Ventas\FacturacionJuegoController@guardarConfiguracion')->name('guardar_facturacion_juego_configuracion');
+Route::post('ventas/facturacion-juego/configuracion/sembrar-anita', 'Ventas\FacturacionJuegoController@sembrarDesdeAnita')->name('sembrar_facturacion_juego_anita');
+Route::get('ventas/facturacion-juego/api/preview', 'Ventas\FacturacionJuegoController@apiPreview')->name('api_facturacion_juego_preview');
+
 Route::get('ventas/factura', 'Ventas\FacturacionController@index')->name('factura');
 Route::get('ventas/factura/crear', 'Ventas\FacturacionController@crear')->name('crear_factura');
 Route::get('ventas/factura/ots-pedido', 'Ventas\FacturacionController@consultaOtPedido')->name('consulta_factura_ot_pedido');
@@ -3623,6 +3635,8 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/flash-crown', 'Caja\Flash\FlashCrownController@index')->name('flash_crown');
     Route::get('caja/lista-flash-crown/{formato?}', 'Caja\Flash\FlashCrownController@listar')->name('lista_flash_crown');
     Route::get('caja/flash-crown/reporte', 'Caja\Flash\FlashCrownReporteController@index')->name('flash_reporte_crown');
+    Route::post('caja/flash-crown/reporte/enviar', 'Caja\Flash\FlashCrownReporteController@enviar')->name('enviar_flash_reporte_crown');
+    Route::post('caja/flash-crown/reporte/destinatarios', 'Caja\Flash\FlashCrownReporteController@guardarDestinatarios')->name('guardar_destinatarios_flash_reporte_crown');
     Route::get('caja/flash-crown/reporte/exportar', 'Caja\Flash\FlashCrownReporteController@exportar')->name('exportar_flash_reporte_crown');
     Route::post('caja/flash-crown/reporte/suscripciones', 'Caja\Flash\FlashCrownReporteController@guardarSuscripcion')->name('guardar_suscripcion_flash_reporte_crown');
     Route::put('caja/flash-crown/reporte/suscripciones/{id}', 'Caja\Flash\FlashCrownReporteController@actualizarSuscripcion')->name('actualizar_suscripcion_flash_reporte_crown');
@@ -4336,6 +4350,7 @@ Route::post('compras/comprobante-proveedor/workbench/columnas', 'Compras\Comprob
 Route::post('compras/comprobante-proveedor/workbench/etiquetas', 'Compras\Comprobante_ProveedorController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/workbench/preview', 'Compras\Comprobante_ProveedorController@previewWorkbench')->name('preview_workbench_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/opciones-carga', 'Compras\Comprobante_ProveedorController@opcionesCarga')->name('comprobante_proveedor_opciones_carga');
+Route::get('compras/comprobante-proveedor/tipo-carga', 'Compras\Comprobante_ProveedorController@recordarTipoCarga')->name('comprobante_proveedor_tipo_carga');
 Route::get('compras/comprobante-proveedor/resolver-oc', 'Compras\Comprobante_ProveedorController@resolverOrdencompraParaAlta')->name('comprobante_proveedor_resolver_oc');
 Route::get('compras/lista_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Comprobante_ProveedorController@listar')->name('lista_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/plan-cuotas', 'Compras\ComprobanteProveedorPlanCuotasController@index')->name('plan_cuotas_comprobante_proveedor');

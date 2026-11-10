@@ -8,14 +8,19 @@ use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Caja\TesoreriaCrownSlot;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownPoderPublicoGenerador;
+use App\Support\Caja\TesoreriaCrownResultadoOnlineCalculo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\GastronomiaSalaSupport;
 use RuntimeException;
 use Throwable;
 
 /**
- * Importa resultado online de slots desde Anita (ventana slot ON-LINE / resulol).
- * Casino online (a-resonline) dejó de usarse en Anita C: columnas en 0.
+ * Importa resultado online Crown:
+ * - Slots (resulol / sucursal sala, cncadmin)
+ * - Casinos del Río online (resonline / suc. 67, ac-server1)
+ * - Betsur online (resonline / suc. 68, ac-server1)
+ *
+ * Porcentaje = resultado / apostado × 100 (a-resonline.c).
  * Persiste subtotal_slot (soft count) para que el Generador no dependa de Anita.
  */
 class TesoreriaCrownResultadoOnlineAnitaImportService
@@ -34,45 +39,84 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
             ->keyBy(fn (TesoreriaCrownResultadoOnline $f) => $f->fecha->format('Y-m-d'));
 
         $slots = $this->slotsPorFecha($desde, $hasta);
-        $fechas = array_keys($slots);
+        $delRio = $this->casinoOnlinePorFecha(
+            (int) config('caja_anita.sucursal_del_rio_online', 67),
+            $desde,
+            $hasta
+        );
+        $betsur = $this->casinoOnlinePorFecha(
+            (int) config('caja_anita.sucursal_betsur_online', 68),
+            $desde,
+            $hasta
+        );
+
+        $fechas = array_values(array_unique(array_merge(
+            array_keys($slots),
+            array_keys($delRio),
+            array_keys($betsur)
+        )));
         sort($fechas);
 
         $crear = $actualizar = $omitir = 0;
         $filas = [];
         foreach ($fechas as $fecha) {
-            $s = $slots[$fecha];
+            $s = $slots[$fecha] ?? null;
             $coinIn = round((float) ($s['coin_in'] ?? 0), 2);
             $coinOut = round((float) ($s['coin_out'] ?? 0), 2);
             $pagoManual = round((float) ($s['pago_manual'] ?? 0), 2);
-            $slotResultado = round((float) ($s['slot_resultado'] ?? ($coinIn - $coinOut - $pagoManual)), 2);
+            $slotResultado = $s !== null
+                ? round((float) ($s['slot_resultado'] ?? ($coinIn - $coinOut - $pagoManual)), 2)
+                : 0.0;
+            $cantidadSlots = (int) ($s['cantidad_slots'] ?? 0);
             $subtotal = $this->resolverSubtotalSlot((int) $sala->id, $fecha, $slotResultado);
 
             $actual = $existentes->get($fecha);
-            // Soft count / casino online nativos: si ya hay dato ERP, el import de slots no lo pisa.
+            // Soft count nativo: si ya hay dato ERP, el import de slots no lo pisa.
             $subtotalConservar = $actual !== null && $actual->subtotal_slot !== null
                 ? (float) $actual->subtotal_slot
                 : $subtotal;
-            $tieneCasinoNativo = $actual !== null && (
-                abs((float) $actual->apostado) > 0.001
-                || abs((float) $actual->pagado) > 0.001
-                || abs((float) $actual->resultado) > 0.001
-            );
+
+            $dr = $delRio[$fecha] ?? $this->casinoVacio();
+            $bt = $betsur[$fecha] ?? $this->casinoVacio();
+            // Si Anita no trae fila ese día y ya hay carga manual, se conserva.
+            if ($actual !== null && ! isset($delRio[$fecha]) && $this->tieneCasino($actual, false)) {
+                $dr = $this->casinoDesdeModelo($actual, false);
+            }
+            if ($actual !== null && ! isset($betsur[$fecha]) && $this->tieneCasino($actual, true)) {
+                $bt = $this->casinoDesdeModelo($actual, true);
+            }
+
+            // Slots: si Anita no tiene resulol ese día, conservar lo ya cargado.
+            if ($actual !== null && $s === null) {
+                $coinIn = (float) $actual->coin_in;
+                $coinOut = (float) $actual->coin_out;
+                $pagoManual = (float) $actual->pago_manual;
+                $cantidadSlots = (int) $actual->cantidad_slots;
+                $slotResultado = (float) $actual->slot_resultado;
+            }
 
             $datos = [
                 'empresa_id' => (int) $sala->empresa_id,
                 'sala_id' => (int) $sala->id,
                 'fecha' => $fecha,
-                'attendance' => $tieneCasinoNativo ? (int) $actual->attendance : 0,
-                'apostado' => $tieneCasinoNativo ? (float) $actual->apostado : 0.0,
-                'pagado' => $tieneCasinoNativo ? (float) $actual->pagado : 0.0,
-                'drop' => $tieneCasinoNativo ? (float) $actual->drop : 0.0,
-                'resultado' => $tieneCasinoNativo ? (float) $actual->resultado : 0.0,
-                'porcentaje' => $tieneCasinoNativo ? (float) $actual->porcentaje : 0.0,
-                'poder_publico' => $tieneCasinoNativo ? (float) $actual->poder_publico : 0.0,
+                'attendance' => (int) $dr['attendance'],
+                'apostado' => (float) $dr['apostado'],
+                'pagado' => (float) $dr['pagado'],
+                'drop' => (float) $dr['drop'],
+                'resultado' => (float) $dr['resultado'],
+                'porcentaje' => (float) $dr['porcentaje'],
+                'poder_publico' => (float) $dr['poder_publico'],
+                'betsur_attendance' => (int) $bt['attendance'],
+                'betsur_apostado' => (float) $bt['apostado'],
+                'betsur_pagado' => (float) $bt['pagado'],
+                'betsur_drop' => (float) $bt['drop'],
+                'betsur_resultado' => (float) $bt['resultado'],
+                'betsur_porcentaje' => (float) $bt['porcentaje'],
+                'betsur_poder_publico' => (float) $bt['poder_publico'],
                 'coin_in' => $coinIn,
                 'coin_out' => $coinOut,
                 'pago_manual' => $pagoManual,
-                'cantidad_slots' => (int) ($s['cantidad_slots'] ?? 0),
+                'cantidad_slots' => $cantidadSlots,
                 'slot_resultado' => $slotResultado,
                 'subtotal_slot' => $subtotalConservar,
             ];
@@ -160,12 +204,122 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
         return $out;
     }
 
+    /**
+     * @return array<string, array{attendance: int, apostado: float, pagado: float, drop: float, resultado: float, porcentaje: float, poder_publico: float}>
+     */
+    private function casinoOnlinePorFecha(int $sucursal, int $desde, int $hasta): array
+    {
+        if ($sucursal <= 0) {
+            return [];
+        }
+        $out = [];
+        try {
+            // drop puede no estar en el SQL antiguo; si falla el SELECT con drop, reintentar sin él.
+            $filas = $this->consultarCasinoOnline(
+                'f,att,ap,pg,res,porc,pp,dr',
+                'SELECT resol_fecha f, resol_att att, resol_apostado ap, resol_pagado pg,'
+                .' resol_resultado res, resol_porc porc, resol_ppublico pp, resol_drop dr'
+                .' FROM resonline WHERE resol_sucursal = '.$sucursal
+                .' AND resol_fecha BETWEEN '.$desde.' AND '.$hasta
+            );
+        } catch (Throwable $e) {
+            try {
+                $filas = $this->consultarCasinoOnline(
+                    'f,att,ap,pg,res,porc,pp',
+                    'SELECT resol_fecha f, resol_att att, resol_apostado ap, resol_pagado pg,'
+                    .' resol_resultado res, resol_porc porc, resol_ppublico pp'
+                    .' FROM resonline WHERE resol_sucursal = '.$sucursal
+                    .' AND resol_fecha BETWEEN '.$desde.' AND '.$hasta
+                );
+            } catch (Throwable $e2) {
+                return [];
+            }
+        }
+
+        foreach ($filas as $fila) {
+            $fecha = $this->ymd((int) ($fila->f ?? 0));
+            if ($fecha === '') {
+                continue;
+            }
+            $apostado = round((float) ($fila->ap ?? 0), 2);
+            $pagado = round((float) ($fila->pg ?? 0), 2);
+            $calc = TesoreriaCrownResultadoOnlineCalculo::desdeApostadoPagado($apostado, $pagado);
+            $out[$fecha] = [
+                'attendance' => (int) ($fila->att ?? 0),
+                'apostado' => $apostado,
+                'pagado' => $pagado,
+                'drop' => round((float) ($fila->dr ?? 0), 2),
+                'resultado' => $calc['resultado'],
+                'porcentaje' => $calc['porcentaje'],
+                'poder_publico' => round((float) ($fila->pp ?? 0), 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array{attendance: int, apostado: float, pagado: float, drop: float, resultado: float, porcentaje: float, poder_publico: float}
+     */
+    private function casinoVacio(): array
+    {
+        return [
+            'attendance' => 0,
+            'apostado' => 0.0,
+            'pagado' => 0.0,
+            'drop' => 0.0,
+            'resultado' => 0.0,
+            'porcentaje' => 0.0,
+            'poder_publico' => 0.0,
+        ];
+    }
+
+    /**
+     * @return array{attendance: int, apostado: float, pagado: float, drop: float, resultado: float, porcentaje: float, poder_publico: float}
+     */
+    private function casinoDesdeModelo(TesoreriaCrownResultadoOnline $fila, bool $betsur): array
+    {
+        if ($betsur) {
+            return [
+                'attendance' => (int) $fila->betsur_attendance,
+                'apostado' => (float) $fila->betsur_apostado,
+                'pagado' => (float) $fila->betsur_pagado,
+                'drop' => (float) $fila->betsur_drop,
+                'resultado' => (float) $fila->betsur_resultado,
+                'porcentaje' => (float) $fila->betsur_porcentaje,
+                'poder_publico' => (float) $fila->betsur_poder_publico,
+            ];
+        }
+
+        return [
+            'attendance' => (int) $fila->attendance,
+            'apostado' => (float) $fila->apostado,
+            'pagado' => (float) $fila->pagado,
+            'drop' => (float) $fila->drop,
+            'resultado' => (float) $fila->resultado,
+            'porcentaje' => (float) $fila->porcentaje,
+            'poder_publico' => (float) $fila->poder_publico,
+        ];
+    }
+
+    private function tieneCasino(TesoreriaCrownResultadoOnline $fila, bool $betsur): bool
+    {
+        if ($betsur) {
+            return abs((float) $fila->betsur_apostado) > 0.001
+                || abs((float) $fila->betsur_pagado) > 0.001
+                || abs((float) $fila->betsur_resultado) > 0.001;
+        }
+
+        return abs((float) $fila->apostado) > 0.001
+            || abs((float) $fila->pagado) > 0.001
+            || abs((float) $fila->resultado) > 0.001;
+    }
+
     private function resolverSubtotalSlot(int $salaId, string $fechaYmd, float $slotResultado): ?float
     {
         // Preferir inversión desde ppublico Anita (soft count real de l-anexo1).
         // El recuento de validadoras ERP no es el soft count del poder público.
         try {
-            $avisos = [];
             $filas = $this->consultarCaja(
                 'slot_dia',
                 'SELECT ppub_pp_slot FROM ppublico WHERE ppub_fecha = '.(int) str_replace('-', '', $fechaYmd)
@@ -180,7 +334,7 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
                 } else {
                     $ppTrue = round($anitaLong + (1.0 - $frac), 2);
                 }
-                $voucher = TesoreriaCrownPoderPublicoGenerador::voucherMesa($salaId, $fechaYmd, $avisos);
+                $voucher = TesoreriaCrownPoderPublicoGenerador::voucherMesa($salaId, $fechaYmd, $avisos = []);
 
                 return round($ppTrue + $slotResultado + $voucher, 2);
             }
@@ -208,13 +362,15 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
 
     private function difiere(TesoreriaCrownResultadoOnline $actual, array $datos): bool
     {
-        foreach (['cantidad_slots'] as $campo) {
+        foreach (['cantidad_slots', 'attendance', 'betsur_attendance'] as $campo) {
             if ((int) $actual->{$campo} !== (int) $datos[$campo]) {
                 return true;
             }
         }
         foreach ([
-            'attendance', 'apostado', 'pagado', 'drop', 'resultado', 'porcentaje', 'poder_publico',
+            'apostado', 'pagado', 'drop', 'resultado', 'porcentaje', 'poder_publico',
+            'betsur_apostado', 'betsur_pagado', 'betsur_drop', 'betsur_resultado',
+            'betsur_porcentaje', 'betsur_poder_publico',
             'coin_in', 'coin_out', 'pago_manual', 'slot_resultado',
         ] as $campo) {
             if (abs((float) $actual->{$campo} - (float) $datos[$campo]) > 0.001) {
@@ -275,7 +431,10 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
      */
     private function consultarCaja(string $campos, string $sql): array
     {
-        return $this->consultar($campos, $sql, (string) config('caja_anita.sistema', 'caja'));
+        return $this->consultar($campos, $sql, (string) config('caja_anita.sistema', 'caja'), [
+            'ifx_server' => (string) config('caja_anita.ifx_server', ''),
+            'path_sistema' => (string) config('caja_anita.path_sistema', ''),
+        ]);
     }
 
     /**
@@ -283,13 +442,30 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
      */
     private function consultarVentas(string $campos, string $sql): array
     {
-        return $this->consultar($campos, $sql, 'ventas');
+        return $this->consultar($campos, $sql, 'ventas', [
+            'ifx_server' => (string) config('caja_anita.ifx_server', ''),
+            'path_sistema' => (string) config('caja_anita.path_sistema', ''),
+        ]);
     }
 
     /**
+     * Casino online solo en ac-server1 (acncadmin).
+     *
      * @return list<object>
      */
-    private function consultar(string $campos, string $sql, string $sistema): array
+    private function consultarCasinoOnline(string $campos, string $sql): array
+    {
+        return $this->consultar($campos, $sql, 'ventas', [
+            'ifx_server' => (string) config('caja_anita.ifx_server_casino_online', 'acncadmin'),
+            'path_sistema' => (string) config('caja_anita.path_sistema_casino_online', '/usr2/casino'),
+        ]);
+    }
+
+    /**
+     * @param  array{ifx_server?: string, path_sistema?: string}  $opts
+     * @return list<object>
+     */
+    private function consultar(string $campos, string $sql, string $sistema, array $opts = []): array
     {
         $api = new ApiAnita;
         $payload = [
@@ -298,12 +474,12 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
             'customSql' => $sql,
             'sistema' => $sistema,
         ];
-        $ifx = trim((string) config('caja_anita.ifx_server', ''));
+        $ifx = trim((string) ($opts['ifx_server'] ?? ''));
         if ($ifx !== '') {
             $payload['ifx_server'] = $ifx;
         }
-        $path = rtrim(trim((string) config('caja_anita.path_sistema', '')), '/');
-        if ($path !== '' && $sistema === (string) config('caja_anita.sistema', 'caja')) {
+        $path = rtrim(trim((string) ($opts['path_sistema'] ?? '')), '/');
+        if ($path !== '') {
             $payload['path_sistema'] = $path;
         }
         $raw = $api->apiCall($payload);

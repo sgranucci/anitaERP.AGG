@@ -267,8 +267,9 @@ return [
     ],
 
     /*
-     * Flash Crown (directivos): cálculo online + mail solo con días validados.
-     * Comandos: flash-crown:calcular-diario | flash-crown:distribuir-reportes
+     * Flash Crown (directivos): cálculo online.
+     * El informe se envía a mano desde la pantalla (no por cron).
+     * Comandos: flash-crown:calcular-diario
      */
     'flash_crown_calculo_diario' => [
         'habilitado' => filter_var(env('FLASH_CROWN_CALCULO_DIARIO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
@@ -276,7 +277,7 @@ return [
     ],
     'flash_reporte_crown' => [
         'distribucion_habilitada' => filter_var(
-            env('FLASH_REPORTE_CROWN_DISTRIBUCION', true),
+            env('FLASH_REPORTE_CROWN_DISTRIBUCION', false),
             FILTER_VALIDATE_BOOLEAN
         ),
     ],

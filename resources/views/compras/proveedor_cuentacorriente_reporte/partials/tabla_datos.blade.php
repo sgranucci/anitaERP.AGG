@@ -124,7 +124,7 @@
 <tfoot>
     <tr class="cc-rep-total-general">
         <td></td>
-        <td><strong>Total deuda pendiente</strong></td>
+        <td><strong>Saldo total del reporte</strong></td>
         <td class="text-right">
             <strong>{{ $fmt($totalesReporte['pendiente'] ?? 0) }}</strong>
             @if (! empty($totalesReporte['abreviatura']))
@@ -352,4 +352,20 @@
     </tr>
 @endforelse
 </tbody>
+@if ($modoDeuda && ! empty($mostrar_total_general))
+<tfoot>
+    <tr class="cc-rep-total-general">
+        <td colspan="11"><strong>Saldo total del reporte</strong></td>
+        <td class="text-right">
+            <strong>{{ $fmt($totalesReporte['pendiente'] ?? 0) }}</strong>
+            @if (! empty($totalesReporte['abreviatura']))
+                {{ $totalesReporte['abreviatura'] }}
+            @endif
+        </td>
+        @if ($mostrarLinks && ! $paraPdf && ! $paraExcel)
+            <td></td>
+        @endif
+    </tr>
+</tfoot>
+@endif
 @endif

@@ -50,9 +50,6 @@
                     </div>
                 </form>
 
-                @if ($empresa_id <= 0)
-                    <div class="alert alert-info">Seleccione una empresa para operar el ajuste.</div>
-                @else
                     <div class="row">
                         <div class="col-xl-6">
                             <div class="card card-outline card-info h-100">
@@ -61,9 +58,17 @@
                                 </div>
                                 <div class="card-body">
                                     @if ($puede_importar_indices)
-                                        <form method="post" action="{{ route('guardar_indice_ajuste_inflacion') }}" class="form-horizontal mb-3">
+                                        <p class="text-muted small">
+                                            Los índices son comunes a todas las empresas.
+                                            @if (! empty($sincroniza_indice_revaluo))
+                                                Al guardar, el mismo valor queda en el índice de revalúo de bienes de uso.
+                                            @endif
+                                        </p>
+                                        <form method="post" action="{{ route('guardar_indice_ajuste_inflacion') }}" class="form-horizontal mb-3" data-enter-campos="1">
                                             @csrf
-                                            <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                                            @if ($empresa_id > 0)
+                                                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                                            @endif
                                             <div class="form-group row">
                                                 <label class="col-md-3 control-label text-right pr-2 requerido">Período</label>
                                                 <div class="col-md-3">
@@ -98,7 +103,9 @@
                                             enctype="multipart/form-data" class="border-top pt-3 mb-3 form-proceso-ajuste"
                                             data-titulo="Importando índices…">
                                             @csrf
-                                            <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                                            @if ($empresa_id > 0)
+                                                <input type="hidden" name="empresa_id" value="{{ $empresa_id }}">
+                                            @endif
                                             <div class="form-row align-items-end">
                                                 <div class="col-md-8">
                                                     <label>CSV (columnas periodo, valor, fuente, provisorio)</label>
@@ -144,8 +151,13 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="col-xl-6 mt-3 mt-xl-0">
+                @if ($empresa_id <= 0)
+                    <div class="alert alert-info mt-3">Seleccione una empresa para configurar las cuentas, simular y confirmar el ajuste.</div>
+                @else
+                    <div class="row mt-3">
+                        <div class="col-xl-6">
                             <div class="card card-outline card-info h-100">
                                 <div class="card-header">
                                     <h3 class="card-title">2. Configuración contable</h3>

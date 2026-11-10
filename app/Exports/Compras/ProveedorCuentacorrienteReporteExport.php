@@ -93,7 +93,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
         $this->filaTituloExcel = $offsetLogo + 1;
         $this->filaCabecerasExcel = $offsetLogo + $this->filasMeta + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
-        $this->filaTotalGeneralExcel = $this->listadoCompacto
+        $this->filaTotalGeneralExcel = $modoDeuda
             ? $this->filaPrimeraDatosExcel + count($this->filas)
             : 0;
     }
@@ -320,6 +320,28 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
                         }
                         $excelRow = $this->filaPrimeraDatosExcel + (int) $idx;
                         $sheet->getStyle('A'.$excelRow.':'.$colUltima.$excelRow)->applyFromArray($estiloTotalCorte);
+                    }
+                    if ($this->filaTotalGeneralExcel > 0) {
+                        $totalRow = $this->filaTotalGeneralExcel;
+                        $sheet->setCellValueExplicit(
+                            'L'.$totalRow,
+                            (float) ($this->resultado['totales']['pendiente'] ?? 0),
+                            DataType::TYPE_NUMERIC
+                        );
+                        $sheet->getStyle('A'.$totalRow.':'.$colUltima.$totalRow)->applyFromArray([
+                            'font' => [
+                                'bold' => true,
+                                'color' => ['rgb' => '1B4F72'],
+                                'size' => 11,
+                                'name' => 'Arial',
+                            ],
+                            'fill' => [
+                                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                                'color' => ['rgb' => 'AED6F1'],
+                            ],
+                        ]);
+                        $sheet->getStyle('L'.$totalRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                        $sheet->getStyle('L'.$totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                     }
                 }
 

@@ -83,7 +83,7 @@ final class CierreJornadaProcesoAutomaticoSupport
             return null;
         }
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
             return null;
         }
 

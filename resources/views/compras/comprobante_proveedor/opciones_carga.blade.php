@@ -9,8 +9,8 @@
 <script src="{{ asset('assets/pages/scripts/configuracion/moneda/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/moneda/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js')) ?: time() }}" type="text/javascript"></script>
 @endif
-@if (can('crear-comprobante-proveedor', false))
-<script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/opciones_carga.js') }}" type="text/javascript"></script>
+@if (can('crear-comprobante-proveedor', false) || (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false)))
+<script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/opciones_carga.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/comprobante_proveedor/opciones_carga.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @endsection
 
@@ -28,7 +28,7 @@
                     </a>
                 </div>
             </div>
-            <div class="card-body">
+            <div class="card-body" id="cp-opciones-carga" data-tipo="{{ $tipoCargaRecordado ?? '' }}">
                 <p class="text-muted mb-4">
                     Elija una de las cuatro formas de ingreso. La precarga (agente/API o IA) deja los datos listos para generar el comprobante;
                     las otras opciones abren el comprobante en borrador directamente.
@@ -45,7 +45,7 @@
                                     Facturas ya recibidas por el agente o la API (correo/PDF en <code>Facturas_scan</code>).
                                     Revise el listado y genere el comprobante desde cada fila.
                                 </p>
-                                <a href="{{ route('precarga_comprobante_proveedor') }}" class="btn btn-info btn-sm mt-auto">
+                                <a href="{{ route('comprobante_proveedor_tipo_carga', ['tipo' => 'precarga']) }}" class="btn btn-info btn-sm mt-auto">
                                     Ir al listado de precargas
                                 </a>
                                 <a href="{{ route('precarga_comprobante_recepcion_error') }}" class="btn btn-outline-danger btn-sm mt-2">
@@ -92,7 +92,7 @@
                                 <p class="card-text small flex-grow-1">
                                     Gastos o servicios sin orden de compra. Carga manual de proveedor, conceptos IVA y totales.
                                 </p>
-                                <a href="{{ route('crear_comprobante_proveedor') }}" class="btn btn-outline-secondary btn-sm mt-auto">
+                                <a href="{{ route('comprobante_proveedor_tipo_carga', ['tipo' => 'sin_oc']) }}" class="btn btn-outline-secondary btn-sm mt-auto">
                                     Nuevo comprobante manual
                                 </a>
                             </div>
@@ -111,9 +111,15 @@
                                     Graba la precarga y abre la carga de la factura ya completa.
                                     Sin orden de compra pide la cuenta de gasto y se termina con Contabilizar.
                                 </p>
+                                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+                                <a href="{{ route('comprobante_proveedor_tipo_carga', ['tipo' => 'ia']) }}" class="btn btn-primary btn-sm mt-auto">
+                                    Cargar PDF con IA
+                                </a>
+                                @else
                                 <button type="button" class="btn btn-primary btn-sm mt-auto" data-toggle="modal" data-target="#modal-precarga-pdf-ia">
                                     Cargar PDF con IA
                                 </button>
+                                @endif
                             </div>
                         </div>
                     </div>

@@ -14,7 +14,7 @@ class ImportarComprasIvaMaestrosAnitaCommand extends Command
         {--ejecutar : Persiste columnas, conceptos y tipos de compra}
         {--path= : Path Anita (default ANITA_BDD_PATH)}';
 
-    protected $description = 'Importa de Anita colivacomp, conccomp y t_comp (+cont_comp) al ERP. Dry-run por defecto.';
+    protected $description = 'Importa de Anita colivacomp, conccomp y t_comp (+cont_comp y centros de costo del tipo) al ERP. Dry-run por defecto.';
 
     public function handle(ComprasIvaMaestrosAnitaImportService $service): int
     {
@@ -56,12 +56,13 @@ class ImportarComprasIvaMaestrosAnitaCommand extends Command
                 (string) ($stats['crear'] ?? 0).($dryRun ? ' (sim)' : ''),
                 (string) ($stats['actualizar'] ?? 0).($dryRun ? ' (sim)' : ''),
                 (string) ($stats['omitidos'] ?? 0),
-                (string) ($stats['vinculos_concepto'] ?? '-'),
+                (string) ($stats['vinculos_concepto'] ?? '-')
+                    .(isset($stats['vinculos_centrocosto']) ? ' / cc '.(string) $stats['vinculos_centrocosto'] : ''),
             ];
         }
 
         $this->table(
-            ['Maestro', 'Fuente', 'En Anita', 'Crear', 'Actualizar', 'Sin cambio', 'Vínculos concepto'],
+            ['Maestro', 'Fuente', 'En Anita', 'Crear', 'Actualizar', 'Sin cambio', 'Vínculos concepto / cc'],
             $filas
         );
 

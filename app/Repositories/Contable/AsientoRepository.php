@@ -1625,8 +1625,10 @@ class AsientoRepository implements AsientoRepositoryInterface
 	/**
 	 * true si Informix ya tiene al menos una línea ctamov para el nro (y empresa si aplica).
 	 *
-	 * @param  bool  $forzarFiltroEmpresa  true tras DELETE; en reserva Bierzo/Ferli/Interforming
-	 *                                    se consulta solo por nro (plan Informix rápido).
+	 * La lectura es solo por ctav_nro_asiento (~30 ms). Empresa+nro recorre toda la
+	 * empresa (~3 s). Si el numerador es por empresa, la empresa se filtra en las filas.
+	 *
+	 * @param  bool  $forzarFiltroEmpresa  true tras DELETE: vacío solo de esa empresa.
 	 */
 	private function ctamovTieneLineas(
 		int|string $codigoEmpresa,
@@ -1638,14 +1640,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 			'acc' => 'list',
 			'tabla' => $this->tableAnita[0],
 			'sistema' => 'contab',
-			'campos' => 'ctav_nro_asiento',
+			'campos' => 'ctav_empresa,ctav_nro_asiento',
 			'whereArmado' => AsientoAnitaNumeracionSupport::whereOcupacionCtamov(
 				$codigoEmpresa,
 				$nroAsiento,
 				$forzarFiltroEmpresa,
 			),
-			// Existencia: una fila alcanza (asiento = N líneas).
-			'limit' => 'FIRST 1',
 		];
 		if (isset($this->path_sistema)) {
 			$data['path_sistema'] = $this->path_sistema;
@@ -1678,7 +1678,11 @@ class AsientoRepository implements AsientoRepositoryInterface
 				continue;
 			}
 
-			return count($parsed['filas']) > 0;
+			return AsientoAnitaNumeracionSupport::filasOcupan(
+				$parsed['filas'],
+				$codigoEmpresa,
+				AsientoAnitaNumeracionSupport::filtrarEmpresaEnOcupacion($forzarFiltroEmpresa),
+			);
 		}
 
 		throw new \RuntimeException(

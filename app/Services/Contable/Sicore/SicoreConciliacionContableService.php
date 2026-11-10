@@ -8,13 +8,14 @@ use App\Models\Contable\Sicore_Config;
 use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
-use App\Support\Contable\Sicore\SicoreCuentaRgpSupport;
+use App\Support\Contable\Sicore\SicoreConfigCuentaSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
+use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Conciliación SICORE vs mayor: suma del período vs col. P (saldo ejerc. Anita)
+ * Conciliación SICORE vs mayor del ERP: suma del período vs col. P
  * al último movimiento ≤ fecha_hasta de la quincena/mes elegida.
  */
 final class SicoreConciliacionContableService
@@ -37,6 +38,10 @@ final class SicoreConciliacionContableService
         }
 
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        if ($desde === '') {
+            $desde = $hasta;
+        }
         $tolerancia = SicoreFormatoV8Support::toleranciaConciliacion();
 
         // Precarga saldos de ejercicio (col. P) de todas las cuentas del proceso en un solo mayor plano.
@@ -53,7 +58,8 @@ final class SicoreConciliacionContableService
             $empresaId,
             $hasta,
             array_values($codigosSaldo),
-            MayorFuenteConsultaSupport::MODO_ANITA,
+            MayorFuenteConsultaSupport::MODO_ERP,
+            $desde,
         );
 
         $items = [];
@@ -74,14 +80,40 @@ final class SicoreConciliacionContableService
 
             $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
-            // Col. P del mayor Anita: saldo de ejercicio al último movimiento ≤ fecha_hasta.
+            // Col. P del mayor del ERP, en convención SICORE (haber +).
             $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
                 $empresaId,
                 $hasta,
                 $cuentasDetalle,
                 $cuentaInversa,
-                MayorFuenteConsultaSupport::MODO_ANITA,
+                MayorFuenteConsultaSupport::MODO_ERP,
+                $desde,
             );
+
+            $codigosItem = [];
+            foreach ($cuentasDetalle as $cuentaItem) {
+                $codigoItem = (int) preg_replace('/\D/', '', (string) ($cuentaItem['codigo'] ?? ''));
+                if ($codigoItem > 0) {
+                    $codigosItem[] = $codigoItem;
+                }
+            }
+            $particion = SicoreMayorComparableSupport::particionar(
+                $this->saldoEjercicioSupport->lineasPeriodo(
+                    $empresaId,
+                    $desde,
+                    $hasta,
+                    $codigosItem,
+                    MayorFuenteConsultaSupport::MODO_ERP,
+                ),
+            );
+            $auditoria = $cuentasDetalle === []
+                ? null
+                : SicoreConciliacionAuditoriaSupport::auditarOperaciones(
+                    $registrosConfig,
+                    $particion['comparables'],
+                    $cuentaInversa,
+                    $tolerancia,
+                );
 
             $dif = round($totalSicore - $totalMayor, 2);
 
@@ -100,6 +132,8 @@ final class SicoreConciliacionContableService
                 'cuadra' => SicoreFormatoV8Support::cuadraConciliacion($totalSicore, $totalMayor),
                 'registros' => count($registrosConfig),
                 'tolerancia' => $tolerancia,
+                'auditoria' => $auditoria,
+                'mayor_excluidos' => count($particion['excluidos']),
             ];
         }
 
@@ -113,41 +147,14 @@ final class SicoreConciliacionContableService
     }
 
     /**
-     * Ganancias de pagos: la cuenta es la de RGP (pago.retencion_ganancias).
-     * El resto sigue la cuenta cargada en la configuración SICORE.
+     * Cuenta cargada en la configuración SICORE.
+     * Ganancias sin cuentas en la configuración usa la automática RGP.
      *
      * @return list<array{id: int, codigo: string, nombre: string, tipocuenta: ?string}>
      */
     private function cuentasDetalle(Sicore_Config $config, int $empresaId): array
     {
-        if ($config->criterio === 'compras_ganancias') {
-            $rgp = SicoreCuentaRgpSupport::ganancias($empresaId);
-            if ($rgp !== null) {
-                return [[
-                    'id' => $rgp['id'],
-                    'codigo' => $rgp['codigo'],
-                    'nombre' => $rgp['nombre'],
-                    'tipocuenta' => $rgp['tipocuenta'],
-                ]];
-            }
-        }
-
-        if (! $config->relationLoaded('cuentas')) {
-            $config->load('cuentas.cuentacontable');
-        }
-
-        return $config->cuentas
-            ->where('empresa_id', $empresaId)
-            ->map(static fn ($c) => [
-                'id' => (int) $c->cuentacontable_id,
-                'codigo' => (string) ($c->cuentacontable?->codigo ?? ''),
-                'nombre' => (string) ($c->cuentacontable?->nombre ?? ''),
-                'tipocuenta' => $c->cuentacontable?->tipocuenta !== null
-                    ? (string) $c->cuentacontable->tipocuenta
-                    : null,
-            ])
-            ->values()
-            ->all();
+        return SicoreConfigCuentaSupport::detalle($config, $empresaId);
     }
 
     private static function ymdAIso(int $ymd): string

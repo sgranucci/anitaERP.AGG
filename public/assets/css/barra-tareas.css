@@ -499,6 +499,42 @@
     text-overflow: ellipsis;
 }
 
+/* Preferencia usuario: globos de cantidad en submenús del aside. */
+.anita-aside-conteo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    margin: 0 0.15rem 0 0.1rem;
+    padding: 0;
+    border: 1px solid rgba(133, 193, 233, 0.35);
+    border-radius: 0.4rem;
+    background: transparent;
+    color: #8b9cb3;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.anita-aside-conteo-btn:hover,
+.anita-aside-conteo-btn:focus {
+    background: rgba(133, 193, 233, 0.14);
+    border-color: rgba(133, 193, 233, 0.55);
+    color: #85c1e9;
+    outline: none;
+}
+
+.anita-aside-conteo-btn.is-on {
+    background: rgba(133, 193, 233, 0.22);
+    border-color: #85c1e9;
+    color: #dce9f5;
+}
+
+.anita-aside-conteo-btn i {
+    font-size: 0.78rem;
+}
+
 .anita-accesos-btn {
     position: relative;
     display: inline-flex;

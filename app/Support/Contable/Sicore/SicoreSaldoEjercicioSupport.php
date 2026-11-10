@@ -16,15 +16,19 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
  * {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}, así el saldo_ejercicio
  * final es el de la columna P al último movimiento ≤ fecha_hasta.
  *
- * Fuente por defecto: ERP (SUSS). SICORE e IIBB pasan Anita para cuadrar
- * contra el Excel del mayor clásico mientras las OP del período sigan en Anita.
+ * Fuente por defecto: ERP (SUSS y SICORE). IIBB pasa Anita para cuadrar
+ * contra el Excel del mayor clásico.
  *
  * Una sola corrida del mayor por (empresa, fecha_hasta, fuente) carga todas las
  * cuentas pedidas en el request.
  */
 final class SicoreSaldoEjercicioSupport
 {
-    /** @var array<string, array<int, float>> empresa|hasta|fuente => [codigo => saldo plano debe-haber] */
+    /**
+     * empresa|desde|hasta|fuente => saldos y líneas del período visible.
+     *
+     * @var array<string, array{saldos: array<int, float>, lineas: array<int, list<array<string, mixed>>>}>
+     */
     private array $cacheLote = [];
 
     public function __construct(
@@ -44,6 +48,7 @@ final class SicoreSaldoEjercicioSupport
         array $cuentasDetalle,
         bool $cuentaInversa = true,
         string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
+        string $fechaDesdeIso = '',
     ): float {
         $codigos = $this->codigosNumericos($cuentasDetalle);
         if ($empresaId <= 0 || $codigos === [] || $fechaHastaIso === '') {
@@ -55,7 +60,13 @@ final class SicoreSaldoEjercicioSupport
             return 0.0;
         }
 
-        $mapa = $this->saldosPlanoPorCuenta($empresaId, $hastaYmd, $codigos, $fuente);
+        $mapa = $this->saldosPlanoPorCuenta(
+            $empresaId,
+            $this->ymd($fechaDesdeIso !== '' ? $fechaDesdeIso : $fechaHastaIso),
+            $hastaYmd,
+            $codigos,
+            $fuente,
+        );
         $sumaPlano = 0.0;
         foreach ($codigos as $codigo) {
             $sumaPlano += (float) ($mapa[$codigo] ?? 0);
@@ -75,13 +86,51 @@ final class SicoreSaldoEjercicioSupport
         string $fechaHastaIso,
         array $codigos,
         string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
+        string $fechaDesdeIso = '',
     ): void {
         $codigos = array_values(array_unique(array_filter(array_map('intval', $codigos), static fn (int $c) => $c > 0)));
         $hastaYmd = (int) str_replace('-', '', $fechaHastaIso);
         if ($empresaId <= 0 || $codigos === [] || $hastaYmd < MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD) {
             return;
         }
-        $this->saldosPlanoPorCuenta($empresaId, $hastaYmd, $codigos, $fuente);
+        $this->saldosPlanoPorCuenta(
+            $empresaId,
+            $this->ymd($fechaDesdeIso !== '' ? $fechaDesdeIso : $fechaHastaIso),
+            $hastaYmd,
+            $codigos,
+            $fuente,
+        );
+    }
+
+    /**
+     * Líneas del período ya leídas al armar el saldo. No vuelve a correr el mayor.
+     *
+     * @param  list<int>  $codigos
+     * @return list<array<string, mixed>>
+     */
+    public function lineasPeriodo(
+        int $empresaId,
+        string $fechaDesdeIso,
+        string $fechaHastaIso,
+        array $codigos,
+        string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
+    ): array {
+        $codigos = array_values(array_unique(array_filter(array_map('intval', $codigos), static fn (int $c) => $c > 0)));
+        $hastaYmd = $this->ymd($fechaHastaIso);
+        if ($empresaId <= 0 || $codigos === [] || $hastaYmd < MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD) {
+            return [];
+        }
+
+        $desdeYmd = $this->ymd($fechaDesdeIso !== '' ? $fechaDesdeIso : $fechaHastaIso);
+        $lote = $this->lote($empresaId, $desdeYmd, $hastaYmd, $codigos, $fuente);
+        $out = [];
+        foreach ($codigos as $codigo) {
+            foreach ($lote['lineas'][$codigo] ?? [] as $linea) {
+                $out[] = $linea;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -107,35 +156,53 @@ final class SicoreSaldoEjercicioSupport
      */
     private function saldosPlanoPorCuenta(
         int $empresaId,
+        int $desdeYmd,
+        int $hastaYmd,
+        array $codigos,
+        string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
+    ): array {
+        return $this->lote($empresaId, $desdeYmd, $hastaYmd, $codigos, $fuente)['saldos'];
+    }
+
+    /**
+     * Un solo mayor por (empresa, desde, hasta, fuente). El saldo es la columna P
+     * al cierre; las líneas son las del período visible, para el cruce uno a uno.
+     *
+     * @param  list<int>  $codigos
+     * @return array{saldos: array<int, float>, lineas: array<int, list<array<string, mixed>>>}
+     */
+    private function lote(
+        int $empresaId,
+        int $desdeYmd,
         int $hastaYmd,
         array $codigos,
         string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
     ): array {
         $fuente = MayorFuenteConsultaSupport::normalizarModo($fuente);
-        $claveLote = $empresaId.'|'.$hastaYmd.'|'.$fuente;
-        $mapa = $this->cacheLote[$claveLote] ?? [];
+        if ($desdeYmd <= 0 || $desdeYmd > $hastaYmd) {
+            $desdeYmd = $hastaYmd;
+        }
+        $claveLote = $empresaId.'|'.$desdeYmd.'|'.$hastaYmd.'|'.$fuente;
+        $lote = $this->cacheLote[$claveLote] ?? ['saldos' => [], 'lineas' => []];
         $faltantes = [];
         foreach ($codigos as $codigo) {
-            if (! array_key_exists($codigo, $mapa)) {
+            if (! array_key_exists($codigo, $lote['saldos'])) {
                 $faltantes[] = $codigo;
             }
         }
         if ($faltantes === []) {
-            return $mapa;
+            return $lote;
         }
 
         sort($faltantes);
-        $cuentaDesde = min($faltantes);
-        $cuentaHasta = max($faltantes);
 
-        // fecha_desde = fecha_hasta: el SI ya trae el acumulado previo; la col. P
-        // del último movimiento del día es el saldo de ejercicio a conciliar.
+        // Lista exacta de cuentas: sin rango min–max, que arrastraría todo el plan intermedio.
         $resultado = $this->procesador->generar(
             [$empresaId],
+            $desdeYmd,
             $hastaYmd,
-            $hastaYmd,
-            $cuentaDesde,
-            $cuentaHasta,
+            0,
+            0,
             1,
             false,
             true,
@@ -151,21 +218,61 @@ final class SicoreSaldoEjercicioSupport
         $encontradas = [];
         foreach ($resultado['secciones'] ?? [] as $seccion) {
             $cuenta = (int) ($seccion['cuenta'] ?? 0);
-            if ($cuenta <= 0) {
+            if ($cuenta <= 0 || ! in_array($cuenta, $faltantes, true)) {
                 continue;
             }
-            $mapa[$cuenta] = $this->saldoFinalSeccion($seccion);
+            $lote['saldos'][$cuenta] = $this->saldoFinalSeccion($seccion);
+            $lote['lineas'][$cuenta] = $this->lineasDeSeccion($seccion);
             $encontradas[$cuenta] = true;
         }
         foreach ($faltantes as $codigo) {
             if (! isset($encontradas[$codigo])) {
-                $mapa[$codigo] = 0.0;
+                $lote['saldos'][$codigo] = 0.0;
+                $lote['lineas'][$codigo] = [];
             }
         }
 
-        $this->cacheLote[$claveLote] = $mapa;
+        $this->cacheLote[$claveLote] = $lote;
 
-        return $mapa;
+        return $lote;
+    }
+
+    private function ymd(string $fechaIso): int
+    {
+        return (int) str_replace('-', '', $fechaIso);
+    }
+
+    /**
+     * @param  array<string, mixed>  $seccion
+     * @return list<array<string, mixed>>
+     */
+    private function lineasDeSeccion(array $seccion): array
+    {
+        $out = [];
+        foreach ($seccion['lineas'] ?? [] as $linea) {
+            if (! is_array($linea) || ($linea['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $fecha = (int) ($linea['fecha'] ?? 0);
+            $s = str_pad((string) $fecha, 8, '0', STR_PAD_LEFT);
+            $tipo = (string) ($linea['tipo_comp'] ?? '');
+            $emisor = (string) ($linea['emisor'] ?? '');
+            $out[] = [
+                'fecha' => strlen($s) === 8 ? substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2) : '',
+                'detalle' => (string) ($linea['descripcion'] ?? ''),
+                'asiento_id' => (int) ($linea['asiento_id'] ?? 0),
+                'debe' => (float) ($linea['debe'] ?? 0),
+                'haber' => (float) ($linea['haber'] ?? 0),
+                'origen' => 'erp',
+                'cuenta_codigo' => (string) ($linea['cuenta_codigo'] ?? ''),
+                'tipo_comp' => $tipo,
+                'emisor' => $emisor,
+                'subd_tipo' => $tipo,
+                'subd_emisor' => $emisor,
+            ];
+        }
+
+        return $out;
     }
 
     /**

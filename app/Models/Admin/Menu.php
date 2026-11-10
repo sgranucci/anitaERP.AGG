@@ -18,16 +18,27 @@ class Menu extends Model implements Auditable
         return $this->belongsToMany(Rol::class, 'menu_rol');
     }
 
-    public function getHijos($padres, $line, &$nivelActual)
+    /**
+     * Arma los hijos de un ítem. El nivel se calcula por profundidad (sin mutar un
+     * contador compartido): el bug anterior dejaba hermanos/nietos con tipografía incorrecta.
+     *
+     * @param  array<int, array<string, mixed>>  $padres
+     * @param  array<string, mixed>  $line
+     * @return array<int, array<string, mixed>>
+     */
+    public function getHijos($padres, $line, $nivelPadre)
     {
-        $nivelActual++;
+        $nivelHijo = (int) $nivelPadre + 1;
         $children = [];
         foreach ($padres as $line1) {
-            if ($line['id'] == $line1['menu_id']) {
-                $children = array_merge($children, [array_merge($line1, ['submenu' => $this->getHijos($padres, $line1, $nivelActual), 'nivel' => $nivelActual])]);
-                $nivelActual--;
+            if ((int) $line['id'] === (int) $line1['menu_id']) {
+                $children[] = array_merge($line1, [
+                    'submenu' => $this->getHijos($padres, $line1, $nivelHijo),
+                    'nivel' => $nivelHijo,
+                ]);
             }
         }
+
         return $children;
     }
 
@@ -38,11 +49,13 @@ class Menu extends Model implements Auditable
                 $query->where('rol_id', session()->get('rol_id'))->orderby('menu_id');
             })->orderby('menu_id')
                 ->orderby('orden')
+                ->orderby('id')
                 ->get()
                 ->toArray();
         } else {
             $menus = $this->orderby('menu_id')
                 ->orderby('orden')
+                ->orderby('id')
                 ->get()
                 ->toArray();
         }
@@ -77,18 +90,25 @@ class Menu extends Model implements Auditable
         return $menus;
     }
 
-    public static function getMenu($front = false, $nivelActual)
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public static function getMenu($front = false, $nivelActual = 0)
     {
         $menus = new Menu();
         $padres = $menus->getPadres($front);
         $menuAll = [];
+        $nivelRaiz = (int) $nivelActual;
         foreach ($padres as $line) {
-            if ($line['menu_id'] != 0)
+            if ((int) $line['menu_id'] !== 0) {
                 break;
-            $item = [array_merge($line, ['submenu' => $menus->getHijos($padres, $line, $nivelActual), 'nivel' => $nivelActual])];
-            $nivelActual--;
-            $menuAll = array_merge($menuAll, $item);
+            }
+            $menuAll[] = array_merge($line, [
+                'submenu' => $menus->getHijos($padres, $line, $nivelRaiz),
+                'nivel' => $nivelRaiz,
+            ]);
         }
+
         return $menuAll;
     }
 

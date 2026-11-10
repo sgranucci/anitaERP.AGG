@@ -59,11 +59,12 @@ class AsientoAnitaNumeracionSupportTest extends TestCase
                 ' WHERE ctav_nro_asiento = 2124679',
                 AsientoAnitaNumeracionSupport::whereOcupacionCtamov(1, 2124679),
             );
-            // Tras delete siempre empresa+nro
             $this->assertSame(
-                " WHERE ctav_empresa = '1' AND ctav_nro_asiento = 2124679",
+                ' WHERE ctav_nro_asiento = 2124679',
                 AsientoAnitaNumeracionSupport::whereOcupacionCtamov(1, 2124679, true),
             );
+            $this->assertFalse(AsientoAnitaNumeracionSupport::filtrarEmpresaEnOcupacion());
+            $this->assertTrue(AsientoAnitaNumeracionSupport::filtrarEmpresaEnOcupacion(true));
         } finally {
             config(['app.empresa' => $prev]);
         }
@@ -76,9 +77,21 @@ class AsientoAnitaNumeracionSupportTest extends TestCase
         try {
             $this->assertFalse(AsientoAnitaNumeracionSupport::usaNumeradorVentasGlobal());
             $this->assertSame(
-                " WHERE ctav_empresa = '3' AND ctav_nro_asiento = 100",
+                ' WHERE ctav_nro_asiento = 100',
                 AsientoAnitaNumeracionSupport::whereOcupacionCtamov(3, 100),
             );
+            $this->assertTrue(AsientoAnitaNumeracionSupport::filtrarEmpresaEnOcupacion());
+            $filas = [
+                (object) ['ctav_empresa' => '9', 'ctav_nro_asiento' => 100],
+                (object) ['ctav_empresa' => '3', 'ctav_nro_asiento' => 100],
+            ];
+            $this->assertTrue(AsientoAnitaNumeracionSupport::filasOcupan($filas, 9, false));
+            $this->assertFalse(AsientoAnitaNumeracionSupport::filasOcupan(
+                [(object) ['ctav_empresa' => '9']],
+                3,
+                true,
+            ));
+            $this->assertTrue(AsientoAnitaNumeracionSupport::filasOcupan($filas, 3, true));
         } finally {
             config(['app.empresa' => $prev]);
         }

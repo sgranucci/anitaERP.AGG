@@ -1,18 +1,22 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Flash Report Crown
+    Informe flash
 @endsection
 
 @section('contenido')
-@php
-    $editando = $suscripcion_editar ?? null;
-@endphp
+@include('includes.mensaje')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'informe-flash-overlay',
+    'tituloId' => 'informe-flash-titulo',
+    'subtituloId' => 'informe-flash-subtitulo',
+    'titulo' => 'Armando el informe…',
+    'subtitulo' => 'El mes acumulado recorre cada día. No cierre la página.',
+])
 <div class="row">
     <div class="col-lg-12">
-        @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Flash Report Crown</h3>
+                <h3 class="card-title mb-0">Informe flash</h3>
                 <div class="card-tools">
                     <a href="{{ route('flash_crown') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-reply-all"></i> Flash diario
@@ -20,166 +24,122 @@
                 </div>
             </div>
             <div class="card-body">
-                <form method="get" action="{{ route('exportar_flash_reporte_crown') }}" class="form-horizontal mb-4">
+                <form id="form-informe-flash" method="get" action="{{ route('flash_reporte_crown') }}" class="form-horizontal" autocomplete="off">
+                    @csrf
+                    <input type="hidden" name="consultar" value="1">
                     <div class="form-group row">
-                        <label class="col-lg-2 control-label text-right pr-2" for="desde">Desde</label>
+                        <label class="col-lg-2 control-label text-right pr-2" for="fecha">Día</label>
                         <div class="col-lg-2">
-                            <input type="date" name="desde" id="desde" class="form-control" value="{{ $desde }}">
+                            <input type="date" name="fecha" id="fecha" class="form-control form-control-sm" required value="{{ $fecha }}">
                         </div>
-                        <label class="col-lg-1 control-label text-right pr-2" for="hasta">Hasta</label>
-                        <div class="col-lg-2">
-                            <input type="date" name="hasta" id="hasta" class="form-control" value="{{ $hasta }}">
-                        </div>
-                        <label class="col-lg-1 control-label text-right pr-2" for="perfil_vista">Perfil</label>
-                        <div class="col-lg-2">
-                            <select name="perfil_vista" id="perfil_vista" class="form-control">
-                                @foreach ($perfiles_vista as $k => $v)
-                                    <option value="{{ $k }}" {{ ($perfil_vista ?? 'completa') === $k ? 'selected' : '' }}>{{ $v }}</option>
+                        <label class="col-lg-2 control-label text-right pr-2" for="formato">Formato</label>
+                        <div class="col-lg-3">
+                            <select name="formato" id="formato" class="form-control form-control-sm">
+                                @foreach ($formatos as $clave => $etiqueta)
+                                    <option value="{{ $clave }}" {{ $formato === $clave ? 'selected' : '' }}>{{ $etiqueta }}</option>
                                 @endforeach
                             </select>
                         </div>
-                        <div class="col-lg-2">
-                            <label class="mb-0">
-                                <input type="checkbox" name="solo_validados" value="1" checked>
-                                Solo validados
-                            </label>
-                            <button type="submit" class="btn btn-success btn-sm d-block mt-1">
-                                <i class="fa fa-file-excel-o"></i> Excel
-                            </button>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-lg-2 control-label text-right pr-2" for="destinatarios">Destinatarios</label>
+                        <div class="col-lg-8">
+                            <textarea name="destinatarios" id="destinatarios" class="form-control form-control-sm" rows="6" required>{{ $destinatarios }}</textarea>
+                            <small class="text-muted">Un mail por línea. El envío lo dispara esta pantalla: no sale solo.</small>
+                        </div>
+                    </div>
+                    <div class="form-group row mb-0">
+                        <div class="col-lg-8 offset-lg-2">
+                            <button type="submit" class="btn btn-primary btn-sm">Vista previa</button>
+                            @if ($puedeEnviar)
+                                <button type="submit"
+                                        class="btn btn-success btn-sm"
+                                        form="form-informe-flash"
+                                        formaction="{{ route('enviar_flash_reporte_crown') }}"
+                                        formmethod="post"
+                                        onclick="return confirm('¿Enviar este informe a todos los destinatarios?');">
+                                    Enviar
+                                </button>
+                                <button type="submit"
+                                        class="btn btn-outline-secondary btn-sm"
+                                        form="form-informe-flash"
+                                        formaction="{{ route('guardar_destinatarios_flash_reporte_crown') }}"
+                                        formmethod="post">
+                                    Guardar destinatarios
+                                </button>
+                            @endif
                         </div>
                     </div>
                 </form>
 
-                @if ($puedeAdministrar ?? false)
-                    <hr>
-                    <h5>{{ $editando ? 'Editar envío' : 'Nuevo envío automático' }}</h5>
-                    <form method="post"
-                          action="{{ $editando ? route('actualizar_suscripcion_flash_reporte_crown', $editando->id) : route('guardar_suscripcion_flash_reporte_crown') }}"
-                          class="form-horizontal" data-enter-campos="1">
-                        @csrf
-                        @if ($editando)
-                            @method('PUT')
-                        @endif
-                        <div class="form-group row">
-                            <label class="col-lg-2 control-label text-right pr-2">Nombre</label>
-                            <div class="col-lg-4">
-                                <input type="text" name="nombre" class="form-control form-control-sm" required
-                                       value="{{ old('nombre', $editando->nombre ?? '') }}">
-                            </div>
-                            <label class="col-lg-2 control-label text-right pr-2">Activo</label>
-                            <div class="col-lg-2">
-                                <input type="checkbox" name="activo" value="1" {{ old('activo', $editando->activo ?? true) ? 'checked' : '' }}>
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label class="col-lg-2 control-label text-right pr-2">Periodicidad</label>
-                            <div class="col-lg-2">
-                                <select name="periodicidad" class="form-control form-control-sm">
-                                    @foreach ($periodicidades as $k => $v)
-                                        <option value="{{ $k }}" {{ old('periodicidad', $editando->periodicidad ?? 'diaria') === $k ? 'selected' : '' }}>{{ $v }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <label class="col-lg-1 control-label text-right pr-2">Hora</label>
-                            <div class="col-lg-2">
-                                <input type="time" name="hora" class="form-control form-control-sm" value="{{ old('hora', $editando->hora ?? '08:00') }}">
-                            </div>
-                            <label class="col-lg-2 control-label text-right pr-2">Solo validados</label>
-                            <div class="col-lg-2">
-                                <input type="checkbox" name="solo_validados" value="1" {{ old('solo_validados', $editando->solo_validados ?? true) ? 'checked' : '' }}>
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label class="col-lg-2 control-label text-right pr-2">Período</label>
-                            <div class="col-lg-3">
-                                <select name="periodo_relativo" class="form-control form-control-sm">
-                                    @foreach ($periodos_relativos as $k => $v)
-                                        <option value="{{ $k }}" {{ old('periodo_relativo', $editando->periodo_relativo ?? 'mes_actual') === $k ? 'selected' : '' }}>{{ $v }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <label class="col-lg-2 control-label text-right pr-2">Perfil Excel</label>
-                            <div class="col-lg-3">
-                                <select name="perfil_vista" class="form-control form-control-sm">
-                                    @foreach ($perfiles_vista as $k => $v)
-                                        <option value="{{ $k }}" {{ old('perfil_vista', $editando->perfil_vista ?? 'completa') === $k ? 'selected' : '' }}>{{ $v }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label class="col-lg-2 control-label text-right pr-2">Mails</label>
-                            <div class="col-lg-8">
-                                <input type="text" name="destinatarios" class="form-control form-control-sm" required
-                                       placeholder="mail1@empresa.com, mail2@empresa.com"
-                                       value="{{ old('destinatarios', $editando->destinatarios ?? '') }}">
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <label class="col-lg-2 control-label text-right pr-2">Mensaje</label>
-                            <div class="col-lg-8">
-                                <textarea name="mensaje" class="form-control form-control-sm" rows="2">{{ old('mensaje', $editando->mensaje ?? '') }}</textarea>
-                            </div>
-                        </div>
-                        <div class="form-group row">
-                            <div class="col-lg-10 offset-lg-2">
-                                <button type="submit" class="btn btn-primary btn-sm">{{ $editando ? 'Actualizar' : 'Guardar envío' }}</button>
-                                @if ($editando)
-                                    <a href="{{ route('flash_reporte_crown') }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
-                                @endif
-                            </div>
-                        </div>
-                    </form>
+                <p class="text-muted small mt-3 mb-0">
+                    Gaming revenues: la primera columna es el día pedido.
+                    La segunda es el mismo día de la semana del año anterior, el más cercano, sin salir de ese año.
+                    Las otras dos son el acumulado del mes y el acumulado del mismo mes del año anterior.
+                    El total de cada casino es mesas + slots + A&amp;B.
+                </p>
 
-                    <div class="table-responsive mt-3">
-                        <table class="table table-sm table-bordered">
-                            <thead style="background:#85C1E9;color:#17202A;">
-                                <tr>
-                                    <th>Nombre</th>
-                                    <th>Periodicidad</th>
-                                    <th>Hora</th>
-                                    <th>Perfil</th>
-                                    <th>Último</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse ($suscripciones as $s)
-                                    <tr>
-                                        <td>{{ $s->nombre }} @if (! $s->activo)<span class="badge badge-secondary">off</span>@endif</td>
-                                        <td>{{ $periodicidades[$s->periodicidad] ?? $s->periodicidad }}</td>
-                                        <td>{{ $s->hora }}</td>
-                                        <td>{{ $perfiles_vista[$s->perfil_vista ?? 'completa'] ?? $s->perfil_vista }}</td>
-                                        <td>
-                                            {{ $s->ultima_ejecucion?->format('d/m/Y H:i') ?? '—' }}
-                                            @if ($s->ultimo_estado)
-                                                <small class="d-block text-muted">{{ $s->ultimo_estado }}: {{ $s->ultimo_mensaje }}</small>
-                                            @endif
-                                        </td>
-                                        <td class="text-nowrap">
-                                            <a href="{{ route('flash_reporte_crown', ['editar' => $s->id]) }}" class="btn btn-outline-secondary btn-sm">Editar</a>
-                                            <form method="post" action="{{ route('probar_suscripcion_flash_reporte_crown', $s->id) }}" class="d-inline">
-                                                @csrf
-                                                <button type="submit" class="btn btn-outline-info btn-sm" name="enviar" value="0">Probar</button>
-                                                <button type="submit" class="btn btn-outline-success btn-sm" name="enviar" value="1" onclick="return confirm('¿Enviar mail real?');">Enviar</button>
-                                            </form>
-                                            <form method="post" action="{{ route('eliminar_suscripcion_flash_reporte_crown', $s->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn btn-outline-danger btn-sm">Eliminar</button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr><td colspan="6" class="text-muted">Sin suscripciones.</td></tr>
-                                @endforelse
-                            </tbody>
-                        </table>
+                @if ($informe)
+                    <hr>
+                    <h5 class="mb-2">
+                        @if ($formato === 'gaming')
+                            Gaming revenues {{ \Carbon\Carbon::parse($fecha)->format('d/m/Y') }}
+                            <small class="text-muted">
+                                comparativo {{ $informe['fecha_comparable']->format('d/m/Y') }}
+                                ({{ $informe['columnas'][1]['titulo'] }})
+                            </small>
+                        @else
+                            Flash completo {{ \Carbon\Carbon::parse($fecha)->format('d/m/Y') }}
+                        @endif
+                    </h5>
+                    <div class="table-responsive">
+                        @if ($formato === 'gaming')
+                            @include('caja.flash_crown.reporte.partials.tabla_gaming', ['informe' => $informe])
+                        @else
+                            @include('caja.flash_crown.reporte.partials.tabla_completo', ['informe' => $informe])
+                        @endif
                     </div>
-                    <p class="text-muted small mb-0">El cron envía solo días validados (salvo que desmarques la opción). Comparación “Anterior” = mismo día del año previo.</p>
                 @endif
             </div>
         </div>
     </div>
 </div>
+@endsection
+
+@section('scripts')
+<script>
+(function () {
+    var form = document.getElementById('form-informe-flash');
+    var overlay = document.getElementById('informe-flash-overlay');
+    if (!form || !overlay) {
+        return;
+    }
+    function mostrar(titulo) {
+        var nodo = document.getElementById('informe-flash-titulo');
+        if (nodo && titulo) {
+            nodo.textContent = titulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+    function ocultar() {
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+    form.addEventListener('submit', function (e) {
+        if (!form.checkValidity()) {
+            return;
+        }
+        var boton = e.submitter;
+        var accion = boton && boton.getAttribute('formaction') ? boton.textContent.trim() : 'Vista previa';
+        if (accion.indexOf('Guardar') === 0) {
+            return;
+        }
+        mostrar(accion.indexOf('Enviar') === 0 ? 'Enviando el informe…' : 'Armando la vista previa…');
+    });
+    window.addEventListener('pageshow', ocultar);
+})();
+</script>
 @endsection

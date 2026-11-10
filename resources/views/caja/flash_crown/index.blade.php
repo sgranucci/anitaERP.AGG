@@ -52,7 +52,7 @@
                 <div class="card-tools">
                     @if (can('listar-flash-reporte-crown', false))
                         <a href="{{ route('flash_reporte_crown') }}" class="btn btn-outline-success btn-sm">
-                            <i class="fa fa-envelope"></i> Flash Report / mails
+                            <i class="fa fa-envelope"></i> Informe flash
                         </a>
                     @endif
                 </div>
@@ -122,6 +122,8 @@
                                     <th class="text-right">Win mesas</th>
                                     <th class="text-right">Coin in</th>
                                     <th class="text-right">Win slots</th>
+                                    <th class="text-right">OL Win</th>
+                                    <th class="text-right">BS Win</th>
                                     <th class="text-right">Gaming</th>
                                     <th class="text-right">F&amp;B</th>
                                     <th class="text-right">Hotel</th>
@@ -142,6 +144,8 @@
                                         <td class="text-right">{{ number_format((float) $m['win_mesas'], 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->coin_in, 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->slot_r, 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) ($fila->ol_win ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) ($fila->bs_win ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $m['gaming'], 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->ayb, 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->hotel, 2, ',', '.') }}</td>
@@ -160,7 +164,7 @@
                                                 </a>
                                             @endif
                                             @if (($puedeValidar ?? false) && ! $fila->estaValidado())
-                                                <form method="post" action="{{ route('validar_flash_crown', $fila->id) }}" class="d-inline" onsubmit="return confirm('¿Validar este flash? Habilita el envío por mail.');">
+                                                <form method="post" action="{{ route('validar_flash_crown', $fila->id) }}" class="d-inline" onsubmit="return confirm('¿Validar este flash?');">
                                                     @csrf
                                                     <button type="submit" class="btn-accion-tabla tooltipsC" title="Validar">
                                                         <i class="fa fa-check text-success"></i>
@@ -185,6 +189,8 @@
                                         <td class="text-right">{{ number_format((float) ($cm['win_mesas'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['coin_in'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['slot_r'] ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) ($consolidado['ol_win'] ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) ($consolidado['bs_win'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($cm['gaming'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['ayb'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['hotel'] ?? 0), 2, ',', '.') }}</td>

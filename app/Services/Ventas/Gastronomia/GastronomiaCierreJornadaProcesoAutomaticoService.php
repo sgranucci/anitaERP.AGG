@@ -325,8 +325,9 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
 
     private function assertEntornoPermiteCierreAutomatico(): void
     {
-        if (EntornoEmpresaSupport::esFerli()) {
-            throw new InvalidArgumentException('El cierre de jornada Waitry está desconectado en Ferli.');
+        if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
+            $cliente = EntornoEmpresaSupport::esCrown() ? 'Crown' : 'Ferli';
+            throw new InvalidArgumentException('El cierre de jornada Waitry está desconectado en '.$cliente.'.');
         }
     }
 

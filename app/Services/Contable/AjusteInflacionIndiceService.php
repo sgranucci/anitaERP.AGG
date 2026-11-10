@@ -3,6 +3,8 @@
 namespace App\Services\Contable;
 
 use App\Models\Contable\AjusteInflacionIndice;
+use App\Models\Contable\BienUsoIndice;
+use App\Models\Contable\BienUsoIndiceCoeficiente;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +12,10 @@ use InvalidArgumentException;
 
 class AjusteInflacionIndiceService
 {
+    private ?bool $sincronizaRevaluo = null;
+
+    private int $indiceRevaluoId = 0;
+
     public function guardar(string $periodo, float $valor, int $usuarioId, string $fuente, bool $provisorio): AjusteInflacionIndice
     {
         $periodoNormalizado = $this->normalizarPeriodo($periodo);
@@ -17,7 +23,7 @@ class AjusteInflacionIndiceService
             throw new InvalidArgumentException('El índice debe ser mayor que cero.');
         }
 
-        return AjusteInflacionIndice::query()->updateOrCreate(
+        $indice = AjusteInflacionIndice::query()->updateOrCreate(
             ['periodo' => $periodoNormalizado],
             [
                 'valor' => $valor,
@@ -26,6 +32,26 @@ class AjusteInflacionIndiceService
                 'usuario_id' => $usuarioId,
             ]
         );
+        $this->sincronizarIndiceRevaluo($periodoNormalizado, $valor);
+
+        return $indice;
+    }
+
+    /**
+     * Crown (y el resto) tienen una sola serie de tipo Índices: es el IPC del revalúo.
+     * Si hay más de una, no se adivina cuál actualizar.
+     */
+    public function sincronizaIndiceRevaluo(): bool
+    {
+        if ($this->sincronizaRevaluo === null) {
+            $ids = BienUsoIndice::query()
+                ->where('tipo_valor', BienUsoIndice::TIPO_INDICES)
+                ->pluck('id');
+            $this->sincronizaRevaluo = $ids->count() === 1;
+            $this->indiceRevaluoId = $this->sincronizaRevaluo ? (int) $ids->first() : 0;
+        }
+
+        return $this->sincronizaRevaluo;
     }
 
     /**
@@ -99,6 +125,25 @@ class AjusteInflacionIndiceService
         });
 
         return compact('creados', 'actualizados', 'errores');
+    }
+
+    private function sincronizarIndiceRevaluo(string $periodoYmd, float $valor): void
+    {
+        if ($valor <= 0 || ! $this->sincronizaIndiceRevaluo() || $this->indiceRevaluoId <= 0) {
+            return;
+        }
+
+        $indiceId = $this->indiceRevaluoId;
+
+        $fecha = Carbon::parse($periodoYmd);
+        BienUsoIndiceCoeficiente::query()->updateOrCreate(
+            [
+                'bien_uso_indice_id' => $indiceId,
+                'anio' => (int) $fecha->year,
+                'mes' => (int) $fecha->month,
+            ],
+            ['coeficiente' => round($valor, 6)]
+        );
     }
 
     private function normalizarPeriodo(string $periodo): string

@@ -4,7 +4,8 @@
 @endsection
 
 @section("scripts")
-<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/crear.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -53,4 +54,5 @@
         </div>
     </div>
 </div>
+@include('includes.contable.modalconsultacentrocosto')
 @endsection

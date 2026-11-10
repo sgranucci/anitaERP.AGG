@@ -20,10 +20,19 @@ return [
     'sala_codigo' => env('CAJA_ANITA_SYNC_SALA_CODIGO', ''),
 
     /**
-     * CROWN: sucursal Anita (ventas) de resultado online / resulol.
+     * CROWN: sucursal Anita (ventas) de slots online / resulol.
      * CIP Cipolletti = 15.
      */
     'sucursal_resultado_online' => (int) env('CAJA_ANITA_SUCURSAL_RESULTADO_ONLINE', 15),
+
+    /**
+     * CROWN: casino online (a-resonline / resonline) vive en ac-server1.
+     * Del Río online = 67, Betsur online = 68.
+     */
+    'sucursal_del_rio_online' => (int) env('CAJA_ANITA_SUCURSAL_DEL_RIO_ONLINE', 67),
+    'sucursal_betsur_online' => (int) env('CAJA_ANITA_SUCURSAL_BETSUR_ONLINE', 68),
+    'ifx_server_casino_online' => env('CAJA_ANITA_IFX_SERVER_CASINO_ONLINE', 'acncadmin'),
+    'path_sistema_casino_online' => env('CAJA_ANITA_PATH_CASINO_ONLINE', '/usr2/casino'),
 
     'campos_listado' => 'caja_desc',
 ];

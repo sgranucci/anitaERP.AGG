@@ -10,8 +10,11 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Concepto_Ivacompra_Condicioniva;
 use App\Models\Compras\Concepto_Ivacompra_Empresa;
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Models\Compras\Tipotransaccion_Compra_Centrocosto;
 use App\Models\Compras\Tipotransaccion_Compra_Concepto_Ivacompra;
+use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
+use App\Support\Compras\AnitaSync\TipotransaccionCompra\TipotransaccionCompraAnitaEsquemaSupport;
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ConceptoIvacompraRetieneIibbSupport;
@@ -22,7 +25,7 @@ use RuntimeException;
  * Importa maestros IVA compras Anita → ERP:
  * colivacomp → columna_ivacompra
  * conccomp (+ concciva si aplica) → concepto_ivacompra
- * t_comp (+ cont_comp) → tipotransaccion_compra
+ * t_comp (+ cont_comp + ccostcomp|ccosvtcomp) → tipotransaccion_compra
  *
  * No escribe Anita. Dry-run por defecto vía analizar().
  */
@@ -61,9 +64,9 @@ final class ComprasIvaMaestrosAnitaImportService
         $api = new ApiAnita();
         $errores = [];
         $diagnostico = [
-            'Orden: columnas IVA → conceptos → tipos de transacción (con vínculos cont_comp).',
+            'Orden: columnas IVA → conceptos → tipos de transacción (cont_comp y centros de costo del tipo).',
             'Anita es fuente de verdad en altas y actualización de cabecera; no borra vínculos ERP extra.',
-            'concciva / ccostcomp se omiten si UNLOAD falla (esquema Ferli / Crown sin ccostcomp).',
+            'concciva se omite si UNLOAD falla. Centros de costo del tipo: ccostcomp (AGG) o ccosvtcomp (Crown). Ferli no tiene ninguna.',
         ];
 
         $columnas = $this->syncColumnas($api, $path, $persistir, $errores);
@@ -280,18 +283,25 @@ final class ComprasIvaMaestrosAnitaImportService
         );
 
         $conceptosPorTipo = $this->indexarContComp($api, $path, $errores);
+        $centros = $this->indexarCentrosCostoTipo($api, $path, $errores);
+        $centrosPorTipo = $centros['por_tipo'];
+        $indiceCc = $this->indiceCentrocostoPorCodigo();
 
         $crear = 0;
         $actualizar = 0;
         $omitidos = 0;
         $vinculos = 0;
+        $vinculosCc = 0;
+        $sinCc = [];
         $detalle = [];
+        $tiposVistos = [];
 
         foreach ($filas as $fila) {
             $abrev = strtoupper(trim((string) ($fila->tcomp_clave ?? '')));
             if ($abrev === '') {
                 continue;
             }
+            $tiposVistos[$abrev] = true;
 
             $payload = $this->mapearTipo($fila);
             $existente = Tipotransaccion_Compra::query()
@@ -299,25 +309,33 @@ final class ComprasIvaMaestrosAnitaImportService
                 ->first();
 
             $conceptosCodigo = $conceptosPorTipo[$abrev] ?? [];
+            [$centrosOk, $centrosSinMaestro] = $this->partirCentros($centrosPorTipo[$abrev] ?? [], $indiceCc);
+            foreach ($centrosSinMaestro as $codigoCc) {
+                $sinCc[$codigoCc] = $codigoCc;
+            }
 
             if ($existente === null) {
-                $detalle[] = "crear {$abrev} — {$payload['nombre']} (conceptos: ".count($conceptosCodigo).')';
+                $detalle[] = "crear {$abrev} — {$payload['nombre']} (conceptos: ".count($conceptosCodigo)
+                    .', centros: '.count($centrosOk).')';
                 $crear++;
                 if ($persistir) {
-                    DB::transaction(function () use ($payload, $conceptosCodigo, &$vinculos) {
+                    DB::transaction(function () use ($payload, $conceptosCodigo, $centrosOk, $indiceCc, &$vinculos, &$vinculosCc) {
                         $tipo = Tipotransaccion_Compra::query()->create($payload);
                         $vinculos += $this->vincularConceptos($tipo, $conceptosCodigo);
+                        $vinculosCc += $this->vincularCentros($tipo, $centrosOk, $indiceCc);
                     });
                 } else {
                     $vinculos += count($conceptosCodigo);
+                    $vinculosCc += count($centrosOk);
                 }
                 continue;
             }
 
             $cambios = $this->diffTipo($existente, $payload);
             $faltanVinculos = $this->conceptosFaltantes($existente, $conceptosCodigo);
+            $faltanCc = $this->centrosFaltantes($existente, $centrosOk, $indiceCc);
 
-            if ($cambios === [] && $faltanVinculos === []) {
+            if ($cambios === [] && $faltanVinculos === [] && $faltanCc === []) {
                 $omitidos++;
                 continue;
             }
@@ -329,29 +347,52 @@ final class ComprasIvaMaestrosAnitaImportService
             if ($faltanVinculos !== []) {
                 $partes[] = 'conceptos +'.count($faltanVinculos);
             }
+            if ($faltanCc !== []) {
+                $partes[] = 'centros +'.count($faltanCc);
+            }
             $detalle[] = "actualizar {$abrev} — ".implode('; ', $partes);
             $actualizar++;
 
             if ($persistir) {
-                DB::transaction(function () use ($existente, $cambios, $faltanVinculos, &$vinculos) {
+                DB::transaction(function () use ($existente, $cambios, $faltanVinculos, $faltanCc, $indiceCc, &$vinculos, &$vinculosCc) {
                     if ($cambios !== []) {
                         $existente->fill($cambios);
                         $existente->save();
                     }
                     $vinculos += $this->vincularConceptos($existente, $faltanVinculos);
+                    $vinculosCc += $this->vincularCentros($existente, $faltanCc, $indiceCc);
                 });
             } else {
                 $vinculos += count($faltanVinculos);
+                $vinculosCc += count($faltanCc);
             }
         }
 
+        $huerfanos = array_values(array_diff(array_keys($centrosPorTipo), array_keys($tiposVistos)));
+        if ($huerfanos !== []) {
+            $detalle[] = 'tipos en '.$centros['fuente'].' sin t_comp: '.implode(', ', array_slice($huerfanos, 0, 12));
+        }
+        if ($sinCc !== []) {
+            $codigos = array_values($sinCc);
+            sort($codigos, SORT_NATURAL);
+            $detalle[] = 'centros de costo sin maestro ERP ('.count($codigos).'): '.implode(', ', array_slice($codigos, 0, 20));
+        }
+
+        $fuente = 'compras.t_comp + cont_comp';
+        if ($centros['fuente'] !== null) {
+            $fuente .= ' + '.$centros['fuente'];
+        }
+
         return [
-            'fuente' => 'compras.t_comp + cont_comp',
+            'fuente' => $fuente,
             'en_anita' => count($filas),
             'crear' => $crear,
             'actualizar' => $actualizar,
             'omitidos' => $omitidos,
             'vinculos_concepto' => $vinculos,
+            'vinculos_centrocosto' => $vinculosCc,
+            'centros_en_anita' => $centros['filas'],
+            'sin_centrocosto_erp' => count($sinCc),
             'muestra' => array_slice($detalle, 0, 40),
         ];
     }
@@ -616,6 +657,154 @@ final class ComprasIvaMaestrosAnitaImportService
     }
 
     /**
+     * Centros de costo habilitados por tipo (ccostcomp en AGG, ccosvtcomp en Crown).
+     *
+     * @param  list<string>  $errores
+     * @return array{por_tipo: array<string, list<string>>, fuente: ?string, filas: int}
+     */
+    private function indexarCentrosCostoTipo(ApiAnita $api, ?string $path, array &$errores): array
+    {
+        $origen = TipotransaccionCompraAnitaEsquemaSupport::origenCentrosCostoTipo();
+        if ($origen === null) {
+            return ['por_tipo' => [], 'fuente' => null, 'filas' => 0];
+        }
+
+        $filas = $this->listar(
+            $api,
+            $path,
+            $origen['tabla'],
+            $origen['campo_tipo'].','.$origen['campo_ccosto'],
+            $errores
+        );
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $tipo = strtoupper(trim((string) ($fila->{$origen['campo_tipo']} ?? '')));
+            $codigo = trim((string) ($fila->{$origen['campo_ccosto']} ?? ''));
+            if ($tipo === '' || $codigo === '' || $codigo === '0') {
+                continue;
+            }
+            $out[$tipo][$codigo] = $codigo;
+        }
+
+        foreach ($out as $tipo => $map) {
+            $out[$tipo] = array_values($map);
+        }
+
+        return ['por_tipo' => $out, 'fuente' => $origen['tabla'], 'filas' => count($filas)];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function indiceCentrocostoPorCodigo(): array
+    {
+        $map = [];
+        foreach (Centrocosto::query()->get(['id', 'codigo']) as $cc) {
+            $codigo = trim((string) $cc->codigo);
+            if ($codigo === '') {
+                continue;
+            }
+            $map[$codigo] = (int) $cc->id;
+            $alt = ltrim($codigo, '0');
+            if ($alt !== '' && $alt !== $codigo) {
+                $map[$alt] = (int) $cc->id;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  list<string>  $codigos
+     * @param  array<string, int>  $indice
+     * @return array{0: list<string>, 1: list<string>}
+     */
+    private function partirCentros(array $codigos, array $indice): array
+    {
+        $ok = [];
+        $sin = [];
+        foreach ($codigos as $codigo) {
+            if ($this->idCentrocosto($codigo, $indice) === null) {
+                $sin[] = $codigo;
+                continue;
+            }
+            $ok[] = $codigo;
+        }
+
+        return [$ok, $sin];
+    }
+
+    /**
+     * @param  array<string, int>  $indice
+     */
+    private function idCentrocosto(string $codigo, array $indice): ?int
+    {
+        if (isset($indice[$codigo])) {
+            return $indice[$codigo];
+        }
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && isset($indice[$alt])) {
+            return $indice[$alt];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $codigos
+     * @param  array<string, int>  $indice
+     * @return list<string>
+     */
+    private function centrosFaltantes(Tipotransaccion_Compra $tipo, array $codigos, array $indice): array
+    {
+        if ($codigos === []) {
+            return [];
+        }
+
+        $ya = Tipotransaccion_Compra_Centrocosto::query()
+            ->where('tipotransaccion_compra_id', $tipo->id)
+            ->pluck('centrocosto_id')
+            ->map(static fn ($id) => (int) $id)
+            ->flip()
+            ->all();
+
+        $faltan = [];
+        foreach ($codigos as $codigo) {
+            $id = $this->idCentrocosto($codigo, $indice);
+            if ($id !== null && ! isset($ya[$id])) {
+                $faltan[] = $codigo;
+            }
+        }
+
+        return $faltan;
+    }
+
+    /**
+     * @param  list<string>  $codigos
+     * @param  array<string, int>  $indice
+     */
+    private function vincularCentros(Tipotransaccion_Compra $tipo, array $codigos, array $indice): int
+    {
+        $n = 0;
+        foreach ($codigos as $codigo) {
+            $id = $this->idCentrocosto($codigo, $indice);
+            if ($id === null) {
+                continue;
+            }
+            $created = Tipotransaccion_Compra_Centrocosto::query()->firstOrCreate([
+                'tipotransaccion_compra_id' => $tipo->id,
+                'centrocosto_id' => $id,
+            ]);
+            if ($created->wasRecentlyCreated) {
+                $n++;
+            }
+        }
+
+        return $n;
+    }
+
+    /**
      * @param  list<string>  $codigosConcepto
      * @return list<string>
      */
@@ -748,7 +937,7 @@ final class ComprasIvaMaestrosAnitaImportService
         if ($parsed['error_lectura'] !== null) {
             $msg = "Anita compras.{$tabla}: {$parsed['error_lectura']}";
             if ($silenciarError) {
-                // Esquema incompleto (Ferli sin concciva/ccostcomp; Crown sin ccostcomp): no es fallo del import.
+                // Esquema incompleto (Ferli sin concciva): no es fallo del import.
                 return [];
             }
             throw new RuntimeException($msg);

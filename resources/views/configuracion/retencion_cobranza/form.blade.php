@@ -19,11 +19,11 @@
     <div id="provincia" class="form-group row" style="display: none">
         <label class="col-lg-3 col-form-label">Provincia</label>
         <div class="form-group row col-lg-8">
-            <input type="hidden" id="provincia_id_previa" name="provincia_id_previa" value="{{$data->provincia_id}}" >
-            <input type="hidden" id="desc_provincia" name="desc_provincia" value="{{$data->provincias->nombre??''}}" >
-            <input type="hidden" class="col-form-label provincia_id" id="provincia_id" name="provincia_id" value="{{$data->provincia_id}}" >
-            <input type="text" class="form-control col-lg-2 codigoprovincia" id="codigoprovincia" name="codigoprovincia" value="{{$data->provincias->codigo}}" >
-            <input type="text" class="form-control col-lg-4 nombreprovincia" id="nombreprovincia" name="nombreprovincia" value="{{$data->provincias->nombre??''}}" readonly>
+            <input type="hidden" id="provincia_id_previa" name="provincia_id_previa" value="{{ old('provincia_id', $data->provincia_id ?? '') }}" >
+            <input type="hidden" id="desc_provincia" name="desc_provincia" value="{{ $data->provincias->nombre ?? '' }}" >
+            <input type="hidden" class="col-form-label provincia_id" id="provincia_id" name="provincia_id" value="{{ old('provincia_id', $data->provincia_id ?? '') }}" >
+            <input type="text" class="form-control col-lg-2 codigoprovincia" id="codigoprovincia" name="codigoprovincia" value="{{ old('codigoprovincia', $data->provincias->codigo ?? '') }}" >
+            <input type="text" class="form-control col-lg-4 nombreprovincia" id="nombreprovincia" name="nombreprovincia" value="{{ old('nombreprovincia', $data->provincias->nombre ?? '') }}" readonly>
             <button type="button" title="Consulta provinciaes" style="padding:1;" class="btn-accion-tabla consultaprovincia tooltipsC">
                 <i class="fa fa-search text-primary"></i>
             </button>

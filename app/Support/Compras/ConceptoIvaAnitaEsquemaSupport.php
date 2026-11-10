@@ -13,9 +13,10 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * - no existe compras.ccostcomp (centros de costo por tipo de comprobante).
  *   t_comp y cont_comp sí existen (verificado 9/oct/2026).
  *
- * Crown /usr2/casino (verificado 4/nov/2026):
+ * Crown /usr2/casino (verificado 10/nov/2026):
  * - conccomp completo (con tipo/alicuota/retiene) y concciva existen.
- * - no existe compras.ccostcomp. t_comp y cont_comp sí (canal reducido del ABM tipo).
+ * - no existe compras.ccostcomp. Los centros de costo del tipo están en
+ *   compras.ccosvtcomp (ccosvt_tipo + ccosvt_ccosto). t_comp y cont_comp sí.
  *   Ver {@see \App\Support\Compras\AnitaSync\TipotransaccionCompra\TipotransaccionCompraAnitaEsquemaSupport}.
  */
 final class ConceptoIvaAnitaEsquemaSupport
@@ -62,8 +63,8 @@ final class ConceptoIvaAnitaEsquemaSupport
     }
 
     /**
-     * Tabla compras.ccostcomp (centros de costo habilitados por tipo de comprobante).
-     * Ferli y Crown no la tienen: no leer ni escribir (vínculo solo en el ERP).
+     * Tabla compras.ccostcomp (AGG). Ferli no la tiene. Crown usa ccosvtcomp
+     * en su lugar: no leer ni escribir ccostcomp ahí.
      */
     public static function leeCcostcomp(): bool
     {

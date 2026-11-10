@@ -18,20 +18,17 @@
         if ($texto === '') {
             return '';
         }
-        $attrs = ' data-columna="'.e($columna).'" data-scope="'.e($scope).'"';
+        $attrs = ' type="button" class="btn btn-link btn-sm p-0 text-primary js-tc-audit"';
+        $attrs .= ' data-columna="'.e($columna).'" data-scope="'.e($scope).'"';
         if ($asignacionId) {
             $attrs .= ' data-asignacion-id="'.(int) $asignacionId.'"';
         }
         if ($tipo) {
             $attrs .= ' data-tipo="'.e($tipo).'"';
         }
-        $title = 'Ver cómo se calcula y auditar '.e($columna);
+        $attrs .= ' title="Ver origen y movimientos de '.e($columna).'"';
 
-        return '<span class="tc-audit-celda">'
-            .'<button type="button" class="js-tc-audit"'.$attrs.' title="'.$title.'">'.$texto.'</button>'
-            .'<button type="button" class="tc-audit-btn-info js-tc-audit"'.$attrs.' title="'.$title.'" aria-label="'.$title.'">'
-            .'<i class="fa fa-info" aria-hidden="true"></i></button>'
-            .'</span>';
+        return '<button'.$attrs.'>'.$texto.'</button>';
     };
 @endphp
 <div class="card card-outline card-info mb-3">
@@ -41,7 +38,7 @@
     <div class="card-body pb-2">
         @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
         <p class="text-muted small mb-2">
-            Formato de <code>l-anexo3new.c</code> (ENCAB1). Cada importe azul (o el botón <i class="fa fa-info"></i>) abre la explicación del cálculo y los documentos para auditarlo.
+            Formato de <code>l-anexo3new.c</code> (ENCAB1). Tocá un importe para ver cómo se calcula y los documentos que lo arman.
         </p>
         @if ($anexo3 === null)
             <div class="alert alert-warning mb-0">No se pudo armar el anexo III. {{ $anexo3Error }}</div>
@@ -150,4 +147,3 @@
 @include('caja.tesoreria_crown.jornada.partials.modal_auditoria_importe', [
     'urlAuditoria' => route('auditoria_anexo3_tesoreria_crown_jornada', $jornada->id),
 ])
-<script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js')) }}"></script>

@@ -4,6 +4,7 @@
     var previewTimer = null;
     var previewXhr = null;
     var ultimasHojasDetectadas = null;
+    var ajustandoDefaultsColumnas = false;
 
     function mostrarPanelHoja(mostrar) {
         var $panel = $('#panel-hoja-excel');
@@ -29,6 +30,40 @@
         return $('<div/>').text(texto == null ? '' : String(texto)).html();
     }
 
+    function modoColumnasActual() {
+        return $('input[name="modo_columnas"]:checked').val() || 'titulo';
+    }
+
+    function modoImporteActual() {
+        return $('input[name="modo_importe"]:checked').val() || 'debe_haber';
+    }
+
+    function esArchivoCsv() {
+        var input = document.getElementById('file');
+        if (!input || !input.files || !input.files.length) {
+            return false;
+        }
+        var nombre = String(input.files[0].name || '').toLowerCase();
+        return nombre.endsWith('.csv') || nombre.endsWith('.txt');
+    }
+
+    function sincronizarPanelCsvSeparador() {
+        var $panel = $('#panel-csv-separador');
+        var $select = $('#csv_separador');
+        // Siempre visible: en CSV queda marcado como aplicable; en Excel se ignora.
+        $panel.removeClass('d-none');
+        if (esArchivoCsv()) {
+            $select.addClass('border-primary');
+            $panel.find('.col-form-label').text('Obligatorio para este CSV/TXT. Cambiá el separador y revisá la vista previa.');
+        } else if (archivoSeleccionado()) {
+            $select.removeClass('border-primary');
+            $panel.find('.col-form-label').text('Archivo Excel: el separador no se usa.');
+        } else {
+            $select.removeClass('border-primary');
+            $panel.find('.col-form-label').text('Obligatorio para CSV/TXT. En Excel se ignora.');
+        }
+    }
+
     function badgeColumna(col) {
         if (!col) {
             return '<span class="badge badge-danger">No encontrada</span>';
@@ -38,6 +73,62 @@
         }
         var req = col.requerida ? ' (requerida)' : ' (opcional)';
         return '<span class="badge badge-danger">No encontrada' + req + '</span>';
+    }
+
+    function esValorDefaultColumna($input, modo) {
+        var valor = $.trim(String($input.val() || ''));
+        var defTitulo = String($input.data('default-titulo') || '');
+        var defNumero = String($input.data('default-numero') || '');
+        if (valor === '') {
+            return true;
+        }
+        if (modo === 'numero') {
+            // Cambiando a número: si todavía tiene el default de título, se puede reemplazar.
+            return valor === defTitulo || valor.toLowerCase() === defTitulo.toLowerCase();
+        }
+        // Cambiando a título: vacío o el default numérico.
+        return valor === defNumero;
+    }
+
+    function aplicarDefaultsColumnas(forzar) {
+        var porNumero = modoColumnasActual() === 'numero';
+        ajustandoDefaultsColumnas = true;
+        $('.js-col-config').each(function () {
+            var $input = $(this);
+            var defTitulo = String($input.data('default-titulo') || '');
+            var defNumero = String($input.data('default-numero') || '');
+            var destino = porNumero ? defNumero : defTitulo;
+            if (forzar || esValorDefaultColumna($input, porNumero ? 'numero' : 'titulo')) {
+                $input.val(destino);
+            }
+            $input.attr('placeholder', destino !== '' ? destino : (porNumero ? 'nº col.' : defTitulo));
+        });
+        ajustandoDefaultsColumnas = false;
+    }
+
+    function sincronizarUiModos() {
+        var porNumero = modoColumnasActual() === 'numero';
+        var montoDh = modoImporteActual() === 'monto_dh';
+
+        if (montoDh) {
+            $('.js-panel-debe-haber').hide();
+            $('.js-panel-monto-dh').show();
+        } else {
+            $('.js-panel-monto-dh').hide();
+            $('.js-panel-debe-haber').show();
+        }
+
+        if (porNumero) {
+            $('#label-fila-encabezado').text('Primera fila de datos');
+            $('#ayuda-fila-encabezado').text('Vacío = fila 1. No hay fila de títulos: se leen todas las filas desde ahí.');
+            $('#fila_encabezado').attr('placeholder', '1');
+            $('.js-ayuda-col-cuenta').html('Número de columna (1 = primera) o letra Excel (A, B…).');
+        } else {
+            $('#label-fila-encabezado').text('Fila del encabezado');
+            $('#ayuda-fila-encabezado').text('Vacío = detectar automáticamente (título arriba, encabezado en fila 2, 3, etc.)');
+            $('#fila_encabezado').attr('placeholder', 'Auto');
+            $('.js-ayuda-col-cuenta').html('Código de cuenta contable. Alias: <code>cuenta</code>, <code>codigo_cuenta</code>, <code>cta</code>…');
+        }
     }
 
     function actualizarSelectorHojas(data) {
@@ -86,7 +177,7 @@
         var html = '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
         html += '<thead style="background-color:#85C1E9;color:#17202A;"><tr>';
         html += '<th>Fila</th><th>Cuenta</th><th>Nombre</th><th>CC</th><th>Mon.</th>';
-        html += '<th class="text-right">Debe</th><th class="text-right">Haber</th><th>Detalle</th><th>Resultado</th>';
+        html += '<th class="text-right">Debe</th><th class="text-right">Haber</th><th>D/H</th><th>Detalle</th><th>Resultado</th>';
         html += '</tr></thead><tbody>';
         filas.forEach(function (fila) {
             var cls = listas ? 'table-success' : 'table-warning';
@@ -98,6 +189,7 @@
             html += '<td>' + escHtml(fila.moneda_abreviatura || '') + '</td>';
             html += '<td class="text-right">' + escHtml(fila.debe_texto || '') + '</td>';
             html += '<td class="text-right">' + escHtml(fila.haber_texto || '') + '</td>';
+            html += '<td>' + escHtml(fila.dh || fila.dh_texto || '') + '</td>';
             html += '<td><small>' + escHtml(fila.detalle || '') + '</small></td>';
             html += '<td><small>' + escHtml(fila.mensaje) + '</small></td>';
             html += '</tr>';
@@ -123,7 +215,10 @@
         }
 
         var hayErroresFila = data.filas_error && data.filas_error.length;
-        if (data.ok) {
+        var paraCompletar = data.ok && data.resumen && (!data.resumen.balanceado || (data.resumen.sin_importe || 0) > 0);
+        if (paraCompletar) {
+            $estado.removeClass().addClass('badge badge-warning').text('Se abre el asiento para completar');
+        } else if (data.ok) {
             $estado.removeClass().addClass('badge badge-success').text('Listo para importar');
         } else if (hayErroresFila) {
             $estado.removeClass().addClass('badge badge-danger').text('Errores en filas');
@@ -142,17 +237,42 @@
         if (data.hoja_nombre) {
             html += '<p class="small mb-2">Hoja analizada: <strong>' + escHtml(data.hoja_seleccionada) + ' — ' + escHtml(data.hoja_nombre) + '</strong></p>';
         }
-        html += '<p class="small mb-2">Encabezado detectado en fila <strong>' + escHtml(data.fila_encabezado) + '</strong>';
-        if (data.fila_encabezado_automatica) {
-            html += ' (automático)';
+
+        if (data.sin_encabezado) {
+            html += '<p class="small mb-2">Sin fila de títulos. Datos desde la fila <strong>'
+                + escHtml(data.fila_inicio_datos || 1) + '</strong>.</p>';
+        } else {
+            html += '<p class="small mb-2">Encabezado detectado en fila <strong>' + escHtml(data.fila_encabezado) + '</strong>';
+            if (data.fila_encabezado_automatica) {
+                html += ' (automático)';
+            }
+            html += '.</p>';
         }
-        html += '.</p>';
+
+        if (data.modo_importe === 'monto_dh') {
+            html += '<p class="small mb-2">Modo importes: <strong>monto + D/H</strong>.</p>';
+        } else {
+            html += '<p class="small mb-2">Modo importes: <strong>Debe / Haber</strong>.</p>';
+        }
+
+        if (esArchivoCsv() && data.csv_separador_etiqueta) {
+            html += '<p class="small mb-2">Separador CSV: <strong>' + escHtml(data.csv_separador_etiqueta) + '</strong>';
+            if (data.csv_separador_detectado && data.csv_separador_automatico) {
+                html += ' <span class="text-muted">(' + escHtml(data.csv_separador_detectado) + ')</span>';
+            }
+            html += '.</p>';
+        }
 
         if (data.columnas) {
             html += '<div class="row small mb-2">';
             html += '<div class="col-md-4"><strong>Cuenta</strong> (' + escHtml(data.columnas.cuenta.configurado) + '): ' + badgeColumna(data.columnas.cuenta) + '</div>';
-            html += '<div class="col-md-4"><strong>Debe</strong> (' + escHtml(data.columnas.debe.configurado) + '): ' + badgeColumna(data.columnas.debe) + '</div>';
-            html += '<div class="col-md-4"><strong>Haber</strong> (' + escHtml(data.columnas.haber.configurado) + '): ' + badgeColumna(data.columnas.haber) + '</div>';
+            if (data.modo_importe === 'monto_dh') {
+                html += '<div class="col-md-4"><strong>Monto</strong> (' + escHtml(data.columnas.monto.configurado) + '): ' + badgeColumna(data.columnas.monto) + '</div>';
+                html += '<div class="col-md-4"><strong>D/H</strong> (' + escHtml(data.columnas.dh.configurado) + '): ' + badgeColumna(data.columnas.dh) + '</div>';
+            } else {
+                html += '<div class="col-md-4"><strong>Debe</strong> (' + escHtml(data.columnas.debe.configurado) + '): ' + badgeColumna(data.columnas.debe) + '</div>';
+                html += '<div class="col-md-4"><strong>Haber</strong> (' + escHtml(data.columnas.haber.configurado) + '): ' + badgeColumna(data.columnas.haber) + '</div>';
+            }
             html += '<div class="col-md-4 mt-1"><strong>Centro costo</strong>: ' + badgeColumna(data.columnas.centrocosto) + '</div>';
             html += '<div class="col-md-4 mt-1"><strong>Moneda</strong>: ' + badgeColumna(data.columnas.moneda) + '</div>';
             html += '<div class="col-md-4 mt-1"><strong>Detalle</strong>: ' + badgeColumna(data.columnas.detalle) + '</div>';
@@ -280,9 +400,13 @@
     }
 
     $(function () {
+        sincronizarUiModos();
+        sincronizarPanelCsvSeparador();
+
         $('#file').on('change', function () {
             var tieneArchivo = archivoSeleccionado();
             $('#btn-preview-import-asiento').prop('disabled', !tieneArchivo);
+            sincronizarPanelCsvSeparador();
             if (tieneArchivo) {
                 $('#hoja_indice').val(1);
                 ultimasHojasDetectadas = null;
@@ -293,6 +417,12 @@
                 $('#panel-preview-import-asiento').hide();
                 ultimasHojasDetectadas = null;
                 mostrarPanelHoja(false);
+            }
+        });
+
+        $('#csv_separador').on('change', function () {
+            if (archivoSeleccionado()) {
+                programarPreview();
             }
         });
 
@@ -307,10 +437,28 @@
             solicitarPreview();
         });
 
+        $('input[name="modo_columnas"]').on('change', function () {
+            aplicarDefaultsColumnas(false);
+            sincronizarUiModos();
+            if (archivoSeleccionado()) {
+                programarPreview();
+            }
+        });
+
+        $('input[name="modo_importe"]').on('change', function () {
+            sincronizarUiModos();
+            if (archivoSeleccionado()) {
+                programarPreview();
+            }
+        });
+
         $('#form-general').on(
             'change input',
-            '#empresa_id, #moneda_id, #col_cuenta, #col_debe, #col_haber, #col_centrocosto, #col_moneda, #col_cotizacion, #col_detalle, #fila_encabezado',
+            '#empresa_id, #moneda_id, #col_cuenta, #col_debe, #col_haber, #col_monto, #col_dh, #col_centrocosto, #col_moneda, #col_cotizacion, #col_detalle, #fila_encabezado',
             function () {
+                if (ajustandoDefaultsColumnas) {
+                    return;
+                }
                 if (archivoSeleccionado()) {
                     programarPreview();
                 }

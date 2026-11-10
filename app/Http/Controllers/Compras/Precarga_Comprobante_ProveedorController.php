@@ -18,6 +18,7 @@ use App\Services\Compras\OrdencompraLegajoFacturaPdfService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
+use App\Support\Compras\ComprobanteProveedorTipoCargaSesion;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorDuplicadoException;
@@ -103,6 +104,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
     public function previewPdfIa(Request $request)
     {
         can('crear-precarga-proveedores');
+
+        ComprobanteProveedorTipoCargaSesion::recordar(ComprobanteProveedorTipoCargaSesion::IA);
 
         $request->validate([
             'pdf' => 'required|file|mimes:pdf|max:20480',
@@ -277,6 +280,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
     public function confirmarPdfIa(Request $request)
     {
         can('crear-precarga-proveedores');
+
+        ComprobanteProveedorTipoCargaSesion::recordar(ComprobanteProveedorTipoCargaSesion::IA);
 
         $request->validate([
             'payload' => 'required|json',

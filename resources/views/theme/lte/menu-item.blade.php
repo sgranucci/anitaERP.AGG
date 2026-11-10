@@ -1,7 +1,8 @@
 @php
     $nivel = (int) ($item['nivel'] ?? 0);
     $url = $item['url'] ?? '';
-    $esActivo = $url !== '' ? getMenuActivo($url) : '';
+    $menuIdItem = (int) ($item['id'] ?? 0);
+    $esActivo = $url !== '' ? getMenuActivo($url, $menuIdItem > 0 ? $menuIdItem : null) : '';
     $tieneSubmenu = ! empty($item['submenu']);
     $ramaActiva = $tieneSubmenu && menuItemEsActivoOAncestro($item);
     $esPadreAbierto = $ramaActiva && $esActivo !== 'active';
@@ -14,7 +15,10 @@
 @if (! $tieneSubmenu)
     <li class="nav-item nav-menu-level-{{ $nivel }} anita-menu-leaf{{ $mostrarBadgeBandeja ? ' anita-menu-leaf-has-badge' : '' }}">
         <a href="{{ url($url) }}"
-           class="nav-link {{ $claseLink }}{{ $mostrarBadgeBandeja ? ' js-bandeja-ticket-nav' : '' }}"
+           class="nav-link anita-aside-menu-link {{ $claseLink }}{{ $mostrarBadgeBandeja ? ' js-bandeja-ticket-nav' : '' }}"
+           @if ($menuIdItem > 0)
+               data-menu-id="{{ $menuIdItem }}"
+           @endif
            @if ($mostrarBadgeBandeja)
                data-bandeja-ticket-contador
                data-contador-url="{{ urlAppCarpeta('ticket/bandeja/contador') }}"
@@ -51,16 +55,28 @@
         @endauth
     </li>
 @else
+    @php
+        $cantidadHijos = count($item['submenu']);
+        $tituloHijos = $cantidadHijos === 1
+            ? '1 opción colgada'
+            : $cantidadHijos . ' opciones colgadas';
+    @endphp
     <li class="nav-item has-treeview nav-menu-level-{{ $nivel }}{{ $ramaActiva ? ' menu-open' : '' }}">
-        <a href="javascript:;" class="nav-link {{ $claseLink }}">
+        <a href="javascript:;" class="nav-link {{ $claseLink }}" title="{{ $tituloHijos }}">
             @if ($nivel === 0)
                 <i class="nav-icon fa {{ $icono }}"></i>
             @else
                 <i class="nav-icon fa {{ $icono }}"></i>
             @endif
-            <p>
-                {{ $item['nombre'] }}
-                <i class="right fas fa-angle-left"></i>
+            <p class="anita-menu-label">
+                <span class="anita-menu-nombre">{{ $item['nombre'] }}</span>
+                <span class="anita-menu-meta">
+                    @if ($mostrarConteoHijosMenu ?? false)
+                        <span class="badge badge-info anita-menu-hijos-badge"
+                              aria-label="{{ $tituloHijos }}">{{ $cantidadHijos }}</span>
+                    @endif
+                    <i class="fas fa-angle-left anita-menu-chevron" aria-hidden="true"></i>
+                </span>
             </p>
         </a>
         <ul class="nav nav-treeview">

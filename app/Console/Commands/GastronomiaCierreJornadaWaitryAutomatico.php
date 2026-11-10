@@ -22,9 +22,10 @@ class GastronomiaCierreJornadaWaitryAutomatico extends Command
         @ini_set('memory_limit', (string) config('gastronomia.cierre_jornada_proceso_memory_limit', '1024M'));
         @set_time_limit(0);
 
-        if (EntornoEmpresaSupport::esFerli()) {
-            $this->warn('El cierre de jornada Waitry está desconectado en Ferli.');
-            Log::info('gastronomia.cierre_jornada_automatico.omitido_ferli');
+        if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
+            $cliente = EntornoEmpresaSupport::esCrown() ? 'Crown' : 'Ferli';
+            $this->warn('El cierre de jornada Waitry está desconectado en '.$cliente.'.');
+            Log::info('gastronomia.cierre_jornada_automatico.omitido_'.strtolower($cliente));
 
             return self::SUCCESS;
         }

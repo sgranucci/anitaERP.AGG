@@ -85,7 +85,7 @@
         @endforeach
         <tr>
             <td></td>
-            <td>Total deuda pendiente</td>
+            <td>Saldo total del reporte</td>
             <td>{{ number_format((float) ($totalesReporte['pendiente'] ?? 0), 2, '.', '') }}</td>
         </tr>
     </tbody>
@@ -165,6 +165,23 @@
                 @endif
             </tr>
         @endforeach
+        @if ($modoDeuda)
+            <tr>
+                <td></td>
+                <td>Saldo total del reporte</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td>{{ number_format((float) ($totalesReporte['pendiente'] ?? 0), 2, '.', '') }}</td>
+                <td></td>
+            </tr>
+        @endif
     </tbody>
     @endif
 </table>

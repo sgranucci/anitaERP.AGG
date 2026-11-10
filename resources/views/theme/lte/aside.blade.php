@@ -30,6 +30,15 @@
             </div>
             @auth
                 <button type="button"
+                    class="anita-aside-conteo-btn{{ ($mostrarConteoHijosMenu ?? false) ? ' is-on' : '' }}"
+                    id="anita-aside-conteo-btn"
+                    title="{{ ($mostrarConteoHijosMenu ?? false) ? 'Ocultar cantidad de opciones en submenús (solo para vos)' : 'Mostrar cantidad de opciones en submenús (solo para vos)' }}"
+                    aria-label="Cantidad de opciones en submenús"
+                    aria-pressed="{{ ($mostrarConteoHijosMenu ?? false) ? 'true' : 'false' }}"
+                    data-default="{{ ($conteoHijosMenuDefault ?? false) ? '1' : '0' }}">
+                    <i class="fas fa-hashtag" aria-hidden="true"></i>
+                </button>
+                <button type="button"
                     class="anita-accesos-btn"
                     id="anita-accesos-anclados-btn"
                     title="Accesos anclados"

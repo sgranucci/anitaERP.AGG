@@ -22,6 +22,9 @@
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js')) }}"></script>
+    @if (in_array($panel ?? '', ['rescajero', 'anexo3'], true))
+        <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js')) }}"></script>
+    @endif
 @endsection
 
 @section('contenido')

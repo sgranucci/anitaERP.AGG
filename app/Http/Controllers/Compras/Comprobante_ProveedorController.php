@@ -57,6 +57,8 @@ use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorTipoCargaSesion;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
@@ -107,6 +109,8 @@ class Comprobante_ProveedorController extends Controller
     public function index(Request $request)
     {
         can('listar-comprobante-proveedor');
+
+        ComprobanteProveedorTipoCargaSesion::olvidar();
 
         $armado = $this->armarListado($request);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
@@ -342,9 +346,42 @@ class Comprobante_ProveedorController extends Controller
             abort(403);
         }
 
+        $pedido = (string) $request->query('tipo', '');
+        if (ComprobanteProveedorTipoCargaSesion::esValido($pedido)) {
+            ComprobanteProveedorTipoCargaSesion::recordar($pedido);
+        }
+        $tipo = ComprobanteProveedorTipoCargaSesion::esValido($pedido)
+            ? $pedido
+            : ComprobanteProveedorTipoCargaSesion::actual();
+        if ($pedido === '' && in_array($tipo, [
+            ComprobanteProveedorTipoCargaSesion::SIN_OC,
+            ComprobanteProveedorTipoCargaSesion::PRECARGA,
+        ], true)) {
+            return redirect()->to(ComprobanteProveedorTipoCargaSesion::urlContinuar($tipo));
+        }
+
         return view('compras.comprobante_proveedor.opciones_carga', [
             'pdfIaHabilitado' => (bool) config('comprobante_proveedor_pdf_ia.habilitado'),
+            'tipoCargaRecordado' => $tipo ?? '',
         ]);
+    }
+
+    public function recordarTipoCarga(Request $request)
+    {
+        if (! can('crear-comprobante-proveedor', false)
+            && ! can('listar-precarga-proveedores', false)
+            && ! can('crear-precarga-proveedores', false)) {
+            abort(403);
+        }
+
+        $tipo = (string) $request->query('tipo', '');
+        if (! ComprobanteProveedorTipoCargaSesion::esValido($tipo)) {
+            return redirect()->route('comprobante_proveedor_opciones_carga');
+        }
+
+        ComprobanteProveedorTipoCargaSesion::recordar($tipo);
+
+        return redirect()->to(ComprobanteProveedorTipoCargaSesion::urlContinuar($tipo));
     }
 
     public function resolverOrdencompraParaAlta(Request $request): JsonResponse
@@ -368,6 +405,8 @@ class Comprobante_ProveedorController extends Controller
                 'message' => 'No existe orden de compra «'.$numeroOc.'» en el ERP.',
             ], 404);
         }
+
+        ComprobanteProveedorTipoCargaSesion::recordar(ComprobanteProveedorTipoCargaSesion::OC);
 
         return response()->json([
             'ok' => true,
@@ -428,11 +467,10 @@ class Comprobante_ProveedorController extends Controller
             }
 
             return $this->conAvisosControles(
-                $this->redirectTrasGuardarComprobante(
+                $this->redirectTrasContabilizar(
                     $request,
                     $comprobante,
-                    $this->mensajeContabilizadoConLegajo($comprobante),
-                    'index'
+                    $this->mensajeContabilizadoConLegajo($comprobante)
                 ),
                 $avisos
             );
@@ -536,11 +574,10 @@ class Comprobante_ProveedorController extends Controller
             $comprobante = $this->comprobanteRepository->find($id);
 
             return $this->conAvisosControles(
-                $this->redirectTrasGuardarComprobante(
+                $this->redirectTrasContabilizar(
                     $request,
                     $comprobante,
-                    $this->mensajeContabilizadoConLegajo($comprobante),
-                    'index'
+                    $this->mensajeContabilizadoConLegajo($comprobante)
                 ),
                 $avisos
             );
@@ -1076,11 +1113,10 @@ class Comprobante_ProveedorController extends Controller
 
         $comprobante = $this->comprobanteRepository->find($id);
 
-        return $this->redirectTrasGuardarComprobante(
+        return $this->redirectTrasContabilizar(
             $request,
             $comprobante,
-            $this->mensajeContabilizadoConLegajo($comprobante),
-            'index'
+            $this->mensajeContabilizadoConLegajo($comprobante)
         );
     }
 
@@ -1949,6 +1985,39 @@ class Comprobante_ProveedorController extends Controller
         }
 
         return $base;
+    }
+
+    private function redirectTrasContabilizar(Request $request, mixed $comprobante, string $mensaje)
+    {
+        $origenRetorno = ComprobanteProveedorRetornoLegajoSupport::origenDesdeRequest($request);
+        if (in_array($origenRetorno, [
+            ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+            ComprobanteProveedorRetornoLegajoSupport::ORIGEN_OC,
+        ], true)) {
+            return $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index');
+        }
+
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index');
+        }
+
+        $tipo = ComprobanteProveedorTipoCargaSesion::actual();
+        if ($tipo === null) {
+            $tipo = ComprobanteProveedorTipoCargaSesion::desdeOrigenEntrada(
+                (string) ($comprobante->origen_entrada ?? $request->input('origen_entrada', ''))
+            );
+            if ($tipo !== null) {
+                ComprobanteProveedorTipoCargaSesion::recordar($tipo);
+            }
+        }
+
+        if ($tipo === null) {
+            return $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index');
+        }
+
+        return redirect()
+            ->to(ComprobanteProveedorTipoCargaSesion::urlContinuar($tipo))
+            ->with('mensaje', $mensaje);
     }
 
     private function redirectTrasGuardarComprobante(

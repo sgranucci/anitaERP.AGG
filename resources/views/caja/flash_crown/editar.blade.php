@@ -64,6 +64,27 @@
                 'ruleta_el_r' => 'Ruleta el. win',
             ],
         ],
+        'online' => [
+            'titulo' => 'Casinos del Río online',
+            'icono' => 'fa-globe',
+            'campos' => [
+                'ol_att' => 'Attendance',
+                'ol_drop' => 'Drop',
+                'ol_coin_in' => 'Coin in (apostado)',
+                'ol_cage_bal' => 'Cage bal. (pagado)',
+                'ol_win' => 'Win',
+            ],
+        ],
+        'betsur' => [
+            'titulo' => 'Betsur online',
+            'icono' => 'fa-globe',
+            'campos' => [
+                'bs_att' => 'Attendance',
+                'bs_coin_in' => 'Coin in (apostado)',
+                'bs_cage_bal' => 'Cage bal. (pagado)',
+                'bs_win' => 'Win',
+            ],
+        ],
         'otros' => [
             'titulo' => 'Torneos / Hospitality',
             'icono' => 'fa-cutlery',
@@ -77,7 +98,7 @@
             ],
         ],
     ];
-    $enteros = ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el'];
+    $enteros = ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el', 'ol_att', 'bs_att'];
 @endphp
 <div class="row fc-edit">
     <div class="col-12">

@@ -27,14 +27,43 @@ class ClienteCuentacorrienteDeudaFichaAuditorMail extends Mailable
             $empresa = 'Empresa #'.(int) ($this->informe['empresa_id'] ?? 0);
         }
         $fecha = (string) ($this->informe['fecha_fmt'] ?? $this->informe['fecha'] ?? '');
-        $alerta = ! empty($this->informe['requiere_alerta']);
-        $estado = $alerta ? 'ALERTA' : 'OK';
+        $alertaFicha = ! empty($this->informe['alerta_ficha']);
+        $alertaDelta = ! empty($this->informe['alerta_delta']);
+        $variacion = $this->informe['delta_mayor']['variacion_conjunto'] ?? null;
+        $variacionTxt = $variacion === null
+            ? 'base'
+            : number_format((float) $variacion, 2, ',', '.');
         $cantidad = (int) ($this->informe['grupos_total'] ?? count($this->informe['grupos'] ?? []));
 
-        // Nombre de empresa primero: en la bandeja se distinguen aunque el resto del asunto se vea igual.
-        $asunto = $alerta
-            ? sprintf('%s — Deuda vs ficha clientes — %s — %s (%d)', $empresa, $fecha, $estado, $cantidad)
-            : sprintf('%s — Deuda vs ficha clientes — %s — %s · todo cuadrado', $empresa, $fecha, $estado);
+        if ($alertaFicha && $alertaDelta) {
+            $asunto = sprintf(
+                '%s — Deuda vs ficha y delta clientes — %s — ALERTA (ficha %d, delta %s)',
+                $empresa,
+                $fecha,
+                $cantidad,
+                $variacionTxt
+            );
+        } elseif ($alertaDelta) {
+            $asunto = sprintf(
+                '%s — Delta clientes — %s — ALERTA (%s)',
+                $empresa,
+                $fecha,
+                $variacionTxt
+            );
+        } elseif ($alertaFicha) {
+            $asunto = sprintf(
+                '%s — Deuda vs ficha clientes — %s — ALERTA (%d)',
+                $empresa,
+                $fecha,
+                $cantidad
+            );
+        } else {
+            $asunto = sprintf(
+                '%s — Deuda vs ficha clientes — %s — OK · todo cuadrado',
+                $empresa,
+                $fecha
+            );
+        }
 
         return $this->subject($asunto)
             ->view('mails.ventas.cliente_cuentacorriente_deuda_ficha_auditor');

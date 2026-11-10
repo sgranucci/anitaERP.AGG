@@ -29,6 +29,38 @@ if (! function_exists('aplanarUrlsMenu')) {
     }
 }
 
+if (! function_exists('menusFrontResueltos')) {
+    /**
+     * Árbol de menú visible para el rol actual (misma fuente que el aside).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    function menusFrontResueltos(): array
+    {
+        static $cacheRolId = null;
+        static $cacheMenus = null;
+
+        $rolId = (int) session()->get('rol_id', 0);
+        if ($cacheRolId === $rolId && $cacheMenus !== null) {
+            return $cacheMenus;
+        }
+
+        $cacheRolId = $rolId;
+        if ($rolId <= 0) {
+            $cacheMenus = [];
+
+            return $cacheMenus;
+        }
+
+        $menus = \App\Models\Admin\Menu::getMenu(true, 0);
+        $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
+        $menus = \App\Support\Caja\Bingo\BingoModuloSupport::filtrarMenuAside($menus);
+        $cacheMenus = $menus;
+
+        return $cacheMenus;
+    }
+}
+
 if (! function_exists('urlsMenuFrontResueltas')) {
     /**
      * URLs de menú visibles para el rol actual (misma fuente que el aside).
@@ -37,28 +69,88 @@ if (! function_exists('urlsMenuFrontResueltas')) {
      */
     function urlsMenuFrontResueltas(): array
     {
-        static $cacheRolId = null;
-        static $cacheUrls = null;
+        return array_values(array_unique(aplanarUrlsMenu(menusFrontResueltos())));
+    }
+}
 
-        $rolId = (int) session()->get('rol_id', 0);
-        if ($cacheRolId === $rolId && $cacheUrls !== null) {
-            return $cacheUrls;
+if (! function_exists('aplanarHojasMenuConRama')) {
+    /**
+     * Hojas del menú con flag de si cuelgan bajo Configuración (atajos canónicos vs módulo).
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     * @return list<array{id:int,url:string,bajo_configuracion:bool}>
+     */
+    function aplanarHojasMenuConRama(array $items, bool $bajoConfiguracion = false): array
+    {
+        $hojas = [];
+
+        foreach ($items as $item) {
+            $nombre = (string) ($item['nombre'] ?? '');
+            $url = trim((string) ($item['url'] ?? ''), '/');
+            $esConfig = $bajoConfiguracion
+                || strcasecmp($nombre, 'Configuración') === 0
+                || str_starts_with($url, '#config')
+                || str_starts_with($url, 'configuracion');
+
+            if (! empty($item['submenu']) && is_array($item['submenu'])) {
+                $hojas = array_merge($hojas, aplanarHojasMenuConRama($item['submenu'], $esConfig));
+                continue;
+            }
+
+            if ($url === '' || $url === '#') {
+                continue;
+            }
+
+            $hojas[] = [
+                'id' => (int) ($item['id'] ?? 0),
+                'url' => $url,
+                'bajo_configuracion' => $esConfig,
+            ];
         }
 
-        $cacheRolId = $rolId;
-        if ($rolId <= 0) {
-            $cacheUrls = [];
+        return $hojas;
+    }
+}
 
-            return $cacheUrls;
+if (! function_exists('menuIdActivoPreferido')) {
+    /**
+     * Si la misma URL está en más de un ítem (módulo + Configuración), elige uno solo
+     * para marcar activo / abrir la rama: cookie del último clic, o el del módulo operativo.
+     */
+    function menuIdActivoPreferido(?string $urlActiva = null): ?int
+    {
+        $urlActiva = $urlActiva ?? menuUrlMasEspecificaParaRuta(trim(request()->path(), '/'));
+        if ($urlActiva === null || $urlActiva === '') {
+            return null;
         }
 
-        $nivelActual = 0;
-        $menus = \App\Models\Admin\Menu::getMenu(true, $nivelActual);
-        $menus = \App\Support\Caja\Estacionamiento\EstacionamientoModuloSupport::filtrarMenuAside($menus);
-        $menus = \App\Support\Caja\Bingo\BingoModuloSupport::filtrarMenuAside($menus);
-        $cacheUrls = array_values(array_unique(aplanarUrlsMenu($menus)));
+        $candidatos = array_values(array_filter(
+            aplanarHojasMenuConRama(menusFrontResueltos()),
+            static fn (array $hoja): bool => $hoja['url'] === $urlActiva && $hoja['id'] > 0
+        ));
 
-        return $cacheUrls;
+        if ($candidatos === []) {
+            return null;
+        }
+
+        if (count($candidatos) === 1) {
+            return (int) $candidatos[0]['id'];
+        }
+
+        $cookieId = (int) request()->cookie('anita_aside_menu_id', 0);
+        foreach ($candidatos as $hoja) {
+            if ((int) $hoja['id'] === $cookieId) {
+                return $cookieId;
+            }
+        }
+
+        foreach ($candidatos as $hoja) {
+            if (! $hoja['bajo_configuracion']) {
+                return (int) $hoja['id'];
+            }
+        }
+
+        return (int) $candidatos[0]['id'];
     }
 }
 
@@ -98,7 +190,10 @@ if (! function_exists('menuUrlMasEspecificaParaRuta')) {
 }
 
 if (! function_exists('getMenuActivo')) {
-    function getMenuActivo($ruta)
+    /**
+     * @param  int|string|null  $menuId  Si hay URL duplicada en el aside, solo el ítem preferido queda activo.
+     */
+    function getMenuActivo($ruta, $menuId = null)
     {
         $ruta = trim((string) $ruta, '/');
         if ($ruta === '' || $ruta === '#') {
@@ -108,8 +203,20 @@ if (! function_exists('getMenuActivo')) {
         $urlsMenu = urlsMenuFrontResueltas();
         if ($urlsMenu !== []) {
             $activa = menuUrlMasEspecificaParaRuta(trim(request()->path(), '/'));
+            if ($activa !== $ruta) {
+                return '';
+            }
 
-            return $activa === $ruta ? 'active' : '';
+            if ($menuId === null) {
+                return 'active';
+            }
+
+            $preferido = menuIdActivoPreferido($activa);
+            if ($preferido === null) {
+                return 'active';
+            }
+
+            return (int) $menuId === $preferido ? 'active' : '';
         }
 
         if (request()->is($ruta) || request()->is($ruta.'/*')) {
@@ -129,7 +236,8 @@ if (! function_exists('menuItemEsActivoOAncestro')) {
     function menuItemEsActivoOAncestro(array $item): bool
     {
         $url = $item['url'] ?? '';
-        if ($url !== '' && getMenuActivo($url) === 'active') {
+        $menuId = (int) ($item['id'] ?? 0);
+        if ($url !== '' && getMenuActivo($url, $menuId > 0 ? $menuId : null) === 'active') {
             return true;
         }
 

@@ -89,6 +89,9 @@ final class ParametroSistemaSupport
     /** Días que una jornada puede seguir abierta antes de avisar. */
     public const CLAVE_TESORERIA_CROWN_AVISOS_JORNADA_ABIERTA_DIAS = 'tesoreria_crown_avisos_jornada_abierta_dias';
 
+    /** Aside: mostrar el número de opciones colgadas en cada carpeta de menú. */
+    public const CLAVE_MENU_ASIDE_CONTEO_HIJOS = 'menu_aside_conteo_hijos';
+
     /** Si gastronomía/hotel facturan en esta misma base ERP (Cierre X / p-cierrefact). */
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
@@ -98,6 +101,13 @@ final class ParametroSistemaSupport
     public static function definiciones(): array
     {
         $defs = [
+            self::CLAVE_MENU_ASIDE_CONTEO_HIJOS => [
+                'grupo' => 'Interfaz',
+                'etiqueta' => 'Menú: cantidad de opciones en submenús',
+                'ayuda' => 'Si está activo, cada carpeta del menú lateral muestra un número con cuántas opciones cuelgan. Cada usuario puede prenderlo o apagarlo para sí con el botón # del panel de usuario. Por defecto: encendido en Crown, apagado en el resto.',
+                'tipo' => 'boolean',
+                'orden' => 5,
+            ],
             self::CLAVE_LIMITE_FCE => [
                 'grupo' => 'Facturación ARCA',
                 'etiqueta' => 'Tope FCE MiPyME',
@@ -703,8 +713,21 @@ final class ParametroSistemaSupport
             self::CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_DIAS => '30',
             self::CLAVE_TESORERIA_CROWN_AVISOS_FALLO_MINIMO => '5000',
             self::CLAVE_TESORERIA_CROWN_AVISOS_JORNADA_ABIERTA_DIAS => '2',
+            self::CLAVE_MENU_ASIDE_CONTEO_HIJOS => EntornoEmpresaSupport::esCrown() ? '1' : '0',
             default => '0',
         };
+    }
+
+    /**
+     * Default de la instalación para el globo de cantidad en submenús del aside.
+     * Sin fila en BD: Crown encendido, resto apagado. El usuario puede pisarlo con cookie.
+     */
+    public static function menuAsideMostrarConteoHijos(): bool
+    {
+        return self::boolean(
+            self::CLAVE_MENU_ASIDE_CONTEO_HIJOS,
+            EntornoEmpresaSupport::esCrown()
+        );
     }
 
     /**

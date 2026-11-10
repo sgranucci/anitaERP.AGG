@@ -199,7 +199,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 					if ($haberLin != 0)
 						$monto = -$haberLin;
 
-					if (abs($monto) <= 0.0001) {
+					if (abs($monto) <= 0.0001 && empty($data['conservar_sin_importe'])) {
 						continue;
 					}
 

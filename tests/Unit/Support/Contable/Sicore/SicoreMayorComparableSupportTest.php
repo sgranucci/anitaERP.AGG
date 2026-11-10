@@ -48,4 +48,11 @@ class SicoreMayorComparableSupportTest extends TestCase
         $this->assertCount(1, $particion['excluidos']);
         $this->assertSame('pago_arba', $particion['excluidos'][0]['motivo_exclusion']);
     }
+
+    public function test_excluye_pago_a_cuenta_sicore(): void
+    {
+        $this->assertSame('pago_sicore', SicoreMayorComparableSupport::motivoExclusion('PAGO A CUENTA SICORE 10.2026'));
+        $this->assertSame('pago_sicore', SicoreMayorComparableSupport::motivoExclusion('PAGO SICORE 09.2026'));
+        $this->assertNull(SicoreMayorComparableSupport::motivoExclusion('Pago: BELLOTTI CLAUDIA #219726'));
+    }
 }

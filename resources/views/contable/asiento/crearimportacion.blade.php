@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Importar asiento desde Excel
+    Importar asiento desde Excel / CSV
 @endsection
 
 @section("scripts")
@@ -8,7 +8,7 @@
 <script>
     window.asientoImportPreviewUrl = @json(route('asiento_import_preview'));
 </script>
-<script src="{{ asset('assets/pages/scripts/contable/asiento/importar.js') }}?v=20261006b" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/importar.js') }}?v=20261110e" type="text/javascript"></script>
 @if (session('asiento_import_resultado'))
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -28,7 +28,7 @@
         @include('includes.mensaje')
         <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Importar asiento contable desde Excel</h3>
+                <h3 class="card-title">Importar asiento contable desde Excel / CSV</h3>
                 <div class="card-tools">
                     <a href="{{ route('asiento') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

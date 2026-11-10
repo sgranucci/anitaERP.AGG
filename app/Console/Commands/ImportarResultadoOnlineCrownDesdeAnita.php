@@ -12,7 +12,7 @@ class ImportarResultadoOnlineCrownDesdeAnita extends Command
                             {--hasta= : Fecha final Y-m-d}
                             {--ejecutar : Graba. Sin este flag solo muestra el plan}';
 
-    protected $description = 'Importa resultado online de slots (resulol / slot ON-LINE) a tesorería Crown.';
+    protected $description = 'Importa resultado online Crown: slots (resulol), Del Río (67) y Betsur (68) desde resonline.';
 
     public function handle(TesoreriaCrownResultadoOnlineAnitaImportService $import): int
     {
@@ -38,15 +38,17 @@ class ImportarResultadoOnlineCrownDesdeAnita extends Command
             $filas[] = [
                 $d['fecha'],
                 $fila['accion'],
-                number_format((float) $d['coin_in'], 2, ',', '.'),
-                number_format((float) $d['coin_out'], 2, ',', '.'),
                 number_format((float) $d['slot_resultado'], 2, ',', '.'),
-                $d['subtotal_slot'] === null
-                    ? '—'
-                    : number_format((float) $d['subtotal_slot'], 2, ',', '.'),
+                number_format((float) $d['resultado'], 2, ',', '.'),
+                number_format((float) $d['porcentaje'], 2, ',', '.').'%',
+                number_format((float) $d['betsur_resultado'], 2, ',', '.'),
+                number_format((float) $d['betsur_porcentaje'], 2, ',', '.').'%',
             ];
         }
-        $this->table(['Fecha', 'Acción', 'Coin in', 'Coin out', 'Slot R', 'Subtotal'], $filas);
+        $this->table(
+            ['Fecha', 'Acción', 'Slots', 'Del Río', '% Río', 'Betsur', '% Bet'],
+            $filas
+        );
         $this->info(sprintf(
             'Crear: %d. Actualizar: %d. Omitir: %d.',
             $plan['crear'],

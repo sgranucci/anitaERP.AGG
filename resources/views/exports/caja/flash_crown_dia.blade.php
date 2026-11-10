@@ -26,6 +26,10 @@
         <th>Win mesas</th>
         <th>Coin in</th>
         <th>Win slots</th>
+        <th>OL Coin in</th>
+        <th>OL Win</th>
+        <th>BS Coin in</th>
+        <th>BS Win</th>
         <th>Gaming</th>
         <th>F&amp;B</th>
         <th>Hotel</th>
@@ -52,6 +56,10 @@
             <td>{{ (float) ($m['win_mesas'] ?? 0) }}</td>
             <td>{{ (float) ($fila['coin_in'] ?? 0) }}</td>
             <td>{{ (float) ($fila['slot_r'] ?? 0) }}</td>
+            <td>{{ (float) ($fila['ol_coin_in'] ?? 0) }}</td>
+            <td>{{ (float) ($fila['ol_win'] ?? 0) }}</td>
+            <td>{{ (float) ($fila['bs_coin_in'] ?? 0) }}</td>
+            <td>{{ (float) ($fila['bs_win'] ?? 0) }}</td>
             <td>{{ (float) ($m['gaming'] ?? 0) }}</td>
             <td>{{ (float) ($fila['ayb'] ?? 0) }}</td>
             <td>{{ (float) ($fila['hotel'] ?? 0) }}</td>

@@ -8,6 +8,8 @@ alwaysApply: false
 
 Pantalla: **Caja → Rendiciones → Cierre jornada Waitry** (`caja/waitry-cierre-jornada`).
 
+En **Ferli** y en **Crown** el proceso automático (`gastronomia:cierre-jornada-waitry-automatico`) está desconectado: el schedule no se agenda y el comando sale sin consultar Waitry, facturar ni grabar asientos, aunque `GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HABILITADO` quede en true. El bloqueo de cierre de jornada por proceso pendiente tampoco aplica.
+
 Documentación extendida: [`docs/waitry/README.md`](../../docs/waitry/README.md).
 
 ## Dos capas

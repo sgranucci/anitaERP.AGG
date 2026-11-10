@@ -8,6 +8,7 @@ use App\Mail\Ventas\ClienteCuentacorrienteDeudaFichaAuditorMail;
 use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ProveedorCuentacorrienteConciliacionSupport;
 use App\Support\Ventas\ClienteCuentacorrienteDeudaFichaCuadreSupport;
+use App\Support\Ventas\ClienteDeudaMayorDeltaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -15,13 +16,15 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Auditor diario: deuda vs ficha de clientes por empresa (moneda origen por defecto).
+ * Auditor diario: deuda vs ficha y delta mayor − deuda de clientes por empresa.
  * Solo informa por mail; no graba ajustes. La deuda es la verdad.
+ * El delta avisa si la suma mayor − deuda se mueve de un día al otro.
  */
 final class ClienteCuentacorrienteDeudaFichaAuditorService
 {
     public function __construct(
         private readonly ClienteCuentacorrienteDeudaFichaCuadreSupport $cuadre,
+        private readonly ClienteDeudaMayorDeltaSupport $deltaMayor,
     ) {
     }
 
@@ -54,6 +57,7 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
         }
         $limite = max(10, (int) ($config['limite_filas_mail'] ?? 120));
         $mailSiempre = filter_var($config['mail_siempre'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $toleranciaDelta = (float) ($config['tolerancia_delta_mayor'] ?? 1);
 
         $empresas = $this->empresasAAuditar($empresaId);
         $salida = [
@@ -77,6 +81,8 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
             $grupos = array_values($informe['grupos'] ?? []);
             $hayDiferencia = $grupos !== [];
             $resumen = $informe['resumen'] ?? [];
+            $delta = $this->deltaMayor->controlar((int) $empresa->id, $fecha, $toleranciaDelta);
+            $conjuntoMovio = ! empty($delta['conjunto_movio']);
             $paquete = [
                 'fecha' => $fecha,
                 'fecha_fmt' => Carbon::parse($fecha)->format('d/m/Y'),
@@ -84,8 +90,11 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
                 'empresa_id' => (int) $empresa->id,
                 'empresa_nombre' => trim((string) $empresa->nombre),
                 'tolerancia' => $tolerancia,
-                'requiere_alerta' => $hayDiferencia,
+                'requiere_alerta' => $hayDiferencia || $conjuntoMovio,
+                'alerta_ficha' => $hayDiferencia,
+                'alerta_delta' => $conjuntoMovio,
                 'resumen' => $resumen,
+                'delta_mayor' => $delta,
                 'grupos' => array_slice($grupos, 0, $limite),
                 'grupos_total' => count($grupos),
                 'grupos_truncados' => max(0, count($grupos) - $limite),
@@ -94,11 +103,11 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
                 'mail_error' => null,
             ];
 
-            if ($hayDiferencia) {
+            if ($hayDiferencia || $conjuntoMovio) {
                 $salida['requiere_alerta'] = true;
             }
 
-            if ($enviarMail && ($hayDiferencia || $mailSiempre)) {
+            if ($enviarMail && ($hayDiferencia || $conjuntoMovio || $mailSiempre)) {
                 $paquete = array_merge($paquete, $this->enviarMail($paquete, $config));
                 if (! empty($paquete['mail_enviado'])) {
                     $salida['mails_enviados']++;
@@ -120,7 +129,13 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
      */
     private function empresasAAuditar(?int $empresaId): array
     {
+        $permitidas = $this->idsEmpresasConfiguradas();
+
         if ($empresaId !== null && $empresaId > 0) {
+            if ($permitidas !== null && ! in_array($empresaId, $permitidas, true)) {
+                return [];
+            }
+
             $empresa = Empresa::query()->find($empresaId);
             if ($empresa === null) {
                 return [];
@@ -129,16 +144,22 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
             return [$empresa];
         }
 
-        $ids = DB::table('cliente_cuentacorriente')
-            ->select('empresa_id')
-            ->distinct()
-            ->whereNotNull('empresa_id')
-            ->orderBy('empresa_id')
-            ->pluck('empresa_id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->values()
-            ->all();
+        if ($permitidas !== null) {
+            $ids = $permitidas;
+        } else {
+            $idsCc = DB::table('cliente_cuentacorriente')
+                ->select('empresa_id')
+                ->distinct()
+                ->whereNotNull('empresa_id')
+                ->pluck('empresa_id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+            $ids = array_values(array_unique(array_filter(
+                array_merge($idsCc, $this->deltaMayor->empresasConSaldo()),
+                static fn (int $id): bool => $id > 0
+            )));
+            sort($ids);
+        }
 
         if ($ids === []) {
             return [];
@@ -149,6 +170,30 @@ final class ClienteCuentacorrienteDeudaFichaAuditorService
             ->orderBy('id')
             ->get()
             ->all();
+    }
+
+    /**
+     * null = todas las empresas. Lista = solo esas.
+     *
+     * @return list<int>|null
+     */
+    private function idsEmpresasConfiguradas(): ?array
+    {
+        $raw = config('ventas.deuda_ficha_auditor.empresas');
+        if ($raw === null) {
+            return null;
+        }
+        if (! is_array($raw)) {
+            $raw = explode(',', (string) $raw);
+        }
+
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $raw),
+            static fn (int $id) => $id > 0
+        )));
+        sort($ids);
+
+        return $ids;
     }
 
     /**

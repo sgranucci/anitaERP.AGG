@@ -648,6 +648,7 @@ class Kernel extends ConsoleKernel
                 ->withoutOverlapping(240)
                 ->appendOutputTo(storage_path('logs/cierre-jornada-waitry-automatico-schedule.log'))
                 ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                    && ! EntornoEmpresaSupport::esCrown()
                     && (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
         }
 
@@ -748,7 +749,8 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esAgg()
                 && (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
 
-        // Flash Report Crown: mails solo con días validados (suscripciones).
+        // Flash Report Crown: el informe lo dispara el usuario. El cron queda apagado
+        // (FLASH_REPORTE_CROWN_DISTRIBUCION=false) por si queda alguna suscripción vieja.
         $schedule->command('flash-crown:distribuir-reportes')
             ->everyFifteenMinutes()
             ->runInBackground()

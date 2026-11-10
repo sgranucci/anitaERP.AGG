@@ -794,6 +794,11 @@
 }
 
 /* Orden de columnas en anexos (solo pantalla) */
+.tc-orden-wrap {
+    min-width: 0;
+    max-width: 100%;
+}
+
 .tc-orden-barra {
     display: flex;
     flex-wrap: wrap;
@@ -840,58 +845,19 @@
     content: "\f0dd";
 }
 
-/* Auditoría de importes (Res. cajeros / Anexo III) */
-.tc-audit-celda {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: .2rem;
-    max-width: 100%;
-}
-
-.tc-audit-celda .js-tc-audit {
-    border: 0;
-    background: transparent;
-    color: #1a5276;
-    font-weight: 600;
-    padding: 0;
-    line-height: 1.2;
-    cursor: pointer;
+/* Auditoría: el importe es el link (azul sutil, sin ícono aparte) */
+button.js-tc-audit.btn-link {
+    font-variant-numeric: tabular-nums;
+    font-weight: inherit;
+    line-height: inherit;
+    vertical-align: baseline;
     text-decoration: none;
 }
 
-.tc-audit-celda .js-tc-audit:hover,
-.tc-audit-celda .js-tc-audit:focus {
-    color: #154360;
+button.js-tc-audit.btn-link:hover,
+button.js-tc-audit.btn-link:focus {
     text-decoration: underline;
     outline: none;
-}
-
-.tc-audit-btn-info {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.35rem;
-    height: 1.35rem;
-    border-radius: 999px;
-    border: 1px solid #a9cce3;
-    background: #eaf2f8;
-    color: #1a5276;
-    padding: 0;
-    line-height: 1;
-    flex: 0 0 auto;
-}
-
-.tc-audit-btn-info:hover,
-.tc-audit-btn-info:focus {
-    background: #d4e6f1;
-    border-color: #5dade2;
-    color: #154360;
-    outline: none;
-}
-
-.tc-audit-btn-info i {
-    font-size: .72rem;
 }
 
 .tc-audit-modal-header {

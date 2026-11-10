@@ -162,37 +162,20 @@
 </div>
 <div class="card-body px-0" id="divcentrocosto" @if($manejaccosto !== 'S') hidden @endif>
     <h5 class="mb-2">Centros de costo válidos</h5>
-    <table class="table table-sm" id="centrocosto-table">
-        <thead>
+    <table class="table table-sm table-bordered mb-2" id="centrocosto-table">
+        <thead style="background:#85C1E9;color:#17202A;">
             <tr>
-                <th style="width: 50%;">Centro de costo</th>
-                <th></th>
+                <th>Centro de costo</th>
+                <th style="width: 3rem;"></th>
             </tr>
         </thead>
         <tbody id="tbody-centrocosto-table">
-        @if ($data->cuentacontable_centrocostos ?? '')
-            @foreach (old('centrocostos', $data->cuentacontable_centrocostos->count() ? $data->cuentacontable_centrocostos : ['']) as $centrocosto)
-                <tr class="item-centrocosto">
-                    <td>
-                        <select name="centrocosto_ids[]" class="form-control centrocosto" @if($soloLectura) disabled @endif>
-                            <option value="">— Elija centro de costo —</option>
-                            @foreach($centrocosto_query as $value)
-                                <option value="{{ $value->id }}" @selected((int) $value->id === (int) old('centrocosto_id', $centrocosto->centrocosto_id ?? 0))>
-                                    {{ $value->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </td>
-                    <td>
-                        @if (! $soloLectura)
-                            <button type="button" title="Elimina esta línea" class="btn-accion-tabla eliminar_centrocosto tooltipsC">
-                                <i class="fa fa-times-circle text-danger"></i>
-                            </button>
-                        @endif
-                    </td>
-                </tr>
+            @foreach ($filasCentrocosto as $fila)
+                @include('contable.cuentacontable.partials.renglon_centrocosto', [
+                    'fila' => $fila,
+                    'soloLectura' => $soloLectura,
+                ])
             @endforeach
-        @endif
         </tbody>
     </table>
     @include('contable.cuentacontable.template1')

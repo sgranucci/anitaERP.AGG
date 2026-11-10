@@ -24,7 +24,7 @@ class OficinacompraController extends Controller
      */
     public function index()
     {
-        can('listar-oficina-de-compras');
+        $this->puede('listar-oficina-de-compras', 'lista-oficina-de-compras');
 		$datas = $this->repository->all();
 
         return view('configuracion.oficinacompra.index', compact('datas'));
@@ -37,7 +37,7 @@ class OficinacompraController extends Controller
      */
     public function crear()
     {
-        can('crear-oficina-de-compras');
+        $this->puede('crear-oficina-de-compras', 'crea-oficina-de-compras');
 
         return view('configuracion.oficinacompra.crear');
     }
@@ -63,7 +63,7 @@ class OficinacompraController extends Controller
      */
     public function editar($id)
     {
-        can('editar-oficina-de-compras');
+        $this->puede('editar-oficina-de-compras', 'edita-oficina-de-compras');
         $data = $this->repository->findOrFail($id);
 
         return view('configuracion.oficinacompra.editar', compact('data'));
@@ -78,7 +78,7 @@ class OficinacompraController extends Controller
      */
     public function actualizar(ValidacionOficinacompra $request, $id)
     {
-        can('actualizar-oficina-de-compras');
+        $this->puede('actualizar-oficina-de-compras', 'actualiza-oficina-de-compras');
 
         $this->repository->update($request->all(), $id);
 
@@ -93,7 +93,7 @@ class OficinacompraController extends Controller
      */
     public function eliminar(Request $request, $id)
     {
-        can('borrar-oficina-de-compras');
+        $this->puede('borrar-oficina-de-compras', 'borra-oficina-de-compras');
 
         if ($request->ajax()) {
         	if ($this->repository->delete($id)) {
@@ -104,6 +104,19 @@ class OficinacompraController extends Controller
         } else {
             abort(404);
         }
+    }
+
+    /**
+     * Crown guarda los slugs históricos (lista/crea/edita). El Bierzo usa listar/crear/editar.
+     * can() con redirect manda al inicio en el primer slug que falte, así que primero se prueba sin redirigir.
+     */
+    private function puede(string $slug, string $slugHistorico): void
+    {
+        if (can($slug, false) || can($slugHistorico, false)) {
+            return;
+        }
+
+        can($slug);
     }
 
 }

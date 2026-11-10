@@ -95,6 +95,86 @@ $(function () {
         $('#' + paneId).show().addClass('show active');
     }
 
+    function enfocarMontoFilaConcepto($row) {
+        var monto = $row && $row.length ? $row.find('.monto').get(0) : null;
+        if (!monto || monto.disabled || monto.readOnly) {
+            return;
+        }
+        setTimeout(function () {
+            try {
+                monto.focus();
+                if (typeof monto.select === 'function') {
+                    monto.select();
+                }
+            } catch (errMonto) {
+                // ignore
+            }
+        }, 0);
+    }
+
+    function enfocarPrimerConceptoCp() {
+        setTimeout(function () {
+            var $filas = $('#tbody-concepto-table tr.item-concepto');
+            var montoPrecargado = null;
+            $filas.each(function () {
+                var $row = $(this);
+                var id = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+                var codigoFila = String($row.find('.codigo_concepto_ivacompra').val() || '').trim();
+                if (id <= 0 && codigoFila === '') {
+                    return;
+                }
+                var monto = $row.find('.monto').get(0);
+                if (!monto || monto.disabled || monto.readOnly || !$(monto).is(':visible')) {
+                    return;
+                }
+                montoPrecargado = monto;
+                return false;
+            });
+            if (montoPrecargado) {
+                try {
+                    montoPrecargado.focus();
+                    if (typeof montoPrecargado.select === 'function') {
+                        montoPrecargado.select();
+                    }
+                } catch (errMonto) {
+                    // ignore
+                }
+                return;
+            }
+            var codigo = null;
+            $filas.find('.codigo_concepto_ivacompra').each(function () {
+                if (this.disabled || this.readOnly || !$(this).is(':visible')) {
+                    return;
+                }
+                codigo = this;
+                return false;
+            });
+            if (codigo) {
+                try {
+                    codigo.focus();
+                    if (typeof codigo.select === 'function') {
+                        codigo.select();
+                    }
+                } catch (errCodigo) {
+                    // ignore
+                }
+                return;
+            }
+            var btn = document.getElementById('agrega_renglon_concepto');
+            if (btn && !btn.disabled) {
+                btn.focus();
+            }
+        }, 0);
+    }
+
+    function abrirSolapaConceptosConFoco() {
+        var yaActiva = $('#cp-boton-conceptos').hasClass('active');
+        mostrarSolapa('#cp-solapa-conceptos');
+        if (yaActiva) {
+            enfocarPrimerConceptoCp();
+        }
+    }
+
     function abrirSolapaCom() {
         if ($('#cp-solapa-recepciones-com').length) {
             mostrarSolapa('#cp-solapa-recepciones-com');
@@ -2595,6 +2675,9 @@ $(function () {
             if (href === '#cp-solapa-asiento-contable') {
                 pendienteFocoCuentaAsientoVacia = true;
             }
+            if (href === '#cp-solapa-conceptos') {
+                enfocarPrimerConceptoCp();
+            }
             window.refrescarPreviewAsiento(true);
             // Fallback si el preview no vuelve a renderizar (ya estaba al día).
             if (href === '#cp-solapa-asiento-contable') {
@@ -2739,12 +2822,11 @@ $(function () {
         // No agregar renglón vacío al Enter: abortaba el preview y podía confundir al grabar.
         sincronizarTotalesDesdeConceptos();
         window.refrescarPreviewAsiento(true);
-        if (!coherencia.valido) {
-            return;
-        }
-        var $nextCodigo = $row.nextAll('tr.item-concepto').first().find('.codigo_concepto_ivacompra');
-        if ($nextCodigo.length) {
-            $nextCodigo.trigger('focus').select();
+        var $siguienteMonto = $row.nextAll('tr.item-concepto').find('.monto').filter(function () {
+            return !this.disabled;
+        }).first();
+        if ($siguienteMonto.length) {
+            $siguienteMonto.trigger('focus').select();
             return;
         }
         $(this).trigger('blur');
@@ -3519,6 +3601,13 @@ $(function () {
             }
             aplicarCuentaConceptoEnFila($row, true);
             marcarAvisosConceptosLocales();
+        }
+        var $codigoElegido = $row.find('.codigo_concepto_ivacompra');
+        if ($codigoElegido.length && $codigoElegido.data('cp-foco-monto-tras-resolver')) {
+            $codigoElegido.removeData('cp-foco-monto-tras-resolver');
+            if (data && data.id) {
+                enfocarMontoFilaConcepto($row);
+            }
         }
         programarPreviewAsiento();
     });
@@ -4459,13 +4548,43 @@ $(function () {
                 if (!(e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13)) {
                     return;
                 }
-                var target = e.target;
-                if (!target || !$(target).closest('#cp-solapa-principal').length) {
+            var target = e.target;
+            if (!target) {
+                return;
+            }
+            if (target.classList && target.classList.contains('codigo_concepto_ivacompra')
+                && target.closest && target.closest('#tbody-concepto-table')) {
+                var codigoConcepto = String(target.value || '').trim();
+                var $codigoConcepto = $(target);
+                var $filaConcepto = $codigoConcepto.closest('tr.item-concepto');
+                var resueltoConcepto = String($codigoConcepto.data('codigo-resuelto') || '');
+                var idConcepto = parseInt($filaConcepto.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+                if (codigoConcepto !== '' && resueltoConcepto === codigoConcepto && idConcepto > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    enfocarMontoFilaConcepto($filaConcepto);
                     return;
                 }
-                if (target.tagName === 'TEXTAREA') {
+                if (codigoConcepto !== '') {
+                    $codigoConcepto.data('cp-foco-monto-tras-resolver', 1);
+                }
+                return;
+            }
+            if (!$(target).closest('#cp-solapa-principal').length) {
+                return;
+            }
+            if (target.id === 'leyenda') {
+                if (e.shiftKey) {
                     return;
                 }
+                e.preventDefault();
+                e.stopPropagation();
+                abrirSolapaConceptosConFoco();
+                return;
+            }
+            if (target.tagName === 'TEXTAREA') {
+                return;
+            }
                 if (target.tagName === 'BUTTON' || target.type === 'submit' || target.type === 'button') {
                     return;
                 }

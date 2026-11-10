@@ -29,6 +29,7 @@ class FeriadoImportadorService
 
         try {
             $response = Http::timeout($timeout > 0 ? $timeout : 20)
+                ->withOptions($this->opcionesProxy())
                 ->acceptJson()
                 ->get($url);
         } catch (\Throwable $e) {
@@ -117,6 +118,28 @@ class FeriadoImportadorService
             'fecha' => $fecha->format('Y-m-d'),
             'tipo' => $tipo !== '' ? mb_substr($tipo, 0, 50) : null,
         ];
+    }
+
+    /**
+     * El servidor sale a internet por el proxy (192.168.1.1). Sin él, cURL 7 al puerto 443.
+     *
+     * @return array<string, string>
+     */
+    private function opcionesProxy(): array
+    {
+        $host = trim((string) config('feriados.proxy_host', ''));
+        if ($host === '') {
+            return [];
+        }
+
+        $port = max(1, (int) config('feriados.proxy_port', 3128));
+        $user = (string) config('feriados.proxy_user', '');
+        $password = (string) config('feriados.proxy_password', '');
+        $proxy = $user !== ''
+            ? sprintf('http://%s:%s@%s:%d', rawurlencode($user), rawurlencode($password), $host, $port)
+            : sprintf('http://%s:%d', $host, $port);
+
+        return ['proxy' => $proxy];
     }
 
     /**

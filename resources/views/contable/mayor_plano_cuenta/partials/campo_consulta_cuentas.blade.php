@@ -17,7 +17,7 @@
             <div class="input-group input-group-sm">
                 <input type="text" class="form-control codigocuentacontable"
                     id="mpc_cuenta_puntual_codigo" value="" placeholder="111010-001"
-                    title="C&oacute;digo de cuenta. F1 = consulta" autocomplete="off"
+                    title="C&oacute;digo de cuenta. Al escribir se abre la consulta. F1 tambi&eacute;n." autocomplete="off"
                     style="max-width: 125px;">
                 <input type="text" class="form-control nombrecuentacontable"
                     id="mpc_cuenta_puntual_nombre" value="" placeholder="Nombre de la cuenta" readonly>
@@ -71,7 +71,7 @@
                             <input type="text" name="cuenta_desde" id="cuenta_desde_codigo"
                                 class="form-control codigocuentacontable mpc-cuenta-codigo-input"
                                 placeholder="111010-001" autocomplete="off"
-                                title="C&oacute;digo desde. F1 = consulta"
+                                title="C&oacute;digo desde. Al escribir se abre la consulta. F1 tambi&eacute;n."
                                 value="{{ $cuenta_desde_meta['codigo'] ?? '' }}">
                             <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
                                 placeholder="Nombre cuenta" value="{{ $cuenta_desde_meta['nombre'] ?? '' }}">
@@ -90,7 +90,7 @@
                             <input type="text" name="cuenta_hasta" id="cuenta_hasta_codigo"
                                 class="form-control codigocuentacontable mpc-cuenta-codigo-input"
                                 placeholder="vac&iacute;o = hasta el final" autocomplete="off"
-                                title="C&oacute;digo hasta. Vac&iacute;o = hasta la &uacute;ltima cuenta. F1 = consulta"
+                                title="C&oacute;digo hasta. Vac&iacute;o = hasta la &uacute;ltima cuenta. Al escribir se abre la consulta. F1 tambi&eacute;n."
                                 value="{{ $cuenta_hasta_meta['codigo'] ?? '' }}">
                             <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
                                 placeholder="Nombre cuenta" value="{{ $cuenta_hasta_meta['nombre'] ?? '' }}">

@@ -22,6 +22,16 @@
         @endif
         <th>Coin in</th>
         <th>Win slots</th>
+        @if ($perfil !== 'finanzas')
+            <th>OL Att</th>
+            <th>OL Coin in</th>
+            <th>OL Cage</th>
+            <th>OL Win</th>
+            <th>BS Att</th>
+            <th>BS Coin in</th>
+            <th>BS Cage</th>
+            <th>BS Win</th>
+        @endif
         <th>Gaming</th>
         <th>F&amp;B</th>
         <th>Hotel</th>
@@ -47,6 +57,16 @@
             @endif
             <td>{{ (float) ($fila['coin_in'] ?? 0) }}</td>
             <td>{{ (float) ($fila['slot_r'] ?? 0) }}</td>
+            @if ($perfil !== 'finanzas')
+                <td>{{ (int) ($fila['ol_att'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['ol_coin_in'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['ol_cage_bal'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['ol_win'] ?? 0) }}</td>
+                <td>{{ (int) ($fila['bs_att'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['bs_coin_in'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['bs_cage_bal'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['bs_win'] ?? 0) }}</td>
+            @endif
             <td>{{ (float) ($m['gaming'] ?? 0) }}</td>
             <td>{{ (float) ($fila['ayb'] ?? 0) }}</td>
             <td>{{ (float) ($fila['hotel'] ?? 0) }}</td>

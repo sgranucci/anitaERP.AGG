@@ -1,4 +1,7 @@
 var mayorPlanoCuentaCampoActivo = null;
+var mayorPlanoAbriendoModalCuenta = false;
+var mayorPlanoCaretAlFinal = false;
+var mayorPlanoBuscarModalTimer = null;
 var mayorPlanoCuentasSel = {};
 var mayorPlanoCentrocostosSel = {};
 
@@ -107,7 +110,7 @@ function mayorPlanoActualizarExcelSolapasSeparadas() {
         $label.text('Excel en solapas separadas (una por cuenta o centro de costo)');
         $ayuda.html(
             'Se habilita al elegir cuentas o centros de costo en particular.'
-            + ' <span class="d-none d-md-inline"> · F1 en los c&oacute;digos abre la consulta.</span>'
+            + ' <span class="d-none d-md-inline"> · Escribir el c&oacute;digo abre la consulta. F1 tambi&eacute;n.</span>'
         );
     }
 }
@@ -384,17 +387,53 @@ function mayorPlanoEsTeclaF1(e) {
 
 function mayorPlanoModalConsultaAbierto() {
     var $modal = $('#consultacuentaModal');
-    return $modal.hasClass('show') || $modal.is(':visible');
+    return mayorPlanoAbriendoModalCuenta
+        || ($modal.length > 0 && ($modal.hasClass('show') || $modal.hasClass('in') || $modal.is(':visible')));
 }
 
-function mayorPlanoAbrirModalConsultaCuenta($campo) {
+function mayorPlanoPonerCaretAlFinal(el) {
+    if (!el || typeof el.setSelectionRange !== 'function') {
+        return;
+    }
+    var len = String(el.value || '').length;
+    try {
+        el.setSelectionRange(len, len);
+    } catch (e) {}
+}
+
+function mayorPlanoProgramarBusquedaModal(consulta) {
+    clearTimeout(mayorPlanoBuscarModalTimer);
+    mayorPlanoBuscarModalTimer = setTimeout(function () {
+        mayorPlanoBuscarCuentasModal(consulta);
+    }, 280);
+}
+
+function mayorPlanoElegirUnicaCuentaModal() {
+    var $btns = $('#datoscuentas .eligeconsultacuentacontable');
+    if ($btns.length !== 1) {
+        return false;
+    }
+    var el = $btns.get(0);
+    if (el && typeof el.click === 'function') {
+        el.click();
+        return true;
+    }
+    $btns.trigger('click');
+    return true;
+}
+
+function mayorPlanoAbrirModalConsultaCuenta($campo, opciones) {
     var empresaId = mayorPlanoEmpresaIdParaConsultaCuenta();
     if (!empresaId) {
-        alert('Debe seleccionar al menos una empresa');
+        if (!(opciones && opciones.silencioso)) {
+            alert('Debe seleccionar al menos una empresa');
+        }
         return false;
     }
 
     mayorPlanoCuentaCampoActivo = $campo && $campo.length ? $campo : null;
+    mayorPlanoAbriendoModalCuenta = true;
+    mayorPlanoCaretAlFinal = !!(opciones && opciones.caretAlFinal);
     $('#consultaempresa_id').val(empresaId);
     $('#consultacuentaModal').modal('show');
     return true;
@@ -407,7 +446,37 @@ function activaEventosMayorPlanoCuentaFiltro() {
         .off('change.mpc', '.mpc-cuenta-campo .codigocuentacontable')
         .on('change.mpc', '.mpc-cuenta-campo .codigocuentacontable', function (event) {
             event.preventDefault();
+            if (mayorPlanoModalConsultaAbierto()) {
+                return;
+            }
             mayorPlanoResolverNombreCuenta($(this).closest('.mpc-cuenta-campo'));
+        });
+
+    $(document)
+        .off('input.mpcAbreCuenta', '.mpc-cuenta-campo .codigocuentacontable')
+        .on('input.mpcAbreCuenta', '.mpc-cuenta-campo .codigocuentacontable', function () {
+            if (this.readOnly || this.disabled) {
+                return;
+            }
+            var texto = mayorPlanoTextoConsultaModal(this.value || '');
+            if (texto === '') {
+                return;
+            }
+            if (!(mayorPlanoEmpresaIdParaConsultaCuenta() > 0)) {
+                return;
+            }
+            var $campo = $(this).closest('.mpc-cuenta-campo');
+            mayorPlanoCuentaCampoActivo = $campo;
+            var $buscar = $('#consultacuentacontable');
+            $buscar.val(texto);
+            if (document.activeElement === $buscar.get(0)) {
+                mayorPlanoPonerCaretAlFinal($buscar.get(0));
+            }
+            if (mayorPlanoModalConsultaAbierto()) {
+                mayorPlanoProgramarBusquedaModal(texto);
+                return;
+            }
+            mayorPlanoAbrirModalConsultaCuenta($campo, { caretAlFinal: true, silencioso: true });
         });
 
     $(document)
@@ -415,6 +484,9 @@ function activaEventosMayorPlanoCuentaFiltro() {
         .on('keydown.mpc', '.mpc-cuenta-campo .codigocuentacontable', function (event) {
             if (event.key === 'Enter' || event.keyCode === 13) {
                 event.preventDefault();
+                if (mayorPlanoModalConsultaAbierto()) {
+                    return;
+                }
                 var $campo = $(this).closest('.mpc-cuenta-campo');
                 if (mayorPlanoEsCampoPuntual($campo)) {
                     mayorPlanoAgregarCuentaDesdeCampo();
@@ -460,14 +532,60 @@ function activaEventosMayorPlanoCuentaFiltro() {
                 );
             }
 
-            $('#consultacuentacontable').val(valor);
-            mayorPlanoBuscarCuentasModal(valor);
-            $(this).find('[autofocus]').focus();
+            mayorPlanoAbriendoModalCuenta = false;
+            var caretAlFinal = mayorPlanoCaretAlFinal;
+            mayorPlanoCaretAlFinal = false;
+            clearTimeout(mayorPlanoBuscarModalTimer);
+            var $buscar = $('#consultacuentacontable');
+            // Al tipear, el buscador ya tiene el texto: no reponerlo (pisaría lo escrito
+            // mientras el modal terminaba de abrir) ni dejarlo seleccionado.
+            if (!caretAlFinal || String($buscar.val() || '').trim() === '') {
+                $buscar.val(valor);
+            }
+            mayorPlanoBuscarCuentasModal(String($buscar.val() || '').trim());
+            setTimeout(function () {
+                var el = $buscar.get(0);
+                if (!el) {
+                    return;
+                }
+                el.focus();
+                if (caretAlFinal) {
+                    mayorPlanoPonerCaretAlFinal(el);
+                }
+            }, 0);
+        })
+        .off('hidden.bs.modal.mpc')
+        .on('hidden.bs.modal.mpc', function () {
+            mayorPlanoAbriendoModalCuenta = false;
+            mayorPlanoCaretAlFinal = false;
+            clearTimeout(mayorPlanoBuscarModalTimer);
+        });
+
+    $(document)
+        .off('keydown.mpcEnter', '#consultacuentacontable')
+        .on('keydown.mpcEnter', '#consultacuentacontable', function (event) {
+            if (event.key !== 'Enter' && event.keyCode !== 13) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            if (!mayorPlanoElegirUnicaCuentaModal()) {
+                mayorPlanoBuscarCuentasModal(String(this.value || '').trim());
+            }
+        });
+
+    $('#consultacuentaModal')
+        .off('submit.mpc', 'form')
+        .on('submit.mpc', 'form', function (event) {
+            event.preventDefault();
         });
 
     $(document)
         .off('keyup.mpc', '#consultacuentacontable')
-        .on('keyup.mpc', '#consultacuentacontable', function () {
+        .on('keyup.mpc', '#consultacuentacontable', function (event) {
+            if (event.key === 'Enter' || event.keyCode === 13) {
+                return;
+            }
             var valor = $(this).val().trim();
             mayorPlanoBuscarCuentasModal(valor);
         });

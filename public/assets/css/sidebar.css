@@ -148,7 +148,7 @@ body.sidebar-mini.sidebar-collapse .main-sidebar:not(:hover):not(.sidebar-focuse
     border-left-color: rgba(133, 193, 233, 0.35);
 }
 
-/* --- Niveles de jerarquía --- */
+/* --- Niveles de jerarquía (0 = módulo raíz) --- */
 .main-sidebar.anita-sidebar .nav-menu-level-0 > .nav-link {
     font-weight: 600;
     font-size: 0.92rem;
@@ -159,15 +159,22 @@ body.sidebar-mini.sidebar-collapse .main-sidebar:not(:hover):not(.sidebar-focuse
     font-weight: 500;
 }
 
-.main-sidebar.anita-sidebar .nav-menu-level-2 > .nav-link,
-.main-sidebar.anita-sidebar .nav-menu-level-3 > .nav-link {
+.main-sidebar.anita-sidebar .nav-menu-level-2 > .nav-link {
     font-size: 0.82rem;
     font-weight: 400;
     color: var(--anita-sidebar-text-muted);
 }
 
+.main-sidebar.anita-sidebar .nav-menu-level-3 > .nav-link,
+.main-sidebar.anita-sidebar .nav-menu-level-4 > .nav-link {
+    font-size: 0.78rem;
+    font-weight: 400;
+    color: var(--anita-sidebar-text-muted);
+}
+
 .main-sidebar.anita-sidebar .nav-menu-level-2 > .nav-link:hover,
-.main-sidebar.anita-sidebar .nav-menu-level-3 > .nav-link:hover {
+.main-sidebar.anita-sidebar .nav-menu-level-3 > .nav-link:hover,
+.main-sidebar.anita-sidebar .nav-menu-level-4 > .nav-link:hover {
     color: #fff;
 }
 
@@ -196,9 +203,67 @@ body.sidebar-mini.sidebar-collapse .main-sidebar:not(:hover):not(.sidebar-focuse
     max-width: calc(100% - 2rem);
 }
 
-/* Ítems con submenú: reservar el ancho del chevron (posicionado absoluto a la derecha). */
-.main-sidebar.anita-sidebar .nav-sidebar .has-treeview > .nav-link > p {
-    max-width: calc(100% - 3.2rem);
+/*
+ * Padres con submenú: el <p> es flex.
+ * Nombre a la izquierda (puede wrapear); badge + chevron fijos a la derecha.
+ * Sin position:absolute → no se pisan con el texto.
+ */
+.main-sidebar.anita-sidebar .nav-sidebar .has-treeview > .nav-link > p.anita-menu-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    width: calc(100% - 2rem);
+    max-width: calc(100% - 2rem);
+    vertical-align: middle;
+}
+
+.main-sidebar.anita-sidebar .anita-menu-nombre {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.main-sidebar.anita-sidebar .anita-menu-meta {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.main-sidebar.anita-sidebar .anita-menu-hijos-badge {
+    display: inline-block;
+    margin: 0;
+    min-width: 1.15rem;
+    text-align: center;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.12em 0.38em;
+    border-radius: 0.65rem;
+    line-height: 1.15;
+    background-color: rgba(133, 193, 233, 0.28) !important;
+    color: #dce9f5 !important;
+    border: 1px solid rgba(133, 193, 233, 0.45);
+}
+
+.main-sidebar.anita-sidebar .nav-link.active:not(.menu-parent-open) .anita-menu-hijos-badge,
+.main-sidebar.anita-sidebar .nav-item.menu-open > .nav-link .anita-menu-hijos-badge {
+    background-color: rgba(255, 255, 255, 0.22) !important;
+    color: #fff !important;
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Chevron propio (sin clase AdminLTE .right) para no pelear con absolute. */
+.main-sidebar.anita-sidebar .anita-menu-chevron {
+    display: inline-block;
+    width: 0.85rem;
+    text-align: center;
+    transition: transform 0.2s ease-in-out;
+}
+
+.main-sidebar.anita-sidebar .nav-item.menu-open > .nav-link .anita-menu-chevron,
+.main-sidebar.anita-sidebar .nav-item.menu-is-opening > .nav-link .anita-menu-chevron {
+    transform: rotate(-90deg);
 }
 
 /* --- Override AdminLTE: active solo en raíz --- */

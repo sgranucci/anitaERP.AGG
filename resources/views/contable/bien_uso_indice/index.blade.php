@@ -28,6 +28,7 @@
                             <th>C&oacute;digo</th>
                             <th>Nombre</th>
                             <th>Tipo</th>
+                            <th>Último valor</th>
                             <th class="width80"></th>
                         </tr>
                     </thead>
@@ -39,8 +40,14 @@
                                 <td>{{ $data->nombre }}</td>
                                 <td>{{ $data->tipo_valor }}</td>
                                 <td>
+                                    @php $ultimo = ($ultimos ?? collect())->get($data->id); @endphp
+                                    @if ($ultimo)
+                                        {{ str_pad((string) $ultimo->mes, 2, '0', STR_PAD_LEFT) }}/{{ $ultimo->anio }}
+                                    @endif
+                                </td>
+                                <td>
                                     @if (can('editar-bien-uso-indice', false))
-                                        <a href="{{ route('editar_bien_uso_indice', $data->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                        <a href="{{ route('editar_bien_uso_indice', $data->id) }}#coeficientes" class="btn-accion-tabla tooltipsC" title="Editar y cargar valores">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     @endif
@@ -55,7 +62,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="5" class="text-center text-muted">Sin &iacute;ndices</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">Sin &iacute;ndices</td></tr>
                         @endforelse
                     </tbody>
                 </table>

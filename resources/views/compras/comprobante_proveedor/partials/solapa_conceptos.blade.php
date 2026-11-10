@@ -34,14 +34,15 @@
     <div id="cp-conceptos-col-iva" class="{{ $mostrarPreviewAsiento ? 'col-lg-6' : 'col-12' }} mb-3 mb-lg-0">
         <h4 class="mb-2">Conceptos de IVA compra</h4>
         <p class="text-muted small mb-3">
-            Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
+            Agregue uno o más renglones. En el código, <kbd>Enter</kbd> pasa al monto de ese renglón
+            (<kbd>F1</kbd> o la lupa consultan).
             En tipos normales se precarga la plantilla con los conceptos del tipo,
             filtrados por la <strong>letra</strong> del comprobante: letra <strong>C</strong>
             solo monotributo / exento; letras <strong>A/B</strong> gravados e IVA (sin
             monotributo). En prorrateadas multi-CC (FPB/CPB/…) la plantilla
             es la unión de los finos de la OC (en $0 si la precarga no trajo montos). Si la
             precarga ya armó esos renglones, se conservan. El modal F1 lista la misma unión.
-            En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
+            En el monto, <kbd>Enter</kbd> pasa al monto del renglón siguiente, valida coherencia y actualiza la vista previa del asiento.
             La cuenta contable no se carga acá: el neto con OC toma las cuentas de los artículos.
             En una nota de crédito o débito esa elección se hace al enviar el legajo (cuenta de la OC u otra cuenta).
             En ND/NC se puede cambiar después en la solapa <strong>Asiento contable</strong>.
@@ -106,7 +107,7 @@
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $codigo }}" style="width:5.5rem;" autocomplete="off"
                                             @if ($conceptoId && $codigo !== '') data-codigo-resuelto="{{ $codigo }}" @endif
-                                            title="Código + Enter · F1 consulta" placeholder="Cód.">
+                                            title="Enter pasa al monto · F1 consulta" placeholder="Cód.">
                                         <input type="text" class="form-control form-control-sm nombre_concepto_ivacompra mr-1"
                                             value="{{ $nombre }}" readonly style="min-width:8rem;flex:1;" placeholder="Descripción">
                                         <button type="button" class="btn btn-outline-primary btn-sm consultaconcepto_ivacompra tooltipsC flex-shrink-0"
@@ -183,7 +184,7 @@
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $concepto->codigo ?? '' }}" style="width:5.5rem;" autocomplete="off"
                                             @if (($renglon->concepto_ivacompra_id ?? 0) && ($concepto->codigo ?? '') !== '') data-codigo-resuelto="{{ $concepto->codigo }}" @endif
-                                            title="Código + Enter · F1 consulta" placeholder="Cód.">
+                                            title="Enter pasa al monto · F1 consulta" placeholder="Cód.">
                                         <input type="text" class="form-control form-control-sm nombre_concepto_ivacompra mr-1"
                                             value="{{ $concepto->nombre ?? '' }}" readonly style="min-width:8rem;flex:1;" placeholder="Descripción">
                                         <button type="button" class="btn btn-outline-primary btn-sm consultaconcepto_ivacompra tooltipsC flex-shrink-0"

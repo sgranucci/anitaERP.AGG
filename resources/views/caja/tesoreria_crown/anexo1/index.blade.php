@@ -4,14 +4,54 @@
     Anexos
 @endsection
 
+@section('styles')
+    <link rel="stylesheet" href="{{ asset('assets/css/tesoreria-crown-jornada.css') }}?v={{ filemtime(public_path('assets/css/tesoreria-crown-jornada.css')) }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ filemtime(public_path('assets/css/tabla-ancha-reporte.css')) }}">
+@endsection
+
+@section('scripts')
+    <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js')) }}"></script>
+    @if (in_array($panel ?? '', ['rescajero', 'anexo3'], true))
+        <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js')) }}"></script>
+    @endif
+@endsection
+
 @section('contenido')
 @include('includes.mensaje')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'tesoreria-crown-overlay',
+    'tituloId' => 'tesoreria-crown-overlay-titulo',
+    'subtituloId' => 'tesoreria-crown-overlay-subtitulo',
+    'titulo' => 'Exportando…',
+    'subtitulo' => 'Generando el archivo.',
+])
 @php
     $anexosBaseUrl = route('tesoreria_crown_anexo1');
     $anexosBaseQuery = array_filter([
         'sala_id' => $sala->id ?? null,
         'jornada_id' => $jornada->id ?? null,
     ]);
+    $exportAnexoRuta = null;
+    $exportAnexoParams = [];
+    if ($jornada) {
+        $exportAnexoRuta = match ($panel ?? '') {
+            'anexo2' => 'listar_anexo2_tesoreria_crown_jornada',
+            'rescajero' => 'listar_rescajero_tesoreria_crown_jornada',
+            'anexo3' => 'listar_anexo3_tesoreria_crown_jornada',
+            'anexo7' => 'listar_anexo7_tesoreria_crown_jornada',
+            'anexo8' => 'listar_anexo8_tesoreria_crown_jornada',
+            default => 'listar_anexo1_tesoreria_crown_jornada',
+        };
+        $exportAnexoParams = ($panel ?? '') === 'anexo'
+            ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'clasico']
+            : (
+                ($panel ?? '') === 'anexo2'
+                    ? ['id' => $jornada->id, 'grupo_anexo2' => $anexo2['grupo'] ?? 'todo']
+                    : ['id' => $jornada->id]
+            );
+    }
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -35,7 +75,11 @@
                     @endif
                 </div>
             </div>
-            @include('caja.tesoreria_crown.partials.sala_chips', ['ruta' => 'tesoreria_crown_anexo1'])
+            @include('caja.tesoreria_crown.partials.sala_chips', [
+                'ruta' => 'tesoreria_crown_anexo1',
+                'exportRuta' => $exportAnexoRuta,
+                'exportQueryparams' => $exportAnexoParams,
+            ])
             @include('caja.tesoreria_crown.partials.jornada_selector', [
                 'ruta' => 'tesoreria_crown_anexo1',
                 'queryExtra' => array_filter([

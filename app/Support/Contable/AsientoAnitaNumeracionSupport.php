@@ -22,12 +22,11 @@ final class AsientoAnitaNumeracionSupport
 
     /**
      * Instalaciones con `ventas.numerador` (clave 501/500), no `shared.numabm` por empresa.
-     * El número de asiento es de secuencia global: filtrar ocupación solo por
-     * `ctav_nro_asiento` (~15 ms). Empresa+nro en Informix Bierzo hace un plan ~5 s
-     * aunque exista índice (empresa, nro_asiento, nro_linea).
+     * El número de asiento es de secuencia global: cualquier línea de ese nro lo ocupa.
      *
-     * AGG (numabm a-ctamov.c por empresa) NO entra: el mismo nro puede coexistir
-     * en distintas empresas Anita; ahí hay que filtrar por ctav_empresa.
+     * En numabm por empresa (AGG, Crown) el mismo nro puede existir en otra empresa.
+     * Igual se lee solo por `ctav_nro_asiento`: empresa+nro en Informix recorre toda
+     * la empresa (~3 s) aunque haya índice. La empresa se filtra sobre esas filas.
      */
     public static function usaNumeradorVentasGlobal(): bool
     {
@@ -37,29 +36,55 @@ final class AsientoAnitaNumeracionSupport
     }
 
     /**
-     * WHERE para chequear si un nro de asiento ya tiene líneas en ctamov.
-     *
-     * @param  bool  $forzarFiltroEmpresa  true tras DELETE (verificar vacío de esa empresa);
-     *                                    false en reserva → solo nro si numerador ventas global.
+     * WHERE de la lectura a ctamov. Siempre solo por número: el plan
+     * empresa+nro tarda segundos. $codigoEmpresa y $forzarFiltroEmpresa
+     * quedan para quien filtra las filas con filasOcupan().
      */
     public static function whereOcupacionCtamov(
         int|string $codigoEmpresa,
         int $nroAsiento,
         bool $forzarFiltroEmpresa = false,
     ): string {
+        unset($codigoEmpresa, $forzarFiltroEmpresa);
+
         $nro = (int) $nroAsiento;
         if ($nro < 1) {
             throw new RuntimeException('Número de asiento Anita inválido para ocupación ctamov: '.$nroAsiento);
         }
 
-        $soloNumero = ! $forzarFiltroEmpresa && self::usaNumeradorVentasGlobal();
-        if ($soloNumero) {
-            return ' WHERE ctav_nro_asiento = '.$nro;
+        return ' WHERE ctav_nro_asiento = '.$nro;
+    }
+
+    /**
+     * true: la ocupación es de esta empresa (numabm por empresa, o verificación
+     * posterior a un DELETE). false: numerador global, cualquier empresa ocupa el nro.
+     */
+    public static function filtrarEmpresaEnOcupacion(bool $forzarFiltroEmpresa = false): bool
+    {
+        return $forzarFiltroEmpresa || ! self::usaNumeradorVentasGlobal();
+    }
+
+    /**
+     * @param  list<object|array<string, mixed>>  $filas
+     */
+    public static function filasOcupan(array $filas, int|string $codigoEmpresa, bool $filtrarEmpresa): bool
+    {
+        $empresa = trim((string) $codigoEmpresa);
+
+        foreach ($filas as $fila) {
+            if (! $filtrarEmpresa) {
+                return true;
+            }
+
+            $empFila = is_array($fila)
+                ? ($fila['ctav_empresa'] ?? '')
+                : ($fila->ctav_empresa ?? '');
+            if (trim((string) $empFila) === $empresa) {
+                return true;
+            }
         }
 
-        $empresa = str_replace("'", "''", (string) $codigoEmpresa);
-
-        return " WHERE ctav_empresa = '".$empresa."' AND ctav_nro_asiento = ".$nro;
+        return false;
     }
 
     /**

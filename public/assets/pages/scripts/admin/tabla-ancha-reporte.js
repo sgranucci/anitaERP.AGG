@@ -1,11 +1,18 @@
 (function () {
     function bindTablaAncha(root) {
+        if (root.dataset.tablaAnchaBound === '1') {
+            if (typeof root._tablaAnchaMedir === 'function') {
+                root._tablaAnchaMedir();
+            }
+            return;
+        }
         var wrap = root.querySelector('.tabla-ancha-wrap');
         var topScroll = root.querySelector('.tabla-ancha-scroll-top');
         var topInner = root.querySelector('.tabla-ancha-scroll-top-inner');
         if (!wrap || !topScroll || !topInner) {
             return;
         }
+        root.dataset.tablaAnchaBound = '1';
         var table = wrap.querySelector('table');
         var syncing = false;
         function medirDobleCabecera() {
@@ -33,6 +40,7 @@
                 topScroll.setAttribute('hidden', 'hidden');
             }
         }
+        root._tablaAnchaMedir = medir;
         topScroll.addEventListener('scroll', function () {
             if (syncing) {
                 return;
@@ -51,6 +59,8 @@
         });
         window.addEventListener('resize', medir);
         medir();
+        window.setTimeout(medir, 50);
+        window.setTimeout(medir, 250);
     }
 
     function iniciar() {
@@ -62,4 +72,5 @@
     } else {
         iniciar();
     }
+    window.addEventListener('load', iniciar);
 })();

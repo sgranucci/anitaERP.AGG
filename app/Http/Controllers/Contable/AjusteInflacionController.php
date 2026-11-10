@@ -91,6 +91,7 @@ class AjusteInflacionController extends Controller
             'puede_importar_indices' => can('importar-indices-ajuste-inflacion', false),
             'puede_simular' => can('simular-ajuste-inflacion', false),
             'puede_confirmar' => can('confirmar-ajuste-inflacion', false),
+            'sincroniza_indice_revaluo' => $this->indiceService->sincronizaIndiceRevaluo(),
         ]);
     }
 

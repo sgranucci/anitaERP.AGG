@@ -25,6 +25,34 @@ $(document).ready(function () {
     menuParents.children('a').addClass('menu-parent-open');
     $('ul.nav-sidebar li.menu-open > .nav-treeview').css('display', 'block');
 
+    // Misma URL en módulo y Configuración: recordar por cuál entró para reabrir esa rama.
+    $(document).on('click', 'a.anita-aside-menu-link[data-menu-id]', function () {
+        var menuId = $(this).attr('data-menu-id');
+        if (!menuId) {
+            return;
+        }
+        document.cookie = 'anita_aside_menu_id=' + encodeURIComponent(menuId)
+            + '; path=/; SameSite=Lax; max-age=31536000';
+    });
+
+    // Preferencia del usuario: mostrar/ocultar globos de cantidad en submenús.
+    $(document).on('click', '#anita-aside-conteo-btn', function () {
+        var $btn = $(this);
+        var encendido = ! $btn.hasClass('is-on');
+        $btn.toggleClass('is-on', encendido);
+        $btn.attr('aria-pressed', encendido ? 'true' : 'false');
+        $btn.attr(
+            'title',
+            encendido
+                ? 'Ocultar cantidad de opciones en submenús (solo para vos)'
+                : 'Mostrar cantidad de opciones en submenús (solo para vos)'
+        );
+        document.cookie = 'anita_aside_conteo_hijos=' + (encendido ? '1' : '0')
+            + '; path=/; SameSite=Lax; max-age=31536000';
+        // Recargar para armar/desarmar los badges en el HTML del menú.
+        window.location.reload();
+    });
+
     // El mini-sidebar, al pasar el mouse, se dibuja encima del botón de colapsar.
     // Si en ese momento se elige una opción, el clic no llega al botón (o AdminLTE
     // lo interpreta como "abrir" un menú que ya se ve abierto) y parece que no hace nada.

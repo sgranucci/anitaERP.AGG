@@ -25,7 +25,7 @@ final class FlashCrownPerfilVistaSupport
     public static function descripciones(): array
     {
         return [
-            self::COMPLETA => 'Todas las columnas de mesas, slots, online, F&B, hotel, torneos y Combined vs año anterior.',
+            self::COMPLETA => 'Mesas, slots, Del Río online (67), Betsur (68), F&B, hotel, torneos y Combined vs año anterior (l-consolida Completo).',
             self::FINANZAS => 'Att, Drop, Win mesas, Coin in, Win slots, Gaming, F&B, Hotel, Combined.',
         ];
     }

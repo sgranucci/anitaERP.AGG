@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Support\Contable\Sicore;
 
 /**
- * Evita duplicar en SICORE las retenciones que ya están en Anita (retmov/retimov)
- * cuando también existen en pagoproveedor_retencion (ERP).
- *
- * El ERP solo completa OPs que Anita no trajo (pagos nativos aún no reflejados en retmov).
+ * La fuente de las retenciones es el ERP (pagoproveedor_retencion).
+ * Anita (retmov/retimov) solo aporta las que todavía no están subidas.
  */
 final class SicoreErpComplementoSupport
 {

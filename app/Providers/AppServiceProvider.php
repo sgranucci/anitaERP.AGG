@@ -64,6 +64,14 @@ class AppServiceProvider extends ServiceProvider
             $menus = \App\Support\Caja\Bingo\BingoModuloSupport::filtrarMenuAside($menus);
             $menus = \App\Support\Caja\CajaRecepcionPcSupport::filtrarMenuAside($menus);
             $view->with('menusComposer', $menus);
+            $view->with(
+                'mostrarConteoHijosMenu',
+                \App\Support\Admin\MenuAsideConteoHijosSupport::mostrar()
+            );
+            $view->with(
+                'conteoHijosMenuDefault',
+                \App\Support\Admin\MenuAsideConteoHijosSupport::defaultInstalacion()
+            );
 
             if (auth()->check()) {
                 $barraTareas = app(BarraTareasSupport::class);

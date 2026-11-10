@@ -8,6 +8,7 @@ use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownPoderPublicoGenerador;
+use App\Support\Caja\TesoreriaCrownResultadoOnlineCalculo;
 use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas;
 use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoFiltros;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -135,7 +136,7 @@ class TesoreriaCrownResultadoOnlineController extends Controller
                 foreach ($claves as $clave) {
                     $celda[] = $clave === 'fecha'
                         ? $fila->fecha?->format('d/m/Y')
-                        : ($clave === 'cantidad_slots'
+                        : (in_array($clave, ['cantidad_slots', 'attendance', 'betsur_attendance'], true)
                             ? (int) $fila->{$clave}
                             : (float) ($fila->{$clave} ?? 0));
                 }
@@ -471,7 +472,10 @@ class TesoreriaCrownResultadoOnlineController extends Controller
         $slot = round($coinIn - $coinOut - $pagoManual, 2);
         $apostado = $this->importe($request->input('apostado'));
         $pagado = $this->importe($request->input('pagado'));
-        $resultadoCasino = round($apostado - $pagado, 2);
+        $delRio = TesoreriaCrownResultadoOnlineCalculo::desdeApostadoPagado($apostado, $pagado);
+        $betsurApostado = $this->importe($request->input('betsur_apostado'));
+        $betsurPagado = $this->importe($request->input('betsur_pagado'));
+        $betsur = TesoreriaCrownResultadoOnlineCalculo::desdeApostadoPagado($betsurApostado, $betsurPagado);
 
         return [
             'empresa_id' => (int) $sala->empresa_id,
@@ -481,11 +485,16 @@ class TesoreriaCrownResultadoOnlineController extends Controller
             'apostado' => $apostado,
             'pagado' => $pagado,
             'drop' => $this->importe($request->input('drop')),
-            'resultado' => $resultadoCasino,
-            'porcentaje' => $apostado > 0.00001
-                ? round(($resultadoCasino / $apostado) * 100, 2)
-                : 0.0,
+            'resultado' => $delRio['resultado'],
+            'porcentaje' => $delRio['porcentaje'],
             'poder_publico' => $this->importe($request->input('poder_publico')),
+            'betsur_attendance' => (int) $request->input('betsur_attendance', 0),
+            'betsur_apostado' => $betsurApostado,
+            'betsur_pagado' => $betsurPagado,
+            'betsur_drop' => $this->importe($request->input('betsur_drop')),
+            'betsur_resultado' => $betsur['resultado'],
+            'betsur_porcentaje' => $betsur['porcentaje'],
+            'betsur_poder_publico' => $this->importe($request->input('betsur_poder_publico')),
             'coin_in' => $coinIn,
             'coin_out' => $coinOut,
             'pago_manual' => $pagoManual,

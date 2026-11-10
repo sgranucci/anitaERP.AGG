@@ -11,7 +11,7 @@ use App\Repositories\Compras\RetencionivaRepositoryInterface;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
 use App\Support\Contable\Sicore\SicoreCompraConcmovAnitaSupport;
-use App\Support\Contable\Sicore\SicoreCuentaRgpSupport;
+use App\Support\Contable\Sicore\SicoreConfigCuentaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreErpComplementoSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
@@ -43,56 +43,23 @@ final class SicoreComprasDatosService
     }
 
     /**
-     * Ganancias: el período lo marca la fecha contable del OPP/AOP.
-     * El detalle puede estar en el subdiario o solo en ctamov (sistema B): Rebisco
-     * 2ª quincena 09/2026 imputa la 214010013 únicamente en ctamov.
-     * retmov se lee por tipo/letra/sucursal/nro/empresa (sin filtrar por retv_fecha),
-     * porque esa fecha a veces queda desfasada respecto del asiento.
+     * Ganancias: retenciones del ERP. Anita (retmov) solo si el pago todavía no está subido.
      *
      * @return list<array<string, mixed>>
      */
     private function desdeRetmov(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
     {
-        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
-        $codigosCuenta = $this->codigosCuentaConfig($config, $empresaId);
-        $pagosPeriodo = $this->listarPagosProveedorSubdiario(
-            $empresaAnita,
-            $fechaDesde,
-            $fechaHasta,
-            $codigosCuenta,
-        );
-        foreach ($this->listarPagosProveedorCtamov(
-            $empresaAnita,
-            $fechaDesde,
-            $fechaHasta,
-            $codigosCuenta,
-        ) as $claveCtamov => $pagoCtamov) {
-            if (! isset($pagosPeriodo[$claveCtamov])) {
-                $pagosPeriodo[$claveCtamov] = $pagoCtamov;
-            }
-        }
-
-        $out = [];
-        if ($pagosPeriodo !== []) {
-            $out = $this->registrosDesdePagosRetmov($empresaAnita, $pagosPeriodo, $config);
-        }
-
-        $out = array_merge(
-            $out,
-            $this->desdeDevolucionesRetencionSubdiario($empresaId, $fechaDesde, $fechaHasta, $config, $out),
+        $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'G');
+        $anita = SicoreErpComplementoSupport::descartarSinBaseCubiertos(
+            $this->registrosRetmovPeriodoAnita($empresaId, $fechaDesde, $fechaHasta, $config),
+            $erp,
         );
 
-        return array_merge(
-            $out,
-            SicoreErpComplementoSupport::soloNuevos(
-                $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'G'),
-                $out,
-            ),
-        );
+        return array_merge($erp, SicoreErpComplementoSupport::soloNuevos($anita, $erp));
     }
 
     /**
-     * Retenciones de pagos ERP (pagoproveedor_retencion) — solo OPs que Anita no trajo.
+     * Retenciones de pagos del ERP (pagoproveedor_retencion). Es la fuente del archivo.
      *
      * @return list<array<string, mixed>>
      */
@@ -187,6 +154,132 @@ final class SicoreComprasDatosService
     }
 
     /**
+     * retmov del período que todavía no está en el ERP.
+     * La fecha es retv_fecha: el asiento de esas OP no está en anitaERP.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function registrosRetmovPeriodoAnita(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
+    {
+        $filas = $this->listarRetmovPeriodo($empresaId, $fechaDesde, $fechaHasta);
+        if ($filas === []) {
+            return [];
+        }
+
+        $this->proveedorSupport->precargar(array_map(
+            static fn (array $row) => (string) ($row['retv_proveedor'] ?? ''),
+            $filas,
+        ));
+
+        $regimenPorCodigo = $this->mapaRegimenGanancias();
+        $out = [];
+        $vistos = [];
+
+        foreach ($filas as $row) {
+            $dedupe = (string) ($row['retv_tipo'] ?? '').'|'
+                .(int) ($row['retv_nro'] ?? 0).'|'
+                .(int) ($row['retv_codigo_ret'] ?? 0).'|'
+                .(int) ($row['retv_nro_retencion'] ?? 0);
+            if (isset($vistos[$dedupe])) {
+                continue;
+            }
+            $vistos[$dedupe] = true;
+
+            $proveedor = $this->proveedorSupport->resolverDesdeFila(
+                $row,
+                'retv_proveedor',
+                'retv_nombre_prov',
+                'retv_cuit_prov',
+            );
+            if (($proveedor['codigo_proveedor'] ?? '') === '' && ($proveedor['cuit'] ?? '') === '') {
+                continue;
+            }
+
+            $codRet = (int) ($row['retv_codigo_ret'] ?? 0);
+            $regimen = (int) ($config->codigo_regimen ?? ($regimenPorCodigo[$codRet] ?? 999));
+            $signo = strncmp((string) ($row['retv_tipo'] ?? ''), 'AOP', 3) === 0 ? -1.0 : 1.0;
+            $retencion = round((float) ($row['retv_retencion'] ?? 0) * $signo, 2);
+            if (abs($retencion) < 0.001) {
+                continue;
+            }
+
+            $pagoActual = round((float) ($row['retv_pago_actual'] ?? 0) * $signo, 2);
+            $base = $signo < 0 ? abs($retencion) : abs($pagoActual);
+            $esDevolucion = strncmp((string) ($row['retv_tipo'] ?? ''), 'AOP', 3) === 0;
+            $fechaIso = $this->anitaAFechaIso((int) ($row['retv_fecha'] ?? 0));
+
+            $out[] = [
+                'origen' => 'compras_ganancias',
+                'sicore_config_id' => (int) $config->id,
+                'cod_regimen' => $regimen,
+                'cod_impuesto' => (int) $config->codigo_impuesto,
+                'cod_operacion' => (int) ($config->codigo_operacion ?? 1),
+                'cod_comp' => $esDevolucion
+                    ? SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO
+                    : SicoreFormatoV8Support::COD_COMP_ORDEN_PAGO,
+                'fecha_comp' => $fechaIso,
+                'nro_comp' => (int) ($row['retv_nro'] ?? 0),
+                'importe_comp' => abs($pagoActual),
+                'base_calculo' => abs($base),
+                'fecha_retencion' => $fechaIso,
+                'cod_condicion' => $proveedor['cod_condicion'],
+                'importe' => $retencion,
+                'porc_excl' => (float) ($row['retv_porc_excl'] ?? 0),
+                'fecha_boletin' => '',
+                'cod_documento' => 80,
+                'nro_documento' => SicoreFormatoV8Support::normalizarCuit($proveedor['cuit']),
+                'nro_cert' => (int) ($row['retv_nro_retencion'] ?? 0),
+                'codigo_proveedor' => $proveedor['codigo_proveedor'],
+                'razon_social' => substr($proveedor['nombre'], 0, 30),
+                'referencia' => 'Ret.GC '.$proveedor['codigo_proveedor'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function listarRetmovPeriodo(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
+        if ($empresaAnita <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return [];
+        }
+
+        $desdeAnita = (int) str_replace('-', '', $fechaDesde);
+        $hastaAnita = (int) str_replace('-', '', $fechaHasta);
+        $api = new ApiAnita();
+        $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'tabla' => 'retmov',
+            'campos' => $this->camposRetmov(implode(', ', [
+                'retv_proveedor', 'retv_tipo', 'retv_letra', 'retv_sucursal', 'retv_nro',
+                'retv_fecha', 'retv_codigo_ret', 'retv_pago_actual', 'retv_retencion',
+                'retv_nro_retencion', 'retv_porc_excl', 'retv_nombre_prov', 'retv_cuit_prov',
+            ])),
+            'whereArmado' => ' WHERE '.$this->filtroEmpresaRetmov($empresaAnita)
+                .'retv_fecha >= '.$desdeAnita
+                .' AND retv_fecha <= '.$hastaAnita
+                .' AND retv_retencion <> 0'
+                .' AND (retv_tipo="OPP" OR retv_tipo LIKE "OPP%"'
+                .' OR retv_tipo="AOP" OR retv_tipo LIKE "AOP%"'
+                .' OR retv_tipo="OPA" OR retv_tipo LIKE "OPA%"'
+                .' OR retv_tipo="OPV" OR retv_tipo LIKE "OPV%")',
+            'orderBy' => 'retv_fecha, retv_nro',
+        ]));
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $out[] = (array) $fila;
+        }
+
+        return $out;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function desdeRetimov(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
@@ -254,10 +347,7 @@ final class SicoreComprasDatosService
         $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'I');
         $out = SicoreErpComplementoSupport::descartarSinBaseCubiertos($out, $erp);
 
-        return array_merge(
-            $out,
-            SicoreErpComplementoSupport::soloNuevos($erp, $out),
-        );
+        return array_merge($erp, SicoreErpComplementoSupport::soloNuevos($out, $erp));
     }
 
     /**
@@ -565,24 +655,7 @@ final class SicoreComprasDatosService
      */
     private function codigosCuentaConfig(Sicore_Config $config, int $empresaId): array
     {
-        if ($config->criterio === 'compras_ganancias') {
-            $rgp = SicoreCuentaRgpSupport::ganancias($empresaId);
-            if ($rgp !== null) {
-                return [$rgp['codigo_anita']];
-            }
-        }
-
-        if (! $config->relationLoaded('cuentas')) {
-            $config->load('cuentas.cuentacontable');
-        }
-
-        return $config->cuentas
-            ->where('empresa_id', $empresaId)
-            ->map(static fn ($c) => (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')))
-            ->filter(static fn (int $cod) => $cod > 0)
-            ->unique()
-            ->values()
-            ->all();
+        return SicoreConfigCuentaSupport::codigosAnita($config, $empresaId);
     }
 
     /**

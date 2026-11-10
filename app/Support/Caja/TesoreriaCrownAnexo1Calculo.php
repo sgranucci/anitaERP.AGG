@@ -349,12 +349,8 @@ final class TesoreriaCrownAnexo1Calculo
             (string) $jornada->fecha?->format('Y-m-d')
         ));
         if ($central) {
-            $tieneCasino = abs((float) $central->apostado) > 0.001
-                || abs((float) $central->pagado) > 0.001
-                || abs((float) $central->resultado) > 0.001;
-            if ($tieneCasino) {
-                $out['online'] = (float) $central->resultado;
-            }
+            // Del Río (67) y Betsur (68) son marcas online de AC: no pisan la línea
+            // On-line del anexo de la sala (sigue saliendo de cajeros / movimientos).
             if (abs((float) $central->slot_resultado) > 0.001) {
                 $out['slot'] = (float) $central->slot_resultado;
             }
@@ -362,9 +358,6 @@ final class TesoreriaCrownAnexo1Calculo
 
         foreach ($out as $clave => $importe) {
             $out[$clave] = round((float) $importe, 2);
-        }
-        if ($central && abs((float) $out['online'] - (float) $central->resultado) < 0.001 && (abs((float) $central->apostado) > 0.001 || abs((float) $central->pagado) > 0.001 || abs((float) $central->resultado) > 0.001)) {
-            $avisos[] = 'On-line salió del resultado de casino online cargado para el día.';
         }
         if (abs($out['slot']) < 0.001) {
             $avisos[] = 'La recaudación de tragamonedas queda en cero: cargá el resultado de slots online del día.';

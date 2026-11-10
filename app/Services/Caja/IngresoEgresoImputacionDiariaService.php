@@ -63,6 +63,9 @@ final class IngresoEgresoImputacionDiariaService
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)
             ->whereNull('caja_movimiento_revertido_por_id')
+            // Cobranzas (p. ej. devolución gastronomía con tipo EGR) no son I/E de tesorería:
+            // el asiento va en la venta/NC y la caja se cierra en la rendición de jornada.
+            ->whereNull('cobranza_id')
             ->where(function ($q) {
                 $q->whereHas('tipotransaccioncajas', function ($t) {
                     $t->whereIn(\DB::raw('UPPER(TRIM(abreviatura))'), Ie::TIPOS_IE);
@@ -140,7 +143,8 @@ final class IngresoEgresoImputacionDiariaService
             'mail_error' => null,
             'notas' => [
                 'Incluye ING / EGR / TRA y OPP/OPA de tesorería (sin CC de proveedor).',
-                'No incluye cobranzas ni las OP de proveedores con facturas/anticipo (esas van al control AP).',
+                'No incluye cobranzas (cobranza_id): devoluciones/cobranzas gastronomía usan tipo EGR/ING pero su asiento es el de la venta/NC.',
+                'No incluye las OP de proveedores con facturas/anticipo (esas van al control AP).',
                 'Caja + cheques ERP se cruza con tesmov Anita. El cheque propio se toma del tesmov CHP que auxpag imputa al comprobante (un OPP solo-cheque no tiene tesmov con el nro del OPP). El asiento ERP se cruza con ctamov.',
                 'En ING/EGR/TRA además se exige que caja+cheques cuadre con el total del asiento.',
                 'Dólares y otras monedas se comparan en pesos con la cotización de cada línea (caja, asiento, tesmov y ctamov).',

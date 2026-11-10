@@ -23,10 +23,12 @@
 }
 .tabla-ancha-scroll-top-inner { height: 1px; }
 .tabla-ancha-wrap {
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: auto;
     max-height: calc(100vh - 240px);
     max-width: 100%;
     border: 1px solid #d5d8dc;
+    -webkit-overflow-scrolling: touch;
 }
 .tabla-ancha {
     margin-bottom: 0;

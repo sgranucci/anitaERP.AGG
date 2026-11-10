@@ -56,8 +56,17 @@ class AsientoQuery implements AsientoQueryInterface
             'asiento.estado_aprobacion as estado_aprobacion'
         )
             ->join('tipoasiento', 'tipoasiento.id', '=', 'asiento.tipoasiento_id')
-            ->join('empresa', 'empresa.id', '=', 'asiento.empresa_id')
-            ->with('asiento_movimientos');
+            ->join('empresa', 'empresa.id', '=', 'asiento.empresa_id');
+
+        if ($flPaginando) {
+            $asientos
+                ->withCount('asiento_movimientos')
+                ->withSum(['asiento_movimientos as total_debe' => function ($q) {
+                    $q->where('monto', '>', 0);
+                }], 'monto');
+        } else {
+            $asientos->with('asiento_movimientos');
+        }
 
         AsientoListadoFiltros::aplicar($asientos, $filtros);
 

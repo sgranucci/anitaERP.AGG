@@ -13,5 +13,7 @@ class EncryptCookies extends Middleware
      */
     protected $except = [
         'lid_descarga',
+        'anita_aside_menu_id',
+        'anita_aside_conteo_hijos',
     ];
 }

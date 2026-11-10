@@ -38,6 +38,8 @@ final class SicoreMayorComparableSupport
         '/^SICORE[_\s]+SICORE/iu',
         '/\bPRESENTACI[OÓ]N\s+SICORE\b/iu',
         '/\bPAGO\s+SICORE\b/iu',
+        // Crown: "PAGO A CUENTA SICORE 10.2026" (Anita usa "PAGO SICORE" pegado).
+        '/\bPAGO\s+A\s+CUENTA\s+SICORE\b/iu',
         '/\bDDJJ\s+SICORE\b/iu',
         // IIBB / ARBA: pago de liquidación quincenal (no es generación de retención).
         // Variantes reales Anita: "RETENCIONES IIBB ARBA 1Q…", "RETENC ARBA 2Q…",
