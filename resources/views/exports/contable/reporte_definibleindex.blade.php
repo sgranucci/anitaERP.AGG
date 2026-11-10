@@ -27,6 +27,11 @@
             <strong style="font-size:16px;">{{ $reporte->titulo1 ?: $reporte->nombre }}</strong>
         </td>
     </tr>
+    @if (trim((string) ($empresas_origen ?? '')) !== '')
+        <tr>
+            <td colspan="20"><strong>{{ $empresas_origen }}</strong></td>
+        </tr>
+    @endif
     <tr>
         <td colspan="20">Generado {{ date('d/m/Y H:i') }}</td>
     </tr>

@@ -58,6 +58,7 @@ return [
         'asientos_traspaso_interno' => (string) env('MAYOR_CONCEPTO_ASIENTOS_TRASPASO_INTERNO', ''),
         // Cierre "Venta maquinas": cada cuenta > límite sale con su Debe/Haber nativo (sin
         // prorratear sobre la pata de caja). false = vuelve al prorrateo anterior.
+        // El cierre bingo (tipo BIN / Pago de premios / Dev. pozo) siempre usa líneas nativas.
         'venta_maquinas_lineas_nativas' => filter_var(
             env('MAYOR_CONCEPTO_VENTA_MAQUINAS_LINEAS_NATIVAS', true),
             FILTER_VALIDATE_BOOLEAN

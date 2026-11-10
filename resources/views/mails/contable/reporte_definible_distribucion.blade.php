@@ -22,6 +22,10 @@
     · Generado el {{ now()->format('d/m/Y H:i') }}
 </p>
 
+@if (trim((string) ($empresasTexto ?? '')) !== '')
+    <p style="margin:0 0 16px 0;"><strong>{{ $empresasTexto }}</strong></p>
+@endif
+
 @if (trim((string) ($suscripcion->mensaje ?? '')) !== '')
     <p style="padding:10px; background:#f4f6f7; border-left:4px solid #85C1E9; margin:0 0 16px 0;">
         {{ $suscripcion->mensaje }}

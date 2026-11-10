@@ -18,9 +18,10 @@ use Illuminate\Support\Facades\DB;
  * queda en la contrapartida con el concepto de esa cuenta. Las OPP llevan
  * además el total de retenciones del pago, prorrateado con el mismo criterio.
  *
- * Cierre «Venta maquinas» (flag venta_maquinas_lineas_nativas): las cuentas
- * por encima del límite salen con su Debe/Haber nativo; el cuadre con el mayor
- * analítico es por neto (neto analítico + neto concepto = 0).
+ * Cierre «Venta maquinas» (flag venta_maquinas_lineas_nativas) y cierre bingo
+ * (Pago de premios / Dev. pozo / tipo BIN): las cuentas por encima del límite
+ * salen con su Debe/Haber nativo; el cuadre con el mayor analítico es por neto
+ * (neto analítico + neto concepto = 0). Misma regla que el motor Anita multilínea.
  */
 class MayorConceptoErpPlanoMotor
 {
@@ -160,7 +161,9 @@ class MayorConceptoErpPlanoMotor
             $debePlano = 0.0;
             $haberPlano = 0.0;
             $cuentasPlano = [];
+            $esBingoNativo = $this->esAsientoBingo($asiento);
             $esVentaNativo = $ventaMaquinasLineasNativas && $this->esAsientoVentaMaquinas($asiento);
+            $esLineasNativas = $esBingoNativo || $esVentaNativo;
 
             foreach ($patas as $pata) {
                 $importe = round((float) $pata['importe'], 2);
@@ -172,8 +175,11 @@ class MayorConceptoErpPlanoMotor
                 $cuentasPlano[$pata['cuenta_codigo']] = true;
             }
 
-            if ($esVentaNativo) {
+            if ($esLineasNativas) {
                 $pataRef = $this->pataDisponibilidadReferencia($patas);
+                $origenNativo = $esBingoNativo
+                    ? 'Cuenta del cierre bingo (lado nativo)'
+                    : 'Cuenta del cierre venta máquinas (lado nativo)';
                 foreach ($movimientos as $mov) {
                     $cuenta = (int) ($mov['cuenta'] ?? 0);
                     $importe = round((float) ($mov['importe'] ?? 0), 2);
@@ -187,7 +193,7 @@ class MayorConceptoErpPlanoMotor
                         $importe,
                         (bool) $mov['es_debe'],
                         false,
-                        'Cuenta del cierre venta máquinas (lado nativo)',
+                        $origenNativo,
                     );
                 }
             } else {
@@ -261,7 +267,7 @@ class MayorConceptoErpPlanoMotor
                 'fecha_min' => (int) $asiento['fecha'],
                 'fecha_fmt' => $this->fmtFecha((int) $asiento['fecha']),
                 'cuentas' => $cuentas,
-                'cuadre_neto' => $esVentaNativo,
+                'cuadre_neto' => $esLineasNativas,
             ];
         }
 
@@ -287,15 +293,44 @@ class MayorConceptoErpPlanoMotor
             }
         }
 
+        $texto = $this->textoAsientoNormalizado($asiento);
+
+        return str_contains($texto, 'venta maquinas')
+            || str_contains($texto, 'cierre rendicion maquinas');
+    }
+
+    /**
+     * Cierre de rendición bingo: tipo BIN o leyendas de {@see CierreRendicionBingoAsientoSupport}.
+     *
+     * @param  array<string, mixed>  $asiento
+     */
+    public function esAsientoBingo(array $asiento): bool
+    {
+        $tipo = strtoupper(trim((string) ($asiento['tipo'] ?? '')));
+        if ($tipo === 'BIN') {
+            return true;
+        }
+
+        $texto = $this->textoAsientoNormalizado($asiento);
+
+        return str_contains($texto, 'pago de premios')
+            || str_contains($texto, 'dev. pozo acum')
+            || str_contains($texto, 'dev pozo acum')
+            || str_contains($texto, 'cierre rendicion bingo');
+    }
+
+    /**
+     * @param  array<string, mixed>  $asiento
+     */
+    private function textoAsientoNormalizado(array $asiento): string
+    {
         $texto = strtolower(
             trim((string) ($asiento['observacion'] ?? ''))
             .' '
             .trim((string) ($asiento['tipo'] ?? ''))
         );
-        $texto = str_replace(['á', 'é', 'í', 'ó', 'ú'], ['a', 'e', 'i', 'o', 'u'], $texto);
 
-        return str_contains($texto, 'venta maquinas')
-            || str_contains($texto, 'cierre rendicion maquinas');
+        return str_replace(['á', 'é', 'í', 'ó', 'ú'], ['a', 'e', 'i', 'o', 'u'], $texto);
     }
 
     /**
@@ -325,8 +360,8 @@ class MayorConceptoErpPlanoMotor
 
     /**
      * Compara, asiento por asiento, el Debe y el Haber de las patas hasta el límite
-     * contra el Debe y el Haber del mayor por concepto. En cierre venta máquinas con
-     * líneas nativas el control es Neto analítico + Neto concepto = 0.
+     * contra el Debe y el Haber del mayor por concepto. En cierre venta máquinas /
+     * bingo con líneas nativas el control es Neto analítico + Neto concepto = 0.
      *
      * @param  array<int, array<string, mixed>>  $analitico
      * @param  list<array<string, mixed>>  $lineas
@@ -381,7 +416,7 @@ class MayorConceptoErpPlanoMotor
                 $cuadra = abs($diferencia) < self::TOLERANCIA;
                 $motivo = $cuadra
                     ? ''
-                    : 'Venta máquinas (neto): analítico '.$netoA.' + concepto '.$netoC.' = '.$diferencia.'.';
+                    : 'Líneas nativas (neto): analítico '.$netoA.' + concepto '.$netoC.' = '.$diferencia.'.';
             } else {
                 $diferencia = round(abs($dDebe) + abs($dHaber), 2);
                 $cuadra = abs($dDebe) < self::TOLERANCIA && abs($dHaber) < self::TOLERANCIA;
@@ -431,7 +466,7 @@ class MayorConceptoErpPlanoMotor
             'cuadra' => $descuadrados === 0,
             'tolerancia' => self::TOLERANCIA,
             'regla' => $asientosNeto > 0
-                ? 'Pata hasta el límite (columnas) y, en venta máquinas, Neto analítico + Neto concepto = 0'
+                ? 'Pata hasta el límite (columnas) y, en venta máquinas/bingo, Neto analítico + Neto concepto = 0'
                 : 'El Debe y el Haber de cada asiento en el mayor por concepto igualan la pata hasta el límite',
             'asientos_analizados' => $analizados,
             'asientos_cuadrados' => $analizados - $descuadrados,
@@ -442,7 +477,7 @@ class MayorConceptoErpPlanoMotor
             'filas' => $filas,
             'filas_descuadradas' => $filasDescuadradas,
             'filas_cuadradas' => $filasCuadradas,
-            'nota' => 'Solo entran las cuentas menores o iguales al límite de caja/banco. El importe de esa pata no se cambia: se abre en las cuentas de gasto de la COM si la contrapartida es proveedores, y si no queda en la contrapartida con el concepto de esa cuenta. En cierre venta máquinas con líneas nativas el control es por neto contra el mayor analítico.',
+            'nota' => 'Solo entran las cuentas menores o iguales al límite de caja/banco. El importe de esa pata no se cambia: se abre en las cuentas de gasto de la COM si la contrapartida es proveedores, y si no queda en la contrapartida con el concepto de esa cuenta. En cierre venta máquinas/bingo con líneas nativas el control es por neto contra el mayor analítico.',
         ];
     }
 

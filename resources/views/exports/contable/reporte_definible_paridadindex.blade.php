@@ -6,7 +6,8 @@
     );
     // auto: número crudo (la máscara la pone WithColumnFormatting); ar/intl: texto ya formateado.
     $fmt = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 2);
-    $subtitulo = 'Empresas: '.implode(', ', (array) ($p['empresa_ids'] ?? []))
+    $textoEmpresas = \App\Services\Contable\ReporteDefinibleParidadService::textoEmpresasOrigen((array) ($p['empresa_ids'] ?? []));
+    $subtitulo = ($textoEmpresas !== '' ? $textoEmpresas : 'Empresas: '.implode(', ', (array) ($p['empresa_ids'] ?? [])))
         .' | '.($p['fecha_desde'] ?? '').' a '.($p['fecha_hasta'] ?? '')
         .' | base '.($p['base_saldo'] ?? '')
         .' | tolerancia '.number_format((float) ($p['tolerancia'] ?? 0), 2, ',', '.')

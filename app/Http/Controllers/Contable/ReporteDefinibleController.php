@@ -617,7 +617,13 @@ class ReporteDefinibleController extends Controller
                 'publicacion' => $publicacion,
             ])->setPaper('legal', 'landscape');
 
-            return $pdf->stream('publicacion_'.$publicacion->id.'.pdf');
+            $slugEmpresa = ReporteDefinibleParidadService::slugEmpresasOrigen(
+                (array) (($publicacion->filtros ?? [])['empresa_ids'] ?? [])
+            );
+
+            return $pdf->stream(
+                'publicacion_'.$publicacion->id.($slugEmpresa !== '' ? '_'.$slugEmpresa : '').'.pdf'
+            );
         }
 
         return view('contable.reporte_definible.publicacion', [
@@ -850,7 +856,10 @@ class ReporteDefinibleController extends Controller
         }
 
         $formato = strtoupper($formato);
-        $nombre = 'reporte_definible_'.$reporte->codigo.'_'.date('Ymd_His');
+        $slugEmpresa = ReporteDefinibleParidadService::slugEmpresasOrigen((array) ($filtros['empresa_ids'] ?? []));
+        $nombre = 'reporte_definible_'.$reporte->codigo
+            .($slugEmpresa !== '' ? '_'.$slugEmpresa : '')
+            .'_'.date('Ymd_His');
 
         if ($formato === 'PDF') {
             $pdf = \PDF::loadView('contable.reporte_definible.listado', [

@@ -68,6 +68,7 @@ class ReporteDefinibleDistribucionService
         }
 
         $periodoTexto = $this->reporteService->formatearPeriodoTexto($filtros);
+        $empresasTexto = ReporteDefinibleParidadService::textoEmpresasOrigen((array) ($filtros['empresa_ids'] ?? []));
         $publicacion = null;
 
         if ($suscripcion->publicar && ! $dryRun) {
@@ -104,6 +105,7 @@ class ReporteDefinibleDistribucionService
                 $resultado,
                 $adjuntos,
                 $publicacion,
+                $empresasTexto,
             ));
         } catch (\Throwable $e) {
             Log::error('Distribución reporte definible falló', [
@@ -158,7 +160,10 @@ class ReporteDefinibleDistribucionService
             @mkdir($dir, 0775, true);
         }
 
-        $base = 'informe_'.$reporte->codigo.'_'.$ahora->format('Ymd_His');
+        $slugEmpresa = ReporteDefinibleParidadService::slugEmpresasOrigen((array) ($filtros['empresa_ids'] ?? []));
+        $base = 'informe_'.$reporte->codigo
+            .($slugEmpresa !== '' ? '_'.$slugEmpresa : '')
+            .'_'.$ahora->format('Ymd_His');
         $formato = (string) $suscripcion->formato;
         $adjuntos = [];
 

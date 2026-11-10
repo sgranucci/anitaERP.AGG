@@ -667,6 +667,9 @@
                                     $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
                                         \App\Services\Contable\ReporteDefinibleParidadService::coleccionEmpresasParaLogos((array) ($filtros['empresa_ids'] ?? []))
                                     );
+                                    $empresasOrigen = \App\Services\Contable\ReporteDefinibleParidadService::textoEmpresasOrigen(
+                                        (array) ($filtros['empresa_ids'] ?? [])
+                                    );
                                 @endphp
                                 @if (count($logosVista) > 0)
                                     <div class="d-flex flex-wrap align-items-center mb-2">
@@ -674,6 +677,9 @@
                                             <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" class="mr-2" style="max-height: 48px; max-width: 140px;">
                                         @endforeach
                                     </div>
+                                @endif
+                                @if ($empresasOrigen !== '')
+                                    <div class="font-weight-bold mb-1">{{ $empresasOrigen }}</div>
                                 @endif
                                 <h4 class="mb-0">{{ $reporte->titulo1 ?: $reporte->nombre }}</h4>
                                 @if ($reporte->titulo2)

@@ -33,6 +33,9 @@
     $filas = $resultado['filas'] ?? [];
     $notas = $resultado['notas'] ?? [];
     $marcasNota = $resultado['notas_marcas'] ?? [];
+    $empresasOrigen = \App\Services\Contable\ReporteDefinibleParidadService::textoEmpresasOrigen(
+        (array) ($filtros['empresa_ids'] ?? [])
+    );
 @endphp
 @if (!empty($logos))
     <div style="margin-bottom:8px;">
@@ -42,6 +45,9 @@
             @endif
         @endforeach
     </div>
+@endif
+@if ($empresasOrigen !== '')
+    <div style="font-size:12px;font-weight:bold;margin:0 0 4px;">{{ $empresasOrigen }}</div>
 @endif
 <h1>{{ $reporte->titulo1 ?: $reporte->nombre }}</h1>
 @if ($reporte->titulo2)

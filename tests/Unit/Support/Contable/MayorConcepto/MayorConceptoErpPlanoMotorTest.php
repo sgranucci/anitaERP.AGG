@@ -334,6 +334,76 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
     }
 
+    public function test_bingo_pago_de_premios_emite_premios_mismo_lado_que_caja(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $asiento = $this->asiento(232084, 232084, [
+            $this->mov(111010001, 'CAJA PESOS', 0, 'SIN CLASIFICAR', 500000.00, true),
+            $this->mov(521050001, 'PREMIOS 53 PORC.', 48, 'PREMIOS', 2997150.00, true),
+            $this->mov(211010006, 'POZO BINGO A PAGAR', 48, 'PREMIOS', 471681.14, true),
+            $this->mov(521280004, 'DIFERENCIA DE CAJA', 12, 'GAMING SUPPLIES', 12000.00, false),
+            $this->mov(411010001, 'VENTAS SALA', 47, 'VENTA', 3956831.14, false),
+        ]);
+        $asiento['tipo'] = 'BIN';
+        $asiento['observacion'] = 'Pago de premios';
+
+        $this->assertTrue($motor->esAsientoBingo($asiento));
+
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE);
+        $this->assertTrue($clasificado['analitico'][232084]['cuadre_neto']);
+        $this->assertCount(4, $clasificado['lineas']);
+
+        $porCuenta = [];
+        foreach ($clasificado['lineas'] as $ln) {
+            $this->assertGreaterThan(self::LIMITE, $ln['cuenta']);
+            $this->assertSame('Cuenta del cierre bingo (lado nativo)', $ln['origen']);
+            $clave = $ln['cuenta'].'|'.($ln['debe'] > 0 ? 'D' : 'H');
+            $porCuenta[$clave] = [
+                'importe' => $ln['debe'] + $ln['haber'],
+                'concepto' => $ln['concepto_id'],
+            ];
+        }
+
+        $this->assertEqualsWithDelta(2997150.00, $porCuenta['521050001|D']['importe'], 0.001);
+        $this->assertSame(48, $porCuenta['521050001|D']['concepto']);
+        $this->assertEqualsWithDelta(471681.14, $porCuenta['211010006|D']['importe'], 0.001);
+        $this->assertSame(48, $porCuenta['211010006|D']['concepto']);
+        $this->assertEqualsWithDelta(12000.00, $porCuenta['521280004|H']['importe'], 0.001);
+        $this->assertSame(12, $porCuenta['521280004|H']['concepto']);
+        $this->assertEqualsWithDelta(3956831.14, $porCuenta['411010001|H']['importe'], 0.001);
+        $this->assertSame(47, $porCuenta['411010001|H']['concepto']);
+
+        $auditoria = $motor->auditar($clasificado['analitico'], $clasificado['lineas']);
+        $this->assertTrue($auditoria['cuadra']);
+        $this->assertSame(1, $auditoria['asientos_cuadre_neto']);
+    }
+
+    public function test_sin_marcadores_bingo_no_emite_premios_del_mismo_lado(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $asiento = $this->asiento(232085, 232085, [
+            $this->mov(111010001, 'CAJA PESOS', 0, 'SIN CLASIFICAR', 500000.00, true),
+            $this->mov(521050001, 'PREMIOS 53 PORC.', 48, 'PREMIOS', 2997150.00, true),
+            $this->mov(211010006, 'POZO BINGO A PAGAR', 48, 'PREMIOS', 471681.14, true),
+            $this->mov(521280004, 'DIFERENCIA DE CAJA', 12, 'GAMING SUPPLIES', 12000.00, false),
+            $this->mov(411010001, 'VENTAS SALA', 47, 'VENTA', 3956831.14, false),
+        ]);
+        $asiento['tipo'] = 'ASI';
+        $asiento['observacion'] = 'Movimiento genérico';
+
+        $this->assertFalse($motor->esAsientoBingo($asiento));
+
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE);
+        $this->assertFalse($clasificado['analitico'][232085]['cuadre_neto']);
+
+        $cuentas = array_column($clasificado['lineas'], 'cuenta');
+        $this->assertNotContains(521050001, $cuentas);
+        $this->assertNotContains(211010006, $cuentas);
+        $this->assertContains(411010001, $cuentas);
+        $this->assertContains(521280004, $cuentas);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $movimientos
      * @return array<string, mixed>

@@ -99,7 +99,7 @@
                     <div class="row mb-2">
                         <div class="col-md-8">
                             <div class="small text-muted">
-                                Empresas {{ implode(', ', $parametros['empresa_ids'] ?? []) }} ·
+                                {{ \App\Services\Contable\ReporteDefinibleParidadService::textoEmpresasOrigen((array) ($parametros['empresa_ids'] ?? [])) ?: ('Empresas '.implode(', ', $parametros['empresa_ids'] ?? [])) }} ·
                                 {{ $parametros['fecha_desde'] ?? '' }} → {{ $parametros['fecha_hasta'] ?? '' }} ·
                                 base {{ $parametros['base_saldo'] ?? '' }} ·
                                 {{ (int) ($parametros['cuentas'] ?? 0) }} cuentas ·

@@ -32,6 +32,9 @@
         <div class="card card-info">
             <div class="card-header">
                 @php
+                    $empresasOrigen = \App\Services\Contable\ReporteDefinibleParidadService::textoEmpresasOrigen(
+                        (array) (($publicacion->filtros ?? [])['empresa_ids'] ?? [])
+                    );
                     $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion(
                         \App\Services\Contable\ReporteDefinibleParidadService::coleccionEmpresasParaLogos((array) (($publicacion->filtros ?? [])['empresa_ids'] ?? []))
                     );
@@ -61,7 +64,9 @@
                     Publicado el {{ $publicacion->created_at?->format('d/m/Y H:i') }}
                     por {{ $publicacion->usuario->nombre ?? '—' }}
                     · Período {{ $publicacion->periodo_texto }}
-                    · Empresas {{ is_array($publicacion->filtros['empresa_ids'] ?? null) ? implode(', ', $publicacion->filtros['empresa_ids']) : '' }}
+                    @if ($empresasOrigen !== '')
+                        · {{ $empresasOrigen }}
+                    @endif
                     · Definición v{{ $publicacion->definicion_version }}
                     · Huella <code>{{ substr((string) $publicacion->hash, 0, 16) }}</code>
                     <div class="small text-muted mt-1">
@@ -69,6 +74,9 @@
                     </div>
                 </div>
 
+                @if ($empresasOrigen !== '')
+                    <div class="font-weight-bold mb-1">{{ $empresasOrigen }}</div>
+                @endif
                 <h4 class="mb-0">{{ $reporte->titulo1 ?: $reporte->nombre }}</h4>
                 @if ($reporte->titulo2)
                     <div class="text-muted mb-2">{{ $reporte->titulo2 }}</div>

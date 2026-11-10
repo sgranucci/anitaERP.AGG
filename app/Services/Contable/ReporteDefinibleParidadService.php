@@ -16,6 +16,7 @@ use App\Support\Contable\ReporteDefinible\ReporteDefinibleSupport;
 use App\Support\Contable\SumasSaldos\SumasSaldosRuntimeSupport;
 use App\Support\Contable\SumasSaldosListadoFiltros;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Paridad del informe definible: mismo árbol y mismas asignaciones calculados sobre
@@ -41,6 +42,94 @@ class ReporteDefinibleParidadService
             ->orderBy('id')
             ->pluck('nombre')
             ->map(static fn ($nombre) => (object) ['nombreempresa' => (string) $nombre]);
+    }
+
+    /**
+     * Nombres de las empresas de las que sale la información, ordenados para mostrarlos.
+     *
+     * @param  list<int>  $empresaIds
+     * @return list<string>
+     */
+    public static function nombresEmpresasOrigen(array $empresaIds): array
+    {
+        $nombres = array_values(array_unique(array_filter(
+            array_map(
+                static fn ($nombre): string => trim((string) $nombre),
+                self::nombresPorId($empresaIds)
+            ),
+            static fn (string $nombre): bool => $nombre !== ''
+        )));
+        sort($nombres, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return $nombres;
+    }
+
+    /**
+     * @param  list<int>  $empresaIds
+     * @return array<int, string> id => nombre
+     */
+    public static function nombresPorId(array $empresaIds): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $empresaIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($ids === []) {
+            return [];
+        }
+
+        $nombres = [];
+        foreach (Empresa::query()->whereIn('id', $ids)->pluck('nombre', 'id') as $id => $nombre) {
+            $nombres[(int) $id] = trim((string) $nombre);
+        }
+
+        return $nombres;
+    }
+
+    /**
+     * Rótulo de cabecera: «Empresa: X» o «Empresas: A, B».
+     *
+     * @param  list<int>  $empresaIds
+     */
+    public static function textoEmpresasOrigen(array $empresaIds): string
+    {
+        return self::textoDesdeNombres(self::nombresEmpresasOrigen($empresaIds));
+    }
+
+    /**
+     * @param  list<string>  $nombres
+     */
+    public static function textoDesdeNombres(array $nombres): string
+    {
+        $nombres = array_values(array_filter(
+            array_map(static fn ($nombre): string => trim((string) $nombre), $nombres),
+            static fn (string $nombre): bool => $nombre !== ''
+        ));
+        if ($nombres === []) {
+            return '';
+        }
+
+        return (count($nombres) === 1 ? 'Empresa: ' : 'Empresas: ').implode(', ', $nombres);
+    }
+
+    /**
+     * Trozo seguro para el nombre del archivo, para distinguir un informe de otro.
+     *
+     * @param  list<int>  $empresaIds
+     */
+    public static function slugEmpresasOrigen(array $empresaIds, int $max = 80): string
+    {
+        $nombres = self::nombresEmpresasOrigen($empresaIds);
+        if ($nombres === []) {
+            return '';
+        }
+
+        $slug = Str::slug(implode(' ', $nombres), '_');
+        if ($max > 0 && strlen($slug) > $max) {
+            $slug = rtrim(substr($slug, 0, $max), '_');
+        }
+
+        return $slug;
     }
 
     /**

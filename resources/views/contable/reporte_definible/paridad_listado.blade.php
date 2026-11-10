@@ -42,7 +42,7 @@
                 <div class="titulo">Paridad anitaERP vs Anita — {{ $reporte->nombre ?? '' }}</div>
                 <div class="meta">Generado {{ now()->format('d/m/Y H:i') }}</div>
                 <div class="meta">
-                    Empresas: {{ implode(', ', (array) ($p['empresa_ids'] ?? [])) }}
+                    {{ \App\Services\Contable\ReporteDefinibleParidadService::textoEmpresasOrigen((array) ($p['empresa_ids'] ?? [])) ?: ('Empresas: '.implode(', ', (array) ($p['empresa_ids'] ?? []))) }}
                     | {{ $p['fecha_desde'] ?? '' }} a {{ $p['fecha_hasta'] ?? '' }}
                     | base {{ $p['base_saldo'] ?? '' }}
                     | tolerancia {{ number_format((float) ($p['tolerancia'] ?? 0), 2, ',', '.') }}

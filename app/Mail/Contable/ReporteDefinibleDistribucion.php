@@ -26,14 +26,17 @@ class ReporteDefinibleDistribucion extends Mailable
         public array $resultado,
         public array $adjuntos = [],
         public ?ReporteContablePublicacion $publicacion = null,
+        public string $empresasTexto = '',
     ) {}
 
     public function build(): self
     {
+        $empresaAsunto = trim($this->empresasTexto);
         $asunto = sprintf(
-            '[%s] %s — %s',
+            '[%s] %s — %s%s',
             config('app.name', 'anitaERP'),
             trim((string) $this->reporte->nombre) !== '' ? $this->reporte->nombre : 'Informe contable',
+            $empresaAsunto !== '' ? $empresaAsunto.' — ' : '',
             $this->periodoTexto !== '' ? $this->periodoTexto : now()->format('m/Y'),
         );
 

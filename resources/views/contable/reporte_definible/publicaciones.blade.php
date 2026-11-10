@@ -34,7 +34,7 @@
                                 <th style="width:130px">Publicado</th>
                                 <th>Nombre</th>
                                 <th style="width:150px">Período</th>
-                                <th style="width:110px">Empresas</th>
+                                <th style="width:220px">Empresas</th>
                                 <th class="text-right" style="width:70px">Filas</th>
                                 <th style="width:100px">Definición</th>
                                 <th>Usuario</th>
@@ -43,8 +43,28 @@
                             </tr>
                         </thead>
                         <tbody>
+                            @php
+                                $idsEmpresasPub = [];
+                                foreach ($publicaciones as $pubItem) {
+                                    foreach ((array) ($pubItem->filtros['empresa_ids'] ?? []) as $idEmp) {
+                                        $idsEmpresasPub[] = (int) $idEmp;
+                                    }
+                                }
+                                $nombresEmpresasPub = \App\Services\Contable\ReporteDefinibleParidadService::nombresPorId($idsEmpresasPub);
+                            @endphp
                             @forelse ($publicaciones as $pub)
-                                @php $empresas = $pub->filtros['empresa_ids'] ?? []; @endphp
+                                @php
+                                    $nombresFila = [];
+                                    foreach ((array) ($pub->filtros['empresa_ids'] ?? []) as $idEmp) {
+                                        $nombreEmp = trim((string) ($nombresEmpresasPub[(int) $idEmp] ?? ''));
+                                        if ($nombreEmp !== '') {
+                                            $nombresFila[] = $nombreEmp;
+                                        }
+                                    }
+                                    $nombresFila = array_values(array_unique($nombresFila));
+                                    sort($nombresFila, SORT_NATURAL | SORT_FLAG_CASE);
+                                    $empresas = \App\Services\Contable\ReporteDefinibleParidadService::textoDesdeNombres($nombresFila);
+                                @endphp
                                 <tr>
                                     <td>{{ $pub->created_at?->format('d/m/Y H:i') }}</td>
                                     <td>
@@ -54,7 +74,7 @@
                                         @endif
                                     </td>
                                     <td>{{ $pub->periodo_texto }}</td>
-                                    <td>{{ is_array($empresas) ? implode(', ', $empresas) : '' }}</td>
+                                    <td>{{ $empresas }}</td>
                                     <td class="text-right">{{ $pub->filas }}</td>
                                     <td>v{{ $pub->definicion_version }}</td>
                                     <td>{{ $pub->usuario->nombre ?? '' }}</td>

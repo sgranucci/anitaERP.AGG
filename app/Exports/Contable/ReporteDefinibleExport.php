@@ -65,8 +65,12 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
             );
         $this->rutasLogosExcel = $logos;
         $hayLogos = count($logos) > 0;
-        // Filas meta de la vista: [logo] + titulo1 + generado + [titulo2]
+        $textoEmpresas = ReporteDefinibleParidadService::textoEmpresasOrigen(
+            (array) ($this->filtros['empresa_ids'] ?? [])
+        );
+        // Filas meta de la vista: [logo] + titulo1 + [empresa] + generado + [titulo2]
         $filasMeta = 2 + ($hayLogos ? 1 : 0)
+            + ($textoEmpresas !== '' ? 1 : 0)
             + (trim((string) ($this->reporte->titulo2 ?? '')) !== '' ? 1 : 0)
             + (trim((string) ($this->resultado['criterios'] ?? '')) !== '' ? 1 : 0);
         $grupos = [];
@@ -86,6 +90,7 @@ class ReporteDefinibleExport implements FromView, WithColumnFormatting, WithColu
             'filtros' => $this->filtros,
             'hayFilaLogos' => $hayLogos,
             'rutasLogos' => $logos,
+            'empresas_origen' => $textoEmpresas,
             'excel_formato_numero' => $this->formatoNumero(),
         ]);
     }
