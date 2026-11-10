@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Http\Requests\ValidacionEmpleadoAusencia_Sueldos;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
@@ -32,7 +33,7 @@ class Empleado_AusenciaSueldosController extends Controller
      */
     public function panel($empleadoId)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $empleado = Empleado_Sueldos::findOrFail($empleadoId);
 
         return $this->responderPanel($empleado);
@@ -135,7 +136,7 @@ class Empleado_AusenciaSueldosController extends Controller
             'resumen' => $resumen,
             'ausencias' => $ausencias,
             'tipos' => $tipos,
-            'puedeEditar' => can('actualizar-empleado-sueldos', false),
+            'puedeEditar' => EmpleadoLegajoVisualizacion::puedeMutar(can('actualizar-empleado-sueldos', false)),
         ])->render();
 
         return response()->json(['html' => $html, 'mensaje' => $mensaje, 'resumen' => $resumen]);

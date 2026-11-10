@@ -28,6 +28,7 @@ use App\Services\Sueldos\EmpleadoBaseSueldosService;
 use App\Services\Sueldos\EmpleadoIngresoService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
 use App\Support\Sueldos\CategoriaOrigenBases;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoVisualSupport;
@@ -63,7 +64,9 @@ class Empleado_SueldosController extends Controller
 
     public function index(Request $request)
     {
-        can('listar-empleado-sueldos');
+        if (! can('listar-empleado-sueldos', false) && ! can(EmpleadoLegajoVisualizacion::PERMISO, false)) {
+            can('listar-empleado-sueldos');
+        }
 
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(EmpleadoSueldosListadoColumnas::RECURSO, $usuarioId);
@@ -482,9 +485,12 @@ class Empleado_SueldosController extends Controller
 
     public function editar(Request $request, $id)
     {
+        $soloVisualizacion = $request->query('vista') === EmpleadoLegajoVisualizacion::VISTA;
         $consulta = $request->query('origen') === 'modal_consulta'
             || $request->query('vista') === 'consulta';
-        if ($consulta) {
+        if ($soloVisualizacion) {
+            can(EmpleadoLegajoVisualizacion::PERMISO);
+        } elseif ($consulta) {
             if (! can('listar-empleado-sueldos', false)
                 && ! can('editar-empleado-sueldos', false)
                 && ! can('actualizar-empleado-sueldos', false)) {
@@ -495,8 +501,8 @@ class Empleado_SueldosController extends Controller
         }
         $data = $this->repository->findOrFail($id);
 
-        // La consulta no recalcula vacaciones: eso escribe el ledger.
-        if (! $consulta) {
+        // La consulta y la visualización no recalculan vacaciones: eso escribe el ledger.
+        if (! $consulta && ! $soloVisualizacion) {
             $this->sincronizarSaldosVacaciones($data);
         }
 
@@ -513,9 +519,11 @@ class Empleado_SueldosController extends Controller
             'usaTabla' => $usaTabla,
             'basesGrilla' => $basesGrilla,
             'nombrebases' => Nombrebase_Sueldos::query()->orderBy('codigo')->get(),
-            'puedeBorrarVigencia' => can('borrar-vigencia-empleado-sueldos', false),
-            'puedeBaja' => can('baja-empleado-sueldos', false),
-            'puedeAutorizar' => can('autorizar-empleado-sueldos', false),
+            'puedeBorrarVigencia' => ! $soloVisualizacion && can('borrar-vigencia-empleado-sueldos', false),
+            'puedeBaja' => ! $soloVisualizacion && can('baja-empleado-sueldos', false),
+            'puedeAutorizar' => ! $soloVisualizacion && can('autorizar-empleado-sueldos', false),
+            'soloVisualizacion' => $soloVisualizacion,
+            'qVista' => $soloVisualizacion ? ['vista' => EmpleadoLegajoVisualizacion::VISTA] : [],
         ]));
     }
 
@@ -667,7 +675,7 @@ class Empleado_SueldosController extends Controller
 
     public function bases($id)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $emp = $this->repository->findOrFail($id);
 
         return response()->json([
@@ -680,7 +688,7 @@ class Empleado_SueldosController extends Controller
      */
     public function simularLiquidacion(Request $request, LiquidacionCalculadorService $calculador, $id)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $emp = $this->repository->findOrFail($id);
 
         $periodo = (string) $request->input('periodo', now()->format('Y-m'));
@@ -714,7 +722,7 @@ class Empleado_SueldosController extends Controller
      */
     public function depurarFormulas(Request $request, LiquidacionCalculadorService $calculador, $id)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $emp = $this->repository->findOrFail($id);
 
         $periodo = (string) $request->input('periodo', now()->format('Y-m'));
@@ -735,7 +743,7 @@ class Empleado_SueldosController extends Controller
 
     public function historialBases(Request $request, $id)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $emp = $this->repository->findOrFail($id);
         $nb = $request->input('nombrebase_id') ? (int) $request->input('nombrebase_id') : null;
 

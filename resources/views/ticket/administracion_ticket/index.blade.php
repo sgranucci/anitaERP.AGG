@@ -44,6 +44,40 @@
         font-weight: 600;
         cursor: pointer;
     }
+    /* La columna de editar/eliminar no puede achicarse: al entrar desde el
+       link del mail (sin menú) la grilla ocupa todo el ancho y la aplasta. */
+    .lw-workbench #tabla-paginada.tabla-acciones-fijas {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .lw-workbench #tabla-paginada th.col-acciones-tabla,
+    .lw-workbench #tabla-paginada td.col-acciones-tabla {
+        position: sticky;
+        right: 0;
+        width: 4.75rem;
+        min-width: 4.75rem;
+        max-width: 4.75rem;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+        background-clip: padding-box;
+        box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+    }
+    .lw-workbench #tabla-paginada thead th.col-acciones-tabla {
+        top: 0;
+        z-index: 5;
+        background-color: #85C1E9;
+    }
+    .lw-workbench #tabla-paginada tbody td.col-acciones-tabla {
+        z-index: 3;
+        background-color: #fff;
+    }
+    .lw-workbench #tabla-paginada.table-striped tbody tr:nth-of-type(odd) td.col-acciones-tabla {
+        background-color: #f2f2f2;
+    }
+    .lw-workbench #tabla-paginada.table-hover tbody tr:hover td.col-acciones-tabla {
+        background-color: #EBF5FB;
+    }
 </style>
 @endsection
 
@@ -242,7 +276,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                         Marque «Ver todos los tickets» para ver el resto del equipo.
                     </div>
                 @endif
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="table table-striped table-bordered table-hover tabla-acciones-fijas" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
@@ -251,7 +285,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="width40" data-orderable="false"></th>
+                            <th class="col-acciones-tabla" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -274,7 +308,8 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                                 @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
                                     <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
                                 @endforeach
-                                <td>
+                                <td class="col-acciones-tabla">
+                                    <div class="lw-acciones-inner">
                                     @if ($puedeVerTicket)
                                         <a href="{{ route('edita_administracion_ticket', ['id' => $data->id] + ($retornoListadoQuery ?? [])) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                             <i class="fa fa-edit"></i>
@@ -288,6 +323,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                                             </button>
                                         </form>
                                     @endif
+                                    </div>
                                 </td>
                             </tr>
                         @empty

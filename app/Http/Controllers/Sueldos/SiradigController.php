@@ -8,6 +8,7 @@ use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Siradig_Presentacion_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Sueldos\SiradigImportacionService;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Support\Sueldos\SiradigListadoFiltros;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -194,7 +195,11 @@ class SiradigController extends Controller
      */
     public function panelEmpleado(Request $request, $empleado)
     {
-        can('listar-siradig-sueldos');
+        if (EmpleadoLegajoVisualizacion::activa()) {
+            can(EmpleadoLegajoVisualizacion::PERMISO);
+        } else {
+            can('listar-siradig-sueldos');
+        }
         $emp = Empleado_Sueldos::findOrFail($empleado);
 
         $cuit = preg_replace('/\D+/', '', (string) $emp->cuil) ?? '';

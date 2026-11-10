@@ -19,8 +19,8 @@ use Illuminate\Support\Facades\DB;
  * además el total de retenciones del pago, prorrateado con el mismo criterio.
  *
  * Cierre «Venta maquinas» (flag venta_maquinas_lineas_nativas) y cierre bingo
- * (Pago de premios / Dev. pozo / tipo BIN): las cuentas por encima del límite
- * salen con su Debe/Haber nativo; el cuadre con el mayor analítico es por neto
+ * (flag bingo_lineas_nativas): las cuentas por encima del límite salen con su
+ * Debe/Haber nativo; el cuadre con el mayor analítico es por neto
  * (neto analítico + neto concepto = 0). Misma regla que el motor Anita multilínea.
  */
 class MayorConceptoErpPlanoMotor
@@ -49,6 +49,7 @@ class MayorConceptoErpPlanoMotor
     ): array {
         $limite = (int) config('contable.mayor_concepto.limite_caja_banco', 112010008);
         $ventaMaquinasNativas = $this->ventaMaquinasLineasNativasHabilitado();
+        $bingoNativas = $this->bingoLineasNativasHabilitado();
         $asientos = $empresaId > 0
             ? $this->cargarAsientos($empresaId, $fechaDesdeYmd, $fechaHastaYmd, $monedaReporteId, $soloMonedaOrigen, $monedaConverter)
             : [];
@@ -66,7 +67,7 @@ class MayorConceptoErpPlanoMotor
         $asientosProveedor = array_keys($conProveedor);
         $gastos = $this->cargarGastosPorAsiento($empresaId, $asientosProveedor);
         $retenciones = $this->cargarRetencionesPorAsiento($empresaId, $asientosProveedor);
-        $clasificado = $this->clasificar($asientos, $gastos, $limite, $retenciones, $ventaMaquinasNativas);
+        $clasificado = $this->clasificar($asientos, $gastos, $limite, $retenciones, $ventaMaquinasNativas, $bingoNativas);
         $lineas = $clasificado['lineas'];
         $analitico = $clasificado['analitico'];
         $auditoria = $this->auditar($analitico, $lineas);
@@ -80,10 +81,10 @@ class MayorConceptoErpPlanoMotor
             $retencionesTotal += (float) ($ln['retenciones'] ?? 0);
         }
 
-        $asientosVentaMaquinas = 0;
+        $asientosLineasNativas = 0;
         foreach ($analitico as $fila) {
             if (! empty($fila['cuadre_neto'])) {
-                $asientosVentaMaquinas++;
+                $asientosLineasNativas++;
             }
         }
 
@@ -99,6 +100,7 @@ class MayorConceptoErpPlanoMotor
                 'fuente_etiqueta' => 'ERP — mayor por concepto sobre las patas hasta el límite',
                 'limite_caja_banco' => $limite,
                 'venta_maquinas_lineas_nativas' => $ventaMaquinasNativas,
+                'bingo_lineas_nativas' => $bingoNativas,
             ],
             'secciones' => $this->agruparPorConcepto($lineas),
             'totales' => [
@@ -113,7 +115,7 @@ class MayorConceptoErpPlanoMotor
                 'asientos_erp' => count($asientos),
                 'asientos_con_pata_limite' => count($analitico),
                 'asientos_proveedor' => count($conProveedor),
-                'asientos_venta_maquinas_nativas' => $asientosVentaMaquinas,
+                'asientos_venta_maquinas_nativas' => $asientosLineasNativas,
                 'lineas' => count($lineas),
                 'motor' => 'erp_plano_limite',
             ],
@@ -135,6 +137,7 @@ class MayorConceptoErpPlanoMotor
         int $limite,
         array $retencionesPorAsiento = [],
         bool $ventaMaquinasLineasNativas = false,
+        bool $bingoLineasNativas = false,
     ): array {
         $lineas = [];
         $analitico = [];
@@ -161,7 +164,7 @@ class MayorConceptoErpPlanoMotor
             $debePlano = 0.0;
             $haberPlano = 0.0;
             $cuentasPlano = [];
-            $esBingoNativo = $this->esAsientoBingo($asiento);
+            $esBingoNativo = $bingoLineasNativas && $this->esAsientoBingo($asiento);
             $esVentaNativo = $ventaMaquinasLineasNativas && $this->esAsientoVentaMaquinas($asiento);
             $esLineasNativas = $esBingoNativo || $esVentaNativo;
 
@@ -277,6 +280,11 @@ class MayorConceptoErpPlanoMotor
     public function ventaMaquinasLineasNativasHabilitado(): bool
     {
         return (bool) config('contable.mayor_concepto.venta_maquinas_lineas_nativas', true);
+    }
+
+    public function bingoLineasNativasHabilitado(): bool
+    {
+        return (bool) config('contable.mayor_concepto.bingo_lineas_nativas', false);
     }
 
     /**

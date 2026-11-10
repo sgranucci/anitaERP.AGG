@@ -92,6 +92,35 @@
 
     $(document).on('click', '#btn-sancion-cancelar', function () { resetForm(); });
 
+    function textoOVacio(valor) {
+        var t = $.trim(valor == null ? '' : String(valor));
+        return t !== '' ? t : '—';
+    }
+
+    function mostrarDetalle(data) {
+        $('#sancion-detalle-titulo').text('Detalle de la sanción #' + (data.id || ''));
+        $('#sancion-det-fecha').text(textoOVacio(data.fecha_hecho_fmt || data.fecha_hecho));
+        $('#sancion-det-tipo').text(textoOVacio(data.tipo_nombre));
+        $('#sancion-det-motivo').text(textoOVacio(data.motivo_nombre));
+        $('#sancion-det-estado').text(textoOVacio(data.estado_label || data.estado));
+        $('#sancion-det-comentario').text(textoOVacio(data.comentario));
+        $('#sancion-det-descargo').text(textoOVacio(data.descargo_texto));
+        $('#sancion-det-resolucion').text(textoOVacio(data.resolucion_texto));
+        $('#sancion-detalle-panel').removeClass('d-none');
+        var panel = document.getElementById('sancion-detalle-panel');
+        if (panel && typeof panel.scrollIntoView === 'function') {
+            panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    $(document).on('click', '.btn-ver-sancion', function () {
+        mostrarDetalle($(this).closest('tr').data('sancion') || {});
+    });
+
+    $(document).on('click', '#btn-sancion-cerrar-detalle', function () {
+        $('#sancion-detalle-panel').addClass('d-none');
+    });
+
     $(document).on('click', '.btn-editar-sancion', function () {
         var data = $(this).closest('tr').data('sancion') || {};
         var $f = $('#form-sancion-empleado');

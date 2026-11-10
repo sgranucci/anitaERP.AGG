@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
 use App\Models\Sueldos\Empleado_Sueldos;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Services\Sueldos\FalloCuentaCorrienteReporteService;
 use Illuminate\Http\Request;
 
@@ -18,7 +19,7 @@ class Empleado_FalloSueldosController extends Controller
 
     public function panel(Request $request, $empleadoId)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $empleado = Empleado_Sueldos::query()
             ->with(['agrupamiento'])
             ->findOrFail($empleadoId);

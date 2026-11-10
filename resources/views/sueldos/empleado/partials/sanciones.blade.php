@@ -1,9 +1,10 @@
 @php
     use App\Support\Sueldos\EmpleadoSancionSupport;
     $r = $resumen ?? ['total' => 0, 'dias_suspension_anio' => 0, 'ultima' => null];
+    $qVista = $qVista ?? [];
 @endphp
 <div id="sanciones-empleado-panel" data-empleado="{{ $empleado->id }}"
-     data-url="{{ route('sanciones_empleado_sueldos', ['empleado' => $empleado->id]) }}">
+     data-url="{{ route('sanciones_empleado_sueldos', ['empleado' => $empleado->id] + $qVista) }}">
     <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
         <div class="d-flex flex-wrap align-items-center" style="gap:8px;">
             <h5 class="mb-0"><i class="fa fa-gavel"></i> Expediente disciplinario</h5>
@@ -11,6 +12,7 @@
         </div>
         <div class="small text-muted">
             {{ $r['total'] }} sanción(es) · {{ $r['dias_suspension_anio'] }} día(s) de suspensión en {{ date('Y') }}
+            <span class="d-block">Incluye el histórico del legajo en todas las empresas.</span>
         </div>
     </div>
 
@@ -95,6 +97,24 @@
     </div>
     @endif
 
+    <div id="sancion-detalle-panel" class="card card-outline card-info mb-3 d-none">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <strong id="sancion-detalle-titulo">Detalle de la sanción</strong>
+            <button type="button" class="btn btn-outline-secondary btn-xs" id="btn-sancion-cerrar-detalle">Cerrar</button>
+        </div>
+        <div class="card-body py-2 small">
+            <div class="row">
+                <div class="col-md-3 mb-2"><span class="text-muted">Fecha</span><div id="sancion-det-fecha"></div></div>
+                <div class="col-md-3 mb-2"><span class="text-muted">Tipo</span><div id="sancion-det-tipo"></div></div>
+                <div class="col-md-3 mb-2"><span class="text-muted">Motivo</span><div id="sancion-det-motivo"></div></div>
+                <div class="col-md-3 mb-2"><span class="text-muted">Estado</span><div id="sancion-det-estado"></div></div>
+                <div class="col-md-12 mb-2"><span class="text-muted">Comentario / leyenda</span><div id="sancion-det-comentario" class="border rounded p-2 bg-light" style="white-space:pre-wrap;"></div></div>
+                <div class="col-md-6 mb-2"><span class="text-muted">Descargo</span><div id="sancion-det-descargo" class="border rounded p-2 bg-light" style="white-space:pre-wrap;"></div></div>
+                <div class="col-md-6 mb-2"><span class="text-muted">Resolución</span><div id="sancion-det-resolucion" class="border rounded p-2 bg-light" style="white-space:pre-wrap;"></div></div>
+            </div>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-sm table-bordered table-striped mb-0">
             <thead style="background:#85C1E9;color:#17202A;">
@@ -102,6 +122,7 @@
                     <th>Fecha</th>
                     <th>Tipo</th>
                     <th>Motivo</th>
+                    <th>Comentario / leyenda</th>
                     <th class="text-right">Días</th>
                     <th>Recepción</th>
                     <th>Estado</th>
@@ -117,6 +138,9 @@
                             optional($s->fecha_notificacion)->format('Y-m-d')
                         );
                         $reinc = EmpleadoSancionSupport::contarReincidencias((int) $empleado->id, (int) $s->motivo_sancion_id, (int) $s->id);
+                        $comentarioTxt = trim((string) ($s->comentario ?? ''));
+                        $otraEmpresa = (int) $s->empleado_id !== (int) $empleado->id;
+                        $empresaNombre = optional(optional($s->empleado)->empresa)->nombre;
                         $payloadSancion = [
                             'id' => $s->id,
                             'tipo_sancion_id' => $s->tipo_sancion_id,
@@ -126,16 +150,19 @@
                             'motivo_codigo' => $s->motivo->codigo ?? '',
                             'motivo_nombre' => $s->motivo->nombre ?? '',
                             'fecha_hecho' => optional($s->fecha_hecho)->format('Y-m-d'),
+                            'fecha_hecho_fmt' => optional($s->fecha_hecho)->format('d/m/Y'),
                             'fecha_desde' => optional($s->fecha_desde)->format('Y-m-d'),
                             'fecha_hasta' => optional($s->fecha_hasta)->format('Y-m-d'),
                             'cant_dias' => $s->cant_dias,
                             'importe_perdida' => $s->importe_perdida,
                             'fecha_notificacion' => optional($s->fecha_notificacion)->format('Y-m-d'),
                             'fecha_recepcion' => optional($s->fecha_recepcion)->format('Y-m-d'),
-                            'comentario' => $s->comentario,
+                            'comentario' => $comentarioTxt,
                             'descargo_texto' => $s->descargo_texto,
                             'resolucion_texto' => $s->resolucion_texto,
                             'estado' => $s->estado,
+                            'estado_label' => $s->estadoLabel(),
+                            'empresa_nombre' => $empresaNombre,
                         ];
                     @endphp
                     <tr data-sancion='@json($payloadSancion)'>
@@ -143,6 +170,9 @@
                         <td>{{ $s->tipo->nombre ?? '' }}</td>
                         <td>
                             {{ $s->motivo->nombre ?? '' }}
+                            @if ($otraEmpresa && $empresaNombre)
+                                <span class="badge badge-secondary" title="Histórico del mismo legajo">{{ $empresaNombre }}</span>
+                            @endif
                             @if ($reinc > 0)
                                 <span class="badge badge-warning">Reincidencia {{ $reinc }}</span>
                             @endif
@@ -150,25 +180,29 @@
                                 <span class="badge badge-danger">Inmediatez {{ $inmed['dias'] }}d</span>
                             @endif
                         </td>
+                        <td title="{{ $comentarioTxt }}">
+                            {{ $comentarioTxt !== '' ? \Illuminate\Support\Str::limit($comentarioTxt, 80) : '—' }}
+                        </td>
                         <td class="text-right">{{ $s->cant_dias }}</td>
                         <td>{{ optional($s->fecha_recepcion)->format('d/m/Y') }}</td>
                         <td>{{ $s->estadoLabel() }}</td>
                         <td class="text-right">{{ number_format((float) $s->importe_perdida, 2, ',', '.') }}</td>
                         <td class="text-nowrap">
-                            @if (($puedeEditar ?? false) && $s->esEditable())
+                            <button type="button" class="btn-accion-tabla btn-ver-sancion" title="Ver detalle / leyenda"><i class="fa fa-eye"></i></button>
+                            @if (($puedeEditar ?? false) && (int) $s->empleado_id === (int) $empleado->id && $s->esEditable())
                                 <button type="button" class="btn-accion-tabla btn-editar-sancion" title="Editar"><i class="fa fa-edit"></i></button>
                             @endif
                             @if ($puedeImprimir ?? false)
                                 <a href="{{ route('notificacion_sancion_sueldos', ['id' => $s->id]) }}" class="btn-accion-tabla" target="_blank" rel="noopener" title="Carta PDF"><i class="fa fa-file-pdf"></i></a>
                             @endif
-                            @if (($puedeEditar ?? false) && $s->estado === EmpleadoSancionSupport::ESTADO_BORRADOR)
+                            @if (($puedeEditar ?? false) && (int) $s->empleado_id === (int) $empleado->id && $s->estado === EmpleadoSancionSupport::ESTADO_BORRADOR)
                                 <button type="button" class="btn btn-outline-primary btn-xs btn-transicion-sancion" data-accion="notificar" data-id="{{ $s->id }}">Notificar</button>
                             @endif
-                            @if (($puedeEditar ?? false) && in_array($s->estado, [EmpleadoSancionSupport::ESTADO_NOTIFICADA, EmpleadoSancionSupport::ESTADO_CON_DESCARGO], true))
+                            @if (($puedeEditar ?? false) && (int) $s->empleado_id === (int) $empleado->id && in_array($s->estado, [EmpleadoSancionSupport::ESTADO_NOTIFICADA, EmpleadoSancionSupport::ESTADO_CON_DESCARGO], true))
                                 <button type="button" class="btn btn-outline-secondary btn-xs btn-transicion-sancion" data-accion="descargo" data-id="{{ $s->id }}">Descargo</button>
                                 <button type="button" class="btn btn-outline-success btn-xs btn-transicion-sancion" data-accion="firmar" data-id="{{ $s->id }}">Firmar</button>
                             @endif
-                            @if ($puedeAnular ?? false)
+                            @if (($puedeAnular ?? false) && (int) $s->empleado_id === (int) $empleado->id)
                                 <button type="button" class="btn btn-outline-danger btn-xs btn-transicion-sancion" data-accion="anular" data-id="{{ $s->id }}">Anular</button>
                                 <button type="button" class="btn-accion-tabla text-danger btn-eliminar-sancion" data-id="{{ $s->id }}" title="Eliminar"><i class="fa fa-times-circle"></i></button>
                             @endif
@@ -180,7 +214,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="8" class="text-center text-muted">Sin sanciones.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted">Sin sanciones.</td></tr>
                 @endforelse
             </tbody>
         </table>

@@ -3,6 +3,7 @@
 namespace App\Models\Admin;
 
 use App\Support\Admin\MenuFerliSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -46,7 +47,34 @@ class Menu extends Model implements Auditable
                 ->toArray();
         }
 
+        if ($front) {
+            $menus = self::etiquetasFront($menus);
+        }
+
         return MenuFerliSupport::filtrar($menus);
+    }
+
+    /**
+     * El registro sigue llamándose «Módulo Sueldos y Jornales» (las migraciones lo buscan así).
+     * En AGG el menú lateral muestra Capital Humano.
+     *
+     * @param  list<array<string, mixed>>  $menus
+     * @return list<array<string, mixed>>
+     */
+    private static function etiquetasFront(array $menus): array
+    {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return $menus;
+        }
+
+        foreach ($menus as &$menu) {
+            if ((int) ($menu['menu_id'] ?? 0) === 0 && ($menu['nombre'] ?? '') === 'Módulo Sueldos y Jornales') {
+                $menu['nombre'] = 'Capital Humano';
+            }
+        }
+        unset($menu);
+
+        return $menus;
     }
 
     public static function getMenu($front = false, $nivelActual)

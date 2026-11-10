@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Models\Stock\Talle;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Empleado_Talle_Sueldos;
@@ -271,7 +272,9 @@ class Empleado_IndumentariaSueldosController extends Controller
             ->get();
         $puedeAprobarMap = [];
         foreach ($solicitudes as $s) {
-            $puedeAprobarMap[$s->id] = can('aprobar-solicitud-indumentaria', false) && $this->solicitudService->puedeAprobar($s, $usuarioId);
+            $puedeAprobarMap[$s->id] = EmpleadoLegajoVisualizacion::puedeMutar(
+                can('aprobar-solicitud-indumentaria', false) && $this->solicitudService->puedeAprobar($s, $usuarioId)
+            );
         }
 
         $html = view('sueldos.empleado.partials.indumentaria', [
@@ -283,15 +286,15 @@ class Empleado_IndumentariaSueldosController extends Controller
             'prendasDotacion' => $prendasDotacion,
             'talles' => Talle::query()->orderBy('nombre')->get(['id', 'nombre']),
             'tallesEmpleado' => $tallesEmpleado,
-            'puedeEntregar' => can('entregar-prenda', false) && $config->estaCompleta(),
-            'puedeTalles' => can('entregar-prenda', false),
-            'puedeAnular' => can('anular-entrega-prenda', false),
+            'puedeEntregar' => EmpleadoLegajoVisualizacion::puedeMutar(can('entregar-prenda', false) && $config->estaCompleta()),
+            'puedeTalles' => EmpleadoLegajoVisualizacion::puedeMutar(can('entregar-prenda', false)),
+            'puedeAnular' => EmpleadoLegajoVisualizacion::puedeMutar(can('anular-entrega-prenda', false)),
             'solicitudes' => $solicitudes,
             'puedeAprobarMap' => $puedeAprobarMap,
-            'puedeSolicitar' => can('crear-solicitud-indumentaria', false),
+            'puedeSolicitar' => EmpleadoLegajoVisualizacion::puedeMutar(can('crear-solicitud-indumentaria', false)),
             'tieneAprobacion' => $this->solicitudService->tieneAprobacion((int) ($empleado->empresa_id ?? 0), $empleado->agrupamiento_id ? (int) $empleado->agrupamiento_id : null),
             'tulegajoHabilitado' => $this->tuLegajo->habilitado(),
-            'puedeTulegajo' => can('entregar-prenda', false),
+            'puedeTulegajo' => EmpleadoLegajoVisualizacion::puedeMutar(can('entregar-prenda', false)),
         ])->render();
 
         return response()->json(['html' => $html, 'mensaje' => $mensaje, 'mensaje_tipo' => $mensajeTipo]);
@@ -299,6 +302,11 @@ class Empleado_IndumentariaSueldosController extends Controller
 
     private function autorizarLectura(): void
     {
+        if (EmpleadoLegajoVisualizacion::activa()) {
+            can(EmpleadoLegajoVisualizacion::PERMISO);
+
+            return;
+        }
         if (! can('listar-entrega-prenda', false) && ! can('entregar-prenda', false) && ! can('actualizar-empleado-sueldos', false)
             && ! can('crear-solicitud-indumentaria', false) && ! can('aprobar-solicitud-indumentaria', false)) {
             abort(403);

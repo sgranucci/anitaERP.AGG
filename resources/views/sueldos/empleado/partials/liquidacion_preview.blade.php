@@ -10,8 +10,8 @@
 </style>
 <div id="liquidacion-preview-panel"
      class="card card-outline card-info h-100 mb-0"
-     data-url="{{ route('simular_liquidacion_empleado_sueldos', ['id' => $data->id]) }}"
-     data-url-debug="{{ route('depurar_formulas_empleado_sueldos', ['id' => $data->id]) }}">
+     data-url="{{ route('simular_liquidacion_empleado_sueldos', ['id' => $data->id] + ($qVista ?? [])) }}"
+     data-url-debug="{{ route('depurar_formulas_empleado_sueldos', ['id' => $data->id] + ($qVista ?? [])) }}">
     <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between">
         <strong class="mb-0"><i class="fa fa-eye"></i> Preview de conceptos</strong>
         <small class="text-muted">Simulaci&oacute;n (no graba recibo)</small>

@@ -9,6 +9,7 @@ use App\Models\Sueldos\Empleado_Sancion_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Sancion_Sueldos;
 use App\Services\Sueldos\SancionNovedadSyncService;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Support\Sueldos\EmpleadoSancionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -235,14 +236,18 @@ class Empleado_SancionSueldosController extends Controller
 
     private function responderPanel(Empleado_Sueldos $empleado, ?string $mensaje = null, bool $error = false)
     {
-        $sanciones = $empleado->sanciones()->with(['tipo', 'motivo', 'archivos', 'novedad'])->get();
+        $sanciones = EmpleadoSancionSupport::sancionesDelLegajo($empleado);
         $resumen = EmpleadoSancionSupport::resumenEmpleado((int) $empleado->id);
+        $qVista = EmpleadoLegajoVisualizacion::activa()
+            ? ['vista' => EmpleadoLegajoVisualizacion::VISTA]
+            : [];
         $html = view('sueldos.empleado.partials.sanciones', [
             'empleado' => $empleado,
             'sanciones' => $sanciones,
             'resumen' => $resumen,
-            'puedeEditar' => can('crear-sancion-empleado-sueldos', false) || can('actualizar-sancion-empleado-sueldos', false),
-            'puedeAnular' => can('anular-sancion-empleado-sueldos', false),
+            'qVista' => $qVista,
+            'puedeEditar' => EmpleadoLegajoVisualizacion::puedeMutar(can('crear-sancion-empleado-sueldos', false) || can('actualizar-sancion-empleado-sueldos', false)),
+            'puedeAnular' => EmpleadoLegajoVisualizacion::puedeMutar(can('anular-sancion-empleado-sueldos', false)),
             'puedeImprimir' => can('imprimir-sancion-sueldos', false),
         ])->render();
 
@@ -256,6 +261,11 @@ class Empleado_SancionSueldosController extends Controller
 
     private function assertPuedeVer(): void
     {
+        if (EmpleadoLegajoVisualizacion::activa()) {
+            can(EmpleadoLegajoVisualizacion::PERMISO);
+
+            return;
+        }
         if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false)) {
             return;
         }

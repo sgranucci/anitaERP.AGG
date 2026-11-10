@@ -18,18 +18,18 @@
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/familiares.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/familiares.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/concepto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/planes_cuota.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/planes_cuota.js')) ?: time() }}"></script>
-@if (can('listar-novedad-sueldos', false) || can('editar-empleado-sueldos', false))
+@if (($soloVisualizacion ?? false) || can('listar-novedad-sueldos', false) || can('editar-empleado-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/novedades.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/novedades.js')) ?: time() }}"></script>
 @endif
-@if (can('editar-empleado-sueldos', false))
+@if (($soloVisualizacion ?? false) || can('editar-empleado-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/fallos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/fallos.js')) ?: time() }}"></script>
 @endif
-@if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+@if (($soloVisualizacion ?? false) || can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/tipo_sancion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/tipo_sancion/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/motivo_sancion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/motivo_sancion/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/sanciones.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/sanciones.js')) ?: time() }}"></script>
 @endif
-@if (can('listar-siradig-sueldos', false))
+@if (($soloVisualizacion ?? false) || can('listar-siradig-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/siradig.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/siradig.js')) ?: time() }}"></script>
 @endif
 @endsection
@@ -37,16 +37,21 @@
 @section('contenido')
 @php
     use App\Support\Sueldos\EmpleadoEstados;
-    $puedeEditar = can('actualizar-empleado-sueldos', false);
+    $soloVisualizacion = (bool) ($soloVisualizacion ?? false);
+    $puedeEditar = ! $soloVisualizacion && can('actualizar-empleado-sueldos', false);
+    $qVista = $qVista ?? ($soloVisualizacion ? ['vista' => 'visualizacion'] : []);
 @endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-primary" id="tab2" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
+        <div class="card card-primary{{ $soloVisualizacion ? ' empleado-solo-lectura' : '' }}" id="tab2" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
             <div class="card-header">
                 <h3 class="card-title">
                     Empleado #{{ $data->legajo }} — {{ $data->nombre }}
+                    @if ($soloVisualizacion)
+                        <span class="badge badge-info">Solo visualización</span>
+                    @endif
                     <span class="badge badge-{{ EmpleadoEstados::esActivo($data->estado) ? 'success' : (EmpleadoEstados::esProvisorio($data->estado) ? 'warning' : 'secondary') }}">
                         {{ EmpleadoEstados::label($data->estado) }}
                     </span>
@@ -83,7 +88,7 @@
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-planes-cuota" role="tab"><i class="fa fa-hand-holding-usd"></i> Préstamos / Cuotas</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-novedades" role="tab"><i class="fa fa-bolt"></i> Novedades</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-fallos" role="tab"><i class="fa fa-balance-scale"></i> Fallos</a></li>
-                        @if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+                        @if ($soloVisualizacion || can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-sanciones" role="tab"><i class="fa fa-gavel"></i> Sanciones</a></li>
                         @endif
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-siradig" role="tab"><i class="fa fa-file-invoice-dollar"></i> SiRADIG (F572)</a></li>
@@ -126,7 +131,7 @@
                     <div class="tab-pane fade" id="tab-planes-cuota" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-novedades" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-fallos" role="tabpanel"></div>
-                    @if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+                    @if ($soloVisualizacion || can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
                     <div class="tab-pane fade" id="tab-sanciones" role="tabpanel"></div>
                     @endif
                     <div class="tab-pane fade" id="tab-siradig" role="tabpanel"></div>
@@ -139,38 +144,38 @@
                     @include('sueldos.empleado.partials.form_historia')
                 </div>
                 <div id="host-ausencias" class="pt-3 d-none"
-                     data-url="{{ route('ausencias_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('ausencias_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando vacaciones y ausencias…</div>
                 </div>
                 <div id="host-indumentaria" class="pt-3 d-none"
-                     data-url="{{ route('indumentaria_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('indumentaria_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando indumentaria…</div>
                 </div>
                 <div id="host-familiares" class="pt-3 d-none"
-                     data-url="{{ route('familiares_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('familiares_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando familiares…</div>
                 </div>
                 <div id="host-planes-cuota" class="pt-3 d-none"
-                     data-url="{{ route('planes_cuota_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('planes_cuota_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando préstamos/cuotas…</div>
                 </div>
                 <div id="host-novedades" class="pt-3 d-none"
-                     data-url="{{ route('novedades_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('novedades_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando novedades…</div>
                 </div>
                 <div id="host-fallos" class="pt-3 d-none"
-                     data-url="{{ route('fallos_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('fallos_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando fallos…</div>
                 </div>
-                @if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+                @if ($soloVisualizacion || can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
                 <div id="host-sanciones" class="pt-3 d-none"
-                     data-url="{{ route('sanciones_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('sanciones_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando sanciones…</div>
                 </div>
                 @endif
-                @if (can('listar-siradig-sueldos', false))
+                @if ($soloVisualizacion || can('listar-siradig-sueldos', false))
                 <div id="host-siradig" class="pt-3 d-none"
-                     data-url="{{ route('siradig_empleado_sueldos', ['empleado' => $data->id]) }}">
+                     data-url="{{ route('siradig_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando SiRADIG…</div>
                 </div>
                 @endif
@@ -208,6 +213,37 @@
         background: #fff;
         border-top: 1px solid #dee2e6;
         box-shadow: 0 -4px 12px rgba(23, 32, 42, 0.08);
+    }
+    .empleado-solo-lectura input:not([type=hidden]),
+    .empleado-solo-lectura select,
+    .empleado-solo-lectura textarea {
+        pointer-events: none;
+        background-color: #f4f6f6 !important;
+    }
+    .empleado-solo-lectura #liquidacion-preview-panel input,
+    .empleado-solo-lectura #liquidacion-preview-panel select,
+    .empleado-solo-lectura #liquidacion-preview-panel textarea {
+        pointer-events: auto;
+        background-color: #fff !important;
+    }
+    .empleado-solo-lectura button:not([data-toggle]):not([data-dismiss]):not(.close):not(.btn-ver-sancion):not(#btn-sancion-cerrar-detalle),
+    .empleado-solo-lectura .btn-success,
+    .empleado-solo-lectura .btn-danger,
+    .empleado-solo-lectura .btn-primary,
+    .empleado-solo-lectura .botonsubmit,
+    .empleado-solo-lectura .form-eliminar {
+        display: none !important;
+    }
+    .empleado-solo-lectura .btn-ver-sancion,
+    .empleado-solo-lectura #btn-sancion-cerrar-detalle {
+        display: inline-block !important;
+        pointer-events: auto;
+    }
+    .empleado-solo-lectura #liquidacion-preview-panel button {
+        display: inline-block !important;
+    }
+    .empleado-solo-lectura #liquidacion-preview-panel .btn-block {
+        display: block !important;
     }
 </style>
 
@@ -265,6 +301,13 @@
     }
 
     moveHosts();
+
+    if (document.getElementById('tab2') && document.getElementById('tab2').classList.contains('empleado-solo-lectura')) {
+        document.getElementById('tab2').addEventListener('submit', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+    }
 })();
 </script>
 @endsection

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Models\Sueldos\Novedad_Sueldos;
@@ -25,7 +26,7 @@ class Empleado_NovedadSueldosController extends Controller
 
     public function panel($empleadoId)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $empleado = Empleado_Sueldos::findOrFail($empleadoId);
 
         return $this->responderPanel($empleado);
@@ -141,7 +142,7 @@ class Empleado_NovedadSueldosController extends Controller
             'novedades' => $novedades,
             'liquidaciones' => $liquidaciones,
             'estados' => NovedadSueldosCatalogo::ESTADOS,
-            'puedeEditar' => can('actualizar-empleado-sueldos', false) && can('crear-novedad-sueldos', false),
+            'puedeEditar' => EmpleadoLegajoVisualizacion::puedeMutar(can('actualizar-empleado-sueldos', false) && can('crear-novedad-sueldos', false)),
         ])->render();
 
         return response()->json(['html' => $html, 'mensaje' => $mensaje]);

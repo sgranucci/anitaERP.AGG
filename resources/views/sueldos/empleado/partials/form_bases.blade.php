@@ -1,6 +1,6 @@
 @php
-    $puedeEditarBases = can('actualizar-empleado-sueldos', false);
-    $puedeBorrarVigencia = $puedeBorrarVigencia ?? can('borrar-vigencia-empleado-sueldos', false);
+    $puedeEditarBases = empty($soloVisualizacion) && can('actualizar-empleado-sueldos', false);
+    $puedeBorrarVigencia = empty($soloVisualizacion) && ($puedeBorrarVigencia ?? can('borrar-vigencia-empleado-sueldos', false));
     // En empleado: editable cuando la categoría NO usa tabla (origen C)
     $basesEditables = ! ($usaTabla ?? true);
 @endphp
@@ -9,7 +9,7 @@
 <div class="col-lg-5 mb-3 mb-lg-0">
 
 <div id="host-set-conceptos" class="mb-3"
-     data-url="{{ route('set_conceptos_empleado_sueldos', ['empleado' => $data->id]) }}">
+     data-url="{{ route('set_conceptos_empleado_sueldos', ['empleado' => $data->id] + ($qVista ?? [])) }}">
     <div class="text-center text-muted py-3 small">
         <i class="fa fa-spinner fa-spin"></i> Cargando grupos / set efectivo…
     </div>
@@ -36,8 +36,8 @@
      data-hoy="{{ now()->format('Y-m-d') }}"
      data-url-guardar="{{ route('guardar_base_empleado_sueldos', ['id' => $data->id]) }}"
      data-url-lote="{{ route('guardar_vigencias_empleado_sueldos', ['id' => $data->id]) }}"
-     data-url-bases="{{ route('bases_empleado_sueldos', ['id' => $data->id]) }}"
-     data-url-historial="{{ route('historial_bases_empleado_sueldos', ['id' => $data->id]) }}"
+     data-url-bases="{{ route('bases_empleado_sueldos', ['id' => $data->id] + ($qVista ?? [])) }}"
+     data-url-historial="{{ route('historial_bases_empleado_sueldos', ['id' => $data->id] + ($qVista ?? [])) }}"
      data-url-actualizar="{{ route('actualizar_vigencia_empleado_sueldos', ['id' => $data->id, 'baseId' => 'BASEID']) }}"
      data-url-eliminar="{{ route('eliminar_base_empleado_sueldos', ['id' => $data->id, 'baseId' => 'BASEID']) }}"
      data-url-eliminar-base="{{ route('eliminar_base_completa_empleado_sueldos', ['id' => $data->id, 'nombrebaseId' => 'NBID']) }}">

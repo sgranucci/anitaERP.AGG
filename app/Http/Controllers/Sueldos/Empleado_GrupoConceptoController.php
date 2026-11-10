@@ -9,6 +9,7 @@ use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Grupo_Concepto_Sueldos;
 use App\Services\Sueldos\ConceptoSetEfectivoService;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -23,7 +24,7 @@ class Empleado_GrupoConceptoController extends Controller
 
     public function panel($empleadoId)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $empleado = Empleado_Sueldos::with('gruposConcepto')->findOrFail($empleadoId);
 
         return $this->responder($empleado);
@@ -205,7 +206,7 @@ class Empleado_GrupoConceptoController extends Controller
             'asignadosIds' => $asignadosIds,
             'explicatos' => $explicatos,
             'acciones' => ConceptoElegibilidadCatalogo::ACCIONES,
-            'puedeEditar' => can('actualizar-empleado-sueldos', false),
+            'puedeEditar' => EmpleadoLegajoVisualizacion::puedeMutar(can('actualizar-empleado-sueldos', false)),
             'puedeConsultarGrupo' => can('listar-grupo-concepto-sueldos', false)
                 || can('editar-grupo-concepto-sueldos', false)
                 || can('editar-empleado-sueldos', false)

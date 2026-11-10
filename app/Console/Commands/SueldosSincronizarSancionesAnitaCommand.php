@@ -270,10 +270,8 @@ class SueldosSincronizarSancionesAnitaCommand extends Command
      */
     private function leerComentariosEmpsley(): array
     {
-        $filas = $this->listarAnita('empsley', 'emsl_nro_interno,emsl_nro_linea,emsl_leyenda', 'emsl_nro_interno,emsl_nro_linea');
-        if (isset($filas['error'])) {
-            $filas = $this->listarAnita('empsley', 'emsl_nro_interno,emsl_linea,emsl_desc', 'emsl_nro_interno,emsl_linea');
-        }
+        // Columnas reales de sueldos.empsley (syscolumns): emsl_nro_interno, emsl_linea, emsl_leyenda.
+        $filas = $this->listarAnita('empsley', 'emsl_nro_interno,emsl_linea,emsl_leyenda', 'emsl_nro_interno,emsl_linea');
         if (isset($filas['error'])) {
             $this->warn('empsley no leído: '.$filas['error']);
 
@@ -282,7 +280,7 @@ class SueldosSincronizarSancionesAnitaCommand extends Command
         $out = [];
         foreach ($filas['filas'] as $row) {
             $nro = (int) ($row->emsl_nro_interno ?? 0);
-            $txt = trim((string) ($row->emsl_leyenda ?? $row->emsl_desc ?? ''));
+            $txt = trim((string) ($row->emsl_leyenda ?? ''));
             if ($nro <= 0 || $txt === '') {
                 continue;
             }

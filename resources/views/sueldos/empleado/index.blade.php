@@ -265,7 +265,7 @@
                             @foreach ($columnasVisibles as $keyColumna)
                                 @include('sueldos.empleado.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th class="text-nowrap" style="width:70px" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:96px" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -302,6 +302,11 @@
                                         @include('sueldos.empleado.partials.workbench_celda', ['key' => $keyColumna, 'data' => $data])
                                     @endforeach
                                     <td class="text-nowrap align-middle">
+                                        @if (can('visualizar-empleado-sueldos', false))
+                                            <a href="{{ route('editar_empleado_sueldos', ['id' => $data->id] + $retornoListadoQuery + ['vista' => 'visualizacion']) }}" class="btn-accion-tabla tooltipsC" title="Visualizar legajo (solo lectura)">
+                                                <i class="fa fa-eye"></i>
+                                            </a>
+                                        @endif
                                         @if (can('editar-empleado-sueldos', false))
                                             <a href="{{ route('editar_empleado_sueldos', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                                 <i class="fa fa-edit"></i>

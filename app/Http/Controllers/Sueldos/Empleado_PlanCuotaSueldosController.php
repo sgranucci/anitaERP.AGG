@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sueldos;
 
 use App\Support\Database\SqlDialectSupport;
 use App\Http\Controllers\Controller;
+use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Plan_Cuota_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
@@ -19,7 +20,7 @@ class Empleado_PlanCuotaSueldosController extends Controller
 {
     public function panel($empleadoId)
     {
-        can('editar-empleado-sueldos');
+        EmpleadoLegajoVisualizacion::autorizarComoEdicion();
         $empleado = Empleado_Sueldos::findOrFail($empleadoId);
 
         return $this->responderPanel($empleado);
@@ -154,7 +155,7 @@ class Empleado_PlanCuotaSueldosController extends Controller
             'conceptos' => $conceptos,
             'tiposCorrida' => Liquidacion_Sueldos::TIPOS,
             'estados' => Empleado_Plan_Cuota_Sueldos::ESTADOS,
-            'puedeEditar' => can('actualizar-empleado-sueldos', false),
+            'puedeEditar' => EmpleadoLegajoVisualizacion::puedeMutar(can('actualizar-empleado-sueldos', false)),
         ])->render();
 
         return response()->json(['html' => $html, 'mensaje' => $mensaje]);

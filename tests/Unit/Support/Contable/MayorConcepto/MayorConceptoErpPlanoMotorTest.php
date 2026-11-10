@@ -334,7 +334,7 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
     }
 
-    public function test_bingo_pago_de_premios_emite_premios_mismo_lado_que_caja(): void
+    public function test_bingo_con_flag_emite_premios_mismo_lado_que_caja(): void
     {
         $motor = new MayorConceptoErpPlanoMotor;
         $asiento = $this->asiento(232084, 232084, [
@@ -349,7 +349,7 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
 
         $this->assertTrue($motor->esAsientoBingo($asiento));
 
-        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE);
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE, [], false, true);
         $this->assertTrue($clasificado['analitico'][232084]['cuadre_neto']);
         $this->assertCount(4, $clasificado['lineas']);
 
@@ -378,6 +378,32 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertSame(1, $auditoria['asientos_cuadre_neto']);
     }
 
+    public function test_bingo_sin_flag_sigue_criterio_plano_solo_lado_opuesto(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $asiento = $this->asiento(232084, 232084, [
+            $this->mov(111010001, 'CAJA PESOS', 0, 'SIN CLASIFICAR', 500000.00, true),
+            $this->mov(521050001, 'PREMIOS 53 PORC.', 48, 'PREMIOS', 2997150.00, true),
+            $this->mov(211010006, 'POZO BINGO A PAGAR', 48, 'PREMIOS', 471681.14, true),
+            $this->mov(521280004, 'DIFERENCIA DE CAJA', 12, 'GAMING SUPPLIES', 12000.00, false),
+            $this->mov(411010001, 'VENTAS SALA', 47, 'VENTA', 3956831.14, false),
+        ]);
+        $asiento['tipo'] = 'BIN';
+        $asiento['observacion'] = 'Pago de premios';
+
+        $this->assertTrue($motor->esAsientoBingo($asiento));
+
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE, [], false, false);
+        $this->assertFalse($clasificado['analitico'][232084]['cuadre_neto']);
+
+        $cuentas = array_column($clasificado['lineas'], 'cuenta');
+        $this->assertNotContains(521050001, $cuentas);
+        $this->assertNotContains(211010006, $cuentas);
+        $this->assertContains(411010001, $cuentas);
+        $this->assertContains(521280004, $cuentas);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
     public function test_sin_marcadores_bingo_no_emite_premios_del_mismo_lado(): void
     {
         $motor = new MayorConceptoErpPlanoMotor;
@@ -393,7 +419,7 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
 
         $this->assertFalse($motor->esAsientoBingo($asiento));
 
-        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE);
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE, [], false, true);
         $this->assertFalse($clasificado['analitico'][232085]['cuadre_neto']);
 
         $cuentas = array_column($clasificado['lineas'], 'cuenta');

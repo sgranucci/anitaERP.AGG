@@ -3,9 +3,11 @@
 namespace App\Support\Sueldos;
 
 use App\Models\Sueldos\Empleado_Sancion_Sueldos;
+use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Sancion_Sueldos;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 /**
  * Reglas de expediente disciplinario (estados, días, inmediatez, reincidencia).
@@ -114,10 +116,12 @@ class EmpleadoSancionSupport
             return 0;
         }
 
+        $empleado = Empleado_Sueldos::query()->find($empleadoId);
+        $ids = $empleado ? self::idsEmpleadoMismoLegajo($empleado) : [$empleadoId];
         $desde = Carbon::now()->subMonths(self::MESES_REINCIDENCIA)->toDateString();
 
         $query = Empleado_Sancion_Sueldos::query()
-            ->where('empleado_id', $empleadoId)
+            ->whereIn('empleado_id', $ids)
             ->where('motivo_sancion_id', $motivoId)
             ->where('fecha_hecho', '>=', $desde)
             ->whereNotIn('estado', [self::ESTADO_ANULADA, self::ESTADO_BORRADOR]);
@@ -130,19 +134,62 @@ class EmpleadoSancionSupport
     }
 
     /**
+     * Anita guarda sanciones con empresa 99 (todas). En el ERP el mismo legajo
+     * puede vivir en más de una empresa; el expediente se arma por legajo.
+     *
+     * @return list<int>
+     */
+    public static function idsEmpleadoMismoLegajo(Empleado_Sueldos $empleado): array
+    {
+        $legajo = (int) ($empleado->legajo ?? 0);
+        if ($legajo <= 0) {
+            return [(int) $empleado->id];
+        }
+
+        return Empleado_Sueldos::query()
+            ->where('legajo', $legajo)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return Collection<int, Empleado_Sancion_Sueldos>
+     */
+    public static function sancionesDelLegajo(Empleado_Sueldos $empleado): Collection
+    {
+        $ids = self::idsEmpleadoMismoLegajo($empleado);
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Empleado_Sancion_Sueldos::query()
+            ->with(['tipo', 'motivo', 'archivos', 'novedad', 'empleado.empresa'])
+            ->whereIn('empleado_id', $ids)
+            ->orderByDesc('fecha_hecho')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
      * @return array{total: int, dias_suspension_anio: int, ultima: ?Empleado_Sancion_Sueldos}
      */
     public static function resumenEmpleado(int $empleadoId): array
     {
+        $empleado = Empleado_Sueldos::query()->find($empleadoId);
+        $ids = $empleado ? self::idsEmpleadoMismoLegajo($empleado) : [$empleadoId];
         $anio = (int) date('Y');
         $query = Empleado_Sancion_Sueldos::query()
-            ->where('empleado_id', $empleadoId)
+            ->whereIn('empleado_id', $ids)
             ->whereNotIn('estado', [self::ESTADO_ANULADA]);
 
         $ultima = (clone $query)->orderByDesc('fecha_hecho')->orderByDesc('id')->first();
 
         $diasSuspension = (int) Empleado_Sancion_Sueldos::query()
-            ->where('empleado_sancion_sueldos.empleado_id', $empleadoId)
+            ->whereIn('empleado_sancion_sueldos.empleado_id', $ids)
             ->whereNotIn('empleado_sancion_sueldos.estado', [self::ESTADO_ANULADA, self::ESTADO_BORRADOR])
             ->whereYear('empleado_sancion_sueldos.fecha_hecho', $anio)
             ->whereHas('tipo', fn ($q) => $q->where('clase', Tipo_Sancion_Sueldos::CLASE_SUSPENSION))
