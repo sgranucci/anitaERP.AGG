@@ -246,6 +246,20 @@ class TesoreriaCrownAnexo8AnitaImportService
             $existente = TesoreriaCrownBovedaStockDia::query()
                 ->where('jornada_id', $jornada->id)
                 ->first();
+            if ($existente && $this->mismasCantidades(
+                TesoreriaCrownBovedaStockDiaSupport::cantidadesDeJornada($jornada) ?? [],
+                $cantidades
+            )) {
+                $filas[] = [
+                    'grupo' => 'stock',
+                    'tipo' => 'stock',
+                    'accion' => 'omitir',
+                    'etiqueta' => $ymd.' igual',
+                ];
+                $omitir++;
+
+                continue;
+            }
             $accion = $existente ? 'actualizar' : 'crear';
             if ($accion === 'crear') {
                 $crear++;
@@ -412,6 +426,27 @@ class TesoreriaCrownAnexo8AnitaImportService
     }
 
     /**
+     * @param  array<int, float>  $a
+     * @param  array<int, float>  $b
+     */
+    private function mismasCantidades(array $a, array $b): bool
+    {
+        $normalizar = function (array $c): array {
+            $out = [];
+            foreach ($c as $valorId => $cant) {
+                if (abs((float) $cant) >= 0.0001) {
+                    $out[(int) $valorId] = round((float) $cant, 2);
+                }
+            }
+            ksort($out);
+
+            return $out;
+        };
+
+        return $normalizar($a) === $normalizar($b);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $filas
      * @return array{crear: int, actualizar: int, omitir: int, movs: int}
      */
@@ -419,6 +454,12 @@ class TesoreriaCrownAnexo8AnitaImportService
     {
         $crear = $actualizar = $omitir = 0;
         $movs = 0;
+        // Las partidas se reescriben con sus movimientos hasta el tope: un rango viejo (p. ej. importar
+        // un día anterior) no puede recortar movimientos posteriores que ya están en el ERP.
+        $ultimoErp = TesoreriaCrownMonedaExtranjeraMov::query()->max('fecha');
+        if ($ultimoErp !== null) {
+            $hasta = max($hasta, (int) date('Ymd', strtotime((string) $ultimoErp)));
+        }
         $partidas = $this->consultar(
             'id,f,mon,cot,orig',
             'SELECT mone_id as id, mone_fecha as f, mone_cod_mon as mon,'

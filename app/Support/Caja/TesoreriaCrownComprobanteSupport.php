@@ -30,6 +30,12 @@ class TesoreriaCrownComprobanteSupport
 
     public const CIERRE = 'F';
 
+    /** Resolución de un no conforme: no suma en ningún cálculo y libera la caja. */
+    public const ANULADO = 'X';
+
+    /** No conformes (y auditoría heredada): bloquean el cierre de la caja hasta que auditoría los resuelva. */
+    public const SIN_RESOLVER = [self::NO_CONFORME, self::AUDITORIA];
+
     /** @var array<string, string> */
     public const TIPOS = [
         self::HABILITACION => 'Habilitación',
@@ -47,6 +53,7 @@ class TesoreriaCrownComprobanteSupport
         self::REVISADA => 'Revisada',
         self::AJUSTE => 'Ajuste',
         self::CIERRE => 'Cierre de auditoría',
+        self::ANULADO => 'Anulado',
     ];
 
     public static function tipo(string $codigo): string

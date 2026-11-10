@@ -218,17 +218,6 @@
     box-shadow: 0 2px 6px rgba(36, 113, 163, .25);
 }
 
-.btn.tc-tool-volver {
-    color: #1a5276;
-    border-color: #85c1e9;
-    background: #eaf2f8;
-}
-.btn.tc-tool-volver:hover {
-    color: #fff;
-    background: #1a5276;
-    border-color: #1a5276;
-}
-
 .btn.tc-tool-cerrar {
     color: #922b21;
     border-color: #f5b7b1;
@@ -849,4 +838,205 @@
 
 .tc-th-sorted-desc .tc-th-sort-icon:before {
     content: "\f0dd";
+}
+
+/* Auditoría de importes (Res. cajeros / Anexo III) */
+.tc-audit-celda {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .2rem;
+    max-width: 100%;
+}
+
+.tc-audit-celda .js-tc-audit {
+    border: 0;
+    background: transparent;
+    color: #1a5276;
+    font-weight: 600;
+    padding: 0;
+    line-height: 1.2;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.tc-audit-celda .js-tc-audit:hover,
+.tc-audit-celda .js-tc-audit:focus {
+    color: #154360;
+    text-decoration: underline;
+    outline: none;
+}
+
+.tc-audit-btn-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    border: 1px solid #a9cce3;
+    background: #eaf2f8;
+    color: #1a5276;
+    padding: 0;
+    line-height: 1;
+    flex: 0 0 auto;
+}
+
+.tc-audit-btn-info:hover,
+.tc-audit-btn-info:focus {
+    background: #d4e6f1;
+    border-color: #5dade2;
+    color: #154360;
+    outline: none;
+}
+
+.tc-audit-btn-info i {
+    font-size: .72rem;
+}
+
+.tc-audit-modal-header {
+    background: linear-gradient(135deg, #eaf2f8 0%, #d6eaf8 100%);
+    border-bottom: 1px solid #a9cce3;
+    align-items: flex-start;
+}
+
+.tc-audit-modal-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a5276;
+    color: #fff;
+    flex: 0 0 auto;
+}
+
+.tc-audit-modal-sub {
+    color: #5d6d7e;
+    margin-top: .15rem;
+}
+
+.tc-audit-modal-total-label {
+    letter-spacing: .04em;
+    color: #5d6d7e;
+    font-size: .68rem;
+}
+
+.tc-audit-modal-total strong {
+    font-size: 1.25rem;
+    color: #1a5276;
+    white-space: nowrap;
+}
+
+.tc-audit-panel {
+    border-radius: 12px;
+    padding: .75rem .9rem;
+    border: 1px solid transparent;
+}
+
+.tc-audit-panel-formula {
+    background: #f4f9fc;
+    border-color: #d4e6f1;
+}
+
+.tc-audit-panel-pista {
+    background: #f8f9f9;
+    border-color: #e5e8e8;
+}
+
+.tc-audit-panel-title {
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: #1a5276;
+    margin-bottom: .35rem;
+}
+
+.tc-audit-panel-pista .tc-audit-panel-title {
+    color: #566573;
+}
+
+.tc-audit-docs-titulo {
+    font-weight: 700;
+    color: #17202a;
+    font-size: .92rem;
+}
+
+.tc-audit-lista {
+    display: flex;
+    flex-direction: column;
+    gap: .65rem;
+}
+
+.tc-audit-doc {
+    border: 1px solid #d5dde6;
+    border-left: 4px solid #5dade2;
+    border-radius: 10px;
+    padding: .7rem .85rem;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 32, 42, .04);
+}
+
+.tc-audit-doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: .75rem;
+}
+
+.tc-audit-doc-meta {
+    min-width: 0;
+}
+
+.tc-audit-doc-grupo {
+    font-size: .78rem;
+    color: #7f8c8d;
+    margin-bottom: .15rem;
+}
+
+.tc-audit-doc-link {
+    font-weight: 600;
+    color: #1a5276;
+    display: inline-block;
+}
+
+.tc-audit-doc-link:hover {
+    color: #154360;
+}
+
+.tc-audit-doc-estado {
+    display: inline-block;
+    margin-top: .25rem;
+    font-weight: 500;
+}
+
+.tc-audit-doc-aporte {
+    color: #17202a;
+    white-space: nowrap;
+    font-size: 1rem;
+}
+
+.tc-audit-doc-renglones {
+    list-style: none;
+    margin: .55rem 0 0;
+    padding: .45rem 0 0;
+    border-top: 1px dashed #d5dde6;
+}
+
+.tc-audit-doc-renglones li {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    font-size: .85rem;
+    color: #566573;
+    padding: .12rem 0;
+}
+
+.tc-audit-vacio {
+    border: 1px dashed #d5dde6;
+    border-radius: 10px;
+    padding: .85rem 1rem;
+    background: #fbfcfd;
 }

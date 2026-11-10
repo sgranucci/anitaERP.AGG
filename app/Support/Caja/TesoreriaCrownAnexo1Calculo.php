@@ -28,6 +28,17 @@ use RuntimeException;
  */
 final class TesoreriaCrownAnexo1Calculo
 {
+    /** @var array<string, array<int|string, mixed>> */
+    private static array $precarga = [];
+
+    /** @var array<string, bool> */
+    private static array $columnas = [];
+
+    private static function tieneColumna(string $columna): bool
+    {
+        return self::$columnas[$columna] ??= Schema::hasColumn('tesoreria_crown_jornada', $columna);
+    }
+
     /**
      * @return array{
      *     filas: list<array{concepto: string, dia: ?float, mes: ?float, anio: ?float, total: bool, seccion: bool, informativo?: bool}>,
@@ -37,6 +48,7 @@ final class TesoreriaCrownAnexo1Calculo
      */
     public static function deJornada(TesoreriaCrownJornada $jornada): array
     {
+        TesoreriaCrownRecalculoAdelanteSupport::asegurar($jornada);
         $fecha = $jornada->fecha->copy()->startOfDay();
         $desdeMes = $fecha->copy()->startOfMonth();
         $desdeAnio = $fecha->copy()->startOfYear();
@@ -50,6 +62,7 @@ final class TesoreriaCrownAnexo1Calculo
         $avisos = [];
         // Un solo eager-load de cajeros/rendiciones del año (evita 1 rescajero × día).
         TesoreriaCrownResumenCajeroCalculo::precargarParaJornadas($jornadas);
+        self::precargarDias($jornadas);
         $dias = [];
         try {
             foreach ($jornadas as $una) {
@@ -60,6 +73,8 @@ final class TesoreriaCrownAnexo1Calculo
             }
         } finally {
             TesoreriaCrownResumenCajeroCalculo::olvidarCache();
+            TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::olvidarPrecarga();
+            self::$precarga = [];
         }
 
         $sumar = function (string $clave, bool $mes) use ($dias): float {
@@ -261,12 +276,11 @@ final class TesoreriaCrownAnexo1Calculo
         $out['gastro'] = $ventaContado('G');
         $out['hotel'] = $ventaContado('H');
 
-        $propinaErp = round((float) DB::table('tesoreria_crown_mesa')
-            ->where('jornada_id', $jornada->id)
-            ->where('tipo', 'F')
-            ->where('estado', 'C')
-            ->whereNull('revierte_id')
-            ->sum('propina'), 2);
+        $propinaErp = 0.0;
+        foreach (self::propinasFilas($jornada) as $fila) {
+            $propinaErp += (float) $fila->propina;
+        }
+        $propinaErp = round($propinaErp, 2);
         // Propina empleados = rendición tipo E. Mesa (tipo F) se resta en sala; no se suma acá.
         $out['propina'] = round((float) ($porTipo['E']['resultado'] ?? 0), 2);
         if (abs($propinaErp) < 0.001 && abs($out['propina']) < 0.001) {
@@ -288,7 +302,10 @@ final class TesoreriaCrownAnexo1Calculo
             $out['debito'] += (float) ($fila['tarjeta_debito'] ?? 0);
             $out['qr'] += (float) ($fila['total_qr'] ?? 0);
             $out['recargo'] += (float) ($fila['recargo_fin'] ?? 0);
-            $out['ctacte'] += (float) ($fila['ctacte'] ?? 0);
+            // l-anexo1.c: efe_ctacte_hotel y efe_transferencia_hotel en renglones distintos.
+            $transferenciaHotel = (float) ($fila['transferencia_hotel'] ?? 0);
+            $out['ctacte'] += (float) ($fila['ctacte'] ?? 0) - $transferenciaHotel;
+            $out['transferencia'] += $transferenciaHotel;
             $out['apuestas'] += (float) ($fila['vta_apuesta'] ?? 0) - (float) ($fila['pago_apuesta'] ?? 0);
         }
 
@@ -304,22 +321,33 @@ final class TesoreriaCrownAnexo1Calculo
         $out['torneo'] = $sumarCod(37);
         $out['bancarios'] = $sumarCod(25, 1, 41, 37, 29);
         $out['excedente'] = round($out['excedente'] + $sumarCod(17, 13), 2);
+        // lee_fallo_boveda (l-anexo7.c): adelanto, fallo de caja y faltante de bóveda a cuenta de terceros.
+        $out['fallos'] = round($out['fallos'] + $sumarCod(...TesoreriaCrownAnexo7Calculo::CODIGOS_BOVEDA_FALLO), 2);
         $out['compras'] = $sumarCod(2);
         $out['deposito'] = $sumarCod(3, 22);
         $out['deposito_propina'] = $sumarCod(7, 24);
         $out['credito'] = round($out['credito'] + $sumarCod(10), 2);
         $out['otros_egresos'] = $sumarCod(14, 30);
-        $out['dolares'] = self::monedaExtranjera($jornada, 8, ['USD', 'DOL']);
-        $out['euros'] = self::monedaExtranjera($jornada, 9, ['EUR', 'EURO']);
+        $out['dolares'] = TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::totalJornada(
+            $jornada,
+            TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::CODIGO_DOLARES,
+            $avisos
+        );
+        $out['euros'] = TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::totalJornada(
+            $jornada,
+            TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::CODIGO_EUROS,
+            $avisos
+        );
         $out['sala'] = self::salaConvencional($jornada, $avisos);
         $out['clientes'] = self::clientesDeJornada($jornada, $avisos);
-        $out['voucher'] = self::voucherPoderPublico($jornada);
+        // l-anexo1.c imprime PP Voucher en 0: el voucher de mesa ya se resta del poder público slot.
+        $out['voucher'] = 0.0;
         // Cache propio del VIII (`caja_final_viii`), distinto de caja_final_dia (variación).
         $out['anexo8'] = TesoreriaCrownAnexo8Calculo::totalCacheadoOCalcular($jornada);
-        $central = TesoreriaCrownResultadoOnline::deSalaFecha(
+        $central = self::porSalaFecha('online', $jornada, fn () => TesoreriaCrownResultadoOnline::deSalaFecha(
             (int) $jornada->sala_id,
             (string) $jornada->fecha?->format('Y-m-d')
-        );
+        ));
         if ($central) {
             $tieneCasino = abs((float) $central->apostado) > 0.001
                 || abs((float) $central->pagado) > 0.001
@@ -342,15 +370,216 @@ final class TesoreriaCrownAnexo1Calculo
             $avisos[] = 'La recaudación de tragamonedas queda en cero: cargá el resultado de slots online del día.';
         }
 
-        $bingo = TesoreriaCrownBingo::deSalaFecha(
+        $bingo = self::porSalaFecha('bingo', $jornada, fn () => TesoreriaCrownBingo::deSalaFecha(
             (int) $jornada->sala_id,
             (string) $jornada->fecha?->format('Y-m-d')
-        );
+        ));
         if ($bingo) {
             $out['bingo'] = (float) $bingo->resultado;
         }
 
         return $out;
+    }
+
+    /**
+     * Precarga en memoria (solo mientras dura deJornada) de lo que importesDia consulta por día:
+     * una consulta por tipo para todo el año en vez de una por jornada.
+     *
+     * @param  iterable<TesoreriaCrownJornada>  $jornadas
+     */
+    private static function precargarDias(iterable $jornadas): void
+    {
+        $ids = [];
+        $salaFechas = [];
+        foreach ($jornadas as $jornada) {
+            $ids[] = (int) $jornada->id;
+            $salaFechas[(int) $jornada->sala_id][] = $jornada->fecha->format('Y-m-d');
+        }
+        self::$precarga = [];
+        if ($ids === []) {
+            return;
+        }
+
+        foreach ([
+            'mesa' => self::consultaMesasPorTipo($ids),
+            'drop' => self::consultaDrops($ids),
+            'propina' => self::consultaPropinas($ids),
+            'boveda' => self::consultaBovedaPorCodigo($ids),
+        ] as $clave => $filas) {
+            self::$precarga[$clave] = array_fill_keys($ids, []);
+            foreach ($filas as $fila) {
+                self::$precarga[$clave][(int) $fila->jornada_id][] = $fila;
+            }
+        }
+
+        foreach (['online' => TesoreriaCrownResultadoOnline::class, 'bingo' => TesoreriaCrownBingo::class] as $clave => $modelo) {
+            self::$precarga[$clave] = [];
+            foreach ($salaFechas as $salaId => $fechas) {
+                foreach ($fechas as $fecha) {
+                    self::$precarga[$clave][$salaId.'|'.$fecha] = null;
+                }
+                $filas = $modelo::query()
+                    ->where('sala_id', $salaId)
+                    ->whereDate('fecha', '>=', min($fechas))
+                    ->whereDate('fecha', '<=', max($fechas))
+                    ->orderBy('id')
+                    ->get();
+                foreach ($filas as $fila) {
+                    $llave = $salaId.'|'.$fila->fecha->format('Y-m-d');
+                    if (array_key_exists($llave, self::$precarga[$clave]) && self::$precarga[$clave][$llave] === null) {
+                        self::$precarga[$clave][$llave] = $fila;
+                    }
+                }
+            }
+        }
+
+        TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::precargar($ids);
+    }
+
+    /**
+     * @param  callable(list<int>): iterable<object>  $consulta
+     * @return list<object>
+     */
+    private static function precargado(string $clave, TesoreriaCrownJornada $jornada, callable $consulta): array
+    {
+        $id = (int) $jornada->id;
+        if (isset(self::$precarga[$clave]) && array_key_exists($id, self::$precarga[$clave])) {
+            return self::$precarga[$clave][$id];
+        }
+        $filas = [];
+        foreach ($consulta([$id]) as $fila) {
+            $filas[] = $fila;
+        }
+
+        return $filas;
+    }
+
+    private static function porSalaFecha(string $clave, TesoreriaCrownJornada $jornada, callable $consulta): mixed
+    {
+        $llave = (int) $jornada->sala_id.'|'.$jornada->fecha?->format('Y-m-d');
+        if (isset(self::$precarga[$clave]) && array_key_exists($llave, self::$precarga[$clave])) {
+            return self::$precarga[$clave][$llave];
+        }
+
+        return $consulta();
+    }
+
+    /** @return list<object> */
+    private static function propinasFilas(TesoreriaCrownJornada $jornada): array
+    {
+        return self::precargado('propina', $jornada, fn (array $ids) => self::consultaPropinas($ids));
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private static function consultaMesasPorTipo(array $ids)
+    {
+        return DB::table('tesoreria_crown_mesa as m')
+            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
+            ->leftJoin('tesoreria_crown_mesa_linea as l', 'l.mesa_id', '=', 'm.id')
+            ->leftJoin('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
+            ->whereIn('m.jornada_id', $ids)
+            ->where('m.estado', 'C')
+            ->whereNull('m.revierte_id')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('tesoreria_crown_mesa as r')
+                    ->whereColumn('r.revierte_id', 'm.id');
+            })
+            ->groupBy('m.jornada_id', 'd.codigo', 'm.tipo')
+            ->get([
+                'm.jornada_id',
+                'd.codigo as mesa',
+                'm.tipo',
+                DB::raw('COALESCE(SUM(l.cantidad * v.denominacion), 0) as monto'),
+            ]);
+    }
+
+    /**
+     * Drops confirmados y vigentes (tipo D) con el total de sus líneas.
+     *
+     * @param  list<int>  $ids
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private static function consultaDrops(array $ids)
+    {
+        $lineas = DB::table('tesoreria_crown_mesa_linea as l')
+            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
+            ->whereIn('l.mesa_id', function ($q) use ($ids) {
+                $q->select('id')
+                    ->from('tesoreria_crown_mesa')
+                    ->whereIn('jornada_id', $ids)
+                    ->where('tipo', 'D');
+            })
+            ->groupBy('l.mesa_id')
+            ->selectRaw('l.mesa_id, SUM(l.cantidad * v.denominacion) as monto');
+
+        return DB::table('tesoreria_crown_mesa as m')
+            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
+            ->leftJoinSub($lineas, 'ml', 'ml.mesa_id', '=', 'm.id')
+            ->whereIn('m.jornada_id', $ids)
+            ->where('m.tipo', 'D')
+            ->where('m.estado', 'C')
+            ->whereNull('m.revierte_id')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('tesoreria_crown_mesa as r')
+                    ->whereColumn('r.revierte_id', 'm.id');
+            })
+            ->orderBy('m.id')
+            ->get([
+                'm.jornada_id',
+                'm.id',
+                'd.codigo as mesa',
+                'm.voucher',
+                'm.comentario',
+                DB::raw('COALESCE(ml.monto, 0) as monto_lineas'),
+            ]);
+    }
+
+    /**
+     * Propina de estados finales (tipo F) confirmados, por mesa.
+     *
+     * @param  list<int>  $ids
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private static function consultaPropinas(array $ids)
+    {
+        return DB::table('tesoreria_crown_mesa as m')
+            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
+            ->whereIn('m.jornada_id', $ids)
+            ->where('m.tipo', 'F')
+            ->where('m.estado', 'C')
+            ->whereNull('m.revierte_id')
+            ->groupBy('m.jornada_id', 'd.codigo')
+            ->get(['m.jornada_id', 'd.codigo as mesa', DB::raw('SUM(m.propina) as propina')]);
+    }
+
+    /**
+     * Bóveda confirmada y vigente por código de transacción y moneda.
+     *
+     * @param  list<int>  $ids
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private static function consultaBovedaPorCodigo(array $ids)
+    {
+        return DB::table('tesoreria_crown_boveda as b')
+            ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
+            ->join('tesoreria_crown_boveda_linea as l', 'l.boveda_id', '=', 'b.id')
+            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
+            ->leftJoin('tesoreria_crown_tipo_valor as tv', 'tv.id', '=', 'v.tipo_valor_id')
+            ->whereIn('b.jornada_id', $ids)
+            ->where('b.estado', 'C')
+            ->whereNull('b.revierte_id')
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                    ->from('tesoreria_crown_boveda as r')
+                    ->whereColumn('r.revierte_id', 'b.id');
+            })
+            ->groupBy('b.jornada_id', 't.codigo', 'tv.codigo')
+            ->get(['b.jornada_id', 't.codigo as codigo', 'tv.codigo as moneda', DB::raw('SUM(l.cantidad * v.denominacion) as monto')]);
     }
 
     /**
@@ -375,24 +604,7 @@ final class TesoreriaCrownAnexo1Calculo
      */
     private static function salaConvencional(TesoreriaCrownJornada $jornada, array &$avisos): float
     {
-        $filas = DB::table('tesoreria_crown_mesa as m')
-            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
-            ->leftJoin('tesoreria_crown_mesa_linea as l', 'l.mesa_id', '=', 'm.id')
-            ->leftJoin('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
-            ->where('m.jornada_id', $jornada->id)
-            ->where('m.estado', 'C')
-            ->whereNull('m.revierte_id')
-            ->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('tesoreria_crown_mesa as r')
-                    ->whereColumn('r.revierte_id', 'm.id');
-            })
-            ->groupBy('d.codigo', 'm.tipo')
-            ->get([
-                'd.codigo as mesa',
-                'm.tipo',
-                DB::raw('COALESCE(SUM(l.cantidad * v.denominacion), 0) as monto'),
-            ]);
+        $filas = self::precargado('mesa', $jornada, fn (array $ids) => self::consultaMesasPorTipo($ids));
 
         $porMesa = [];
         foreach ($filas as $fila) {
@@ -420,15 +632,7 @@ final class TesoreriaCrownAnexo1Calculo
         }
 
         $propinas = [];
-        $locales = DB::table('tesoreria_crown_mesa as m')
-            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
-            ->where('m.jornada_id', $jornada->id)
-            ->where('m.tipo', 'F')
-            ->where('m.estado', 'C')
-            ->whereNull('m.revierte_id')
-            ->groupBy('d.codigo')
-            ->get(['d.codigo as mesa', DB::raw('SUM(m.propina) as propina')]);
-        foreach ($locales as $fila) {
+        foreach (self::propinasFilas($jornada) as $fila) {
             $propinas[(int) preg_replace('/\D/', '', (string) $fila->mesa)] = (float) $fila->propina;
         }
 
@@ -458,37 +662,15 @@ final class TesoreriaCrownAnexo1Calculo
      */
     private static function dropsErp(TesoreriaCrownJornada $jornada): array
     {
-        $movimientos = DB::table('tesoreria_crown_mesa as m')
-            ->join('tesoreria_crown_deposito as d', 'd.id', '=', 'm.deposito_id')
-            ->where('m.jornada_id', $jornada->id)
-            ->where('m.tipo', 'D')
-            ->where('m.estado', 'C')
-            ->whereNull('m.revierte_id')
-            ->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('tesoreria_crown_mesa as r')
-                    ->whereColumn('r.revierte_id', 'm.id');
-            })
-            ->get(['m.id', 'd.codigo as mesa', 'm.voucher', 'm.comentario']);
+        $movimientos = self::precargado('drop', $jornada, fn (array $ids) => self::consultaDrops($ids));
 
         $out = [];
-        if ($movimientos->isEmpty()) {
-            return $out;
-        }
-
-        $montosLinea = DB::table('tesoreria_crown_mesa_linea as l')
-            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
-            ->whereIn('l.mesa_id', $movimientos->pluck('id'))
-            ->groupBy('l.mesa_id')
-            ->selectRaw('l.mesa_id, COALESCE(SUM(l.cantidad * v.denominacion), 0) as monto')
-            ->pluck('monto', 'mesa_id');
-
         foreach ($movimientos as $mov) {
             $nro = (int) preg_replace('/\D/', '', (string) $mov->mesa);
             if ($nro === 27 || $nro === 28 || $nro === 0) {
                 continue;
             }
-            $lineas = (float) ($montosLinea[$mov->id] ?? 0);
+            $lineas = (float) ($mov->monto_lineas ?? 0);
             $voucher = round((float) ($mov->voucher ?? 0), 2);
             if ($voucher < 0.0001) {
                 $comentario = (string) ($mov->comentario ?? '');
@@ -512,21 +694,7 @@ final class TesoreriaCrownAnexo1Calculo
      */
     private static function bovedaPesos(TesoreriaCrownJornada $jornada): array
     {
-        $filas = DB::table('tesoreria_crown_boveda as b')
-            ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
-            ->join('tesoreria_crown_boveda_linea as l', 'l.boveda_id', '=', 'b.id')
-            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
-            ->leftJoin('tesoreria_crown_tipo_valor as tv', 'tv.id', '=', 'v.tipo_valor_id')
-            ->where('b.jornada_id', $jornada->id)
-            ->where('b.estado', 'C')
-            ->whereNull('b.revierte_id')
-            ->whereNotExists(function ($q) {
-                $q->select(DB::raw(1))
-                    ->from('tesoreria_crown_boveda as r')
-                    ->whereColumn('r.revierte_id', 'b.id');
-            })
-            ->groupBy('t.codigo', 'tv.codigo')
-            ->get(['t.codigo as codigo', 'tv.codigo as moneda', DB::raw('SUM(l.cantidad * v.denominacion) as monto')]);
+        $filas = self::precargado('boveda', $jornada, fn (array $ids) => self::consultaBovedaPorCodigo($ids));
 
         $out = [];
         foreach ($filas as $fila) {
@@ -542,43 +710,11 @@ final class TesoreriaCrownAnexo1Calculo
     }
 
     /**
-     * @param  list<string>  $monedas
-     */
-    private static function monedaExtranjera(TesoreriaCrownJornada $jornada, int $codigo, array $monedas): float
-    {
-        $filas = DB::table('tesoreria_crown_boveda as b')
-            ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
-            ->join('tesoreria_crown_boveda_linea as l', 'l.boveda_id', '=', 'b.id')
-            ->join('tesoreria_crown_valor as v', 'v.id', '=', 'l.valor_id')
-            ->join('tesoreria_crown_tipo_valor as tv', 'tv.id', '=', 'v.tipo_valor_id')
-            ->where('b.jornada_id', $jornada->id)
-            ->where('b.estado', 'C')
-            ->whereNull('b.revierte_id')
-            ->where('t.codigo', $codigo)
-            ->whereIn('tv.codigo', $monedas)
-            ->groupBy('v.tipo_valor_id')
-            ->get(['v.tipo_valor_id', DB::raw('SUM(l.cantidad * v.denominacion) as monto')]);
-
-        $total = 0.0;
-        $fecha = $jornada->fecha->format('Y-m-d');
-        foreach ($filas as $fila) {
-            $cot = TesoreriaCrownCierreCalculo::cotizacionVenta((int) $jornada->sala_id, $fecha, (int) $fila->tipo_valor_id);
-            $tasa = (float) ($cot['tasa'] ?? 0);
-            if ($tasa <= 0) {
-                continue;
-            }
-            $total += (float) $fila->monto * $tasa;
-        }
-
-        return round($total, 2);
-    }
-
-    /**
      * Valor para el input de clientes: el grabado en la jornada ERP (0 si falta).
      */
     public static function clientesParaFormulario(TesoreriaCrownJornada $jornada): int
     {
-        if (! Schema::hasColumn('tesoreria_crown_jornada', 'clientes')) {
+        if (! self::tieneColumna('clientes')) {
             return 0;
         }
 
@@ -592,7 +728,7 @@ final class TesoreriaCrownAnexo1Calculo
      */
     private static function clientesDeJornada(TesoreriaCrownJornada $jornada, array &$avisos): float
     {
-        if (Schema::hasColumn('tesoreria_crown_jornada', 'clientes')) {
+        if (self::tieneColumna('clientes')) {
             $local = (int) ($jornada->clientes ?? 0);
             if ($local > 0) {
                 return (float) $local;
@@ -603,39 +739,13 @@ final class TesoreriaCrownAnexo1Calculo
         return 0.0;
     }
 
-    /** Suma vouchers de drops de mesa confirmados (poder público voucher). */
-    private static function voucherPoderPublico(TesoreriaCrownJornada $jornada): float
-    {
-        $total = 0.0;
-        $movimientos = DB::table('tesoreria_crown_mesa')
-            ->where('jornada_id', $jornada->id)
-            ->where('tipo', 'D')
-            ->where('estado', 'C')
-            ->whereNull('revierte_id')
-            ->get(['id', 'voucher', 'comentario']);
-        foreach ($movimientos as $mov) {
-            $voucher = round((float) ($mov->voucher ?? 0), 2);
-            if ($voucher < 0.0001) {
-                $comentario = (string) ($mov->comentario ?? '');
-                if (preg_match('/voucher\s+([\d.]+(?:,\d+)?)/iu', $comentario, $m)) {
-                    $texto = str_replace('.', '', $m[1]);
-                    $texto = str_replace(',', '.', $texto);
-                    $voucher = round((float) $texto, 2);
-                }
-            }
-            $total += $voucher;
-        }
-
-        return round($total, 2);
-    }
-
     /**
      * Persiste la caja final por variación del Anexo I (inicial + variación).
      * No escribe el VIII: eso va en `caja_final_viii` vía TesoreriaCrownAnexo8Calculo.
      */
     private static function persistirCajaFinal(TesoreriaCrownJornada $jornada, ?float $finalDia, ?float $finalMes): void
     {
-        if (! Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_dia')) {
+        if (! self::tieneColumna('caja_final_dia')) {
             return;
         }
         if ($finalDia === null && $finalMes === null) {
@@ -726,18 +836,9 @@ final class TesoreriaCrownAnexo1Calculo
         }
         if ($jornadaAyer instanceof TesoreriaCrownJornada) {
             try {
-                $esPrimero = substr(str_replace('-', '', $hoyIso), 6, 2) === '01';
                 // Caja inicial del día = VIII de ayer (cache caja_final_viii).
                 $dia = TesoreriaCrownAnexo8Calculo::totalCacheadoOCalcular($jornadaAyer);
-                if ($esPrimero) {
-                    $mes = $dia;
-                } elseif (Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_mes')
-                    && $jornadaAyer->caja_final_mes !== null) {
-                    // Mes: caja final por variación del Anexo I de ayer (columna mes).
-                    $mes = round((float) $jornadaAyer->caja_final_mes, 2);
-                } else {
-                    $mes = $dia;
-                }
+                $mes = self::cajaInicialMes($jornadaHoy, $dia, $avisos);
 
                 return ['dia' => $dia, 'mes' => $mes, 'anio' => null];
             } catch (\Throwable $e) {
@@ -748,6 +849,39 @@ final class TesoreriaCrownAnexo1Calculo
         $avisos[] = 'Sin jornada ERP del día anterior: abrí/importá esa jornada para la caja inicial.';
 
         return ['dia' => null, 'mes' => null, 'anio' => null];
+    }
+
+    /**
+     * Caja inicial del mes = caja inicial del primer día del mes (VIII del día previo).
+     * La columna mes ya acumula la variación desde el 1: no se encadena con la caja final de ayer.
+     *
+     * @param  list<string>  $avisos
+     */
+    private static function cajaInicialMes(TesoreriaCrownJornada $jornadaHoy, float $inicialDia, array &$avisos): ?float
+    {
+        $desdeMes = $jornadaHoy->fecha->copy()->startOfMonth();
+        $primera = TesoreriaCrownJornada::query()
+            ->where('sala_id', $jornadaHoy->sala_id)
+            ->whereDate('fecha', '>=', $desdeMes->toDateString())
+            ->orderBy('fecha')
+            ->orderBy('id')
+            ->first();
+        if (! $primera instanceof TesoreriaCrownJornada || (int) $primera->id === (int) $jornadaHoy->id) {
+            return $inicialDia;
+        }
+        $previaMes = TesoreriaCrownJornada::query()
+            ->where('sala_id', $jornadaHoy->sala_id)
+            ->whereDate('fecha', $primera->fecha->copy()->subDay()->toDateString())
+            ->orderByDesc('id')
+            ->first();
+        if (! $previaMes instanceof TesoreriaCrownJornada) {
+            $avisos[] = 'Caja inicial del mes vacía: no está la jornada ERP del '
+                .$primera->fecha->copy()->subDay()->format('d/m/Y').' (anexo VIII previo al '.$primera->fecha->format('d/m/Y').').';
+
+            return null;
+        }
+
+        return TesoreriaCrownAnexo8Calculo::totalCacheadoOCalcular($previaMes);
     }
 
     /**

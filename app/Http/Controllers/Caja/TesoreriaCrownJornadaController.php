@@ -21,6 +21,10 @@ use App\Support\Caja\TesoreriaCrownAsignacionCatalogo;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
+use App\Support\Caja\TesoreriaCrownFirmaSupport;
+use App\Support\Caja\TesoreriaCrownJornadaCierreBloqueoSupport;
+use App\Services\Caja\TesoreriaCrownAvisoGenerador;
+use App\Models\Seguridad\Usuario;
 use App\Support\Caja\TesoreriaCrownCajeroListadoColumnas;
 use App\Support\Caja\TesoreriaCrownCajeroListadoFiltros;
 use App\Support\Caja\TesoreriaCrownJornadaListadoColumnas;
@@ -955,6 +959,9 @@ class TesoreriaCrownJornadaController extends Controller
             'estadoFinalMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['estado_final']) : [],
             'dropMesa' => $stock ? TesoreriaCrownMesaSupport::filas((int) $sala->id, $stock['drop']) : [],
             'esAdministrador' => session('rol_nombre') === 'administrador',
+            'bloqueosCierre' => $jornada->estaAbierta()
+                ? TesoreriaCrownJornadaCierreBloqueoSupport::deJornada($jornada)
+                : [],
         ]));
     }
 
@@ -1021,21 +1028,81 @@ class TesoreriaCrownJornadaController extends Controller
         if (! $jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'La jornada ya está cerrada.');
         }
-        $sinCierre = $jornada->asignaciones()->with('cierre')->withCount('comprobantes')->get()
-            ->contains(function (TesoreriaCrownAsignacion $fila) {
-                if ((int) $fila->comprobantes_count === 0) {
-                    return false;
-                }
+        $bloqueos = TesoreriaCrownJornadaCierreBloqueoSupport::deJornada($jornada);
+        if ($bloqueos !== []) {
+            $cajas = collect($bloqueos)->pluck('caja')->unique()->implode(', ');
 
-                return $fila->cierre === null || ! TesoreriaCrownCierreSupport::terminal((string) $fila->cierre->estado);
-            });
-        if ($sinCierre) {
-            return back()->with('mensaje-error', 'Quedan cajas sin un cierre terminado (conforme, revisada o cierre de auditoría).');
+            return back()
+                ->with(
+                    'mensaje-error',
+                    'Quedan '.count($bloqueos).' caja(s) sin cierre terminado ('.$cajas.'). Resolvelas en el panel «Resolver para cerrar la jornada».'
+                )
+                ->with('bloqueos_cierre_jornada', $bloqueos);
         }
         $jornada->estado = TesoreriaCrownJornada::CERRADA;
         $jornada->save();
 
         return back()->with('mensaje', 'Jornada cerrada.');
+    }
+
+    /**
+     * Proceso diario: con una firma de auditoría cierra todas las cajas en
+     * Auditoría de esta jornada (las que el firmante pueda firmar).
+     */
+    public function sanearAuditorias(Request $request, int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('editar-tesoreria-crown-movimiento');
+
+        $jornada = $this->jornadaEnAlcance($id);
+        if (! $jornada->estaAbierta()) {
+            return back()->with('mensaje-error', 'La jornada ya está cerrada.');
+        }
+
+        $datos = $request->validate([
+            'observacion' => ['nullable', 'string', 'max:500'],
+            'firma_usuario' => ['required', 'string'],
+            'firma_password' => ['required', 'string'],
+        ]);
+        $usuario = TesoreriaCrownFirmaSupport::firmante(
+            $datos['firma_usuario'],
+            $datos['firma_password'],
+            fn (Usuario $u) => TesoreriaCrownFirmaSupport::puedeAuditarCaja($u)
+        );
+        if (is_string($usuario)) {
+            return back()->with('mensaje-error', $usuario)->withInput($request->except('firma_password'));
+        }
+
+        $resultado = TesoreriaCrownJornadaCierreBloqueoSupport::cerrarAuditoriasDeJornada(
+            $jornada,
+            $usuario,
+            trim((string) ($datos['observacion'] ?? ''))
+        );
+        TesoreriaCrownAvisoGenerador::alEvento((int) $jornada->id);
+
+        if ($resultado['cerradas'] === [] && $resultado['omitidas'] === []) {
+            return back()->with('mensaje-aviso', 'No había cajas en auditoría para cerrar.');
+        }
+
+        $mensajes = [];
+        if ($resultado['cerradas'] !== []) {
+            $mensajes[] = 'Auditorías cerradas: '.implode(', ', $resultado['cerradas']).'.';
+        }
+        if ($resultado['omitidas'] !== []) {
+            $redirect = back()->with('mensaje-error', implode(' ', $resultado['omitidas']));
+            if ($mensajes !== []) {
+                $redirect = $redirect->with('mensaje', implode(' ', $mensajes));
+            }
+
+            return $redirect;
+        }
+
+        $restan = TesoreriaCrownJornadaCierreBloqueoSupport::deJornada($jornada->fresh());
+        if ($restan === []) {
+            $mensajes[] = 'Ya podés cerrar la jornada.';
+        }
+
+        return back()->with('mensaje', implode(' ', $mensajes));
     }
 
     public function eliminar(int $id)

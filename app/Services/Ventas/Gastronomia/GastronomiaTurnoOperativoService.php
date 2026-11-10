@@ -9,6 +9,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\CierreParcialTurnoGastronomia;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentActualizacionPorLotesSupport;
 use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
@@ -33,6 +34,11 @@ final class GastronomiaTurnoOperativoService
 
     public static function requiereHabilitacionTurno(): bool
     {
+        // Crown no usa habilitación/cierre de turno (legado AGG); el menú ya está oculto.
+        if (EntornoEmpresaSupport::esCrown()) {
+            return false;
+        }
+
         return (bool) config('gastronomia.requiere_habilitacion_turno', true);
     }
 

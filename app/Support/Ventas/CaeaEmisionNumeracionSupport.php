@@ -10,12 +10,16 @@ use App\Support\Ventas\VentaNumeradorFiscalSupport;
 use InvalidArgumentException;
 
 /**
- * Numeración CAEA (PV mod A), siempre desde el ERP.
+ * Numeración CAEA (PV mod A).
  *
  * Cada serie es venta.codigo_afip + punto de venta. codigo_afip es el tipo AFIP
- * (1/2/3 factura-ND-NC A, 6/7/8 factura-ND-NC B, 11/12/13 letra C). No hay un
- * numerador único del PV y no se lee el último de Anita.
- * El Bierzo reserva en venta_serie_numerador con esa misma clave.
+ * (1/2/3 factura-ND-NC A, 6/7/8 factura-ND-NC B, 11/12/13 letra C).
+ *
+ * - El Bierzo / Crown: reserva atómica en venta_serie_numerador.
+ * - Crown sin Anita nativo: siembra una vez desde Informix (cncadmin) + ERP.
+ * - Crown con GASTRONOMIA_SINCRONIZAR_ANITA: refresca el piso desde Anita bridge
+ *   (igual criterio AGG: último en venta Anita) antes de reservar.
+ * - Resto AGG: max ERP (+ piso config) + 1, sin tabla de numerador.
  */
 final class CaeaEmisionNumeracionSupport
 {
@@ -76,11 +80,27 @@ final class CaeaEmisionNumeracionSupport
         // dos correlatividades (Rebisco PV 00030, sep/2026: NCB 54768/54769 con
         // último autorizado 25 y hueco en FAC 54768).
 
-        if (EntornoEmpresaSupport::esElBierzo()) {
-            // Reserva atómica en venta_serie_numerador. El piso es el máximo
-            // ya grabado en el ERP (y el piso de config del PV), nunca Anita.
-            // Al arrancar cada punto de venta se carga ultimo_numero a mano.
+        if (EntornoEmpresaSupport::esElBierzo() || EntornoEmpresaSupport::esCrown()) {
             $piso = self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip);
+
+            if (EntornoEmpresaSupport::esCrown()) {
+                $ifx = trim((string) config('gastronomia.crown.numerador_anita_ifx_server', 'cncadmin'));
+                $path = trim((string) config('gastronomia.crown.numerador_anita_path_sistema', '/usr2/casino'));
+                $syncAnita = filter_var(
+                    config('gastronomia.sincronizar_anita_al_facturar', false),
+                    FILTER_VALIDATE_BOOLEAN
+                );
+                // Sin sync: siembra una vez (Anita cncadmin + ERP). Con sync: refresca Anita cada vez.
+                $semilla = VentaNumeradorFiscalSupport::sembrarSerieSiFalta(
+                    $puntoventaId,
+                    $codigoAfip,
+                    $empresaId,
+                    $ifx !== '' ? $ifx : null,
+                    $syncAnita,
+                    $path !== '' ? $path : null,
+                );
+                $piso = max($piso, $semilla);
+            }
 
             return VentaNumeradorFiscalSupport::reservarSiguiente(
                 $puntoventaId,
@@ -178,7 +198,7 @@ final class CaeaEmisionNumeracionSupport
             }
 
             $payload['numerocomprobante_forzado'] = $numero;
-            // AGG CAEA: el ERP ya numeró; no tocar compemis.
+            // AGG/Crown CAEA: el ERP ya numeró; no tocar compemis.
             // El Bierzo: Anita sigue vivo; numeraAnita al cierre mantiene el numerador.
             $payload['_omitir_numera_anita_fin'] = ! EntornoEmpresaSupport::esElBierzo();
         } finally {

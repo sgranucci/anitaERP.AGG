@@ -11,37 +11,56 @@
 .gck-topbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    gap: 0.45rem 0.65rem;
     background: linear-gradient(90deg, #15587f, #1a6b9a);
     border-radius: 0.4rem;
-    padding: 0.5rem 0.85rem;
+    padding: 0.4rem 0.7rem;
 }
 
 .gck-brand {
     display: flex;
     align-items: baseline;
-    gap: 0.5rem;
+    gap: 0.35rem;
+    flex: 0 0 auto;
 }
 
 .gck-brand-mark {
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 800;
     letter-spacing: 1px;
     color: #fff;
 }
 
 .gck-brand-sub {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: #cfe3ef;
+}
+
+.gck-topbar-filtros {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.3rem;
+    flex: 1 1 auto;
+    min-width: 12rem;
+}
+
+.gck-filtros-sep {
+    width: 1px;
+    align-self: stretch;
+    min-height: 1.2rem;
+    background: rgba(255, 255, 255, 0.25);
+    margin: 0 0.25rem;
 }
 
 .gck-meta {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     flex-wrap: wrap;
+    margin-left: auto;
 }
 
 .gck-meta .text-muted {
@@ -50,54 +69,53 @@
 
 .gck-meta .custom-control-label {
     color: #e8edf3;
-}
-
-.gck-filtros {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    margin-top: 0.6rem;
+    font-size: 0.8rem;
 }
 
 .gck-filtros-title {
-    font-size: 0.72rem;
+    font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: #8fa6b8;
-    margin-right: 0.3rem;
+    letter-spacing: 0.5px;
+    color: #b7d0e0;
+    margin-right: 0.1rem;
 }
 
 .gck-chip {
     display: inline-block;
-    padding: 0.2rem 0.65rem;
+    padding: 0.12rem 0.5rem;
     border-radius: 999px;
-    border: 1px solid #2b3b4c;
-    background: #18222d;
-    color: #cfe3ef;
-    font-size: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(0, 0, 0, 0.18);
+    color: #e8edf3;
+    font-size: 0.72rem;
     font-weight: 600;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .gck-chip:hover {
-    background: #223040;
+    background: rgba(0, 0, 0, 0.32);
     color: #fff;
     text-decoration: none;
 }
 
 .gck-chip.activo {
-    background: #1a6b9a;
-    border-color: #1a6b9a;
-    color: #fff;
+    background: #fff;
+    border-color: #fff;
+    color: #15587f;
+}
+
+.gck-chip-fijo {
+    cursor: default;
+    pointer-events: none;
 }
 
 .gck-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
     gap: 0.7rem;
-    margin-top: 0.8rem;
+    margin-top: 0.65rem;
 }
 
 .gck-vacio {
@@ -234,6 +252,12 @@
     font-weight: 600;
     color: #fff;
     word-break: break-word;
+}
+
+.gck-btn-receta {
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    font-weight: 600;
 }
 
 .gck-linea-obs {

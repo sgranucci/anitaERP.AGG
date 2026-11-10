@@ -175,3 +175,38 @@
         }
     });
 })();
+
+(function () {
+    function abrirBloqueosCierre() {
+        var panel = document.getElementById('resolver-cierre-jornada');
+        var cuerpo = document.getElementById('resolver-cierre-jornada-body');
+        var toggle = panel ? panel.querySelector('.tc-bloque-toggle') : null;
+        if (!cuerpo) {
+            return false;
+        }
+        if (window.jQuery) {
+            window.jQuery(cuerpo).collapse('show');
+        } else {
+            cuerpo.classList.add('show');
+            if (toggle) {
+                toggle.classList.remove('collapsed');
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+        }
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return true;
+    }
+
+    document.querySelectorAll('form.js-tc-cerrar-jornada').forEach(function (form) {
+        form.addEventListener('submit', function (evento) {
+            if (form.getAttribute('data-tiene-bloqueos') !== '1') {
+                if (!window.confirm('¿Cerrar esta jornada?')) {
+                    evento.preventDefault();
+                }
+                return;
+            }
+            evento.preventDefault();
+            abrirBloqueosCierre();
+        });
+    });
+})();

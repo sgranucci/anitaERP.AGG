@@ -43,7 +43,7 @@ return [
             'herramienta' => 'Cerrar jornada',
             'ubicacion' => $escritorio,
             'accion' => 'Cierra el día si todos los cierres de caja con movimiento están terminales.',
-            'permiso' => 'cerrar-tesoreria-crown-jornada',
+            'permiso' => 'editar-tesoreria-crown-jornada',
         ],
     ],
     'jornada_escritorio' => [
@@ -51,19 +51,55 @@ return [
             'herramienta' => 'Asignar caja',
             'ubicacion' => $escritorio,
             'accion' => 'Elige depósito, cajero, turno y tarea (T/G/H/K/E/L).',
-            'permiso' => 'asignar-tesoreria-crown-jornada',
+            'permiso' => 'crear-tesoreria-crown-jornada',
         ],
         [
-            'herramienta' => 'Solapas Cajeros / Mesas / Bóveda / Slots / Bingo / Fichas / Anexos',
+            'herramienta' => 'Solapa Cajeros',
             'ubicacion' => $escritorio,
-            'accion' => 'Navega el circuito del día sin salir de la jornada.',
+            'accion' => 'Ve asignaciones, habilitaciones, rendiciones y cierres del día.',
             'permiso' => 'listar-tesoreria-crown-jornada',
+        ],
+        [
+            'herramienta' => 'Solapa Mesas',
+            'ubicacion' => $escritorio,
+            'accion' => 'Piso de mesas del día.',
+            'permiso' => 'listar-tesoreria-crown-mesa',
+        ],
+        [
+            'herramienta' => 'Solapa Bóveda',
+            'ubicacion' => $escritorio,
+            'accion' => 'Movimientos y saldo de bóveda del día.',
+            'permiso' => 'listar-tesoreria-crown-boveda',
+        ],
+        [
+            'herramienta' => 'Solapa Slots',
+            'ubicacion' => $escritorio,
+            'accion' => 'Drop y recuento de stacker.',
+            'permiso' => 'listar-tesoreria-crown-slot',
+        ],
+        [
+            'herramienta' => 'Solapa Bingo',
+            'ubicacion' => $escritorio,
+            'accion' => 'Movimiento diario de bingo.',
+            'permiso' => 'listar-tesoreria-crown-bingo',
+        ],
+        [
+            'herramienta' => 'Stock de fichas / Kardex / Anexos',
+            'ubicacion' => $escritorio,
+            'accion' => 'Informes del día; el anexo II pide además un grupo (mesas/máquinas/gastro/todo).',
+            'permiso' => 'listar-tesoreria-crown-poder-publico / kardex-valores / anexo (+ anexo2-*)',
         ],
         [
             'herramienta' => 'Columna Cierre',
             'ubicacion' => 'Grilla de asignaciones',
             'accion' => 'Abre el cierre parcial de esa caja.',
-            'permiso' => 'listar-tesoreria-crown-cierre',
+            'permiso' => 'listar-tesoreria-crown-movimiento (o listar jornada)',
+        ],
+        [
+            'herramienta' => 'Resolver para cerrar la jornada',
+            'ubicacion' => $escritorio,
+            'accion' => 'Lista las cajas que bloquean el cierre del día. Desde el mismo panel, con firma de auditor, cierra todas las auditorías pendientes de una vez; el resto se resuelve en la pantalla de cierre de cada caja.',
+            'permiso' => 'editar-tesoreria-crown-movimiento (formulario) + auditar-tesoreria-crown-caja (firma)',
         ],
     ],
     'comprobante_firma' => [
@@ -103,12 +139,38 @@ return [
             'accion' => 'Crea papel inverso pendiente de las dos firmas (una sola vez).',
             'permiso' => 'editar-tesoreria-crown-movimiento',
         ],
+        [
+            'herramienta' => 'El cajero se olvidó el PIN',
+            'ubicacion' => $comprobante.' (pendiente)',
+            'accion' => 'Tesorería firma y blanquea el PIN; en la próxima firma el cajero elige uno nuevo.',
+            'permiso' => 'editar-tesoreria-crown-movimiento',
+        ],
+    ],
+    'pin_cajero' => [
+        [
+            'herramienta' => 'Elegir PIN nuevo',
+            'ubicacion' => $comprobante.' / '.$cierre,
+            'accion' => 'Si el PIN es inicial o está blanqueado, pide PIN nuevo + repetición (4–8 dígitos).',
+            'permiso' => 'editar-tesoreria-crown-movimiento',
+        ],
+        [
+            'herramienta' => 'Banner PIN',
+            'ubicacion' => $comprobante.' / '.$cierre,
+            'accion' => 'Avisa a tesorería si el cajero asignado aún no tiene PIN propio.',
+            'permiso' => 'listar-tesoreria-crown-movimiento',
+        ],
     ],
     'rendicion' => [
         [
             'herramienta' => 'Aplicar a la rendición',
             'ubicacion' => 'Bloque cierres fiscales (G/H)',
-            'accion' => 'Completa X, Z, NC y último ticket desde cierres de ventas marcados.',
+            'accion' => 'Completa X, Z, NC y último ticket desde cierres ERP/Anita marcados.',
+            'permiso' => 'editar-tesoreria-crown-movimiento',
+        ],
+        [
+            'herramienta' => 'Cargar un cierre a mano',
+            'ubicacion' => 'Bloque cierres fiscales (G/H)',
+            'accion' => 'Alta pendiente del día si falta el cierre y Anita no respondió.',
             'permiso' => 'editar-tesoreria-crown-movimiento',
         ],
         [
@@ -128,14 +190,20 @@ return [
         [
             'herramienta' => 'Cerrar caja',
             'ubicacion' => $cierre,
-            'accion' => 'Calcula diferencia, aplica tolerancia y pide firmas tesorería + cajero.',
-            'permiso' => 'cerrar-tesoreria-crown-cierre',
+            'accion' => 'Calcula diferencia, aplica tolerancia y pide firmas tesorería + cajero (PIN).',
+            'permiso' => 'editar-tesoreria-crown-movimiento',
         ],
         [
-            'herramienta' => 'Marcar revisada / Auditoría / Cerrar auditoría',
+            'herramienta' => 'Marcar revisada / Auditoría',
             'ubicacion' => $cierre,
-            'accion' => 'Avanza el caso hasta un estado terminal.',
-            'permiso' => 'editar-tesoreria-crown-cierre',
+            'accion' => 'Avanza el caso (revisada / mandar a auditoría).',
+            'permiso' => 'editar-tesoreria-crown-movimiento',
+        ],
+        [
+            'herramienta' => 'Cerrar auditoría',
+            'ubicacion' => $cierre.' / panel Resolver de la jornada',
+            'accion' => 'Otra persona distinta cierra el caso de auditoría. En la jornada se pueden cerrar varias pendientes con una sola firma.',
+            'permiso' => 'auditar-tesoreria-crown-caja',
         ],
         [
             'herramienta' => 'Ajuste de caja',
@@ -188,6 +256,26 @@ return [
             'ubicacion' => 'caja/flash-crown/reporte',
             'accion' => 'Exporta período y programa envíos.',
             'permiso' => 'listar-flash-crown',
+        ],
+    ],
+    'avisos' => [
+        [
+            'herramienta' => 'Filtros / Consultar',
+            'ubicacion' => 'Bandeja de avisos',
+            'accion' => 'Filtra por fecha, regla, severidad y estado; pagina el resultado.',
+            'permiso' => 'listar-tesoreria-crown-aviso',
+        ],
+        [
+            'herramienta' => 'Revisado / Descartado',
+            'ubicacion' => 'Fila del aviso',
+            'accion' => 'Cierra el hallazgo con nota (no borra el histórico).',
+            'permiso' => 'auditar-tesoreria-crown-caja',
+        ],
+        [
+            'herramienta' => 'Export Pdf / Excel / Csv',
+            'ubicacion' => $barra,
+            'accion' => 'Exporta los avisos del filtro activo.',
+            'permiso' => 'listar-tesoreria-crown-aviso',
         ],
     ],
 ];

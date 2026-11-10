@@ -29,9 +29,11 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
         'fichas_casino' => 'Fichas Casino',
         'pago_cashless' => 'Pago cashless',
         'vta_cashless' => 'Vta. cashless',
+        'pago_voucher' => 'Pago voucher',
+        'venta_voucher' => 'Venta voucher',
         'pago_online' => 'Pagos online',
         'venta_online' => 'Ventas online',
-        'online' => 'Del Rio ONLINE',
+        'online' => 'Online',
         'apuestas' => 'Apuestas Dep.',
         'resultado' => 'Resultado',
         'diferencia' => 'Dif. cajero',
@@ -45,8 +47,10 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
      *     etiqueta_columna: string,
      *     total: float,
      *     formula: ?string,
+     *     como_auditar: ?string,
      *     avisos: list<string>,
-     *     movimientos: list<array<string, mixed>>
+     *     movimientos: list<array<string, mixed>>,
+     *     cierre_url: ?string
      * }
      */
     public static function deRequest(TesoreriaCrownJornada $jornada, string $columna, string $scope, ?int $asignacionId, ?string $tipoGrupo): array
@@ -111,6 +115,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'etiqueta_columna' => $etiqueta,
             'total' => round((float) ($fila[$columna] ?? 0), 2),
             'formula' => $detalle['formula'],
+            'como_auditar' => self::comoAuditar($columna, (string) ($fila['tarea'] ?? '')),
             'avisos' => $detalle['avisos'],
             'movimientos' => $detalle['movimientos'],
             'cierre_url' => route('ver_tesoreria_crown_cierre', $asignacion->id),
@@ -175,6 +180,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'etiqueta_columna' => $etiqueta,
             'total' => round($total, 2),
             'formula' => $formula,
+            'como_auditar' => self::comoAuditar($columna),
             'avisos' => array_values(array_unique($avisos)),
             'movimientos' => $movimientos,
             'cierre_url' => null,
@@ -202,6 +208,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'etiqueta_columna' => self::COLUMNAS['pie_tarjetas'],
             'total' => round((float) ($armado['total_tarjetas'] ?? 0), 2),
             'formula' => 'Tarjeta crédito + Tarjeta débito + QR (crédito bruto; el recargo ya está dentro del crédito).',
+            'como_auditar' => self::comoAuditar('pie_tarjetas'),
             'avisos' => [],
             'movimientos' => $movimientos,
             'cierre_url' => null,
@@ -232,6 +239,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'etiqueta_columna' => $etiqueta,
             'total' => round((float) ($fila[$columna] ?? 0), 2),
             'formula' => $parte['formula'],
+            'como_auditar' => 'Abrí cada estado final de mesa confirmado y verificá el campo propina.',
             'avisos' => $parte['avisos'],
             'movimientos' => $parte['movimientos'],
             'cierre_url' => null,
@@ -384,6 +392,8 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'recargo_fin' => 'recargo_fin',
             'pago_cashless' => 'pago_cash',
             'vta_cashless' => 'venta_cash',
+            'pago_voucher' => 'pago_voucher',
+            'venta_voucher' => 'venta_voucher',
             'pago_online' => 'pago_online',
             'venta_online' => 'venta_online',
         ];
@@ -436,7 +446,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
                 }
                 $pago = round((float) $doc->pago_online, 2);
                 $venta = round((float) $doc->venta_online, 2);
-                $aporte = round($pago + $venta, 2);
+                $aporte = round($venta - $pago, 2);
                 if (abs($aporte) < 0.001) {
                     continue;
                 }
@@ -599,15 +609,46 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'ingresos' => in_array($tarea, ['G', 'H'], true)
                 ? 'Efectivo + T.crédito − Recargo + T.débito + QR + Fallo mozo + Cta.cte./transferencia.'
                 : 'Efectivo + T.crédito − Recargo + T.débito + QR.',
-            'fichas_casino' => 'Igual a Rend. fichas (tot_rendicion_ficha de Anita).',
-            'online' => 'Pagos online + Ventas online (Del Rio ONLINE del listado).',
+            'fichas_casino' => 'Fichas de las rendiciones conformes (tot_rendicion_ficha de Anita).',
+            'pago_cashless' => 'Campo pago cashless de cada rendición conforme.',
+            'vta_cashless' => 'Campo venta cashless de cada rendición conforme.',
+            'pago_voucher' => 'Campo pago voucher de cada rendición conforme.',
+            'venta_voucher' => 'Campo venta voucher de cada rendición conforme.',
+            'online' => 'Ventas online − Pagos online (neto Del Rio ONLINE).',
             'apuestas' => 'Pago apuestas − Venta apuestas.',
-            'resultado' => 'Ingresos − Egresos + cashless neto + Fichas Casino + Del Rio ONLINE + voucher neto + apuestas.',
+            'resultado' => 'Ingresos − Egresos + (pago cashless − vta. cashless) + Fichas + Online + (pago voucher − venta voucher) + apuestas.',
             'diferencia' => in_array($tarea, ['G', 'H'], true)
                 ? 'Diferencia del cierre de caja (gastro/hotel).'
                 : ($tarea === 'E' ? 'Siempre 0 en caja de empleados.' : 'Igual al Resultado.'),
             'pie_tarjetas' => 'T. crédito + T. débito + QR.',
             default => null,
+        };
+    }
+
+    private static function comoAuditar(string $columna, string $tarea = ''): ?string
+    {
+        return match ($columna) {
+            'egresos' => 'Abrí cada habilitación conforme de la caja y verificá el efectivo (billetes y ME valorizada).',
+            'ingresos' => in_array($tarea, ['G', 'H'], true)
+                ? 'Abrí las rendiciones conformes y sumá efectivo, tarjetas (− recargo), QR, fallo mozo y cta.cte./transferencia.'
+                : 'Abrí las rendiciones conformes y sumá efectivo + tarjetas (− recargo) + QR.',
+            'fichas_casino', 'rend_fichas' => 'En cada rendición conforme revisá las líneas de fichas (FVAL/FCOL) y su valuación.',
+            'hab_fichas' => 'En cada habilitación conforme revisá las líneas de fichas habilitadas.',
+            'pago_cashless', 'vta_cashless', 'pago_voucher', 'venta_voucher',
+            'pago_online', 'venta_online', 'cierre_x',
+            'tarjeta_credito', 'tarjeta_debito', 'total_qr', 'recargo_fin' => 'Entrá a cada rendición conforme y controlá el campo homónimo del comprobante.',
+            'efectivo' => 'En cada rendición conforme sumá billetes y moneda extranjera valorizada a la fecha.',
+            'ctacte' => 'En cada rendición conforme sumá cta.cte. hotel + transferencia hotel.',
+            'online' => 'En cada rendición conforme restá pago online a venta online; el neto es el aporte.',
+            'apuestas' => 'En cada rendición conforme restá venta apuestas a pago apuestas.',
+            'resultado' => 'Revisá cada componente (ingresos, egresos, cashless, fichas, online, voucher, apuestas) con el mismo detalle de esta auditoría.',
+            'diferencia' => in_array($tarea, ['G', 'H'], true)
+                ? 'Abrí el cierre de caja: diferencia = rendido − habilitado − a rendir/resultado.'
+                : ($tarea === 'E'
+                    ? 'En caja de empleados el listado fuerza diferencia en cero.'
+                    : 'Coincide con el Resultado; auditá ese importe.'),
+            'pie_tarjetas' => 'Sumá crédito, débito y QR de todas las cajas del día.',
+            default => 'Abrí los documentos listados abajo y contrastá cada renglón con el aporte.',
         };
     }
 

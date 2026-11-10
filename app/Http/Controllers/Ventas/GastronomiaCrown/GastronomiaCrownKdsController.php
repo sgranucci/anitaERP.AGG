@@ -10,13 +10,16 @@ use App\Models\Ventas\AreaComandaGastronomia;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownComanda;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownComandaEvento;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownComandaLinea;
+use App\Models\Ventas\GastronomiaCrown\GastroCrownKdsEstacion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Stock\FormulaArticuloService;
 use App\Services\Ventas\GastronomiaCrown\GastronomiaCrownPosService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownKdsPreparaSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
+use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +41,7 @@ class GastronomiaCrownKdsController extends Controller
     public function __construct(
         private GastronomiaCrownPosService $posService,
         private EmpresaRepositoryInterface $empresaRepository,
+        private FormulaArticuloService $formulaArticuloService,
     ) {
     }
 
@@ -48,15 +52,88 @@ class GastronomiaCrownKdsController extends Controller
 
         $config = $this->posService->resolverConfig($request);
         $salas = $this->salasVisibles();
-        $salaId = $this->resolverSalaId($request, $config?->sala_id ? (int) $config->sala_id : null, $salas);
+        $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
+        $estacion = $this->estacionPorIdentificador($identificadorPc);
+
+        $salaFallback = $estacion?->sala_id
+            ? (int) $estacion->sala_id
+            : ($config?->sala_id ? (int) $config->sala_id : null);
+        $salaId = $this->resolverSalaId($request, $salaFallback, $salas);
+
+        $areaId = $request->filled('area_id')
+            ? (int) $request->input('area_id')
+            : ($estacion?->area_comanda_gastronomia_id ? (int) $estacion->area_comanda_gastronomia_id : null);
 
         return view('ventas.gastronomia_crown.kds.index', [
             'salas' => $salas,
             'salaId' => $salaId,
             'areas' => $this->areasVisibles(),
-            'areaId' => $request->filled('area_id') ? (int) $request->input('area_id') : null,
+            'areaId' => $areaId,
             'config' => $config,
+            'identificadorPc' => $identificadorPc,
+            'estacion' => $estacion,
             'refrescoSegundos' => max(3, (int) config('gastronomia.crown.kds_refresco_segundos', 5)),
+        ]);
+    }
+
+    /**
+     * Fija esta PC (IP/host) como estación KDS de un área.
+     * No usa la config del POS: es otra máquina (cocina / barra / postres).
+     */
+    public function apiGuardarEstacion(Request $request): JsonResponse
+    {
+        $this->assertCrown();
+        $this->assertPermiso();
+
+        $request->validate([
+            'area_id' => 'required|integer|min:1',
+            'sala_id' => 'nullable|integer|min:1',
+            'descripcion' => 'nullable|string|max:120',
+        ]);
+
+        $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
+        if ($identificadorPc === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'No se pudo resolver el identificador de esta PC.'], 422);
+        }
+
+        $areaId = (int) $request->input('area_id');
+        $areaOk = AreaComandaGastronomia::query()->whereKey($areaId)->exists();
+        if (! $areaOk) {
+            return response()->json(['ok' => false, 'mensaje' => 'Área KDS inválida.'], 422);
+        }
+
+        $salaId = $request->filled('sala_id') ? (int) $request->input('sala_id') : null;
+        if ($salaId !== null && ! UsuarioSalaAsignadaSupport::salaIdPermitida($salaId)) {
+            return response()->json(['ok' => false, 'mensaje' => 'Sala no permitida.'], 422);
+        }
+
+        $estacion = GastroCrownKdsEstacion::query()->updateOrCreate(
+            ['identificador_pc' => $identificadorPc],
+            [
+                'descripcion' => $request->input('descripcion') ?: null,
+                'sala_id' => $salaId,
+                'area_comanda_gastronomia_id' => $areaId,
+                'activo' => true,
+            ]
+        );
+        $estacion->load(['areaComanda:id,codigo,nombre', 'sala:id,codigo,nombre']);
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => 'Estación KDS guardada: esta PC verá el área '.$estacion->areaComanda->nombre.'.',
+            'estacion' => [
+                'id' => (int) $estacion->id,
+                'identificador_pc' => $estacion->identificador_pc,
+                'descripcion' => $estacion->descripcion,
+                'sala_id' => $estacion->sala_id ? (int) $estacion->sala_id : null,
+                'area_id' => (int) $estacion->area_comanda_gastronomia_id,
+                'area' => $estacion->areaComanda->nombre ?? null,
+                'area_codigo' => $estacion->areaComanda->codigo ?? null,
+            ],
+            'url' => route('gastronomia_crown_kds', array_filter([
+                'sala_id' => $salaId,
+                'area_id' => $areaId,
+            ])),
         ]);
     }
 
@@ -208,6 +285,20 @@ class GastronomiaCrownKdsController extends Controller
             ? GastronomiaCrownKdsPreparaSupport::payloadVisualKds($articulo, $cantidad)
             : ['foto_url' => null, 'insumos' => []];
 
+        $articuloId = $articulo?->id ? (int) $articulo->id : ($cuentaLinea?->articulo_id ? (int) $cuentaLinea->articulo_id : null);
+        $urlReceta = null;
+        if ($articuloId) {
+            $resuelto = $this->formulaArticuloService->resolverIdParaArticulo($articuloId);
+            $formulaId = (int) ($resuelto['formula_id'] ?? 0);
+            if ($formulaId > 0) {
+                $urlReceta = route('editar_formula_articulo', [
+                    'id' => $formulaId,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+            }
+        }
+
         return [
             'id' => (int) $linea->id,
             'sku' => $linea->sku,
@@ -215,6 +306,8 @@ class GastronomiaCrownKdsController extends Controller
             'cantidad' => $cantidad,
             'observacion' => $linea->observacion,
             'prepara' => (bool) $linea->prepara,
+            'articulo_id' => $articuloId,
+            'url_receta' => $urlReceta,
             'foto_url' => $visual['foto_url'] ?? null,
             'insumos' => $visual['insumos'] ?? [],
             'opcionales' => $this->etiquetasOpcionales($cuentaLinea?->opcionales_json ?? []),
@@ -318,6 +411,19 @@ class GastronomiaCrownKdsController extends Controller
         }
 
         return $salaId;
+    }
+
+    private function estacionPorIdentificador(string $identificadorPc): ?GastroCrownKdsEstacion
+    {
+        if ($identificadorPc === '' || ! \Illuminate\Support\Facades\Schema::hasTable('gastro_crown_kds_estacion')) {
+            return null;
+        }
+
+        return GastroCrownKdsEstacion::query()
+            ->with(['areaComanda:id,codigo,nombre', 'sala:id,codigo,nombre'])
+            ->where('identificador_pc', $identificadorPc)
+            ->where('activo', true)
+            ->first();
     }
 
     private function assertCrown(): void

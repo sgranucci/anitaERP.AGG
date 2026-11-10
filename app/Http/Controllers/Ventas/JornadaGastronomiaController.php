@@ -106,7 +106,13 @@ class JornadaGastronomiaController extends Controller
             'puede_abrir' => can('abrir-jornada-gastronomia', false),
             'puede_cerrar' => can('cerrar-jornada-gastronomia', false),
             'puede_eliminar' => can('eliminar-jornada-gastronomia', false),
-            'url_saneamiento_turno' => url('ventas/gastronomia/saneamiento-turno'),
+            'url_saneamiento_turno' => $esCrown
+                ? route('gastronomia_crown_saneamiento', array_filter([
+                    'empresa_id' => $empresaId > 0 ? $empresaId : null,
+                    'sala_id' => $salaId > 0 ? $salaId : null,
+                    'desde_jornada' => 1,
+                ]))
+                : url('ventas/gastronomia/saneamiento-turno'),
             'cierre_totem_habilitado' => $this->cierreTotemJornadaService->habilitado(),
             'ultimo_waitry_order_id' => $empresaId > 0
                 ? $this->cierreTotemJornadaService->ultimoWaitryOrderIdHasta($empresaId)

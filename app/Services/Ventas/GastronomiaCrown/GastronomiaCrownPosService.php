@@ -3,11 +3,15 @@
 namespace App\Services\Ventas\GastronomiaCrown;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\CategoriaAreaComanda;
 use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\SubcategoriaAreaComanda;
 use App\Models\Ventas\AreaComandaGastronomia;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Models\Contable\Centrocosto;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownComanda;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownComandaEvento;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownComandaLinea;
@@ -16,6 +20,8 @@ use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaEvento;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaLinea;
 use App\Models\Ventas\MesaGastronomia;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
+use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
@@ -24,6 +30,7 @@ use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownKdsPreparaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPrintSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\GastronomiaSalaSupport;
 use App\Support\Ventas\Vianda\ViandaPrecioSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -35,7 +42,21 @@ final class GastronomiaCrownPosService
     public function __construct(
         private GastronomiaCuentaService $catalogoService,
         private GastronomiaCrownFacturaEmisionService $facturaEmisionService,
+        private GastronomiaJornadaService $jornadaService,
     ) {
+    }
+
+    /**
+     * Bloquea operación del POS Crown si no hay jornada abierta (cuando jornada_obligatoria=true).
+     */
+    public function exigirJornadaOperativa(ConfiguracionPuntoventaGastronomia $cfg): void
+    {
+        if (! filter_var(config('gastronomia.jornada_obligatoria', true), FILTER_VALIDATE_BOOLEAN)) {
+            return;
+        }
+
+        $salaId = $cfg->sala_id !== null ? (int) $cfg->sala_id : null;
+        $this->jornadaService->exigirJornadaAbierta((int) $cfg->empresa_id, $salaId > 0 ? $salaId : null);
     }
 
     public function resolverConfig(Request $request): ?ConfiguracionPuntoventaGastronomia
@@ -52,6 +73,8 @@ final class GastronomiaCrownPosService
         int $mesaId,
         array $extra = [],
     ): GastroCrownCuenta {
+        $this->exigirJornadaOperativa($cfg);
+
         $mesa = MesaGastronomia::query()
             ->where('id', $mesaId)
             ->where('empresa_id', $cfg->empresa_id)
@@ -95,6 +118,8 @@ final class GastronomiaCrownPosService
         ConfiguracionPuntoventaGastronomia $cfg,
         array $extra = [],
     ): GastroCrownCuenta {
+        $this->exigirJornadaOperativa($cfg);
+
         return DB::transaction(function () use ($cfg, $extra) {
             $cuenta = GastroCrownCuenta::query()->create([
                 'empresa_id' => $cfg->empresa_id,
@@ -136,15 +161,33 @@ final class GastronomiaCrownPosService
      */
     public function resolverArticuloPorSku(ConfiguracionPuntoventaGastronomia $cfg, string $sku): ?Articulo
     {
-        $sku = $this->normalizarSkuCatalogo($sku);
+        $skuIngresado = trim($sku);
+        $sku = $this->normalizarSkuCatalogo($skuIngresado);
         $articulo = $this->catalogoService->buscarArticuloCatalogoPorSku($cfg, $sku);
         if ($articulo) {
             return $articulo;
         }
 
-        return Articulo::query()
-            ->whereRaw('UPPER(sku) = ?', [mb_strtoupper(trim($sku), 'UTF-8')])
+        $articulo = Articulo::query()
+            ->whereRaw('UPPER(sku) = ?', [mb_strtoupper($sku, 'UTF-8')])
             ->first();
+        if ($articulo) {
+            return $articulo;
+        }
+
+        // Crown / SKU numérico: si el armado AGG (V+dígitos) no matchea, probar el código tal cual.
+        if ($sku !== $skuIngresado && $skuIngresado !== '') {
+            $articulo = $this->catalogoService->buscarArticuloCatalogoPorSku($cfg, $skuIngresado);
+            if ($articulo) {
+                return $articulo;
+            }
+
+            return Articulo::query()
+                ->whereRaw('UPPER(sku) = ?', [mb_strtoupper($skuIngresado, 'UTF-8')])
+                ->first();
+        }
+
+        return null;
     }
 
     /**
@@ -175,6 +218,15 @@ final class GastronomiaCrownPosService
         }
 
         $listaId = (int) ($cuenta->listaprecio_id ?: $cfg->listaprecio_id);
+        if ($listaId <= 0) {
+            throw new InvalidArgumentException('El puesto no tiene lista de precios.');
+        }
+        // Sin fila de precio vigente = error. Precio 0 explícito = sin cargo (cortesía / invitado).
+        if (! ViandaPrecioSupport::tienePrecioVigente((int) $articulo->id, $listaId, now()->toDateString())) {
+            throw new InvalidArgumentException(
+                'El artículo no tiene precio vigente en la lista del puesto. Cargalo en Precios (0 = sin cargo).'
+            );
+        }
         $precio = ViandaPrecioSupport::precioDesdeLista((int) $articulo->id, $listaId, now()->toDateString());
         $areaId = $areaComandaId ?: $this->resolverAreaComandaId($articulo);
         if ($areaId) {
@@ -402,6 +454,59 @@ final class GastronomiaCrownPosService
     }
 
     /**
+     * Cierra la cuenta sin facturar (paridad AGG / canjes).
+     * Libera la mesa; conserva líneas para auditoría.
+     */
+    public function cerrarSinFacturar(GastroCrownCuenta $cuenta): void
+    {
+        if (! in_array($cuenta->estado, [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO], true)) {
+            throw new InvalidArgumentException('La cuenta no está abierta.');
+        }
+
+        DB::transaction(function () use ($cuenta) {
+            $cuenta->estado = GastroCrownCuenta::ESTADO_CERRADA;
+            $cuenta->cerrada_at = now();
+            $cuenta->save();
+            $this->eventoCuenta($cuenta, 'cerrar_sin_facturar', 'Cerrada sin facturar');
+        });
+    }
+
+    /**
+     * @return int cantidad cerrada
+     */
+    public function cerrarTodasSinFacturar(ConfiguracionPuntoventaGastronomia $cfg): int
+    {
+        $ids = GastroCrownCuenta::query()
+            ->where('empresa_id', $cfg->empresa_id)
+            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
+            ->tap(function ($q) use ($cfg) {
+                GastronomiaSalaSupport::aplicarFiltroSiCorresponde(
+                    $q,
+                    $cfg->sala_id ? (int) $cfg->sala_id : null
+                );
+            })
+            ->orderBy('id')
+            ->limit(200)
+            ->pluck('id');
+
+        $n = 0;
+        foreach ($ids as $id) {
+            $cuenta = GastroCrownCuenta::query()->find((int) $id);
+            if (! $cuenta) {
+                continue;
+            }
+            try {
+                $this->cerrarSinFacturar($cuenta);
+                $n++;
+            } catch (\Throwable) {
+                // sigue con las demás
+            }
+        }
+
+        return $n;
+    }
+
+    /**
      * Marcha: una comanda por área (paridad Anita COM_lista_comanda).
      *
      * @return list<GastroCrownComanda>
@@ -479,8 +584,9 @@ final class GastronomiaCrownPosService
                         $linea->fired_postre_at = now();
                     } else {
                         $linea->fired_at = now();
-                        $linea->gastro_crown_comanda_id = $comanda->id;
                     }
+                    // Vincula siempre: el POS muestra el estado KDS (preparando/listo/entregado).
+                    $linea->gastro_crown_comanda_id = $comanda->id;
                     $linea->marcado = false;
                     $linea->save();
                 }
@@ -557,7 +663,12 @@ final class GastronomiaCrownPosService
         }
 
         $listaId = (int) $cfg->listaprecio_id;
-        $precio = ViandaPrecioSupport::precioDesdeLista((int) $articulo->id, $listaId, now()->toDateString());
+        $fecha = now()->toDateString();
+        $tienePrecio = $listaId > 0
+            && ViandaPrecioSupport::tienePrecioVigente((int) $articulo->id, $listaId, $fecha);
+        $precio = $tienePrecio
+            ? ViandaPrecioSupport::precioDesdeLista((int) $articulo->id, $listaId, $fecha)
+            : 0.0;
 
         $areaId = $this->resolverAreaComandaId($articulo);
 
@@ -566,6 +677,7 @@ final class GastronomiaCrownPosService
             'sku' => $articulo->sku,
             'descripcion' => $articulo->descripcion,
             'precio' => (float) $precio,
+            'tiene_precio_vigente' => $tienePrecio,
             'listaprecio_id' => $listaId,
             'prepara' => GastronomiaCrownKdsPreparaSupport::preparaDesdeArticulo($articulo),
             'area_comanda_gastronomia_id' => $areaId,
@@ -582,6 +694,144 @@ final class GastronomiaCrownPosService
         $cuenta->detalle_descuento = $detalle ? mb_substr(trim($detalle), 0, 80) : $cuenta->detalle_descuento;
         $cuenta->save();
         $this->eventoCuenta($cuenta, 'descuento', 'Dto '.$porcentaje.'%'.($detalle ? ' — '.$detalle : ''));
+    }
+
+    /**
+     * F8 / carga_dto_autorizante: tipo Invitados|Staff|Descuento + autorizante + CC + cliente + código dto.
+     *
+     * @param  array{
+     *     tipo_descuento:string,
+     *     autorizante_usuario_id:int,
+     *     centrocosto_id:int,
+     *     cliente_interno_descuento_id:int,
+     *     descuento_gastronomia_id?:int|null,
+     *     descuento_codigo?:string|null
+     * }  $datos
+     */
+    public function aplicarDescuentoAutorizante(GastroCrownCuenta $cuenta, array $datos): void
+    {
+        $tipo = (string) ($datos['tipo_descuento'] ?? '');
+        if (! in_array($tipo, [
+            GastroCrownCuenta::TIPO_DTO_INVITADOS,
+            GastroCrownCuenta::TIPO_DTO_STAFF,
+            GastroCrownCuenta::TIPO_DTO_DESCUENTO,
+        ], true)) {
+            throw new InvalidArgumentException('Tipo de descuento inválido (Invitados / Staff / Descuento).');
+        }
+
+        $autorizanteId = (int) ($datos['autorizante_usuario_id'] ?? 0);
+        if ($autorizanteId <= 0) {
+            throw new InvalidArgumentException('Indique el autorizante (no puede facturar sin autorizante).');
+        }
+        $autorizante = UsuarioOperativoSupport::query()
+            ->whereKey($autorizanteId)
+            ->first(['id', 'nombre', 'usuario']);
+        if ($autorizante === null) {
+            throw new InvalidArgumentException('Autorizante inexistente o no operativo.');
+        }
+
+        $ccostoId = (int) ($datos['centrocosto_id'] ?? 0);
+        if ($ccostoId <= 0) {
+            throw new InvalidArgumentException('Indique el centro de costo.');
+        }
+        $ccosto = Centrocosto::query()->find($ccostoId, ['id', 'codigo', 'nombre']);
+        if ($ccosto === null) {
+            throw new InvalidArgumentException('Centro de costos inexistente.');
+        }
+
+        $clienteInternoId = (int) ($datos['cliente_interno_descuento_id'] ?? 0);
+        if ($clienteInternoId <= 0) {
+            throw new InvalidArgumentException('Indique el cliente interno del descuento.');
+        }
+        $clienteInterno = Cliente::query()->find($clienteInternoId, ['id', 'codigo', 'nombre']);
+        if ($clienteInterno === null) {
+            throw new InvalidArgumentException('Cliente interno inexistente.');
+        }
+
+        $descuento = null;
+        $pct = 100.0;
+        $detalle = strtoupper($tipo);
+
+        if ($tipo === GastroCrownCuenta::TIPO_DTO_DESCUENTO) {
+            $descuento = $this->resolverDescuentoGastronomia(
+                isset($datos['descuento_gastronomia_id']) ? (int) $datos['descuento_gastronomia_id'] : null,
+                isset($datos['descuento_codigo']) ? (string) $datos['descuento_codigo'] : null,
+            );
+            if ($descuento === null) {
+                throw new InvalidArgumentException('Indique el código de descuento.');
+            }
+            if (stripos((string) $descuento->nombre, '@GST') !== false) {
+                throw new InvalidArgumentException('No puede utilizar descuento GST manualmente.');
+            }
+            $pct = $this->porcentajeDesdeDescuento($descuento, $this->totalesCuenta($cuenta)['subtotal']);
+            $detalle = trim((string) $descuento->codigo.' — '.$descuento->nombre);
+        } else {
+            $tipoConsumo = $tipo === GastroCrownCuenta::TIPO_DTO_STAFF
+                ? DescuentoGastronomia::TIPO_CONSUMO_STAFF
+                : DescuentoGastronomia::TIPO_CONSUMO_INVITACION;
+            $descuento = DescuentoGastronomia::query()
+                ->where('tipo_consumo', $tipoConsumo)
+                ->where('tipovalor', DescuentoGastronomia::TIPO_PORCENTAJE)
+                ->where('valor', '>=', 100)
+                ->orderBy('codigo')
+                ->first();
+            $pct = 100.0;
+        }
+
+        $cuenta->tipo_descuento = $tipo;
+        $cuenta->autorizante_usuario_id = (int) $autorizante->id;
+        $cuenta->autorizante_nombre = mb_substr(trim((string) ($autorizante->nombre ?: $autorizante->usuario)), 0, 60);
+        $cuenta->centrocosto_id = (int) $ccosto->id;
+        $cuenta->cliente_interno_descuento_id = (int) $clienteInterno->id;
+        $cuenta->descuento_gastronomia_id = $descuento?->id;
+        $cuenta->porcentaje_descuento = round($pct, 2);
+        $cuenta->detalle_descuento = mb_substr($detalle, 0, 80);
+        $cuenta->save();
+
+        $this->eventoCuenta(
+            $cuenta,
+            'descuento',
+            'F8 '.$detalle.' · Aut. '.$cuenta->autorizante_nombre
+            .' · CC '.$ccosto->codigo
+            .' · Cli '.$clienteInterno->codigo
+        );
+    }
+
+    public function resolverDescuentoGastronomia(?int $id, ?string $codigo): ?DescuentoGastronomia
+    {
+        if ($id !== null && $id > 0) {
+            return DescuentoGastronomia::query()->find($id);
+        }
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        return DescuentoGastronomia::query()
+            ->where(function ($q) use ($codigo) {
+                $q->where('codigo', $codigo);
+                if (ctype_digit($codigo)) {
+                    $q->orWhere('codigo', str_pad($codigo, 2, '0', STR_PAD_LEFT))
+                        ->orWhere('id', (int) $codigo);
+                }
+            })
+            ->first();
+    }
+
+    private function porcentajeDesdeDescuento(DescuentoGastronomia $descuento, float $subtotal): float
+    {
+        $valor = (float) ($descuento->valor ?? 0);
+        $tipo = (string) ($descuento->tipovalor ?? DescuentoGastronomia::TIPO_PORCENTAJE);
+
+        if ($tipo === DescuentoGastronomia::TIPO_IMPORTE) {
+            if ($subtotal <= 0.0 || $valor <= 0.0) {
+                return 0.0;
+            }
+
+            return min(100.0, round($valor / $subtotal * 100.0, 2));
+        }
+
+        return max(0.0, min(100.0, $valor));
     }
 
     public function asignarCliente(GastroCrownCuenta $cuenta, string $codigoCliente): void
@@ -687,11 +937,14 @@ final class GastronomiaCrownPosService
             throw new InvalidArgumentException('Este puesto es solo marcha; no cobra.');
         }
 
+        $this->exigirJornadaOperativa($cfg);
+
         if (! in_array($tipoCobro, [
             GastroCrownCuenta::COBRO_EFECTIVO,
             GastroCrownCuenta::COBRO_FACTURA_SOLA,
             GastroCrownCuenta::COBRO_INTERNA,
             GastroCrownCuenta::COBRO_HOTEL,
+            GastroCrownCuenta::COBRO_MEDIOS,
         ], true)) {
             throw new InvalidArgumentException('Tipo de cobro inválido: '.$tipoCobro);
         }
@@ -796,16 +1049,17 @@ final class GastronomiaCrownPosService
      */
     public function serializarCuenta(GastroCrownCuenta $cuenta): array
     {
-        $cuenta->loadMissing(['lineas.areaComanda', 'mesa', 'mozo', 'cliente']);
+        $cuenta->loadMissing(['lineas.areaComanda', 'lineas.comanda', 'mesa', 'mozo', 'cliente']);
         $totales = $this->totalesCuenta($cuenta);
         $detalleOpcionales = $this->detalleOpcionalesPorLinea($cuenta->lineas);
         $lineas = [];
         foreach ($cuenta->lineas as $l) {
             $imp = (float) $l->cantidad * (float) $l->precio - (float) $l->descuento_importe;
             $opcDetalle = $detalleOpcionales[(int) $l->id] ?? [];
+            $kdsEstado = $this->estadoKdsLinea($l);
             $lineas[] = [
-                'id' => $l->id,
-                'orden' => $l->orden,
+                'id' => (int) $l->id,
+                'orden' => (int) $l->orden,
                 'sku' => $l->sku,
                 'descripcion' => $l->descripcion,
                 'cantidad' => (float) $l->cantidad,
@@ -817,10 +1071,12 @@ final class GastronomiaCrownPosService
                 'prepara' => (bool) ($l->prepara ?? true),
                 'fired' => $l->fired_at !== null,
                 'fired_postre' => $l->fired_postre_at !== null,
+                'kds_estado' => $kdsEstado,
+                'kds_estado_label' => $this->etiquetaEstadoKds($kdsEstado),
                 'area_id' => $l->area_comanda_gastronomia_id ? (int) $l->area_comanda_gastronomia_id : null,
                 'area' => $l->areaComanda->nombre ?? null,
                 'area_codigo' => $l->areaComanda->codigo ?? null,
-                'comanda_id' => $l->gastro_crown_comanda_id,
+                'comanda_id' => $l->gastro_crown_comanda_id ? (int) $l->gastro_crown_comanda_id : null,
                 'articulo_id' => $l->articulo_id ? (int) $l->articulo_id : null,
                 'opcionales' => $l->opcionales_json,
                 'opcionales_detalle' => $opcDetalle,
@@ -850,6 +1106,18 @@ final class GastronomiaCrownPosService
             'tarjeta_gst' => $cuenta->tarjeta_gst,
             'porcentaje_descuento' => (float) ($cuenta->porcentaje_descuento ?? 0),
             'detalle_descuento' => $cuenta->detalle_descuento,
+            'descuento_gastronomia_id' => $cuenta->descuento_gastronomia_id
+                ? (int) $cuenta->descuento_gastronomia_id
+                : null,
+            'tipo_descuento' => $cuenta->tipo_descuento,
+            'cliente_interno_descuento_id' => $cuenta->cliente_interno_descuento_id
+                ? (int) $cuenta->cliente_interno_descuento_id
+                : null,
+            'autorizante_usuario_id' => $cuenta->autorizante_usuario_id
+                ? (int) $cuenta->autorizante_usuario_id
+                : null,
+            'autorizante_nombre' => $cuenta->autorizante_nombre,
+            'centrocosto_id' => $cuenta->centrocosto_id ? (int) $cuenta->centrocosto_id : null,
             'observacion' => $cuenta->observacion,
             'subtotal' => $totales['subtotal'],
             'descuento' => $totales['descuento'],
@@ -944,6 +1212,21 @@ final class GastronomiaCrownPosService
 
     private function resolverAreaComandaId(Articulo $articulo): ?int
     {
+        // Crown: Anita stkagr.stka_area vive en categoría (no hay subcategorías).
+        if (EntornoEmpresaSupport::esCrown()) {
+            $catId = (int) ($articulo->categoria_id ?? 0);
+            if ($catId <= 0) {
+                return null;
+            }
+
+            $areaId = CategoriaAreaComanda::query()
+                ->where('categoria_id', $catId)
+                ->orderBy('id')
+                ->value('area_comanda_gastronomia_id');
+
+            return $areaId ? (int) $areaId : null;
+        }
+
         $subId = (int) ($articulo->subcategoria_id ?? 0);
         if ($subId <= 0) {
             return null;
@@ -951,9 +1234,43 @@ final class GastronomiaCrownPosService
 
         $areaId = SubcategoriaAreaComanda::query()
             ->where('subcategoria_id', $subId)
+            ->orderBy('id')
             ->value('area_comanda_gastronomia_id');
 
         return $areaId ? (int) $areaId : null;
+    }
+
+    /**
+     * Estado del ticket KDS vinculado a la línea (null si aún no se marchó).
+     */
+    private function estadoKdsLinea(GastroCrownCuentaLinea $linea): ?string
+    {
+        if ($linea->es_separador || ! $linea->prepara) {
+            return null;
+        }
+        if ($linea->fired_at === null && $linea->fired_postre_at === null) {
+            return null;
+        }
+
+        $estado = $linea->comanda?->estado;
+        if (is_string($estado) && $estado !== '') {
+            return $estado;
+        }
+
+        // Marchada sin ticket (área vacía / comanda borrada): asumir enviada.
+        return GastroCrownComanda::ESTADO_FIRED;
+    }
+
+    private function etiquetaEstadoKds(?string $estado): ?string
+    {
+        return match ($estado) {
+            GastroCrownComanda::ESTADO_FIRED => 'En KDS',
+            GastroCrownComanda::ESTADO_PREPARING => 'Preparando',
+            GastroCrownComanda::ESTADO_READY => 'Listo',
+            GastroCrownComanda::ESTADO_DELIVERED => 'Entregado',
+            GastroCrownComanda::ESTADO_VOID => 'Anulada',
+            default => null,
+        };
     }
 
     private function siguienteNumeroComanda(int $empresaId): string

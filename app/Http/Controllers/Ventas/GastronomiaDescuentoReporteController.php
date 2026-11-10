@@ -787,7 +787,7 @@ class GastronomiaDescuentoReporteController extends Controller
         $lista = $resultado['listas_costo']['lista_actual'] ?? '';
         $avisos = [
             "Hay {$sinCosto} filas con costo unitario en cero (lista {$lista}). "
-            .'Revise precios en lista 5000+mes o ejecute el cierre mensual de costos catálogo.',
+            .'Revise precios en lista base+mes o ejecute el cierre mensual de costos catálogo.',
         ];
 
         if ($this->solicitarActualizacionCostoSiCorresponde($filtros, $resultado)) {

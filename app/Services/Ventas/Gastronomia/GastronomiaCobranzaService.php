@@ -124,10 +124,31 @@ final class GastronomiaCobranzaService
      * Tipo de transacción de caja para devolución de factura (NC) en gastronomía.
      * Solo respaldo por config/env: no depende del PV porque la operación es transversal
      * (todas las terminales de gastronomía usan la misma devolución).
+     * Si el id del .env no es Egreso (p. ej. Crown heredó el 3=Transferencia de AGG),
+     * busca un tipo Egreso activo (preferencia: abreviatura EGR / nombre Egresos).
      */
     public static function resolverTipotransaccionCajaDevolucionId(): int
     {
-        return (int) config('gastronomia.tipotransaccion_caja_devolucion_id', 0);
+        $configurado = (int) config('gastronomia.tipotransaccion_caja_devolucion_id', 0);
+        if ($configurado > 0) {
+            $tipo = Tipotransaccion_Caja::query()->find($configurado);
+            if ($tipo && $tipo->signo === 'E') {
+                return $configurado;
+            }
+        }
+
+        $porAbrev = Tipotransaccion_Caja::query()
+            ->where('estado', 'A')
+            ->where(function ($q) {
+                $q->where('abreviatura', 'EGR')
+                    ->orWhere('operacion', 'E')
+                    ->orWhere('nombre', 'like', 'Egreso%');
+            })
+            ->orderByRaw("CASE WHEN abreviatura = 'EGR' THEN 0 WHEN operacion = 'E' THEN 1 ELSE 2 END")
+            ->orderBy('id')
+            ->first();
+
+        return $porAbrev ? (int) $porAbrev->id : $configurado;
     }
 
     private static function asegurarTipotransaccionCajaEsEgreso(int $tipoCajaId): void
@@ -142,7 +163,8 @@ final class GastronomiaCobranzaService
         if ($tipo->signo !== 'E') {
             throw new InvalidArgumentException(
                 'El tipo de transacción de caja para devolución debe tener signo Egreso para que los importes'
-                .' se graben en negativo. Revisar tipotransaccion_caja id '.$tipoCajaId.'.'
+                .' se graben en negativo. Revisar tipotransaccion_caja id '.$tipoCajaId
+                .' (en Crown usar Egresos, p. ej. id 9; GASTRONOMIA_TIPO_TRANSACCION_CAJA_DEVOLUCION_ID).'
             );
         }
     }

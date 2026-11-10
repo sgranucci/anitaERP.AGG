@@ -48,6 +48,10 @@ class GastronomiaCrownCierreXController extends Controller
             ? $this->cierreXService->totalesPorMozo($empresaId, $salaFiltro, $jornada)
             : [];
 
+        $abiertasSala = $salaFiltro !== null
+            ? $this->cierreXService->cuentasAbiertasSala($empresaId, $salaFiltro)
+            : ['total' => 0, 'con_mesa' => 0, 'sin_mesa' => 0];
+
         return view('ventas.gastronomia_crown.cierre_x.index', [
             'empresas' => $empresas,
             'empresa_id' => $empresaId,
@@ -57,6 +61,7 @@ class GastronomiaCrownCierreXController extends Controller
             'jornada' => $jornada,
             'totales' => $totales,
             'total_general' => array_sum(array_column($totales, 'total_x')),
+            'abiertas_sala' => $abiertasSala,
             'puede_crear' => can('crear-cierre-x-gastronomia-crown', false),
         ]);
     }

@@ -10,29 +10,37 @@
 
 @section('contenido')
 @include('includes.mensaje')
-@include('caja.tesoreria_crown.jornada.partials.desk_nav', [
-    'jornada' => $jornada,
-    'navActivo' => 'slots',
-    'puedeMesas' => $escritorio['puedeMesas'],
-    'puedeBoveda' => $escritorio['puedeBoveda'],
-    'puedeSlots' => $escritorio['puedeSlots'],
-    'puedePoder' => $escritorio['puedePoder'],
-    'puedeAnexo' => $escritorio['puedeAnexo'],
-    'puedeKardex' => $escritorio['puedeKardex'] ?? false,
-    'navAsignaciones' => $escritorio['asignaciones'],
-    'navMesas' => $escritorio['mesas'],
-    'navBorradoresMesa' => $escritorio['borradoresMesa'],
-    'navBoveda' => $escritorio['movimientosBoveda'],
-    'navSlots' => $escritorio['slots'],
-])
+@php
+    $desdeMenu = request()->input('origen') === 'menu';
+    $urlVolver = $desdeMenu
+        ? route('tesoreria_crown_slot', array_filter(['sala_id' => $jornada->sala_id]))
+        : route('ver_tesoreria_crown_jornada', $jornada->id).'?panel=slots';
+@endphp
+@if (! $desdeMenu)
+    @include('caja.tesoreria_crown.jornada.partials.desk_nav', [
+        'jornada' => $jornada,
+        'navActivo' => 'slots',
+        'puedeMesas' => $escritorio['puedeMesas'],
+        'puedeBoveda' => $escritorio['puedeBoveda'],
+        'puedeSlots' => $escritorio['puedeSlots'],
+        'puedePoder' => $escritorio['puedePoder'],
+        'puedeAnexo' => $escritorio['puedeAnexo'],
+        'puedeKardex' => $escritorio['puedeKardex'] ?? false,
+        'navAsignaciones' => $escritorio['asignaciones'],
+        'navMesas' => $escritorio['mesas'],
+        'navBorradoresMesa' => $escritorio['borradoresMesa'],
+        'navBoveda' => $escritorio['movimientosBoveda'],
+        'navSlots' => $escritorio['slots'],
+    ])
+@endif
 <div class="row">
-    <div class="col-lg-8 col-md-10 mx-auto">
+    <div class="col-lg-12">
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Nuevo recuento · {{ $jornada->fecha->format('d/m/Y') }}</h3>
                 <div class="card-tools">
-                    <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=slots" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-reply-all"></i> Volver al escritorio
+                    <a href="{{ $urlVolver }}" class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-fw fa-reply-all"></i> {{ $desdeMenu ? 'Volver al listado' : 'Volver al escritorio' }}
                     </a>
                 </div>
             </div>
@@ -42,6 +50,9 @@
                 <form method="POST" action="{{ route('crear_tesoreria_crown_slot') }}" data-enter-campos="1">
                     @csrf
                     <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
+                    @if ($desdeMenu)
+                        <input type="hidden" name="origen" value="menu">
+                    @endif
                     <div class="form-row">
                         <div class="form-group col-md-4">
                             <label for="tipo">Tipo</label>

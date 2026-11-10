@@ -12,9 +12,11 @@ use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
+use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Caja\TesoreriaCrownSlotBovedaSupport;
+use App\Support\Caja\TesoreriaCrownSlotListadoFiltros;
 use App\Support\Caja\TesoreriaCrownSlotSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Http\Request;
@@ -30,33 +32,106 @@ class TesoreriaCrownSlotController extends Controller
 
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $filtros = TesoreriaCrownSlotListadoFiltros::resolverDesdeRequest($request);
+        $filtros['sala_id'] = (int) ($sala->id ?? 0);
         $fechaPedida = trim((string) $request->input('fecha', ''));
-        $jornada = TesoreriaCrownJornadaConsultaSupport::pedida($request, $sala ? (int) $sala->id : 0);
-        $slots = collect();
-        $slotDetalle = null;
-        $resumenSlots = ['drops' => 0, 'drop_total' => 0, 'recuentos' => 0, 'recuento_total' => 0];
-        if ($jornada) {
-            $slots = TesoreriaCrownSlotSupport::delDia($jornada, (string) $request->query('q', ''));
-            $resumenSlots = TesoreriaCrownSlotSupport::resumen(TesoreriaCrownSlotSupport::delDia($jornada));
-            $slotId = (int) $request->query('slot', 0);
-            if ($slotId > 0) {
-                $slotDetalle = TesoreriaCrownSlot::query()
-                    ->with(['lineas.valor.tipoValor'])
-                    ->where('jornada_id', $jornada->id)
-                    ->whereKey($slotId)
-                    ->first();
+        $jornada = null;
+        if ((int) ($filtros['jornada_id'] ?? 0) > 0 || $fechaPedida !== '') {
+            $jornada = TesoreriaCrownJornadaConsultaSupport::pedida($request, $sala ? (int) $sala->id : 0);
+            if ($jornada && (int) ($filtros['jornada_id'] ?? 0) === 0) {
+                $filtros['jornada_id'] = (int) $jornada->id;
             }
         }
+        $filtrosQuery = TesoreriaCrownSlotListadoFiltros::paraQueryString($filtros);
+        // Alta: jornada abierta de la sala (no filtra el listado histórico).
+        $jornadaAlta = null;
+        if ($sala) {
+            $jornadaAlta = TesoreriaCrownJornada::query()
+                ->where('sala_id', $sala->id)
+                ->where('estado', TesoreriaCrownJornada::ABIERTA)
+                ->orderByDesc('fecha')
+                ->first();
+        }
+        $query = TesoreriaCrownSlot::query()
+            ->with(['jornada', 'sala'])
+            ->leftJoin('tesoreria_crown_jornada as tcj_ord', 'tcj_ord.id', '=', 'tesoreria_crown_slot.jornada_id')
+            ->select('tesoreria_crown_slot.*')
+            ->orderByDesc('tcj_ord.fecha')
+            ->orderByDesc('tesoreria_crown_slot.numero');
+        TesoreriaCrownSlotListadoFiltros::aplicar($query, $filtros);
+        $filas = $query->paginate(20)->appends($filtrosQuery);
+        $resumenSlots = TesoreriaCrownSlotSupport::resumen(
+            (clone $query)->reorder()->limit(5000)->get()
+        );
 
         return view('caja.tesoreria_crown.slot.index', [
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
+            'jornadaAlta' => $jornadaAlta,
             'fechaPedida' => $fechaPedida,
-            'slots' => $slots,
-            'slotDetalle' => $slotDetalle,
+            'filas' => $filas,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'tieneCriterios' => TesoreriaCrownSlotListadoFiltros::tieneCriteriosAplicados($filtros),
             'resumenSlots' => $resumenSlots,
         ]);
+    }
+
+    public function listar(Request $request, $formato = null)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-slot');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $salas = TesoreriaCrownSalaSupport::salas();
+        $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $filtros = TesoreriaCrownSlotListadoFiltros::resolverDesdeRequest($request);
+        $filtros['sala_id'] = (int) ($sala->id ?? 0);
+        $query = TesoreriaCrownSlot::query()
+            ->with(['jornada', 'sala', 'empresa'])
+            ->leftJoin('tesoreria_crown_jornada as tcj_ord', 'tcj_ord.id', '=', 'tesoreria_crown_slot.jornada_id')
+            ->select('tesoreria_crown_slot.*')
+            ->orderByDesc('tcj_ord.fecha')
+            ->orderByDesc('tesoreria_crown_slot.numero');
+        TesoreriaCrownSlotListadoFiltros::aplicar($query, $filtros);
+        $coleccion = $query->get();
+        foreach ($coleccion as $fila) {
+            $fila->nombreempresa = $fila->empresa->nombre ?? '';
+        }
+
+        $respuesta = TesoreriaCrownListadoDocumento::responder((string) $formato, [
+            'titulo' => 'Slots Crown',
+            'subtitulo' => $sala ? ($sala->codigo.' — '.$sala->nombre) : 'Todas las salas',
+            'archivo' => 'slots_tesoreria_crown',
+            'titulo_corto' => 'Slots',
+            'columnas' => [
+                ['label' => 'Fecha', 'ancho' => 12, 'texto' => true],
+                ['label' => 'Número', 'ancho' => 12, 'texto' => true],
+                ['label' => 'Tipo', 'ancho' => 14],
+                ['label' => 'Máquina', 'ancho' => 12, 'texto' => true],
+                ['label' => 'Nombre', 'ancho' => 22, 'wrap' => true],
+                ['label' => 'Estado', 'ancho' => 12],
+                ['label' => 'Total', 'ancho' => 14, 'numero' => true],
+            ],
+            'filas' => $coleccion->map(fn (TesoreriaCrownSlot $s) => [
+                $s->jornada?->fecha?->format('d/m/Y'),
+                TesoreriaCrownNumeradorSupport::visible($s->numero),
+                TesoreriaCrownSlot::tipo((string) $s->tipo),
+                $s->maquina,
+                $s->maquina_nombre,
+                TesoreriaCrownSlot::estado((string) $s->estado),
+                (float) $s->total,
+            ])->all(),
+            'coleccion' => $coleccion,
+        ]);
+        if ($respuesta) {
+            return $respuesta;
+        }
+
+        return redirect()->route('tesoreria_crown_slot', TesoreriaCrownSlotListadoFiltros::paraQueryString($filtros));
     }
 
     public function formulario(Request $request)
@@ -107,7 +182,12 @@ class TesoreriaCrownSlotController extends Controller
             ]);
         });
 
-        return redirect()->route('editar_tesoreria_crown_slot', $slot->id);
+        $destino = ['id' => $slot->id];
+        if ($request->input('origen') === 'menu') {
+            $destino['origen'] = 'menu';
+        }
+
+        return redirect()->route('editar_tesoreria_crown_slot', $destino);
     }
 
     public function editar(int $id)
@@ -184,7 +264,7 @@ class TesoreriaCrownSlotController extends Controller
         $errorBoveda = TesoreriaCrownSlotBovedaSupport::asentarDesdeRecuento($slot->fresh(['lineas']), $usuario);
         if ($errorBoveda !== null) {
             return redirect()
-                ->route('ver_tesoreria_crown_jornada', ['id' => $slot->jornada_id, 'panel' => 'slots'])
+                ->to($this->urlRetornoSlots($request, $slot))
                 ->with('mensaje-error', 'Recuento confirmado, pero no se asentó en bóveda: '.$errorBoveda);
         }
 
@@ -194,11 +274,11 @@ class TesoreriaCrownSlotController extends Controller
             : '';
 
         return redirect()
-            ->route('ver_tesoreria_crown_jornada', ['id' => $slot->jornada_id, 'panel' => 'slots'])
+            ->to($this->urlRetornoSlots($request, $slot))
             ->with('mensaje', 'Recuento confirmado '.TesoreriaCrownNumeradorSupport::visible($slot->numero).'.'.$extra);
     }
 
-    public function eliminar(int $id)
+    public function eliminar(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('eliminar-borrador-tesoreria-crown-slot');
@@ -207,15 +287,29 @@ class TesoreriaCrownSlotController extends Controller
         if (! $slot->esBorrador() || ! $slot->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Solo se puede eliminar un borrador con la jornada abierta.');
         }
-        $jornadaId = (int) $slot->jornada_id;
+        $retorno = $this->urlRetornoSlots($request, $slot);
         DB::transaction(function () use ($slot) {
             EloquentAuditDeleteSupport::each($slot->lineas()->getQuery());
             $slot->delete();
         });
 
         return redirect()
-            ->route('ver_tesoreria_crown_jornada', ['id' => $jornadaId, 'panel' => 'slots'])
+            ->to($retorno)
             ->with('mensaje', 'Borrador eliminado.');
+    }
+
+    private function urlRetornoSlots(Request $request, TesoreriaCrownSlot $slot): string
+    {
+        if ($request->input('origen') === 'menu') {
+            return route('tesoreria_crown_slot', array_filter([
+                'sala_id' => (int) $slot->sala_id,
+            ]));
+        }
+
+        return route('ver_tesoreria_crown_jornada', [
+            'id' => $slot->jornada_id,
+            'panel' => 'slots',
+        ]);
     }
 
     private function persistirBorrador(TesoreriaCrownSlot $slot, Request $request): ?string

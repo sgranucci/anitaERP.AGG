@@ -9,13 +9,13 @@ use Illuminate\Console\Command;
 class ActualizarGastronomiaCostoMensualCatalogo extends Command
 {
     protected $signature = 'gastronomia:actualizar-costo-mensual-catalogo
-                            {--fecha= : Fecha de referencia Y-m-d (default: hoy; define mes → lista 5000+mes)}
+                            {--fecha= : Fecha de referencia Y-m-d (default: hoy; define mes → lista base+mes)}
                             {--sku= : Solo un SKU de catálogo (ej. V0365)}
                             {--usuario= : ID usuario para usuarioultcambio_id}
                             {--sin-anita : No replica en Anita (stkpre); solo ERP precio}
                             {--dry-run : Solo contar candidatos sin calcular ni grabar}';
 
-    protected $description = 'Calcula costo catálogo V… (fórmula + última compra Anita) y graba en lista 5000+mes. Usado por gastronomía, viandas y reportes.';
+    protected $description = 'Calcula costo catálogo V… (fórmula + última compra) y graba en lista base+mes (AGG 5000; Crown 100). Usado por gastronomía, viandas y reportes.';
 
     public function handle(GastronomiaCostoMensualCatalogoService $service): int
     {

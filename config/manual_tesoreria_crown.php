@@ -1,9 +1,9 @@
 <?php
 
 return [
-    'version' => '1.2',
+    'version' => '1.3',
     'titulo' => 'Manual de Usuario',
-    'subtitulo' => 'Anita ERP — Tesorería Crown (solo CROWN · capturas reales Chromium · ERP-first)',
+    'subtitulo' => 'Anita ERP — Tesorería Crown (solo CROWN · capturas reales Chromium · ERP-first · PIN / avisos / auditor)',
 
     /**
      * Capturas en public/docs/manual-tesoreria-crown/img/

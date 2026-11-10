@@ -2,131 +2,135 @@
 
 namespace App\Http\Controllers\Stock;
 
-use App\Http\Requests\ValidacionCategoria;
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ValidacionCategoria;
 use App\Models\Stock\Categoria;
-use Illuminate\Support\Facades\Storage;
 use App\Models\Stock\Tipoarticulo;
+use App\Models\Ventas\AreaComandaGastronomia;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CategoriaController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
+    public function __construct(
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
+    }
+
     public function index()
     {
         can('listar-categorias');
         $datas = Categoria::with('tipoarticulo:id,nombre')->get();
 
-		if ($datas->isEmpty())
-		{
-			try {
-				$Categoria = new Categoria();
-				$Categoria->sincronizarConAnita();
-			} catch (\Throwable $e) {
-				return redirect()->route('categoria')->with('errores', [
-					'No se pudo importar categorías desde Anita (stkagr): '.$e->getMessage(),
-				]);
-			}
+        if ($datas->isEmpty()) {
+            try {
+                $Categoria = new Categoria();
+                $Categoria->sincronizarConAnita();
+            } catch (\Throwable $e) {
+                return redirect()->route('categoria')->with('errores', [
+                    'No se pudo importar categorías desde Anita (stkagr): '.$e->getMessage(),
+                ]);
+            }
 
-        	$datas = Categoria::with('tipoarticulo:id,nombre')->get();
-		}
+            $datas = Categoria::with('tipoarticulo:id,nombre')->get();
+        }
 
         return view('stock.categoria.index', compact('datas'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function crear()
     {
         can('crear-categorias');
-		$tipoarticulos = Tipoarticulo::all();
+        $tipoarticulos = Tipoarticulo::all();
+        $usaAreasCrown = EntornoEmpresaSupport::esCrown();
+        $empresa_query = $usaAreasCrown ? $this->empresaRepository->allFiltrado() : collect();
+        $area_query = $usaAreasCrown
+            ? $this->cargarAreasPorEmpresa($empresa_query->pluck('id')->all())
+            : [];
 
-        return view('stock.categoria.crear', compact('tipoarticulos'));
+        return view('stock.categoria.crear', compact(
+            'tipoarticulos',
+            'usaAreasCrown',
+            'empresa_query',
+            'area_query'
+        ));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
     public function guardar(ValidacionCategoria $request)
     {
-        $categoria = Categoria::create($request->all());
+        $categoria = DB::transaction(function () use ($request) {
+            $categoria = Categoria::create($request->all());
+            if (EntornoEmpresaSupport::esCrown()) {
+                $this->sincronizarAreasComanda($categoria, $request->input('area_comanda_ids', []));
+            }
 
-		// Graba anita
-		$Categoria = new Categoria();
+            return $categoria;
+        });
+
+        $Categoria = new Categoria();
         $Categoria->guardarAnita($request, $categoria->id);
 
         return redirect('stock/categoria')->with('mensaje', 'Categoria creada con exito');
     }
 
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function editar($id)
     {
         can('editar-categorias');
-		$tipoarticulos = Tipoarticulo::all();
+        $tipoarticulos = Tipoarticulo::all();
+        $usaAreasCrown = EntornoEmpresaSupport::esCrown();
+        $data = Categoria::query()
+            ->when($usaAreasCrown, fn ($q) => $q->with(['categoriaAreasComanda.areaComanda.empresa']))
+            ->findOrFail($id);
+        $empresa_query = $usaAreasCrown ? $this->empresaRepository->allFiltrado() : collect();
+        $area_query = $usaAreasCrown
+            ? $this->cargarAreasPorEmpresa($empresa_query->pluck('id')->all())
+            : [];
 
-        $data = Categoria::findOrFail($id);
-
-        return view('stock.categoria.editar', compact('data', 'tipoarticulos'));
+        return view('stock.categoria.editar', compact(
+            'data',
+            'tipoarticulos',
+            'usaAreasCrown',
+            'empresa_query',
+            'area_query'
+        ));
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function actualizar(ValidacionCategoria $request, $id)
     {
         can('actualizar-categorias');
-        Categoria::findOrFail($id)->update($request->all());
 
-		// Actualiza anita
-		$Categoria = new Categoria();
+        DB::transaction(function () use ($request, $id) {
+            $categoria = Categoria::findOrFail($id);
+            $categoria->update($request->all());
+            if (EntornoEmpresaSupport::esCrown()) {
+                $this->sincronizarAreasComanda($categoria, $request->input('area_comanda_ids', []));
+            }
+        });
+
+        $Categoria = new Categoria();
         $Categoria->actualizarAnita($request, $id);
 
         return redirect('stock/categoria')->with('mensaje', 'Categoria actualizada con exito');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function eliminar(Request $request, $id)
     {
         can('borrar-categorias');
 
-		// Elimina anita
-		$Categoria = new Categoria();
+        $Categoria = new Categoria();
         $Categoria->eliminarAnita($id);
 
         if ($request->ajax()) {
             if (Categoria::destroy($id)) {
                 return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
             }
-        } else {
-            abort(404);
+
+            return response()->json(['mensaje' => 'ng']);
         }
+
+        abort(404);
     }
 
     public function consultaCategoria(Request $request)
@@ -192,6 +196,36 @@ class CategoriaController extends Controller
             'codigo' => (string) $fila->codigo,
             'nombre' => (string) $fila->nombre,
         ]);
+    }
+
+    private function sincronizarAreasComanda(Categoria $categoria, $areaIds): void
+    {
+        $ids = collect((array) $areaIds)
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        $categoria->areasComanda()->sync($ids);
+    }
+
+    /**
+     * @param  list<int|string>  $empresaIds
+     * @return array<int|string, mixed>
+     */
+    private function cargarAreasPorEmpresa(array $empresaIds): array
+    {
+        $query = AreaComandaGastronomia::orderBy('empresa_id')->orderBy('nombre');
+
+        if (count($empresaIds) > 1) {
+            $query->whereIn('empresa_id', $empresaIds);
+        }
+
+        return $query->get()
+            ->groupBy('empresa_id')
+            ->map(fn ($coll) => $coll->values())
+            ->toArray();
     }
 
     private function puedeConsultarCategoria(): bool

@@ -1,0 +1,71 @@
+---
+description: Migraciones que solo tocan tablas Crown — siempre gatear con EntornoEmpresaSupport::esCrown()
+globs: database/migrations/**/*.php
+alwaysApply: true
+---
+
+# Migraciones Crown: tablas propias gated
+
+Un solo repo corre en AGG, Interforming, Ferli, **Crown**, etc. Las tablas exclusivas de Crown (`tesoreria_crown_*`, `gastro_crown_*`, `cajero_crown`, etc.) **no** deben crearse ni alterarse fuera de `EMPRESA=CROWN`.
+
+Complementa `migraciones-entorno-empresa-menu-roles.mdc` (menú/rol/usuario) y `EntornoEmpresaSupport::esCrown()`.
+
+## Obligatorio
+
+Toda migración **nueva** cuyo `up`/`down` toque **solo** tablas Crown:
+
+```php
+use App\Support\Configuracion\EntornoEmpresaSupport;
+
+public function up(): void
+{
+    if (! EntornoEmpresaSupport::esCrown()) {
+        return;
+    }
+    // Schema::create / table sobre tesoreria_crown_*, gastro_crown_*, …
+}
+```
+
+Lo mismo en `down()`. Filename con sufijo `_crown.php`. Preferir también `Schema::hasTable` / `hasColumn` antes de alterar.
+
+## Qué cuenta como “solo tablas Crown”
+
+| Incluye (gate obligatorio) | No aplica este gate |
+|---|---|
+| `tesoreria_crown_*`, `gastro_crown_*`, `cajero_crown` / `cajero_crown_*` | Columnas en tablas **compartidas** (`caja`, `ordencompra`, `depmae`, `articulo`, …) con default seguro |
+| Seeds/datos solo en esas tablas | Menú/permiso/rol Crown → sigue `migraciones-entorno-empresa-menu-roles` (también con `esCrown()`) |
+
+Si la migración mezcla tabla Crown **y** tabla compartida: gatear el bloque Crown; el cambio compartido documentar por qué corre en todos los clientes.
+
+## Prohibido
+
+```php
+// ❌ Crea/altera tablas Crown en AGG / Ferli / …
+Schema::create('tesoreria_crown_slot', function (Blueprint $table) { … });
+Schema::table('gastro_crown_cuenta', function (Blueprint $table) { … });
+```
+
+## Correcto
+
+```php
+if (! EntornoEmpresaSupport::esCrown()) {
+    return;
+}
+if (! Schema::hasTable('tesoreria_crown_slot') || Schema::hasColumn('tesoreria_crown_slot', 'boveda_id')) {
+    return;
+}
+Schema::table('tesoreria_crown_slot', function (Blueprint $table) {
+    $table->unsignedBigInteger('boveda_id')->nullable();
+});
+```
+
+Referencia: `2026_11_07_210000_tesoreria_crown_slot_boveda_id.php`, `2026_10_23_160000_tesoreria_crown_valores_depositos.php`.
+
+## Comprobación rápida
+
+```bash
+rg "Schema::(create|table)\('(tesoreria_crown_|gastro_crown_|cajero_crown)" database/migrations/ARCHIVO_NUEVO.php
+rg "EntornoEmpresaSupport::esCrown" database/migrations/ARCHIVO_NUEVO.php
+# Si toca solo tablas Crown, el gate tiene que estar en up() y down()
+php -l database/migrations/ARCHIVO_NUEVO.php
+```

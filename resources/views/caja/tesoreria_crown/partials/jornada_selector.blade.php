@@ -3,7 +3,8 @@
     $ruta = $ruta ?? '';
     $queryExtra = $queryExtra ?? [];
     $fechaValor = $jornada?->fecha?->format('Y-m-d')
-        ?? ($fechaPedida ?? '');
+        ?? (trim((string) ($fechaPedida ?? '')) !== '' ? $fechaPedida : null)
+        ?? ($fechaSugerida ?? '');
 @endphp
 @if (($sala ?? null) && $ruta !== '')
     <div class="card-body py-2 border-bottom bg-light">

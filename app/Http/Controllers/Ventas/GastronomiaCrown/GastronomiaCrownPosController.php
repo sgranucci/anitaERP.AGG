@@ -12,10 +12,13 @@ use App\Models\Ventas\GastronomiaCrown\GastroPlanoMesa;
 use App\Models\Ventas\MesaGastronomia;
 use App\Services\Stock\FormulaArticuloService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
+use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Services\Ventas\GastronomiaCrown\GastronomiaCrownPosService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloGastronomia;
+use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownCuentacajaEfectivoSalaSupport;
+use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownCuentasCajaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastroPlanoMesaLayoutSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
@@ -31,6 +34,7 @@ class GastronomiaCrownPosController extends Controller
         private GastronomiaCrownPosService $posService,
         private GastronomiaFormulaOpcionalesService $opcionalesService,
         private FormulaArticuloService $formulaArticuloService,
+        private GastronomiaJornadaService $jornadaService,
     ) {
     }
 
@@ -50,6 +54,11 @@ class GastronomiaCrownPosController extends Controller
 
         $usaMesas = GastronomiaCrownPosModos::usaMesas($modo);
         $planos = $usaMesas ? $this->planosParaConfig($config) : [];
+        $salaId = $config->sala_id !== null ? (int) $config->sala_id : null;
+        $jornada = $this->jornadaService->estadoParaEmpresa(
+            (int) $config->empresa_id,
+            $salaId > 0 ? $salaId : null,
+        );
 
         return view('ventas.gastronomia_crown.pos.index', [
             'config' => $config,
@@ -59,6 +68,8 @@ class GastronomiaCrownPosController extends Controller
             'planos' => $planos,
             'hotkeys' => $this->hotkeysParaConfig($config),
             'herramientas' => $this->herramientasParaConfig($config),
+            'jornada' => $jornada,
+            'jornada_obligatoria' => (bool) config('gastronomia.jornada_obligatoria', true),
         ]);
     }
 
@@ -75,6 +86,12 @@ class GastronomiaCrownPosController extends Controller
         $modo = $config->modoPosEfectivo();
         $usaMesas = GastronomiaCrownPosModos::usaMesas($modo);
 
+        $salaId = $config->sala_id ? (int) $config->sala_id : null;
+        $jornada = $this->jornadaService->estadoParaEmpresa(
+            (int) $config->empresa_id,
+            $salaId > 0 ? $salaId : null,
+        );
+
         return response()->json([
             'ok' => true,
             'planos' => $usaMesas ? $this->planosParaConfig($config) : [],
@@ -86,11 +103,98 @@ class GastronomiaCrownPosController extends Controller
             'habilita_hotel' => (bool) $config->habilita_hotel,
             'habilita_canje_gst' => (bool) $config->habilita_canje_gst,
             'pide_cubiertos' => (bool) $config->pide_cubiertos,
-            'sala_id' => $config->sala_id ? (int) $config->sala_id : null,
+            'sala_id' => $salaId,
             'listaprecio_id' => (int) $config->listaprecio_id,
             'usa_mesas' => GastronomiaCrownPosModos::usaMesas($modo),
+            'jornada_obligatoria' => (bool) config('gastronomia.jornada_obligatoria', true),
+            'jornada' => $jornada,
+            'cuentacaja_efectivo' => GastronomiaCrownCuentacajaEfectivoSalaSupport::cuentaParaSala(
+                $salaId,
+                (int) $config->empresa_id
+            ),
+            'cuentacaja_efectivo_error' => GastronomiaCrownCuentacajaEfectivoSalaSupport::mensajeErrorResolucion(
+                $salaId,
+                (int) $config->empresa_id
+            ),
             'hotkeys' => $this->hotkeysParaConfig($config),
             'herramientas' => $this->herramientasParaConfig($config),
+        ]);
+    }
+
+    /**
+     * Medios de pago del POS Crown (uso Gastronomia). No toca rutas AGG/estacionamiento/canje.
+     */
+    public function apiCuentasCaja(Request $request): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        $config = $this->requireCfg($request);
+        if ($config instanceof JsonResponse) {
+            return $config;
+        }
+
+        $usoId = GastronomiaCrownCuentasCajaSupport::usoCuentacajaGastronomiaId();
+        if ($usoId === null) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'No está configurado el uso de cuenta de caja gastronomía (nombre «Gastronomia»).',
+                'cuentas_caja' => [],
+            ], 422);
+        }
+
+        $salaId = $config->sala_id ? (int) $config->sala_id : null;
+
+        return response()->json([
+            'ok' => true,
+            'usocuentacaja_id' => $usoId,
+            'cuentas_caja' => GastronomiaCrownCuentasCajaSupport::listarParaPos(
+                (int) $config->empresa_id,
+                $salaId
+            ),
+            'cuentacaja_efectivo' => GastronomiaCrownCuentacajaEfectivoSalaSupport::cuentaParaSala(
+                $salaId,
+                (int) $config->empresa_id
+            ),
+            'cuentacaja_efectivo_error' => GastronomiaCrownCuentacajaEfectivoSalaSupport::mensajeErrorResolucion(
+                $salaId,
+                (int) $config->empresa_id
+            ),
+        ]);
+    }
+
+    public function apiResolverDescuento(Request $request): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        $request->validate([
+            'codigo' => 'nullable|string|max:30',
+            'descuento_gastronomia_id' => 'nullable|integer|min:1',
+        ]);
+
+        $descuento = $this->posService->resolverDescuentoGastronomia(
+            $request->filled('descuento_gastronomia_id') ? (int) $request->input('descuento_gastronomia_id') : null,
+            $request->input('codigo'),
+        );
+        if ($descuento === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Descuento inexistente.'], 422);
+        }
+        if (stripos((string) $descuento->nombre, '@GST') !== false) {
+            return response()->json(['ok' => false, 'mensaje' => 'No puede utilizar descuento GST manualmente.'], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'descuento' => [
+                'id' => (int) $descuento->id,
+                'codigo' => (string) $descuento->codigo,
+                'nombre' => (string) $descuento->nombre,
+                'tipovalor' => (string) $descuento->tipovalor,
+                'valor' => (float) $descuento->valor,
+                'tipo_consumo' => (string) ($descuento->tipo_consumo ?? ''),
+                'cliente_id' => $descuento->cliente_id ? (int) $descuento->cliente_id : null,
+            ],
         ]);
     }
 
@@ -135,7 +239,11 @@ class GastronomiaCrownPosController extends Controller
             ];
         });
 
-        return response()->json(['ok' => true, 'mesas' => $mesas]);
+        return response()->json([
+            'ok' => true,
+            'mesas' => $mesas,
+            'cuentas_barra' => $this->cuentasBarraAbiertas($config),
+        ]);
     }
 
     /**
@@ -183,7 +291,44 @@ class GastronomiaCrownPosController extends Controller
             ])
             ->values();
 
-        return response()->json(['ok' => true, 'planos' => $planos, 'mesas' => $mesas]);
+        return response()->json([
+            'ok' => true,
+            'planos' => $planos,
+            'mesas' => $mesas,
+            'cuentas_barra' => $this->cuentasBarraAbiertas($config),
+        ]);
+    }
+
+    /**
+     * Cuentas abiertas sin mesa (barra / eventual).
+     *
+     * @return list<array{id:int,etiqueta:string}>
+     */
+    private function cuentasBarraAbiertas(ConfiguracionPuntoventaGastronomia $config): array
+    {
+        return GastroCrownCuenta::query()
+            ->where('empresa_id', $config->empresa_id)
+            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
+            ->whereNull('mesa_gastronomia_id')
+            ->tap(function ($q) use ($config) {
+                GastronomiaSalaSupport::aplicarFiltroSiCorresponde(
+                    $q,
+                    $config->sala_id ? (int) $config->sala_id : null
+                );
+            })
+            ->orderByDesc('id')
+            ->limit(40)
+            ->get(['id', 'observacion'])
+            ->map(function (GastroCrownCuenta $c) {
+                $obs = trim((string) ($c->observacion ?? ''));
+
+                return [
+                    'id' => (int) $c->id,
+                    'etiqueta' => $obs !== '' ? mb_substr($obs, 0, 24) : 'Barra',
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
@@ -449,7 +594,9 @@ class GastronomiaCrownPosController extends Controller
     public function apiRecetaArticulo(Request $request, int $articuloId): JsonResponse
     {
         $this->assertCrown();
-        can('usar-pos-gastronomia-crown');
+        if (! can('usar-pos-gastronomia-crown', false) && ! can('usar-kds-gastronomia-crown', false)) {
+            abort(403, 'No tiene permisos para consultar la receta.');
+        }
 
         $resuelto = $this->formulaArticuloService->resolverIdParaArticulo($articuloId);
         $formulaId = (int) ($resuelto['formula_id'] ?? 0);
@@ -681,6 +828,51 @@ class GastronomiaCrownPosController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Cerrar cuenta abierta sin facturar (paridad AGG). */
+    public function apiCerrarCuenta(Request $request, int $id): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        $config = $this->requireCfg($request);
+        if ($config instanceof JsonResponse) {
+            return $config;
+        }
+
+        try {
+            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id);
+            $this->posService->cerrarSinFacturar($cuenta);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'mensaje' => 'Cuenta cerrada sin facturar']);
+    }
+
+    /** Cerrar todas las cuentas abiertas de la sala/PC sin facturar. */
+    public function apiCerrarTodasCuentas(Request $request): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        $config = $this->requireCfg($request);
+        if ($config instanceof JsonResponse) {
+            return $config;
+        }
+
+        try {
+            $n = $this->posService->cerrarTodasSinFacturar($config);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'cerradas' => $n,
+            'mensaje' => $n === 1 ? '1 cuenta cerrada' : $n.' cuentas cerradas',
+        ]);
+    }
+
     public function apiMarcha(Request $request, int $id): JsonResponse
     {
         $this->assertCrown();
@@ -870,7 +1062,7 @@ class GastronomiaCrownPosController extends Controller
         can('usar-pos-gastronomia-crown');
 
         $request->validate([
-            'tipo' => 'required|in:efectivo,interna,hotel,factura_sola',
+            'tipo' => 'required|in:efectivo,interna,hotel,factura_sola,medios',
             'habitacion' => 'nullable|string|max:20',
             'reserva_hotel' => 'nullable|string|max:30',
             'tarjeta_gst' => 'nullable|string|max:30',
@@ -878,6 +1070,18 @@ class GastronomiaCrownPosController extends Controller
             'observacion_cobro' => 'nullable|string|max:120',
             'actividad_arca_id' => 'nullable|integer|min:1',
             'sin_cobranza' => 'nullable|boolean',
+            'medios_pago' => 'nullable|array',
+            'medios_pago.*.cuentacaja_id' => 'required_with:medios_pago|integer|min:1',
+            'medios_pago.*.moneda_id' => 'required_with:medios_pago|integer|min:1',
+            'medios_pago.*.monto' => 'required_with:medios_pago|numeric|min:0.01',
+            'medios_pago.*.observacion' => 'nullable|string|max:120',
+            'aplicar_descuento_autorizante' => 'nullable|boolean',
+            'tipo_descuento' => 'nullable|in:invitados,staff,descuento',
+            'autorizante_usuario_id' => 'nullable|integer|min:1',
+            'centrocosto_id' => 'nullable|integer|min:1',
+            'cliente_interno_descuento_id' => 'nullable|integer|min:1',
+            'descuento_gastronomia_id' => 'nullable|integer|min:1',
+            'descuento_codigo' => 'nullable|string|max:30',
         ]);
 
         $config = $this->requireCfg($request);
@@ -887,19 +1091,32 @@ class GastronomiaCrownPosController extends Controller
 
         try {
             $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id);
+            if ($request->boolean('aplicar_descuento_autorizante')) {
+                $this->posService->aplicarDescuentoAutorizante($cuenta, [
+                    'tipo_descuento' => (string) $request->input('tipo_descuento'),
+                    'autorizante_usuario_id' => (int) $request->input('autorizante_usuario_id'),
+                    'centrocosto_id' => (int) $request->input('centrocosto_id'),
+                    'cliente_interno_descuento_id' => (int) $request->input('cliente_interno_descuento_id'),
+                    'descuento_gastronomia_id' => $request->input('descuento_gastronomia_id'),
+                    'descuento_codigo' => $request->input('descuento_codigo'),
+                ]);
+                $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id);
+            }
+            $extra = $request->only([
+                'habitacion',
+                'reserva_hotel',
+                'tarjeta_gst',
+                'sin_gst',
+                'observacion_cobro',
+                'actividad_arca_id',
+                'sin_cobranza',
+                'medios_pago',
+            ]);
             $resultado = $this->posService->cobrar(
                 $cuenta,
                 $config,
                 (string) $request->input('tipo'),
-                $request->only([
-                    'habitacion',
-                    'reserva_hotel',
-                    'tarjeta_gst',
-                    'sin_gst',
-                    'observacion_cobro',
-                    'actividad_arca_id',
-                    'sin_cobranza',
-                ])
+                $extra
             );
             $printHotel = null;
             if ($request->input('tipo') === GastroCrownCuenta::COBRO_HOTEL) {
@@ -1015,11 +1232,12 @@ class GastronomiaCrownPosController extends Controller
             'Enter' => 'Validar / agregar',
             'F1' => 'Consultar artículo',
             'F5' => 'Factura efectivo',
-            'F8' => 'Interna / GST',
+            'F8' => 'Dto. autorizante',
             'F12' => 'Marcha',
             'F6' => 'Borrar ítem',
             'F11' => 'Obs. ítem',
-            'F10' => 'Dto. mesa',
+            'F10' => 'Dto. % mesa',
+            'F7' => 'Medios de cobro',
         ];
         if ($config->habilita_hotel) {
             $keys['F2'] = 'Hotel';
@@ -1045,7 +1263,7 @@ class GastronomiaCrownPosController extends Controller
 
         return [
             ['code' => 'e', 'label' => 'Postres', 'icon' => 'fa-birthday-cake', 'action' => 'marcha_postres', 'enabled' => $conComanda],
-            ['code' => 'x', 'label' => 'Buscar art.', 'icon' => 'fa-search', 'action' => 'buscar_articulo', 'enabled' => true],
+            // Buscar art. = mismo modal que F1 Consulta (no duplicar en barra de herramientas).
             ['code' => 'c', 'label' => 'Cliente', 'icon' => 'fa-user', 'action' => 'cliente', 'enabled' => true],
             ['code' => 's', 'label' => 'Obs. mesa', 'icon' => 'fa-comment', 'action' => 'obs_mesa', 'enabled' => true],
             ['code' => 't', 'label' => 'Separador', 'icon' => 'fa-minus', 'action' => 'separador', 'enabled' => true],
@@ -1054,7 +1272,7 @@ class GastronomiaCrownPosController extends Controller
             ['code' => 'r', 'label' => 'Receta', 'icon' => 'fa-book', 'action' => 'receta', 'enabled' => true],
             ['code' => 'w', 'label' => 'Lista precio', 'icon' => 'fa-tags', 'action' => 'lista_precio', 'enabled' => true],
             ['code' => 'l', 'label' => 'Datos mesa', 'icon' => 'fa-edit', 'action' => 'datos_mesa', 'enabled' => true],
-            ['code' => 'd', 'label' => 'Cobrar', 'icon' => 'fa-credit-card', 'action' => 'cobrar', 'enabled' => ! $config->solo_marcha],
+            ['code' => 'd', 'label' => 'Medios (F7)', 'icon' => 'fa-credit-card', 'action' => 'cobrar', 'enabled' => ! $config->solo_marcha],
             ['code' => 'm', 'label' => 'Anular mesa', 'icon' => 'fa-trash', 'action' => 'anular_mesa', 'enabled' => true],
         ];
     }

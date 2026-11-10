@@ -264,7 +264,7 @@ class TesoreriaCrownAnexoController extends Controller
                     ['label' => 'Pago cashless', 'ancho' => 10, 'numero' => true],
                     ['label' => 'Vta. cashless', 'ancho' => 10, 'numero' => true],
                     ['label' => 'Pagos online', 'ancho' => 10, 'numero' => true],
-                    ['label' => 'Ventas online', 'ancho' => 10, 'numero' => true],
+                    ['label' => 'Neto on-line', 'ancho' => 10, 'numero' => true],
                     ['label' => 'Del Rio ONLINE', 'ancho' => 10, 'numero' => true],
                     ['label' => 'Apuestas Dep.', 'ancho' => 10, 'numero' => true],
                     ['label' => 'Resultado', 'ancho' => 10, 'numero' => true],
@@ -407,6 +407,16 @@ class TesoreriaCrownAnexoController extends Controller
     }
 
     public function auditoriaAnexo3(Request $request, int $id): JsonResponse
+    {
+        return $this->responderAuditoriaImporte($request, $id);
+    }
+
+    public function auditoriaRescajero(Request $request, int $id): JsonResponse
+    {
+        return $this->responderAuditoriaImporte($request, $id);
+    }
+
+    private function responderAuditoriaImporte(Request $request, int $id): JsonResponse
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('listar-tesoreria-crown-anexo');

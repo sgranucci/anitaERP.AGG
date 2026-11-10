@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
+use App\Services\Caja\TesoreriaCrownAvisoGenerador;
 use App\Models\Caja\TesoreriaCrownAjuste;
 use App\Models\Caja\TesoreriaCrownAsignacion;
 use App\Models\Caja\TesoreriaCrownCierre;
@@ -13,6 +14,7 @@ use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
+use App\Support\Caja\TesoreriaCrownJornadaCierreBloqueoSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use Illuminate\Http\Request;
@@ -63,7 +65,9 @@ class TesoreriaCrownCierreController extends Controller
             'observacion' => ['nullable', 'string', 'max:500'],
             'firma_usuario' => ['required', 'string'],
             'firma_password' => ['required', 'string'],
-            'clave_cajero' => ['required', 'string'],
+            'clave_cajero' => ['nullable', 'string'],
+            'clave_cajero_nueva' => ['nullable', 'string'],
+            'clave_cajero_repetir' => ['nullable', 'string'],
         ];
         if (! $calculo['supera']) {
             $reglas['estado'] = ['required', Rule::in([
@@ -77,8 +81,20 @@ class TesoreriaCrownCierreController extends Controller
             return $usuario;
         }
         $cajero = $fila->cajero;
-        if ($cajero === null || ! TesoreriaCrownFirmaSupport::aceptaClaveCajero($cajero, $datos['clave_cajero'])) {
-            return back()->with('mensaje-error', 'La clave del cajero no coincide.')->withInput();
+        if ($cajero === null) {
+            return back()->with('mensaje-error', 'Esta caja no tiene cajero.')->withInput();
+        }
+        $pin = TesoreriaCrownFirmaSupport::autenticarCajero(
+            $cajero,
+            (string) ($datos['clave_cajero'] ?? ''),
+            $datos['clave_cajero_nueva'] ?? null,
+            $datos['clave_cajero_repetir'] ?? null
+        );
+        if (! $pin['ok']) {
+            return back()
+                ->with('mensaje-error', $pin['error'])
+                ->with('tc_pin_nuevo', $pin['pedir_nuevo'])
+                ->withInput($request->except(['firma_password', 'clave_cajero', 'clave_cajero_nueva', 'clave_cajero_repetir']));
         }
         if ((int) ($cajero->usuario_id ?? 0) === (int) $usuario->id) {
             return back()->with('mensaje-error', 'Tesorería y el cajero tienen que ser dos personas.')->withInput();
@@ -92,7 +108,11 @@ class TesoreriaCrownCierreController extends Controller
             $detalle = trim($detalle.' La diferencia supera la tolerancia y el cierre pasa a auditoría.');
         }
 
-        DB::transaction(function () use ($fila, $calculo, $estado, $usuario, $detalle) {
+        $creado = DB::transaction(function () use ($fila, $calculo, $estado, $usuario, $detalle) {
+            TesoreriaCrownAsignacion::query()->whereKey($fila->id)->lockForUpdate()->first();
+            if ($fila->cierre()->exists()) {
+                return false;
+            }
             $cierre = TesoreriaCrownCierre::query()->create([
                 'sala_id' => $fila->sala_id,
                 'empresa_id' => $fila->jornada->empresa_id,
@@ -111,11 +131,18 @@ class TesoreriaCrownCierreController extends Controller
                 'cajero_at' => now(),
             ]);
             $this->evento($cierre, $estado, $usuario, $detalle);
+
+            return true;
         });
+        if (! $creado) {
+            return back()->with('mensaje-error', 'Esta caja ya tiene cierre.');
+        }
 
         $mensaje = $estado === TesoreriaCrownCierreSupport::AUDITORIA
             ? 'Caja cerrada. La diferencia supera la tolerancia: quedó en auditoría.'
             : 'Caja cerrada. Quedó '.TesoreriaCrownCierreSupport::estado($estado).'.';
+
+        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
 
         return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', $mensaje);
     }
@@ -152,26 +179,25 @@ class TesoreriaCrownCierreController extends Controller
             'firma_usuario' => ['required', 'string'],
             'firma_password' => ['required', 'string'],
         ]);
-        $usuario = $this->tesoreria($datos['firma_usuario'], $datos['firma_password']);
-        if ($usuario instanceof \Illuminate\Http\RedirectResponse) {
-            return $usuario;
+        $usuario = TesoreriaCrownFirmaSupport::firmante(
+            $datos['firma_usuario'],
+            $datos['firma_password'],
+            fn (Usuario $u) => TesoreriaCrownFirmaSupport::puedeAuditarCaja($u)
+        );
+        if (is_string($usuario)) {
+            return back()->with('mensaje-error', $usuario)->withInput($request->except('firma_password'));
         }
-        $quienAudito = (int) $cierre->eventos()
-            ->where('estado', TesoreriaCrownCierreSupport::AUDITORIA)
-            ->latest('id')
-            ->value('usuario_id');
-        if ($quienAudito > 0 && $quienAudito === (int) $usuario->id) {
-            return back()->with('mensaje-error', 'El cierre de auditoría lo firma otra persona.')->withInput();
+        try {
+            TesoreriaCrownJornadaCierreBloqueoSupport::cerrarAuditoria(
+                $cierre,
+                $usuario,
+                trim((string) ($datos['observacion'] ?? ''))
+            );
+        } catch (\RuntimeException $e) {
+            return back()->with('mensaje-error', $e->getMessage())->withInput($request->except('firma_password'));
         }
-        $detalle = trim((string) ($datos['observacion'] ?? ''));
-        $cierre->estado = TesoreriaCrownCierreSupport::CIERRE_AUDITORIA;
-        $cierre->auditor_usuario_id = $usuario->id;
-        $cierre->auditor_at = now();
-        if ($detalle !== '') {
-            $cierre->observacion = $detalle;
-        }
-        $cierre->save();
-        $this->evento($cierre, TesoreriaCrownCierreSupport::CIERRE_AUDITORIA, $usuario, $detalle);
+
+        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
 
         return back()->with('mensaje', 'Auditoría cerrada.');
     }
@@ -190,12 +216,15 @@ class TesoreriaCrownCierreController extends Controller
             'firma_usuario' => ['required', 'string'],
             'firma_password' => ['required', 'string'],
         ]);
-        $usuario = TesoreriaCrownFirmaSupport::usuarioPorClave($datos['firma_usuario'], $datos['firma_password']);
-        if ($usuario === null) {
-            return back()->with('mensaje-error', 'Usuario o clave incorrectos.')->withInput();
-        }
-        if (! TesoreriaCrownFirmaSupport::puedeReabrirCaja($usuario)) {
-            return back()->with('mensaje-error', 'Ese usuario no tiene permiso para reabrir una caja.')->withInput();
+        $enAuditoria = $cierre->estado === TesoreriaCrownCierreSupport::AUDITORIA;
+        $usuario = TesoreriaCrownFirmaSupport::firmante(
+            $datos['firma_usuario'],
+            $datos['firma_password'],
+            fn (Usuario $u) => TesoreriaCrownFirmaSupport::puedeReabrirCaja($u)
+                && (! $enAuditoria || TesoreriaCrownFirmaSupport::puedeAuditarCaja($u))
+        );
+        if (is_string($usuario)) {
+            return back()->with('mensaje-error', $usuario)->withInput($request->except('firma_password'));
         }
 
         $jornada = $fila->jornada;
@@ -228,6 +257,8 @@ class TesoreriaCrownCierreController extends Controller
             ? 'Caja reabierta. La jornada volvió a abierta. El cierre anterior queda en la historia.'
             : 'Caja reabierta. El cierre anterior queda en la historia.';
 
+        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+
         return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', $mensaje);
     }
 
@@ -249,16 +280,22 @@ class TesoreriaCrownCierreController extends Controller
             'tesoreria_usuario' => ['required', 'string'],
             'tesoreria_password' => ['required', 'string'],
         ]);
-        $auditor = TesoreriaCrownFirmaSupport::usuarioPorClave($datos['auditor_usuario'], $datos['auditor_password']);
-        if ($auditor === null) {
-            return back()->with('mensaje-error', 'Usuario o clave de quien audita incorrectos.')->withInput();
+        $sinClaves = ['auditor_password', 'tesoreria_password'];
+        $auditor = TesoreriaCrownFirmaSupport::firmante(
+            $datos['auditor_usuario'],
+            $datos['auditor_password'],
+            fn (Usuario $u) => TesoreriaCrownFirmaSupport::puedeAjustarCaja($u)
+        );
+        if (is_string($auditor)) {
+            return back()->with('mensaje-error', 'Quien audita: '.$auditor)->withInput($request->except($sinClaves));
         }
-        if (! TesoreriaCrownFirmaSupport::puedeAjustarCaja($auditor)) {
-            return back()->with('mensaje-error', 'Ese usuario no tiene permiso para ajustar el cierre.')->withInput();
-        }
-        $tesoreria = TesoreriaCrownFirmaSupport::usuarioPorClave($datos['tesoreria_usuario'], $datos['tesoreria_password']);
-        if ($tesoreria === null) {
-            return back()->with('mensaje-error', 'Usuario o clave de tesorería incorrectos.')->withInput();
+        $tesoreria = TesoreriaCrownFirmaSupport::firmante(
+            $datos['tesoreria_usuario'],
+            $datos['tesoreria_password'],
+            fn (Usuario $u) => TesoreriaCrownFirmaSupport::puedeFirmarTesoreria($u)
+        );
+        if (is_string($tesoreria)) {
+            return back()->with('mensaje-error', 'Tesorería: '.$tesoreria)->withInput($request->except($sinClaves));
         }
         if ((int) $auditor->id === (int) $tesoreria->id) {
             return back()->with('mensaje-error', 'Quien audita y quien confirma en tesorería tienen que ser dos personas.')->withInput();
@@ -302,6 +339,8 @@ class TesoreriaCrownCierreController extends Controller
             }
         });
 
+        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+
         return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', 'Ajuste de caja grabado. El cierre original no se modificó.');
     }
 
@@ -334,6 +373,8 @@ class TesoreriaCrownCierreController extends Controller
         $cierre->save();
         $this->evento($cierre, $estado, $usuario, $detalle);
 
+        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+
         return back()->with('mensaje', $mensaje);
     }
 
@@ -349,12 +390,14 @@ class TesoreriaCrownCierreController extends Controller
 
     private function tesoreria(string $login, string $clave): Usuario|\Illuminate\Http\RedirectResponse
     {
-        $usuario = TesoreriaCrownFirmaSupport::usuarioPorClave($login, $clave);
-        if ($usuario === null) {
-            return back()->with('mensaje-error', 'Usuario o clave de tesorería incorrectos.')->withInput();
-        }
-        if (! TesoreriaCrownFirmaSupport::puedeFirmarTesoreria($usuario)) {
-            return back()->with('mensaje-error', 'Ese usuario no puede firmar el cierre.')->withInput();
+        $usuario = TesoreriaCrownFirmaSupport::firmante(
+            $login,
+            $clave,
+            fn (Usuario $u) => TesoreriaCrownFirmaSupport::puedeFirmarTesoreria($u)
+        );
+        if (is_string($usuario)) {
+            return back()->with('mensaje-error', $usuario)
+                ->withInput(request()->except(['firma_password', 'clave_cajero', 'clave_cajero_nueva', 'clave_cajero_repetir']));
         }
 
         return $usuario;

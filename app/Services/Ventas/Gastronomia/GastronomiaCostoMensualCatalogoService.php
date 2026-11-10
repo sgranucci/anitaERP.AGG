@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Calcula el costo mensual de artículos de catálogo (SKU V…) según fórmula + última compra Anita
- * y lo graba en la lista de precios 5000 + mes (ej. junio → 5006) en ERP y Anita (stkpre).
+ * y lo graba en la lista de precios (base + mes) en ERP y Anita (stkpre).
+ * Base: GASTRONOMIA_INFORME_GERENTE_COSTO_LISTA_BASE (AGG 5000 → 5006 jun; Crown 100 → 106 jun).
  * Incluye no facturables (nofactura=1): invitaciones / cortesía también necesitan costo en reportes.
  */
 class GastronomiaCostoMensualCatalogoService
@@ -59,8 +60,9 @@ class GastronomiaCostoMensualCatalogoService
 
         $lista = Listaprecio::query()->where('codigo', $codigoLista)->first(['id', 'codigo']);
         if ($lista === null) {
+            $base = GastronomiaInformeGerenteCostoListaSupport::baseListaCosto();
             throw new \RuntimeException(
-                "No existe listaprecio con código {$codigoLista} (5000 + mes {$listas['mes_actual']}). "
+                "No existe listaprecio con código {$codigoLista} (base {$base} + mes {$listas['mes_actual']}). "
                 .'Sincronice premae desde Anita o cree la lista en el ERP.'
             );
         }

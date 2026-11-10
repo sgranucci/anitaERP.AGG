@@ -102,13 +102,13 @@ function resolverUsuarioDesdeCodigo($input, opciones) {
 }
 
 function avanzarFocoUsuario($cont, $input) {
-    var $form = $cont.closest('form');
-    if (!$form.length) {
-        $form = $(document);
+    var $scope = $cont.closest('.modal.show, .modal.in, form');
+    if (!$scope.length) {
+        $scope = $(document);
     }
-    var $focusables = $form.find(
+    var $focusables = $scope.find(
         'input:not([type="hidden"]):not([readonly]):not(:disabled), select:not(:disabled), textarea:not([readonly]):not(:disabled), button:not(:disabled)'
-    );
+    ).filter(':visible');
     var indice = $focusables.index($input);
     if (indice >= 0 && indice + 1 < $focusables.length) {
         $focusables.eq(indice + 1).trigger('focus');
@@ -207,7 +207,7 @@ function aplicarUsuarioResuelto($row, data, opciones) {
         return false;
     }
     var $hid = $row.find('.usuario_id_arbol');
-    var $cod = $row.find('.usuario_codigo_arbol');
+    var $cod = $row.find('.usuario_codigo_arbol, .codigousuario').first();
     var $nom = $row.find('.nombreusuario');
     var $plain = $row.find('.usuario_id').filter(function () {
         return !$(this).hasClass('usuario_id_arbol');
@@ -256,11 +256,10 @@ function buscar_datos_usuario(consulta) {
     });
 }
 
+// Solo evita submit por Enter; no cortar propagación (F1/Enter de consulta + avance de foco).
 $(document).on('keydown', 'input', function (e) {
-    var keyCode = e.which;
-    if (keyCode == 13) {
-      e.preventDefault();
-      return false;
+    if (e.which === 13 || e.key === 'Enter') {
+        e.preventDefault();
     }
 });
 
@@ -276,6 +275,7 @@ $(document).on('keyup', '#consultausuario', function () {
 function limpiarCamposUsuarioConsulta($cont) {
     $cont.find('.usuario_id_arbol').val('');
     $cont.find('.usuario_id').not('.usuario_id_arbol').val('');
+    $cont.find('.usuario_codigo_arbol, .codigousuario').val('');
     $cont.find('.nombreusuario').val('');
     var $mail = $cont.find('.emailusuario');
     if (! $mail.length) {
@@ -432,7 +432,7 @@ function activa_eventos_consultausuario()
         } else {
             var $contBtn = contenedorUsuarioConsulta($btn);
             ptrusuario_id = $contBtn.find('.usuario_id_arbol, .usuario_id').first();
-            ptrusuario_codigo = $contBtn.find('.usuario_codigo_arbol');
+            ptrusuario_codigo = $contBtn.find('.usuario_codigo_arbol, .codigousuario').first();
             ptrnombreusuario = $contBtn.find('.nombreusuario');
         }
 

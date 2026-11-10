@@ -29,6 +29,12 @@ final class TesoreriaCrownCierreSupport
     /** No se asigna a ningún rol al instalar. Lo tilda Sistemas en Permiso - Rol. */
     public const PERMISO_AJUSTAR = 'ajustar-tesoreria-crown-caja';
 
+    /**
+     * Cierra auditorías de caja, resuelve comprobantes no conformes y autoriza reabrir un
+     * cierre en auditoría. No se asigna a ningún rol al instalar. Lo tilda Sistemas en Permiso - Rol.
+     */
+    public const PERMISO_AUDITAR = 'auditar-tesoreria-crown-caja';
+
     /** Fila de historia cuando se graba un ajuste. No cambia el estado del cierre por sí solo. */
     public const AJUSTE = 'J';
 

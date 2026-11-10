@@ -167,12 +167,28 @@
     opacity: 0.85;
 }
 
+.gc-col-mesas .card-title {
+    font-size: 0.95rem;
+}
+
 .gc-mesa-btn {
     display: block;
     width: 100%;
     text-align: left;
-    margin-bottom: 0.35rem;
-    border-left: 4px solid #85C1E9;
+    margin-bottom: 0.22rem;
+    padding: 0.22rem 0.4rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    border-left: 3px solid #85C1E9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gc-mesa-btn .badge {
+    font-size: 0.62rem;
+    padding: 0.12em 0.35em;
+    vertical-align: middle;
 }
 
 .gc-mesa-btn.ocupada {
@@ -185,23 +201,39 @@
     font-weight: 700;
 }
 
-#gc-panel-cuentas {
-    max-height: 12rem;
-    overflow: auto;
+#gc-panel-cuentas-wrap {
     background: #f8fbfd;
+    border-bottom: 1px solid #d6e4ef;
+    display: block;
+}
+
+.gc-panel-cuentas-lista {
+    max-height: 9.5rem;
+    overflow: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
 }
 
 .gc-cuentas-titulo {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 700;
     color: #1B4F72;
-    margin-bottom: 0.35rem;
 }
 
 .gc-cuentas-ayuda {
-    font-size: 0.8rem;
+    font-size: 0.68rem;
     color: #5d6d7e;
-    margin-bottom: 0.4rem;
+}
+
+.gc-cuentas-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.gc-cuentas-acciones .btn {
+    font-size: 0.72rem;
 }
 
 #gc-desc-articulo {
@@ -228,11 +260,77 @@
     accent-color: #1a6b9a;
 }
 
+#gc-tabla-lineas .gc-linea-sku {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #1a6b9a;
+    background: #eaf4fb;
+    border: 1px solid #c5dceb;
+    border-radius: 0.2rem;
+    padding: 0.05rem 0.35rem;
+    white-space: nowrap;
+}
+
 #gc-tabla-lineas .gc-linea-desc {
     font-size: 0.84rem;
     font-weight: 600;
     line-height: 1.15;
     color: #17202A;
+}
+
+#gc-tabla-lineas .gc-linea-obs {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.72rem;
+    color: #0c5460;
+}
+
+#gc-tabla-lineas .gc-linea-acciones .btn {
+    padding: 0.1rem 0.28rem;
+    line-height: 1.1;
+}
+
+#gc-tabla-lineas .gc-obs-linea.has-obs {
+    color: #117a8b !important;
+}
+
+/* Modal destino KDS: chips de área */
+.gc-kds-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.gc-kds-chip {
+    border: 1px solid #c5d4e2;
+    background: #f7fafc;
+    color: #1a2a3a;
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.gc-kds-chip:hover {
+    background: #e8f4fb;
+    border-color: #1a6b9a;
+}
+
+.gc-kds-chip.activo {
+    background: #1a6b9a;
+    border-color: #1a6b9a;
+    color: #fff;
+    box-shadow: 0 0 0 2px rgba(26, 107, 154, 0.2);
+}
+
+.gc-kds-chip .gc-kds-chip-cod {
+    opacity: 0.85;
+    margin-right: 0.25rem;
 }
 
 #gc-tabla-lineas .gc-qty-btn {
@@ -494,4 +592,293 @@
     color: #6c757d;
     text-align: center;
     background: #fff;
+}
+
+/* Consultas anidadas encima de F8 / cobranza */
+.gc-modal-sobre-f8 {
+    z-index: 2060 !important;
+}
+
+/* Cobranza multi-medio + F8 (solo POS Crown) */
+.gc-cobro-modal .modal-content,
+.gc-f8-modal .modal-content {
+    border: 0;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(13, 33, 55, 0.35);
+}
+
+.gc-cobro-header,
+.gc-f8-header {
+    background: linear-gradient(115deg, #0d2137 0%, #1a6b9a 55%, #c45c26 140%);
+    color: #f8fbff;
+    border: 0;
+    align-items: flex-start;
+}
+
+.gc-cobro-sub {
+    opacity: 0.82;
+    font-size: 0.85rem;
+    margin-top: 0.15rem;
+}
+
+.gc-cobro-total-wrap {
+    margin-left: auto;
+    margin-right: 1rem;
+}
+
+.gc-cobro-total-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.8;
+}
+
+.gc-cobro-total {
+    font-size: 1.65rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.gc-medios-rapidos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.gc-medio-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 5.4rem;
+    max-width: 7.2rem;
+    min-height: 4.4rem;
+    padding: 0.45rem 0.4rem;
+    border: 1px solid #d5e2ee;
+    border-radius: 0.85rem;
+    background:
+        radial-gradient(120% 80% at 50% 0%, rgba(26, 107, 154, 0.08), transparent 55%),
+        linear-gradient(180deg, #fff 0%, #f3f7fb 100%);
+    color: #0f2744;
+    font-size: 0.7rem;
+    font-weight: 650;
+    line-height: 1.15;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+}
+
+.gc-medio-chip:hover {
+    transform: translateY(-2px);
+    border-color: #1a6b9a;
+    box-shadow: 0 8px 18px rgba(26, 107, 154, 0.18);
+}
+
+.gc-medio-chip i,
+.gc-medio-chip .gastro-icon-mercadopago {
+    font-size: 1.35rem;
+    margin-bottom: 0.25rem;
+}
+
+.gastro-icon-mercadopago {
+    display: inline-block;
+    width: 1.35rem;
+    height: 1.35rem;
+    background: url("/assets/pages/img/ventas/gastronomia/mercadopago.svg") center/contain no-repeat;
+}
+
+.gc-cc-cuenta-wrap,
+.gc-campo-consulta {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.gc-cc-cuenta-wrap .codigo,
+.gc-campo-consulta .codigo,
+.gc-campo-consulta .codigousuario,
+.gc-campo-consulta .codigocliente,
+.gc-campo-consulta .codigocentrocosto,
+.gc-campo-consulta .codigodescuento {
+    width: 5.5rem;
+    flex: 0 0 5.5rem;
+}
+
+.gc-cc-cuenta-wrap .nombre,
+.gc-campo-consulta .nombre,
+.gc-campo-consulta .nombreusuario,
+.gc-campo-consulta .nombrecliente,
+.gc-campo-consulta .nombrecentrocosto,
+.gc-campo-consulta .nombredescuento {
+    flex: 1 1 auto;
+}
+
+.gc-cobro-resumen {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.gc-cobro-resumen[data-estado="ok"] { color: #1e8449; }
+.gc-cobro-resumen[data-estado="warn"] { color: #c0392b; }
+
+.gc-cobro-atajos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding-top: 0.65rem;
+    border-top: 1px dashed #d5e2ee;
+}
+
+.gc-f8-tipos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+}
+
+.gc-f8-tipo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 4.6rem;
+    border: 1px solid #d5e2ee;
+    border-radius: 0.9rem;
+    background: #f8fbfd;
+    color: #0f2744;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.gc-f8-tipo i { font-size: 1.35rem; color: #1a6b9a; }
+
+.gc-f8-tipo:hover {
+    transform: translateY(-1px);
+    border-color: #1a6b9a;
+}
+
+.gc-f8-tipo.active {
+    background: linear-gradient(180deg, #e8f4fb 0%, #d6ebf7 100%);
+    border-color: #1a6b9a;
+    box-shadow: 0 0 0 2px rgba(26, 107, 154, 0.2);
+}
+
+/* Panel Carga: compacto, sin cajas vacías grandes */
+.gc-carga-body {
+    padding: 0.65rem 0.75rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.gc-carga-hint {
+    display: block;
+    margin: 0 0 0.15rem;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: #6c757d;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.gc-carga-codigo-row {
+    max-width: 11.5rem;
+}
+
+.gc-carga-codigo-group {
+    width: 100%;
+}
+
+.gc-carga-codigo-group .gc-sku-prefijo {
+    font-size: 0.8rem;
+    font-weight: 700;
+    min-width: 1.5rem;
+    padding: 0.2rem 0.35rem;
+    justify-content: center;
+    background: #eef2f6;
+    color: #334;
+}
+
+#gc-codigo-articulo.gc-codigo-articulo {
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.03em;
+    padding: 0.25rem 0.4rem;
+    max-width: 5.5rem;
+}
+
+.gc-carga-codigo-group .consultaarticulo {
+    padding: 0.25rem 0.45rem;
+}
+
+.gc-carga-desc {
+    min-height: 1.15rem;
+    font-size: 0.82rem;
+    line-height: 1.25;
+    color: #1a2a3a;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gc-carga-desc:empty::before {
+    content: '—';
+    color: #adb5bd;
+    font-weight: 400;
+}
+
+.gc-carga-desc.gc-sin-precio {
+    color: #a94442;
+}
+
+.gc-carga-meta {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.5rem 0.75rem;
+    align-items: end;
+}
+
+.gc-carga-kds {
+    min-width: 0;
+}
+
+#gc-area-kds {
+    font-size: 0.8rem;
+    width: 100%;
+}
+
+.gc-carga-prepara .custom-control-label {
+    font-size: 0.85rem;
+    padding-top: 0.1rem;
+}
+
+.gc-precio-preview {
+    font-size: 0.95rem;
+    color: #0f2744;
+    white-space: nowrap;
+}
+
+.gc-precio-preview.gc-precio-cero {
+    color: #1e7e34;
+}
+
+.gc-precio-preview.gc-precio-faltante {
+    color: #a94442;
+    font-size: 0.8rem;
+}
+
+.gc-carga-aviso {
+    margin: 0;
+    padding: 0.4rem 0.55rem;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    color: #495057;
+    background: #f1f3f5;
+    border-radius: 0.25rem;
 }

@@ -36,6 +36,7 @@ class TesoreriaCrownJornada extends Model implements Auditable
         'caja_final_mes' => 'decimal:2',
         'caja_final_viii' => 'decimal:2',
         'clientes' => 'integer',
+        'recalculo_pendiente' => 'boolean',
     ];
 
     public function sala(): BelongsTo

@@ -47,8 +47,24 @@
                     </select>
                     </div>
                     <label for="estado" class="col-lg-2 col-form-label text-right pr-2">Estado</label>
-                    <div class="col-lg-2">
-                        <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
+                    <div class="col-lg-3">
+                        @php
+                            $estadoArt = strtoupper(trim((string) old('estado', $producto->estado ?? 'ACTIVO')));
+                            $esInactivo = $estadoArt === 'INACTIVO';
+                        @endphp
+                        <div class="d-flex align-items-center">
+                            <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
+                            @if (isset($producto) && can('cambiar-estado-articulos', false))
+                                <button type="button"
+                                    onclick="anulaArticulo()"
+                                    id="anulaarticulo"
+                                    class="btn btn-link btn-sm text-nowrap ml-2 p-0 btn-cambiar-estado-articulo {{ $esInactivo ? 'text-success' : 'text-warning' }}"
+                                    title="{{ $esInactivo ? 'Activar el art&iacute;culo' : 'Inactivar el art&iacute;culo' }}"
+                                    aria-label="{{ $esInactivo ? 'Activar el art&iacute;culo' : 'Inactivar el art&iacute;culo' }}">
+                                    <i class="fa fa-fw {{ $esInactivo ? 'fa-check-circle' : 'fa-ban' }}"></i>
+                                </button>
+                            @endif
+                        </div>
                     </div>
               	</div>
                 @include('stock.articulo.partials.campo_canales_estados_ferli')

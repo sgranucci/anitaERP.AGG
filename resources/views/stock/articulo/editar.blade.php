@@ -140,14 +140,19 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
-                        @if (empty($soloConsulta) && can('cambiar-estado-articulos', false))
-                            <button type="submit" onclick="anulaArticulo()" id="anulaarticulo" class="btn btn-warning btn-sm">
-                                <i class="fa fa-fw fa-ban"></i>
-                                Inactivar el Artículo
-                            </button>
-                        @else
-                            <input type="hidden" id="anulaarticulo" value="">
-                        @endif
+                    @if (can('cambiar-estado-articulos', false))
+                        @php
+                            $estadoToolbar = strtoupper(trim((string) ($producto->estado ?? 'ACTIVO')));
+                            $inactivoToolbar = $estadoToolbar === 'INACTIVO';
+                        @endphp
+                        <button type="button"
+                            onclick="anulaArticulo()"
+                            class="btn btn-sm {{ $inactivoToolbar ? 'btn-success' : 'btn-warning' }} btn-cambiar-estado-articulo js-anula-articulo-toolbar"
+                            title="{{ $inactivoToolbar ? 'Activar el art&iacute;culo' : 'Inactivar el art&iacute;culo' }}">
+                            <i class="fa fa-fw {{ $inactivoToolbar ? 'fa-check' : 'fa-ban' }}"></i>
+                            {{ $inactivoToolbar ? 'Activar el Artículo' : 'Inactivar el Artículo' }}
+                        </button>
+                    @endif
                 </div>
             </div>
             <form action="{{ route('actualizar_articulo', ['id' => $producto->id] + ($filtrosQuery ?? [])) }}" enctype="multipart/form-data" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" @if(empty($puedeActualizarArticulo)) onsubmit="return false;" @endif>

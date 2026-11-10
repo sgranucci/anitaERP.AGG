@@ -548,9 +548,12 @@ function buscar_datos_articulo(consulta) {
     if (listaPrecio.id > 0) {
         postData.listaprecio_id = listaPrecio.id;
     }
-    if ($('#consultaarticuloModal').data('articuloSoloFacturable')) {
-        postData.solo_facturable = 1;
-    }
+        if ($('#consultaarticuloModal').data('articuloSoloFacturable')) {
+            postData.solo_facturable = 1;
+        }
+        if ($('#consultaarticuloModal').data('articuloRequierePrecio')) {
+            postData.requiere_precio = 1;
+        }
     if ($('#consultaarticuloModal').data('articuloSoloInsumoGastronomia')) {
         postData.solo_insumo_gastronomia = 1;
     }
@@ -699,6 +702,12 @@ function activa_eventos_consultaarticulo()
             $('#consultaarticuloModal').data('articuloSoloFacturable', 1);
         } else {
             $('#consultaarticuloModal').removeData('articuloSoloFacturable');
+        }
+
+        if ($(this).attr('data-requiere-precio') === '1') {
+            $('#consultaarticuloModal').data('articuloRequierePrecio', 1);
+        } else {
+            $('#consultaarticuloModal').removeData('articuloRequierePrecio');
         }
 
         if ($(this).closest('#tabla-articulos-requisicion').length) {

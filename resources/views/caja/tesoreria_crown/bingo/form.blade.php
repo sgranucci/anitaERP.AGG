@@ -45,7 +45,7 @@
                 <h3 class="card-title mb-0">{{ $edicion ? 'Editar' : 'Cargar' }} bingo</h3>
                 <div class="card-tools">
                     <a href="{{ route('tesoreria_crown_bingo', ['sala_id' => $sala->id]) }}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-reply-all"></i> Volver
+                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>

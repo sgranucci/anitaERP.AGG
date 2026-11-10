@@ -5,8 +5,9 @@ namespace App\Support\Ventas\Gastronomia;
 use Carbon\Carbon;
 
 /**
- * Listas Anita stkpre para costos del informe gerente: base 5000 + número de mes (ej. junio → 5006, mayo → 5005).
- * El costo se lee solo por lista (prem_lista); no se filtra por fecha de vigencia en stkpre.
+ * Listas de costo mensual: config base + número de mes.
+ * AGG: base 5000 (junio → 5006). Crown: base 100 (junio → 106 STD).
+ * En Anita stkpre el costo se lee solo por lista (prem_lista); no se filtra por vigencia.
  */
 final class GastronomiaInformeGerenteCostoListaSupport
 {

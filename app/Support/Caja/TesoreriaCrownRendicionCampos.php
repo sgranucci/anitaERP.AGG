@@ -38,8 +38,9 @@ final class TesoreriaCrownRendicionCampos
                     'pago_parcial' => ['label' => 'Total pagos parcial', 'tipo' => 'importe', 'negativo' => true],
                     'vta_apuesta' => ['label' => 'Venta apuestas deportivas', 'tipo' => 'importe', 'negativo' => false],
                     'pago_apuesta' => ['label' => 'Pago apuestas deportivas', 'tipo' => 'importe', 'negativo' => false],
-                    'venta_online' => ['label' => 'Ventas de casino on-line', 'tipo' => 'importe', 'negativo' => true],
-                    'pago_online' => ['label' => 'Pagos de casino on-line', 'tipo' => 'importe', 'negativo' => true],
+                    'venta_online' => ['label' => 'Neto casino on-line', 'tipo' => 'importe', 'negativo' => true],
+                    // a-transfefe.c ya no lo pide: queda para rendiciones importadas y reversas.
+                    'pago_online' => ['label' => 'Pagos de casino on-line', 'tipo' => 'importe', 'negativo' => true, 'solo_historico' => true],
                     'tarjeta_debito' => ['label' => 'Tarjeta de débito', 'tipo' => 'importe', 'negativo' => true],
                     'tarjeta_credito' => ['label' => 'Tarjeta de crédito', 'tipo' => 'importe', 'negativo' => true],
                     'recargo_fin' => ['label' => 'Recargo financiación', 'tipo' => 'importe', 'negativo' => false],
@@ -81,6 +82,12 @@ final class TesoreriaCrownRendicionCampos
         $grupos = self::grupos();
         if (! self::esCajaGastroHotel($tipoTarea)) {
             unset($grupos['gastro']);
+        }
+        foreach ($grupos as $clave => $grupo) {
+            $grupos[$clave]['campos'] = array_filter(
+                $grupo['campos'],
+                static fn (array $meta): bool => empty($meta['solo_historico'])
+            );
         }
 
         return $grupos;

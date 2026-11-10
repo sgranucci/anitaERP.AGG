@@ -46,6 +46,8 @@ return [
     /**
      * true = habilitación de turno por PC antes de facturar (AGG).
      * false = caja directo: sin habilitación/cierre de turno operativo.
+     * En Crown el código fuerza false ({@see GastronomiaTurnoOperativoService::requiereHabilitacionTurno}):
+     * no hay menú de turnos y no se usa ese circuito.
      */
     'requiere_habilitacion_turno' => filter_var(env('GASTRONOMIA_REQUIERE_HABILITACION_TURNO', true), FILTER_VALIDATE_BOOLEAN),
 
@@ -145,6 +147,7 @@ return [
 
     /**
      * Replica la venta en Informix legacy vía bridge HTTP al facturar desde gastronomía.
+     * Crown POS: false = grabar solo ERP (más rápido); true = vuelve a replicar Anita.
      */
     'sincronizar_anita_al_facturar' => filter_var(env('GASTRONOMIA_SINCRONIZAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
 
@@ -905,7 +908,8 @@ return [
     'recepciones_erp_desde' => env('GASTRONOMIA_RECEPCIONES_ERP_DESDE', '2025-01-02'),
 
     /**
-     * Informe gerente: base de listas Anita stkpre para costo (5000 + mes). Ej. junio → 5006, mayo → 5005.
+     * Informe gerente / costeo mensual: base + mes.
+     * AGG: 5000 (junio → 5006). Crown: 100 (junio → 106 STD). Lista 50 = COSTO general (ambos).
      */
     'informe_gerente_costo_lista_base' => (int) env('GASTRONOMIA_INFORME_GERENTE_COSTO_LISTA_BASE', 5000),
 
@@ -915,7 +919,7 @@ return [
     'ventas_articulos_listaprecio_venta_id' => (int) env('GASTRONOMIA_VENTAS_ARTICULOS_LISTAPRECIO_VENTA_ID', 0),
 
     /**
-     * Costo catálogo V…: fórmula + última compra Anita → lista 5000+mes (ERP precio; stkpre opcional).
+     * Costo catálogo V…: fórmula + última compra → lista (informe_gerente_costo_lista_base + mes).
      * Comando: php artisan gastronomia:actualizar-costo-mensual-catalogo
      * Schedule: diario al inicio de jornada + último día del mes (cierre).
      */
@@ -976,6 +980,10 @@ return [
          * Tipos de cobro que además registran cobranza en la cuenta de caja de efectivo de la empresa.
          * Interna y hotel facturan sin cobranza (consumo interno / cargo a la habitación).
          */
+        /**
+         * Solo POS Crown. No altera AGG, estacionamiento ni canje marketing.
+         * efectivo / factura_sola = F5 one-shot. Grilla multi-medio usa tipo `medios` aparte.
+         */
         'tipos_cobro_con_cobranza_efectivo' => array_values(array_filter(array_map(
             'trim',
             explode(',', (string) env('GASTRONOMIA_CROWN_TIPOS_COBRO_CON_COBRANZA', 'efectivo,factura_sola')),
@@ -985,6 +993,13 @@ return [
          * Segundos entre refrescos automáticos de la pantalla KDS por sala (mínimo 3).
          */
         'kds_refresco_segundos' => (int) env('GASTRONOMIA_CROWN_KDS_REFRESCO_SEGUNDOS', 5),
+
+        /**
+         * Siembra de numeradores CAEA (venta_serie_numerador) desde Informix.
+         * Cipolletti = cncadmin; AC = acncadmin. Lectura bridge, no escritura.
+         */
+        'numerador_anita_ifx_server' => env('GASTRONOMIA_CROWN_NUMERADOR_ANITA_IFX_SERVER', 'cncadmin'),
+        'numerador_anita_path_sistema' => env('GASTRONOMIA_CROWN_NUMERADOR_ANITA_PATH', '/usr2/casino'),
     ],
 
 ];

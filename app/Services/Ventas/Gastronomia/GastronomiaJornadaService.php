@@ -116,12 +116,17 @@ final class GastronomiaJornadaService
         $abierta = $this->jornadaAbierta($empresaId, $salaId);
         $hoy = Carbon::today()->format('Y-m-d');
 
-        $cuentasAbiertasConItems = $abierta !== null
-            ? $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId)
-            : 0;
-        $cuentasAbiertasVacias = $abierta !== null
-            ? $this->contarCuentasAbiertasVaciasPorEmpresa($empresaId)
-            : 0;
+        if ($abierta !== null && EntornoEmpresaSupport::esCrown()) {
+            $resumenCrown = $this->resumenCuentasAbiertasCrown($empresaId, $salaId);
+            $cuentasAbiertasConItems = $resumenCrown['con_items'];
+            $cuentasAbiertasVacias = $resumenCrown['vacias'];
+        } elseif ($abierta !== null) {
+            $cuentasAbiertasConItems = $this->contarCuentasAbiertasConItemsPorEmpresa($empresaId);
+            $cuentasAbiertasVacias = $this->contarCuentasAbiertasVaciasPorEmpresa($empresaId);
+        } else {
+            $cuentasAbiertasConItems = 0;
+            $cuentasAbiertasVacias = 0;
+        }
 
         $ultimaJornada = $this->jornadaRepository->ultimaJornadaPorEmpresa($empresaId, $salaId);
         $fechasApertura = $this->fechasSugeridasApertura($ultimaJornada);
@@ -475,19 +480,76 @@ final class GastronomiaJornadaService
      */
     private function erroresAntesDeCerrarCrown(int $empresaId, ?int $salaId = null): array
     {
-        $abiertas = GastroCrownCuenta::query()
-            ->where('empresa_id', $empresaId)
-            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
-            ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
-            ->count();
-
-        if ($abiertas <= 0) {
+        $resumen = $this->resumenCuentasAbiertasCrown($empresaId, $salaId);
+        if ($resumen['total'] <= 0) {
             return [];
         }
 
+        $partes = [];
+        if ($resumen['con_mesa'] > 0) {
+            $partes[] = $resumen['con_mesa'].' en mesa';
+        }
+        if ($resumen['sin_mesa'] > 0) {
+            $partes[] = $resumen['sin_mesa'].' de barra/sin mesa';
+        }
+        if ($resumen['con_items'] > 0) {
+            $partes[] = $resumen['con_items'].' con consumos';
+        }
+        if ($resumen['vacias'] > 0) {
+            $partes[] = $resumen['vacias'].' vacías';
+        }
+
         return [
-            'Hay '.$abiertas.' cuenta(s) de mesa abierta(s) o en cobro en el POS. '
-            .'Cóbrelas o anúlelas antes de cerrar la jornada.',
+            'Hay '.$resumen['total'].' cuenta(s) abierta(s) o en cobro en el POS Crown'
+            .($partes !== [] ? ' ('.implode(', ', $partes).')' : '')
+            .'. Cóbrelas o cerralas sin facturar desde Ventas → Gastronomía → '
+            .'Saneamiento de cuentas antes de cerrar la jornada. '
+            .'No se permite cerrar la jornada con mesas/cuentas sin facturar.',
+        ];
+    }
+
+    /**
+     * @return array{total:int,con_items:int,vacias:int,con_mesa:int,sin_mesa:int}
+     */
+    public function resumenCuentasAbiertasCrown(int $empresaId, ?int $salaId = null): array
+    {
+        $vacio = ['total' => 0, 'con_items' => 0, 'vacias' => 0, 'con_mesa' => 0, 'sin_mesa' => 0];
+        if ($empresaId <= 0) {
+            return $vacio;
+        }
+
+        $cuentas = GastroCrownCuenta::query()
+            ->withCount([
+                'lineas as lineas_consumo' => fn ($q) => $q->where('es_separador', false),
+            ])
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
+            ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+            ->get(['id', 'mesa_gastronomia_id']);
+
+        $conItems = 0;
+        $vacias = 0;
+        $conMesa = 0;
+        $sinMesa = 0;
+        foreach ($cuentas as $c) {
+            if ((int) ($c->lineas_consumo ?? 0) > 0) {
+                $conItems++;
+            } else {
+                $vacias++;
+            }
+            if ((int) ($c->mesa_gastronomia_id ?? 0) > 0) {
+                $conMesa++;
+            } else {
+                $sinMesa++;
+            }
+        }
+
+        return [
+            'total' => $cuentas->count(),
+            'con_items' => $conItems,
+            'vacias' => $vacias,
+            'con_mesa' => $conMesa,
+            'sin_mesa' => $sinMesa,
         ];
     }
 

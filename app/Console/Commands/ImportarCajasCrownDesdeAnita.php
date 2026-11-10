@@ -10,7 +10,7 @@ class ImportarCajasCrownDesdeAnita extends Command
 {
     protected $signature = 'tesoreria-crown:importar-cajas-anita
                             {--fecha= : Jornada Y-m-d}
-                            {--excepto=1,40 : Números de caja que no se importan}
+                            {--excepto= : Números de caja que no se importan (coma). Las cajas operadas en el ERP se saltean solas}
                             {--ejecutar : Graba. Sin este flag solo muestra el plan}';
 
     protected $description = 'Importa las cajas abiertas y cerradas de un día desde cncadmin (efectivo, billetes, fichas y cierre).';
@@ -68,7 +68,9 @@ class ImportarCajasCrownDesdeAnita extends Command
             $this->warn($aviso);
         }
         $this->info(count($plan['cajas']).' cajas. Comprobantes nuevos: '.$nuevos.'. Ya cargados: '.$ya.'.');
-        $this->line('Quedan afuera las cajas '.implode(', ', $plan['excluidas']).'.');
+        if ($plan['excluidas'] !== []) {
+            $this->line('Quedan afuera las cajas '.implode(', ', $plan['excluidas']).'.');
+        }
 
         if (! $this->option('ejecutar')) {
             $this->warn('Sin --ejecutar no se grabó nada.');

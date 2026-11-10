@@ -131,12 +131,15 @@ final class TesoreriaCrownWorkbenchSupport
             $recurso,
             (int) auth()->id(),
             (string) $request->input('nombre', ''),
-            [
+            array_filter([
                 'qbe' => $filtros['qbe'] ?? [],
                 'sort' => $filtros['sort'] ?? [],
                 'agrupar' => $filtros['agrupar'] ?? [],
                 'valor' => $filtros['valor'] ?? '',
-            ],
+                'grafico' => $filtros['grafico'] ?? null,
+                'graficos' => $filtros['graficos'] ?? null,
+                'formato' => $filtros['formato'] ?? null,
+            ], static fn ($v) => $v !== null && $v !== []),
             $layout,
             $request->boolean('es_default'),
             $request->boolean('compartida'),

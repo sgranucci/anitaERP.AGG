@@ -24,7 +24,7 @@ class ImportarMesTesoreriaCrownDesdeAnita extends Command
     protected $signature = 'tesoreria-crown:importar-mes-anita
                             {--desde= : Fecha inicial Y-m-d}
                             {--hasta= : Fecha final Y-m-d}
-                            {--excepto-cajas=1,40 : Cajas Anita a excluir}
+                            {--excepto-cajas= : Cajas Anita a excluir (coma). Las cajas operadas en el ERP se saltean solas}
                             {--ejecutar : Graba. Sin este flag solo resume el plan}';
 
     protected $description = 'Crea jornadas e importa mesas/cajas/slots/bóveda Anita día a día (MTD anexos).';
@@ -98,6 +98,7 @@ class ImportarMesTesoreriaCrownDesdeAnita extends Command
                 'cajas' => 0,
                 'slots' => 0,
                 'boveda' => 0,
+                'z' => 0,
                 'aviso' => '',
             ];
             try {
@@ -145,6 +146,8 @@ class ImportarMesTesoreriaCrownDesdeAnita extends Command
                 $fila['slots'] = count($planSlots['crear']);
                 $planBoveda = $boveda->plan($fecha, '');
                 $fila['boveda'] = count($planBoveda['crear']);
+                $planZ = $cajas->planCierresZ($fecha);
+                $fila['z'] = count($planZ);
 
                 if ($ejecutar) {
                     if ($fila['mesas'] > 0) {
@@ -159,6 +162,9 @@ class ImportarMesTesoreriaCrownDesdeAnita extends Command
                     }
                     if ($fila['boveda'] > 0) {
                         $boveda->aplicar($planBoveda);
+                    }
+                    if ($fila['z'] > 0) {
+                        $cajas->aplicarCierresZ($planZ);
                     }
                     // Persiste caja final / poder público para la cadena del anexo I.
                     $jornada->refresh();
@@ -175,21 +181,22 @@ class ImportarMesTesoreriaCrownDesdeAnita extends Command
             }
             $resumen[] = $fila;
             $this->line(sprintf(
-                '%s j=%s m=%d c=%d s=%d b=%d %s',
+                '%s j=%s m=%d c=%d s=%d b=%d z=%d %s',
                 $fila['fecha'],
                 $fila['jornada'],
                 $fila['mesas'],
                 $fila['cajas'],
                 $fila['slots'],
                 $fila['boveda'],
+                $fila['z'],
                 $fila['aviso']
             ));
         }
 
         $this->table(
-            ['Fecha', 'Jornada', 'Mesas+', 'Cajas+', 'Slots+', 'Bóveda+', 'Aviso'],
+            ['Fecha', 'Jornada', 'Mesas+', 'Cajas+', 'Slots+', 'Bóveda+', 'Z+', 'Aviso'],
             array_map(static fn (array $f) => [
-                $f['fecha'], $f['jornada'], $f['mesas'], $f['cajas'], $f['slots'], $f['boveda'], $f['aviso'],
+                $f['fecha'], $f['jornada'], $f['mesas'], $f['cajas'], $f['slots'], $f['boveda'], $f['z'], $f['aviso'],
             ], $resumen)
         );
 

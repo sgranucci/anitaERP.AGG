@@ -72,8 +72,6 @@
                 <p class="mb-1">Total existente en conversión valorizado: <strong>{{ $pesos($fichas['conversion_valorizada']) }}</strong></p>
                 <p class="mb-1">Total en poder del público valorizado: <strong>{{ $pesos($fichas['poder_valorizado']) }}</strong></p>
                 <p class="mb-3">Total en poder del público diario: <strong>{{ $pesos($fichas['diario_valorizado']) }}</strong></p>
-            @elseif (is_array($fichas))
-                <div class="alert alert-warning py-2">Sin filas de stock de fichas para el día.</div>
             @endif
             @if (is_array($c))
                 <div class="table-responsive mb-3">

@@ -24,7 +24,7 @@ use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
-use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
+use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownCuentacajaEfectivoSalaSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
 use App\Support\Ventas\PuntoventaEmisionLock;
@@ -178,19 +178,41 @@ final class GastronomiaCrownFacturaEmisionService
 
         $monedaId = (int) config('gastronomia.moneda_factura_id', 1) ?: 1;
         $mediosPago = [];
-        $sinCobranza = $totales['factura_cortesia'] || ! $this->tipoCobroRegistraEfectivo($tipoCobro, $extra);
+        $sinCobranza = $totales['factura_cortesia'] || ! empty($extra['sin_cobranza']);
 
-        if (! $sinCobranza) {
-            $errorCuentacaja = GastronomiaCuentacajaEfectivo::mensajeErrorResolucion($empresaId);
+        try {
+            $mediosExplicitos = $this->normalizarMediosPagoExtra(
+                $extra['medios_pago'] ?? null,
+                $totales['total'],
+                $cuenta,
+                $tipoCobro,
+            );
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
+        if (! $sinCobranza && $mediosExplicitos !== []) {
+            $mediosPago = $mediosExplicitos;
+        } elseif (! $sinCobranza && $tipoCobro === GastroCrownCuenta::COBRO_MEDIOS) {
+            return ['error' => 'Indique al menos un medio de cobro en la grilla.'];
+        } elseif (! $sinCobranza && $this->tipoCobroRegistraEfectivo($tipoCobro, $extra)) {
+            $salaId = $cuenta->sala_id
+                ? (int) $cuenta->sala_id
+                : ($cfg->sala_id ? (int) $cfg->sala_id : null);
+            $errorCuentacaja = GastronomiaCrownCuentacajaEfectivoSalaSupport::mensajeErrorResolucion(
+                $salaId,
+                $empresaId
+            );
             if ($errorCuentacaja !== null) {
                 return ['error' => $errorCuentacaja];
             }
 
-            $cuentacaja = GastronomiaCuentacajaEfectivo::cuentaParaEmpresa($empresaId);
+            $cuentacaja = GastronomiaCrownCuentacajaEfectivoSalaSupport::cuentaParaSala($salaId, $empresaId);
             if ($cuentacaja === null) {
                 return [
-                    'error' => 'No se pudo resolver la cuenta de caja de efectivo de la empresa '.$empresaId
-                        .' (GASTRONOMIA_CUENTACAJA_EFECTIVO_POR_EMPRESA).',
+                    'error' => 'No se pudo resolver la cuenta de caja de efectivo para la sala'
+                        .($salaId ? ' #'.$salaId : '')
+                        .' (Configuración → Ventas → Cuentas caja gastro por sala).',
                 ];
             }
 
@@ -200,10 +222,13 @@ final class GastronomiaCrownFacturaEmisionService
                 'monto' => $totales['total'],
                 'observacion' => 'POS Crown cuenta #'.$cuenta->id.' ('.$tipoCobro.')',
             ]];
+        } else {
+            $sinCobranza = true;
+            $mediosPago = [];
+        }
 
-            if (config('gastronomia.genera_contabilidad_al_facturar', true)) {
-                $payload['_asiento_medios_pago'] = $mediosPago;
-            }
+        if ($mediosPago !== [] && config('gastronomia.genera_contabilidad_al_facturar', true)) {
+            $payload['_asiento_medios_pago'] = $mediosPago;
         }
 
         $puntoventa = Puntoventa::query()->find($puntoventaId);
@@ -594,8 +619,9 @@ final class GastronomiaCrownFacturaEmisionService
     }
 
     /**
-     * Fecha fiscal = día calendario; fecha de jornada = jornada abierta de la sala si existe
-     * (no se exige para no frenar el POS). Correlatividad CAEA igual que AGG.
+     * Fecha fiscal = día calendario; fecha de jornada = jornada abierta de la sala.
+     * Con jornada_obligatoria=true no se emite sin jornada (misma regla que AGG).
+     * Correlatividad CAEA igual que AGG.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
@@ -603,7 +629,9 @@ final class GastronomiaCrownFacturaEmisionService
     private function aplicarFechasAlPayload(array $payload, int $empresaId, ?int $salaId = null): array
     {
         $hoy = now()->format('Y-m-d');
-        $jornada = $this->jornadaService->jornadaAbierta($empresaId, $salaId);
+        $jornada = filter_var(config('gastronomia.jornada_obligatoria', true), FILTER_VALIDATE_BOOLEAN)
+            ? $this->jornadaService->exigirJornadaAbierta($empresaId, $salaId)
+            : $this->jornadaService->jornadaAbierta($empresaId, $salaId);
 
         $payload['fechafactura'] = $hoy;
         $payload['fechajornada'] = $jornada?->fecha_jornada?->format('Y-m-d') ?? $hoy;
@@ -660,6 +688,11 @@ final class GastronomiaCrownFacturaEmisionService
             'opcionales_por_item' => $opcionalesPorItem,
             'omitir_stkmov_anita_por_item' => $omitirStkmovAnita,
         ];
+
+        // Switch: GASTRONOMIA_SINCRONIZAR_ANITA (false = POS más rápido, sin bridge).
+        if (! config('gastronomia.sincronizar_anita_al_facturar', true)) {
+            $payload['_omitir_sincronizacion_anita'] = true;
+        }
 
         if ($totales['factura_cortesia']) {
             $payload['factura_cortesia_total'] = true;
@@ -838,6 +871,8 @@ final class GastronomiaCrownFacturaEmisionService
      * Tipos de cobro que generan movimiento de caja (efectivo). Interna / hotel facturan sin cobranza:
      * el consumo se imputa al centro interno o a la habitación.
      *
+     * Solo afecta Crown (`config gastronomia.crown.*`); AGG / estacionamiento / canje no leen esta clave.
+     *
      * @param  array<string, mixed>  $extra
      */
     private function tipoCobroRegistraEfectivo(string $tipoCobro, array $extra): bool
@@ -849,6 +884,56 @@ final class GastronomiaCrownFacturaEmisionService
         $tipos = config('gastronomia.crown.tipos_cobro_con_cobranza_efectivo', []);
 
         return is_array($tipos) && in_array($tipoCobro, array_map('strval', $tipos), true);
+    }
+
+    /**
+     * Grilla multi-medio del POS Crown (paridad AGG, aislada del facturador AGG).
+     *
+     * @param  mixed  $medios
+     * @return list<array{cuentacaja_id:int,moneda_id:int,monto:float,observacion?:string}>
+     */
+    private function normalizarMediosPagoExtra(mixed $medios, float $totalCuenta, GastroCrownCuenta $cuenta, string $tipoCobro): array
+    {
+        if (! is_array($medios) || $medios === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($medios as $medio) {
+            if (! is_array($medio)) {
+                continue;
+            }
+            $cuentacajaId = (int) ($medio['cuentacaja_id'] ?? 0);
+            $monedaId = (int) ($medio['moneda_id'] ?? 0);
+            $monto = round((float) ($medio['monto'] ?? 0), 2);
+            if ($cuentacajaId <= 0 || $monedaId <= 0 || $monto <= 0) {
+                continue;
+            }
+            $obs = trim((string) ($medio['observacion'] ?? ''));
+            $out[] = array_filter([
+                'cuentacaja_id' => $cuentacajaId,
+                'moneda_id' => $monedaId,
+                'monto' => $monto,
+                'observacion' => $obs !== ''
+                    ? $obs
+                    : 'POS Crown cuenta #'.$cuenta->id.' ('.$tipoCobro.')',
+            ], fn ($v) => $v !== null && $v !== '');
+        }
+
+        if ($out === []) {
+            return [];
+        }
+
+        $suma = round(array_sum(array_column($out, 'monto')), 2);
+        if ($totalCuenta > 0 && abs($suma - $totalCuenta) > 0.02) {
+            throw new InvalidArgumentException(
+                'El total de cobranza ($ '.number_format($suma, 2, ',', '.')
+                .') debe coincidir con el total a facturar ($ '.number_format($totalCuenta, 2, ',', '.')
+                .').'
+            );
+        }
+
+        return $out;
     }
 
     private function leyendaCuenta(GastroCrownCuenta $cuenta): string

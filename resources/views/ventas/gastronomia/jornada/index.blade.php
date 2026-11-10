@@ -203,13 +203,23 @@
                                     <div class="card-body">
                                         @if (! empty($estado['errores_cierre']))
                                             @php
-                                                $mostrarLinkSaneamiento = false;
-                                                foreach ($estado['errores_cierre'] as $err) {
-                                                    if (stripos($err, 'Saneamiento') !== false) {
-                                                        $mostrarLinkSaneamiento = true;
-                                                        break;
+                                                $mostrarLinkSaneamiento = ! empty($es_crown);
+                                                if (! $mostrarLinkSaneamiento) {
+                                                    foreach ($estado['errores_cierre'] as $err) {
+                                                        if (stripos($err, 'Saneamiento') !== false) {
+                                                            $mostrarLinkSaneamiento = true;
+                                                            break;
+                                                        }
                                                     }
                                                 }
+                                                $urlSaneamientoCierre = $url_saneamiento_turno
+                                                    ?? (! empty($es_crown)
+                                                        ? route('gastronomia_crown_saneamiento', array_filter([
+                                                            'empresa_id' => $empresa_id ?: null,
+                                                            'sala_id' => ($sala_id ?? 0) ?: null,
+                                                            'desde_jornada' => 1,
+                                                        ]))
+                                                        : url('ventas/gastronomia/saneamiento-turno'));
                                             @endphp
                                             <ul class="text-danger small" id="lista-errores-cierre">
                                                 @foreach ($estado['errores_cierre'] as $err)
@@ -218,12 +228,21 @@
                                             </ul>
                                             @if ($mostrarLinkSaneamiento)
                                                 <div class="mb-2">
-                                                    <a href="{{ url('ventas/gastronomia/saneamiento-turno') }}"
-                                                       class="btn btn-warning btn-sm"
-                                                       target="_blank" rel="noopener">
-                                                        <i class="fa fa-external-link"></i>
-                                                        Ir a Saneamiento de turnos
-                                                    </a>
+                                                    @if (! empty($es_crown))
+                                                        <a href="{{ $urlSaneamientoCierre }}"
+                                                           class="btn btn-warning btn-sm"
+                                                           id="btn-ir-saneamiento-crown">
+                                                            <i class="fa fa-wrench"></i>
+                                                            Ir a Saneamiento de cuentas
+                                                        </a>
+                                                    @else
+                                                        <a href="{{ $urlSaneamientoCierre }}"
+                                                           class="btn btn-warning btn-sm"
+                                                           target="_blank" rel="noopener">
+                                                            <i class="fa fa-external-link"></i>
+                                                            Ir a Saneamiento de turnos
+                                                        </a>
+                                                    @endif
                                                 </div>
                                             @endif
                                         @endif
@@ -252,11 +271,24 @@
                                             </div>
                                         @endif
                                         @if (! empty($estado['cuentas_abiertas_vacias']))
-                                            <div class="alert alert-info small py-2 mb-2">
-                                                {{ $estado['cuentas_abiertas_vacias'] }} cuenta(s) abierta(s) sin ítems se
-                                                <strong>descartarán automáticamente</strong> al cerrar la jornada
-                                                (no requieren saneamiento).
-                                            </div>
+                                            @if (! empty($es_crown))
+                                                <div class="alert alert-warning small py-2 mb-2">
+                                                    {{ $estado['cuentas_abiertas_vacias'] }} cuenta(s) abierta(s) vacías
+                                                    también <strong>bloquean</strong> el cierre de jornada en Crown.
+                                                    Cerralas sin facturar desde
+                                                    <a href="{{ $url_saneamiento_turno ?? route('gastronomia_crown_saneamiento', array_filter([
+                                                        'empresa_id' => $empresa_id ?: null,
+                                                        'sala_id' => ($sala_id ?? 0) ?: null,
+                                                        'desde_jornada' => 1,
+                                                    ])) }}">Saneamiento de cuentas</a>.
+                                                </div>
+                                            @else
+                                                <div class="alert alert-info small py-2 mb-2">
+                                                    {{ $estado['cuentas_abiertas_vacias'] }} cuenta(s) abierta(s) sin ítems se
+                                                    <strong>descartarán automáticamente</strong> al cerrar la jornada
+                                                    (no requieren saneamiento).
+                                                </div>
+                                            @endif
                                         @endif
                                         @if (! empty($cierre_totem_habilitado) && $estado['jornada_abierta'])
                                             <div id="waitry-preview-cargando"

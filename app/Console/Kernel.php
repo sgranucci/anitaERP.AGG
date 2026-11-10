@@ -2,6 +2,7 @@
 
 namespace App\Console;
 
+use App\Support\Caja\TesoreriaCrownAvisoSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
@@ -702,7 +703,7 @@ class Kernel extends ConsoleKernel
             ->when(fn () => ! EntornoEmpresaSupport::esFerli()
                 && (bool) config('gastronomia.costo_mensual_catalogo.habilitado', true));
 
-        // Cierre de mes: última pasada del costo catálogo (lista 5000+mes) tras la jornada.
+        // Cierre de mes: última pasada del costo catálogo (lista base+mes) tras la jornada.
         $schedule->command('gastronomia:actualizar-costo-mensual-catalogo')
             ->lastDayOfMonth((string) config('gastronomia.costo_mensual_catalogo.hora_ultimo_dia_mes', '23:30'))
             ->runInBackground()
@@ -806,6 +807,14 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/flash-crown-calculo-diario-schedule.log'))
             ->when(fn () => EntornoEmpresaSupport::esCrown()
                 && (bool) config('caja.flash_crown_calculo_diario.habilitado', true));
+
+        // Bandeja de avisos de auditoría Crown: últimos 7 días, control de ayer contra Anita y resumen por mail.
+        $schedule->command('tesoreria-crown:avisos --ejecutar --anita --mail')
+            ->dailyAt(EntornoEmpresaSupport::esCrown() ? TesoreriaCrownAvisoSupport::hora() : '07:30')
+            ->runInBackground()
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/tesoreria-crown-avisos-schedule.log'))
+            ->when(fn () => EntornoEmpresaSupport::esCrown() && TesoreriaCrownAvisoSupport::disponible());
 
         $schedule->command('ventas:reenviar-impresion-pendiente --ejecutar')
             ->dailyAt((string) config('impresion_comprobante.cron_hora', '06:20'))

@@ -220,7 +220,7 @@ final class TesoreriaCrownResumenCajeroCalculo
      */
     public static function deAsignacion(TesoreriaCrownAsignacion $asignacion): ?array
     {
-        $asignacion->loadMissing(['deposito', 'cajero', 'cierre', 'comprobantes.lineas.valor.tipoValor', 'comprobantes.reversa', 'jornada']);
+        TesoreriaCrownCierreCalculo::cargarRelaciones($asignacion, ['deposito', 'cajero']);
         $conforme = $asignacion->comprobantes->filter(
             fn (TesoreriaCrownComprobante $doc) => $doc->estado === TesoreriaCrownComprobanteSupport::CONFORME
         );
@@ -231,7 +231,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             return null;
         }
 
-        $calc = TesoreriaCrownCierreCalculo::de($asignacion);
+        $calc = TesoreriaCrownCierreCalculo::de($asignacion, false);
         $detalle = self::detalleRendiciones($conforme);
 
         $egresos = (float) $calc['habilitado'];
@@ -252,9 +252,9 @@ final class TesoreriaCrownResumenCajeroCalculo
         // l-anexo3new / rescajero.fc: Fichas Casino = tot_rendicion_ficha (columna Rend. Fichas).
         $fichasCasino = round($detalle['rend_fichas'], 2);
         $cashlessNeto = round($detalle['pago_cashless'] - $detalle['vta_cashless'], 2);
-        // Del Rio ONLINE en C = pago − venta. En el listado usamos pago + venta cuando el
-        // importe quedó cargado en un solo lado (mismo aporte al resultado que Anita).
-        $onlineListado = round($detalle['pago_online'] + $detalle['venta_online'], 2);
+        // a-transfefe.c carga el neto en efe_venta_online; las rendiciones viejas traen además
+        // efe_pago_online. Anita (l-anexo1 lee_online, a-rendfinal) usa venta − pago.
+        $onlineListado = round($detalle['venta_online'] - $detalle['pago_online'], 2);
         $voucherNeto = round($detalle['pago_voucher'] - $detalle['venta_voucher'], 2);
         $apuestasNeto = round($detalle['pago_apuesta'] - $detalle['vta_apuesta'], 2);
 
@@ -288,6 +288,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             'total_qr' => $detalle['total_qr'],
             'recargo_fin' => $detalle['recargo_fin'],
             'ctacte' => $detalle['ctacte'],
+            'transferencia_hotel' => $detalle['transferencia_hotel'],
             'ingresos' => $ingresos,
             'hab_fichas' => $detalle['hab_fichas'],
             'rend_fichas' => $detalle['rend_fichas'],
@@ -324,6 +325,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             'total_qr' => 0.0,
             'recargo_fin' => 0.0,
             'ctacte' => 0.0,
+            'transferencia_hotel' => 0.0,
             'hab_fichas' => 0.0,
             'rend_fichas' => 0.0,
             'pago_cashless' => 0.0,
@@ -353,6 +355,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             $out['total_qr'] = round($out['total_qr'] + (float) $doc->total_qr, 2);
             $out['recargo_fin'] = round($out['recargo_fin'] + (float) $doc->recargo_fin, 2);
             $out['ctacte'] = round($out['ctacte'] + (float) $doc->ctacte_hotel + (float) $doc->transferencia_hotel, 2);
+            $out['transferencia_hotel'] = round($out['transferencia_hotel'] + (float) $doc->transferencia_hotel, 2);
             $out['rend_fichas'] = round($out['rend_fichas'] + $partes['fichas'], 2);
             $out['pago_cashless'] = round($out['pago_cashless'] + (float) $doc->pago_cash, 2);
             $out['vta_cashless'] = round($out['vta_cashless'] + (float) $doc->venta_cash, 2);
@@ -373,41 +376,17 @@ final class TesoreriaCrownResumenCajeroCalculo
      */
     private static function partesFichasYEfectivo(TesoreriaCrownComprobante $doc): array
     {
-        $efectivo = 0.0;
-        $fichas = 0.0;
         $jornada = $doc->relationLoaded('jornada')
             ? $doc->jornada
             : ($doc->relationLoaded('asignacion') && $doc->asignacion?->relationLoaded('jornada')
                 ? $doc->asignacion->jornada
                 : $doc->jornada);
         $fecha = $jornada?->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
-        foreach ($doc->lineas as $linea) {
-            $valor = $linea->valor;
-            $tipo = $valor?->tipoValor;
-            if ($valor === null || $tipo === null) {
-                continue;
-            }
-            $importe = (float) $linea->cantidad * (float) $valor->denominacion;
-            $codigo = (string) $tipo->codigo;
-            if (in_array($codigo, ['FVAL', 'FCOL'], true)) {
-                $fichas += $importe;
-
-                continue;
-            }
-            if ($tipo->es_moneda_referencia || $tipo->cotizacion_fija) {
-                $efectivo += $importe;
-
-                continue;
-            }
-            $tasa = TesoreriaCrownCierreCalculo::tasaDocumento($doc, $fecha, $codigo, (int) $tipo->id);
-            if ($tasa > 0) {
-                $efectivo += $importe * $tasa;
-            }
-        }
+        $lineas = TesoreriaCrownCierreCalculo::lineasEnPesos($doc, $fecha);
 
         return [
-            'efectivo' => round($efectivo, 2),
-            'fichas' => round($fichas, 2),
+            'efectivo' => round($lineas['efectivo'], 2),
+            'fichas' => round($lineas['fichas'], 2),
         ];
     }
 
@@ -494,6 +473,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             'total_qr' => 0.0,
             'recargo_fin' => 0.0,
             'ctacte' => 0.0,
+            'transferencia_hotel' => 0.0,
             'ingresos' => 0.0,
             'hab_fichas' => 0.0,
             'rend_fichas' => 0.0,

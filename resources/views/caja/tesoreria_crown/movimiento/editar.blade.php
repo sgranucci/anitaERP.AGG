@@ -140,6 +140,14 @@
 @if (! empty($cajaCerrada))
     <div class="alert alert-info">Esta caja ya está cerrada. El comprobante queda en consulta.</div>
 @endif
+@if (($comprobante->asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::pinEsInicial($comprobante->asignacion->cajero) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta())
+    <div class="alert alert-warning">
+        <strong>PIN del cajero.</strong>
+        {{ $comprobante->asignacion->cajero->nombre }} todavía no tiene un PIN propio (usa el inicial o está blanqueado).
+        En la próxima firma el sistema le va a pedir que elija uno nuevo delante de tesorería.
+        Si se olvidó el PIN, en Pendiente usá «El cajero se olvidó el PIN».
+    </div>
+@endif
 @php
     $esHabilitacion = $comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::HABILITACION;
     $etiquetaEntrega = \App\Support\Caja\TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, 'entrega');
@@ -213,10 +221,7 @@
                         <i class="fa fa-print"></i> Imprimir
                     </a>
                     @if ($comprobante->estado === 'C' && $comprobante->revierte_id === null && ! $yaRevertido && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
-                        <form method="POST" action="{{ route('revertir_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-0" onsubmit="return confirm('¿Revertir este comprobante? La reversa queda pendiente de las dos firmas.');">
-                            @csrf
-                            <button type="submit" class="btn btn-outline-light btn-sm"><i class="fa fa-undo"></i> Revertir</button>
-                        </form>
+                        <a href="#tc-revertir" class="btn btn-outline-light btn-sm" onclick="document.getElementById('tc-revertir').open = true;"><i class="fa fa-undo"></i> Revertir</a>
                     @endif
                     @if (request()->input('vista') === 'consulta')
                         <button type="button" class="btn btn-outline-light btn-sm" onclick="window.close()">Cerrar solapa</button>
@@ -251,7 +256,7 @@
                     </div>
                 @endif
                 @if ($comprobante->observacion)
-                    <p class="text-muted">{{ $comprobante->observacion }}</p>
+                    <p class="text-muted" style="white-space:pre-line;">{{ $comprobante->observacion }}</p>
                 @endif
 
                 @if ($esHabilitacion)
@@ -463,11 +468,31 @@
                                                 <input type="text" name="cajero_numero" class="form-control form-control-sm" placeholder="Número de cajero" inputmode="numeric" autocomplete="off" required value="{{ old('cajero_numero') }}">
                                             </div>
                                             <div class="col-6 mb-2">
-                                                <input type="text" name="cajero_pin" class="form-control form-control-sm tc-pin-cajero" placeholder="PIN" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required>
+                                                <input type="text" name="cajero_pin" class="form-control form-control-sm tc-pin-cajero" placeholder="PIN actual" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" @unless (session('tc_pin_nuevo')) required @endunless>
                                             </div>
                                         </div>
+                                        @include('caja.tesoreria_crown.partials.pin_nuevo_cajero', ['nuevoName' => 'cajero_pin_nuevo', 'repetirName' => 'cajero_pin_repetir'])
                                         <button type="submit" class="btn btn-success btn-sm">Firmar {{ $etiqueta }}</button>
                                     </form>
+                                    @if (can('editar-tesoreria-crown-movimiento', false))
+                                        <details class="mt-2 small">
+                                            <summary class="text-muted">El cajero se olvidó el PIN</summary>
+                                            <form method="POST" action="{{ route('blanquear_pin_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1" class="mt-2">
+                                                @csrf
+                                                <p class="text-muted mb-2">Tesorería blanquea el PIN; en la próxima firma el cajero elige uno nuevo.</p>
+                                                <input type="text" name="motivo_pin" class="form-control form-control-sm mb-2" placeholder="Motivo" maxlength="300" required>
+                                                <div class="form-row">
+                                                    <div class="col-6 mb-2">
+                                                        <input type="text" name="pin_firma_usuario" class="form-control form-control-sm" placeholder="Usuario tesorería" autocomplete="off" required>
+                                                    </div>
+                                                    <div class="col-6 mb-2">
+                                                        <input type="password" name="pin_firma_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="new-password" required>
+                                                    </div>
+                                                </div>
+                                                <button type="submit" class="btn btn-outline-warning btn-sm">Blanquear PIN</button>
+                                            </form>
+                                        </details>
+                                    @endif
                                 @endif
                                 @if ($lado === $ladoTesoreria && $comprobante->estado === 'P' && $cuando === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
                                     <form method="POST" action="{{ route('firmar_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-boton="1" data-enter-campos="1">
@@ -491,7 +516,7 @@
                 @php
                     $hayFirma = $comprobante->entrega_at !== null || $comprobante->recibe_at !== null;
                 @endphp
-                @if ($comprobante->estado === 'P' && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false))
+                @if ($comprobante->estado === 'P' && $comprobante->revierte_id === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false))
                     <form method="POST" action="{{ route('volver_borrador_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-3" onsubmit="return confirm('{{ $hayFirma ? '¿Volver a borrador? Se borran las firmas.' : '¿Volver a cargar las cantidades? Todavía no hay firmas.' }}');">
                         @csrf
                         <button type="submit" class="btn btn-outline-secondary btn-sm">{{ $hayFirma ? 'Volver a borrador' : 'Modificar cantidades' }}</button>
@@ -506,11 +531,63 @@
                     </form>
                 @endif
 
+                @if (in_array($comprobante->estado, \App\Support\Caja\TesoreriaCrownComprobanteSupport::SIN_RESOLVER, true) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
+                    <div class="card card-outline card-danger mt-3 mb-0">
+                        <div class="card-body py-2">
+                            <strong>Resolución de auditoría</strong>
+                            <p class="small text-muted mb-2">La caja no cierra hasta resolverlo. Firma quien tenga permiso de auditoría.
+                                {{ $comprobante->revierte_id !== null ? 'Es una reversa: solo se anula, y el original vuelve a poder revertirse.' : 'Corregir lo devuelve a borrador sin firmas; anular lo saca de la caja.' }}</p>
+                            <form method="POST" action="{{ route('resolver_noconforme_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1">
+                                @csrf
+                                <div class="form-row">
+                                    <div class="col-md-2 mb-2">
+                                        <select name="accion" class="form-control form-control-sm" required>
+                                            @if ($comprobante->revierte_id === null)
+                                                <option value="corregir">Corregir</option>
+                                            @endif
+                                            <option value="anular">Anular</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4 mb-2">
+                                        <input type="text" name="resolucion" class="form-control form-control-sm" maxlength="500" placeholder="Resolución" required>
+                                    </div>
+                                    <div class="col-md-2 mb-2">
+                                        <input type="text" name="firma_usuario" class="form-control form-control-sm" placeholder="Usuario auditoría" autocomplete="off" required>
+                                    </div>
+                                    <div class="col-md-2 mb-2">
+                                        <input type="password" name="firma_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="new-password" required>
+                                    </div>
+                                    <div class="col-md-2 mb-2">
+                                        <button type="submit" class="btn btn-danger btn-sm">Resolver</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                @endif
+
                 @if ($comprobante->estado === 'C' && $comprobante->revierte_id === null && ! $yaRevertido && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('editar-tesoreria-crown-movimiento', false))
-                    <form method="POST" action="{{ route('revertir_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline ml-2" onsubmit="return confirm('¿Revertir este comprobante? La reversa queda pendiente de las dos firmas.');">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir</button>
-                    </form>
+                    <details id="tc-revertir" class="mt-2" @if ($errors->has('motivo') || old('motivo')) open @endif>
+                        <summary class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir</summary>
+                        <form method="POST" action="{{ route('revertir_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1" class="mt-2" onsubmit="return confirm('¿Revertir este comprobante? La reversa queda pendiente de las dos firmas.');">
+                            @csrf
+                            <p class="small text-muted mb-2">Autoriza tesorería con usuario y clave. La reversa no se modifica: si sale mal, se marca no conforme y auditoría la anula.</p>
+                            <div class="form-row">
+                                <div class="col-md-5 mb-2">
+                                    <input type="text" name="motivo" class="form-control form-control-sm" maxlength="500" placeholder="Motivo de la reversa" value="{{ old('motivo') }}" required>
+                                </div>
+                                <div class="col-md-3 mb-2">
+                                    <input type="text" name="firma_usuario" class="form-control form-control-sm" placeholder="Usuario tesorería" autocomplete="off" required>
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <input type="password" name="firma_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="new-password" required>
+                                </div>
+                                <div class="col-md-2 mb-2">
+                                    <button type="submit" class="btn btn-danger btn-sm">Revertir</button>
+                                </div>
+                            </div>
+                        </form>
+                    </details>
                 @endif
                 @if (request()->input('vista') === 'consulta')
                     <button type="button" class="btn btn-secondary btn-sm ml-2" onclick="window.close()">Cerrar solapa</button>

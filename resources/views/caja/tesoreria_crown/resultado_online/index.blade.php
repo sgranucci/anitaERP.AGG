@@ -17,59 +17,6 @@
     <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-vista-guardar.js')) }}" type="text/javascript"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/workbench.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/workbench.js')) }}" type="text/javascript"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}" type="text/javascript"></script>
-    <script src="{{ asset('assets/lte/plugins/chart.js/Chart.min.js') }}"></script>
-    <script>
-    (function () {
-        var datos = @json($grafico ?? []);
-        var grafico = null;
-        function dibujar() {
-            var canvas = document.getElementById('resultado-online-grafico');
-            if (!canvas || typeof Chart === 'undefined' || !datos.labels || !datos.labels.length) {
-                return;
-            }
-            if (!grafico) {
-                grafico = new Chart(canvas.getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: datos.labels,
-                        datasets: [{
-                            label: 'Res. slots',
-                            data: datos.montos,
-                            backgroundColor: '#85C1E9',
-                            borderColor: '#2471A3',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        legend: { display: false },
-                        tooltips: {
-                            callbacks: {
-                                label: function (item) {
-                                    var monto = datos.montos[item.index] || 0;
-                                    var cant = datos.cantidades[item.index] || 0;
-                                    return monto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                                        + ' · ' + cant + ' días';
-                                }
-                            }
-                        },
-                        scales: {
-                            yAxes: [{ ticks: { beginAtZero: true } }],
-                            xAxes: [{ ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }]
-                        }
-                    }
-                });
-                return;
-            }
-            grafico.resize();
-        }
-        var panel = document.getElementById('resultado-online-grafico-body');
-        if (panel && window.jQuery) {
-            window.jQuery(panel).on('shown.bs.collapse', dibujar);
-        }
-    })();
-    </script>
 @endsection
 
 @section('contenido')
@@ -103,6 +50,7 @@
                 @include('caja.tesoreria_crown.partials.workbench_barra', [
                     'rutaListado' => 'tesoreria_crown_resultado_online',
                     'limpiarParams' => ($sala ?? null) ? ['sala_id' => $sala->id, 'vista_estandar' => 1] : ['vista_estandar' => 1],
+                    'conVisual' => true,
                 ])
                 <div class="px-3 py-2 border-bottom bg-light d-flex flex-wrap align-items-center" style="gap:.4rem;">
                     <label for="fecha_desde" class="mb-0 small text-muted">Desde</label>
@@ -112,6 +60,12 @@
                     <button type="submit" class="btn btn-sm btn-outline-primary">Aplicar</button>
                 </div>
                 @include('caja.tesoreria_crown.resultado_online.partials.workbench_qbe')
+                @php
+                    $ejesVisual = \App\Support\Caja\TesoreriaCrownResultadoOnlineListadoFiltros::camposOrdenables();
+                    $medidasVisual = \App\Support\Listado\ListadoVisualSupport::medidasDisponibles($ejesVisual);
+                    $lienzoVisual = true;
+                @endphp
+                @include('includes.listado.workbench_visual')
             </form>
             @include('caja.tesoreria_crown.partials.sala_chips', [
                 'ruta' => 'tesoreria_crown_resultado_online',
@@ -119,30 +73,10 @@
                 'exportQueryparams' => $filtrosQuery ?? [],
             ])
             @include('includes.listado.workbench_cortes')
-            <div class="px-3 pt-2">
-                <div class="card card-outline card-info mb-2">
-                    <div class="card-header py-2 px-3">
-                        <button type="button" class="btn btn-sm btn-outline-info collapsed" id="btn-resultado-online-grafico"
-                                data-toggle="collapse" data-target="#resultado-online-grafico-body"
-                                aria-expanded="false" aria-controls="resultado-online-grafico-body"
-                                title="Mostrar resultado por mes">
-                            <i class="fa fa-bar-chart"></i> Res. slots por mes
-                        </button>
-                        <span class="text-muted small">Universo del filtro, no solo la página.</span>
-                    </div>
-                    <div class="collapse" id="resultado-online-grafico-body">
-                        <div class="card-body py-2">
-                            @if (($grafico['total'] ?? 0) === 0)
-                                <p class="text-muted mb-0">No hay días en este filtro para graficar.</p>
-                            @else
-                                <div style="height:220px;">
-                                    <canvas id="resultado-online-grafico"></canvas>
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-            </div>
+            @include('includes.listado.workbench_grafico', [
+                'recursoVisual' => \App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
+                'rutaListadoVisual' => 'tesoreria_crown_resultado_online',
+            ])
             <div class="card-body table-responsive p-0">
                 <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">

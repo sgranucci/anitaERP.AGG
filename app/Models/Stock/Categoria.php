@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Stock\Tipoarticulo;
+use App\Models\Ventas\AreaComandaGastronomia;
 use App\Support\Stock\CategoriaAnitaBridgeSupport;
 use App\Support\Stock\TipoarticuloDefaultSupport;
 use OwenIt\Auditing\Contracts\Auditable;
@@ -25,6 +26,21 @@ class Categoria extends Model implements Auditable
     public function tipoarticulo()
     {
         return $this->belongsTo(Tipoarticulo::class, 'tipoarticulo_id');
+    }
+
+    public function categoriaAreasComanda()
+    {
+        return $this->hasMany(CategoriaAreaComanda::class, 'categoria_id');
+    }
+
+    public function areasComanda()
+    {
+        return $this->belongsToMany(
+            AreaComandaGastronomia::class,
+            'categoria_area_comanda',
+            'categoria_id',
+            'area_comanda_gastronomia_id'
+        )->withTimestamps();
     }
 
     public function sincronizarConAnita(){

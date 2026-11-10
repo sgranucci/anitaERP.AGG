@@ -50,7 +50,10 @@
             $cierresReabiertos = $fila->cierres->filter(fn ($cierreFila) => $cierreFila->reabierta_at !== null);
         @endphp
         @if ($cajaCerrada && $cierresReabiertos->isEmpty())
-            <a class="text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->cierre->numero) }} · {{ $fila->cierre->estadoTexto() }}</a>
+            <div class="tc-papel">
+                <a class="tc-papel-nro text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->cierre->numero) }}</a>
+                <span class="tc-papel-estado">{{ $fila->cierre->estadoTexto() }}</span>
+            </div>
         @elseif ($cajaCerrada)
             <div class="tc-papel">
                 <a class="tc-papel-nro text-primary" href="{{ route('ver_tesoreria_crown_cierre', $fila->id) }}">{{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($fila->cierre->numero) }}</a>

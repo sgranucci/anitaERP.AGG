@@ -1,12 +1,12 @@
 <?php
 
 /**
- * Viandas (comedor interno): costo desde lista 5000+mes; venta desde lista de la terminal.
+ * Viandas (comedor interno): costo desde lista (base + mes); venta desde lista de la terminal.
  * Recálculo de costos catálogo: mismo job que gastronomía (gastronomia:actualizar-costo-mensual-catalogo).
  */
 return [
     /**
-     * Base listas de costo mensual (5000 + mes). Ej. julio → 5007.
+     * Base listas de costo mensual + mes. AGG 5000 (jul→5007); Crown 100 (jul→107).
      * Por defecto usa la misma base que gastronomía (GASTRONOMIA_INFORME_GERENTE_COSTO_LISTA_BASE).
      */
     'costo_lista_base' => (int) env(

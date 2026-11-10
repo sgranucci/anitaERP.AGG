@@ -16,6 +16,7 @@ use Throwable;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Listado\ListadoVisualSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -33,28 +34,54 @@ class TesoreriaCrownResultadoOnlineController extends Controller
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
-        $consulta = $this->consulta($armado['filtros']);
+        $camposOrdenables = TesoreriaCrownResultadoOnlineListadoFiltros::camposOrdenables();
+        $filtros = ListadoVisualSupport::aplicarPedido(
+            $armado['filtros'],
+            $request,
+            ($armado['vistaActiva'] && is_array($armado['vistaActiva']->filtros_json))
+                ? $armado['vistaActiva']->filtros_json
+                : null,
+            $camposOrdenables
+        );
+        $armado['filtros'] = $filtros;
+        $armado['filtrosQuery'] = array_merge(
+            TesoreriaCrownResultadoOnlineListadoFiltros::paraQueryString($filtros),
+            ListadoVisualSupport::paraQueryString($filtros),
+            ['columnas' => implode(',', $armado['columnasVisibles'] ?? [])]
+        );
+        if ($armado['vistaActiva'] ?? null) {
+            $armado['filtrosQuery']['vista_id'] = $armado['vistaActiva']->id;
+        } elseif ($request->boolean('vista_estandar')) {
+            $armado['filtrosQuery']['vista_estandar'] = 1;
+        }
+
+        $consulta = $this->consulta($filtros);
         $cortes = ListadoCortesSupport::calcular(
             clone $consulta,
-            (array) ($armado['filtros']['agrupar'] ?? []),
-            TesoreriaCrownResultadoOnlineListadoFiltros::camposOrdenables(),
+            (array) ($filtros['agrupar'] ?? []),
+            $camposOrdenables,
             'tesoreria_crown_resultado_online.id',
             [TesoreriaCrownResultadoOnlineListadoColumnas::class, 'valorCelda'],
             null,
             $armado['etiquetasColumnas'] ?? [],
-            [
-                ['key' => 'slot_resultado', 'column' => 'tesoreria_crown_resultado_online.slot_resultado', 'label' => 'Res. slots'],
-            ]
+            $this->medidasCortes()
         );
         $filas = (clone $consulta)->paginate(15)->appends($armado['filtrosQuery']);
+        $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
+            $filtros,
+            $camposOrdenables,
+            $armado['etiquetasColumnas'] ?? [],
+            fn (array $para): array => $this->cortesParaGrafico($para)
+        );
 
         return view('caja.tesoreria_crown.resultado_online.index', array_merge($armado, [
             'salas' => $salas,
             'sala' => $sala,
             'filas' => $filas,
             'cortes' => $cortes,
-            'grafico' => $this->grafico(clone $consulta),
-            'tieneCriterios' => TesoreriaCrownResultadoOnlineListadoFiltros::tieneCriteriosAplicados($armado['filtros']),
+            'graficoSeries' => $graficoSeries,
+            'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+            'tieneCriterios' => TesoreriaCrownResultadoOnlineListadoFiltros::tieneCriteriosAplicados($filtros),
         ]));
     }
 
@@ -230,8 +257,20 @@ class TesoreriaCrownResultadoOnlineController extends Controller
             TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
             'tesoreria_crown_resultado_online',
             TesoreriaCrownResultadoOnlineListadoColumnas::catalogoActivo(),
-            fn (Request $req) => $this->filtrosDe($req, (int) $request->input('sala_id', 0)),
-            [TesoreriaCrownResultadoOnlineListadoFiltros::class, 'paraQueryString'],
+            function (Request $req) {
+                $filtros = $this->filtrosDe($req, (int) $req->input('sala_id', 0));
+
+                return ListadoVisualSupport::aplicarPedido(
+                    $filtros,
+                    $req,
+                    null,
+                    TesoreriaCrownResultadoOnlineListadoFiltros::camposOrdenables()
+                );
+            },
+            fn (array $filtros) => array_merge(
+                TesoreriaCrownResultadoOnlineListadoFiltros::paraQueryString($filtros),
+                ListadoVisualSupport::paraQueryString($filtros)
+            ),
         );
     }
 
@@ -317,31 +356,52 @@ class TesoreriaCrownResultadoOnlineController extends Controller
     }
 
     /**
-     * @param  Builder<TesoreriaCrownResultadoOnline>  $query
-     * @return array{labels: list<string>, montos: list<float>, cantidades: list<int>, total: int}
+     * @return list<array{key: string, column: string, label: string}>
      */
-    private function grafico(Builder $query): array
+    private function medidasCortes(): array
     {
-        $filas = (clone $query)
-            ->reorder()
-            ->orderBy('tesoreria_crown_resultado_online.fecha')
-            ->get(['tesoreria_crown_resultado_online.fecha', 'tesoreria_crown_resultado_online.slot_resultado']);
-        $grupos = [];
-        foreach ($filas as $fila) {
-            $periodo = $fila->fecha?->format('m/Y') ?? '';
-            if (! isset($grupos[$periodo])) {
-                $grupos[$periodo] = ['monto' => 0.0, 'cantidad' => 0];
+        $out = [];
+        foreach (TesoreriaCrownResultadoOnlineListadoColumnas::COLUMNAS as $key => $meta) {
+            if (! in_array($meta['type'] ?? '', ['decimal', 'entero'], true)) {
+                continue;
             }
-            $grupos[$periodo]['monto'] += (float) $fila->slot_resultado;
-            $grupos[$periodo]['cantidad']++;
+            $out[] = [
+                'key' => $key,
+                'column' => (string) $meta['source'],
+                'label' => (string) $meta['label'],
+            ];
         }
 
-        return [
-            'labels' => array_keys($grupos),
-            'montos' => array_map(fn (array $grupo) => round($grupo['monto'], 2), array_values($grupos)),
-            'cantidades' => array_column(array_values($grupos), 'cantidad'),
-            'total' => $filas->count(),
-        ];
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function cortesParaGrafico(array $filtros): array
+    {
+        $medida = (string) ($filtros['grafico']['medida'] ?? 'conteo');
+        $medidas = [];
+        if ($medida !== 'conteo') {
+            foreach ($this->medidasCortes() as $def) {
+                if ($def['key'] === $medida) {
+                    $medidas = [$def];
+                    break;
+                }
+            }
+        }
+
+        return ListadoCortesSupport::calcular(
+            $this->consulta($filtros),
+            (array) ($filtros['agrupar'] ?? []),
+            TesoreriaCrownResultadoOnlineListadoFiltros::camposOrdenables(),
+            'tesoreria_crown_resultado_online.id',
+            [TesoreriaCrownResultadoOnlineListadoColumnas::class, 'valorCelda'],
+            null,
+            [],
+            $medidas
+        );
     }
 
     /**

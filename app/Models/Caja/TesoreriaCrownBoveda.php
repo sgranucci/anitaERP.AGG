@@ -43,11 +43,13 @@ class TesoreriaCrownBoveda extends Model implements Auditable
         'revierte_id',
         'usuario_id',
         'confirmado_at',
+        'importe_pesos',
     ];
 
     protected $casts = [
         'numero' => 'integer',
         'confirmado_at' => 'datetime',
+        'importe_pesos' => 'decimal:2',
     ];
 
     public function sala(): BelongsTo

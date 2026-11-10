@@ -53,7 +53,11 @@ class GastronomiaCrownCierreXService
      *   total_x:float,
      *   total_facturado:float,
      *   ya_rendido:bool,
-     *   comprobante_id:int
+     *   comprobante_id:int,
+     *   abiertas_total:int,
+     *   abiertas_con_mesa:int,
+     *   abiertas_sin_mesa:int,
+     *   aviso_abiertas:?string
      * }>
      */
     public function totalesPorMozo(
@@ -99,23 +103,99 @@ class GastronomiaCrownCierreXService
             $mozoId = (int) $fila->mozo_gastronomia_id;
             $mozo = $mozos->get($mozoId);
             $comprobanteId = (int) ($comprobantesPorMozo[$mozoId] ?? 0);
+            $abiertas = $this->cuentasAbiertasDelMozo($empresaId, $salaId, $mozoId);
+            $nombreMozo = (string) ($mozo->nombre ?? ('Mozo #'.$mozoId));
 
             $out[] = [
                 'mozo_gastronomia_id' => $mozoId,
                 'mozo_codigo' => (string) ($mozo->codigo ?? ''),
-                'mozo_nombre' => (string) ($mozo->nombre ?? ('Mozo #'.$mozoId)),
+                'mozo_nombre' => $nombreMozo,
                 'cuentas' => (int) $fila->cuentas,
                 'total_x' => round((float) $fila->total_x, 2),
                 'total_facturado' => round((float) $fila->total_facturado, 2),
                 'ya_rendido' => $comprobanteId > 0,
                 'comprobante_id' => $comprobanteId,
                 'rendicion_id' => $comprobanteId, // compat vista
+                'abiertas_total' => $abiertas['total'],
+                'abiertas_con_mesa' => $abiertas['con_mesa'],
+                'abiertas_sin_mesa' => $abiertas['sin_mesa'],
+                'aviso_abiertas' => $abiertas['total'] > 0
+                    ? $this->mensajeAbiertasMozo($nombreMozo, $abiertas)
+                    : null,
             ];
         }
 
         usort($out, fn (array $a, array $b) => strcmp($a['mozo_nombre'], $b['mozo_nombre']));
 
         return $out;
+    }
+
+    /**
+     * @return array{total:int,con_mesa:int,sin_mesa:int}
+     */
+    public function cuentasAbiertasDelMozo(int $empresaId, ?int $salaId, int $mozoId): array
+    {
+        if ($empresaId <= 0 || $mozoId <= 0) {
+            return ['total' => 0, 'con_mesa' => 0, 'sin_mesa' => 0];
+        }
+
+        $filas = GastroCrownCuenta::query()
+            ->where('empresa_id', $empresaId)
+            ->where('mozo_gastronomia_id', $mozoId)
+            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
+            ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+            ->get(['id', 'mesa_gastronomia_id']);
+
+        $conMesa = $filas->filter(fn ($c) => (int) ($c->mesa_gastronomia_id ?? 0) > 0)->count();
+
+        return [
+            'total' => $filas->count(),
+            'con_mesa' => $conMesa,
+            'sin_mesa' => $filas->count() - $conMesa,
+        ];
+    }
+
+    /**
+     * @param  array{total:int,con_mesa:int,sin_mesa:int}  $abiertas
+     */
+    public function mensajeAbiertasMozo(string $mozoNombre, array $abiertas): string
+    {
+        $partes = [];
+        if ($abiertas['con_mesa'] > 0) {
+            $partes[] = $abiertas['con_mesa'].' mesa(s)';
+        }
+        if ($abiertas['sin_mesa'] > 0) {
+            $partes[] = $abiertas['sin_mesa'].' barra/sin mesa';
+        }
+
+        return 'El mozo '.$mozoNombre.' deja '.$abiertas['total']
+            .' cuenta(s) abierta(s) sin facturar'
+            .($partes !== [] ? ' ('.implode(', ', $partes).')' : '')
+            .'. Cóbrelas o cerralas en el POS antes de rendir el cierre X.';
+    }
+
+    /**
+     * @return array{total:int,con_mesa:int,sin_mesa:int}
+     */
+    public function cuentasAbiertasSala(int $empresaId, ?int $salaId): array
+    {
+        if ($empresaId <= 0) {
+            return ['total' => 0, 'con_mesa' => 0, 'sin_mesa' => 0];
+        }
+
+        $filas = GastroCrownCuenta::query()
+            ->where('empresa_id', $empresaId)
+            ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
+            ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+            ->get(['id', 'mesa_gastronomia_id']);
+
+        $conMesa = $filas->filter(fn ($c) => (int) ($c->mesa_gastronomia_id ?? 0) > 0)->count();
+
+        return [
+            'total' => $filas->count(),
+            'con_mesa' => $conMesa,
+            'sin_mesa' => $filas->count() - $conMesa,
+        ];
     }
 
     /**
@@ -152,6 +232,11 @@ class GastronomiaCrownCierreXService
             throw new InvalidArgumentException(
                 'El mozo '.$mozo->nombre.' ya tiene una rendición de cierre X en tesorería para esta jornada.'
             );
+        }
+
+        $abiertasMozo = $this->cuentasAbiertasDelMozo($empresaId, $salaId, $mozoId);
+        if ($abiertasMozo['total'] > 0) {
+            throw new InvalidArgumentException($this->mensajeAbiertasMozo($mozo->nombre, $abiertasMozo));
         }
 
         $totalX = round((float) $totales['total_x'], 2);

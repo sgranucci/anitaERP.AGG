@@ -5,7 +5,7 @@ namespace App\Support\Ventas;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Dispara el cierre mensual de costos catálogo si el reporte detecta artículos sin costo en lista 5000+mes.
+ * Dispara el cierre mensual de costos catálogo si el reporte detecta artículos sin costo en lista base+mes.
  */
 final class GastronomiaDescuentoReporteCostoSupport
 {

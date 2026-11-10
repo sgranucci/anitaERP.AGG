@@ -1605,6 +1605,20 @@ class ArticuloController extends Controller
             $query->where('articulo.nofactura', '0');
         }
 
+        // POS / venta: exige fila de precio vigente (importe 0 = sin cargo; sin fila = no listar).
+        if (filter_var($request->input('requiere_precio'), FILTER_VALIDATE_BOOLEAN)
+            && (int) ($listaPrecio['id'] ?? 0) > 0) {
+            $listaIdReq = (int) $listaPrecio['id'];
+            $fechaPrecio = \Carbon\Carbon::today()->toDateString();
+            $query->whereExists(function ($q) use ($listaIdReq, $fechaPrecio) {
+                $q->selectRaw('1')
+                    ->from('precio')
+                    ->whereColumn('precio.articulo_id', 'articulo.id')
+                    ->where('precio.listaprecio_id', $listaIdReq)
+                    ->where('precio.fechavigencia', '<=', $fechaPrecio);
+            });
+        }
+
         if (filter_var($request->input('solo_insumo_gastronomia'), FILTER_VALIDATE_BOOLEAN)) {
             $insumoId = \App\Support\Stock\ArticuloUsoInsumoSupport::idUsoInsumo();
             if ($insumoId !== null && $insumoId > 0) {

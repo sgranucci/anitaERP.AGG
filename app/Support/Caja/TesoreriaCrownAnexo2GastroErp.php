@@ -93,11 +93,13 @@ final class TesoreriaCrownAnexo2GastroErp
             $cred = round((float) $cierre->tot_cred, 2);
 
             if ($nroZ !== 0) {
+                // Hotel: las NC ya vienen en los X parciales; el Z repite el mismo crédito.
+                $credZ = ($bucket['origen'] ?? '') === 'H' ? 0.0 : $cred;
                 $bucket['aventa'] = round($bucket['aventa'] + $venta, 2);
-                $bucket['aanulado'] = round($bucket['aanulado'] + $cred, 2);
+                $bucket['aanulado'] = round($bucket['aanulado'] + $credZ, 2);
                 if ($esDiario) {
                     $bucket['venta'] = round($bucket['venta'] + $venta, 2);
-                    $bucket['anulado'] = round($bucket['anulado'] + $cred, 2);
+                    $bucket['anulado'] = round($bucket['anulado'] + $credZ, 2);
                 }
             } elseif (($bucket['origen'] ?? '') === 'H') {
                 $bucket['aanulado'] = round($bucket['aanulado'] + $cred, 2);

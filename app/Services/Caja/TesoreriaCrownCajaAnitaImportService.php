@@ -79,6 +79,11 @@ class TesoreriaCrownCajaAnitaImportService
 
                 continue;
             }
+            if ($this->operadaEnErp($jornada, $caja, $filas)) {
+                $fuera[] = 'Caja '.$caja.' ya se operó en el ERP ese día (comprobantes propios): no se importa encima.';
+
+                continue;
+            }
             $entrar[$caja] = $filas;
         }
         if ($entrar === []) {
@@ -249,6 +254,21 @@ class TesoreriaCrownCajaAnitaImportService
                         ]);
                     }
                     foreach ($doc['fiscales'] as $fiscal) {
+                        // El X puede estar cargado antes por la importación fiscal del día, sin rendición.
+                        $existente = TesoreriaCrownCierreFiscal::query()
+                            ->where('sucursal', $fiscal['sucursal'])
+                            ->whereDate('fecha_jor', $fiscal['fecha_jor'])
+                            ->where('hora', $fiscal['hora'])
+                            ->where('nro_x', $fiscal['nro_x'])
+                            ->where('nro_z', $fiscal['nro_z'])
+                            ->first();
+                        if ($existente !== null) {
+                            if ($existente->comprobante_id === null) {
+                                $existente->comprobante_id = $comprobante->id;
+                                $existente->save();
+                            }
+                            continue;
+                        }
                         TesoreriaCrownCierreFiscal::query()->create(array_merge($fiscal, [
                             'comprobante_id' => $comprobante->id,
                         ]));
@@ -261,6 +281,24 @@ class TesoreriaCrownCajaAnitaImportService
         });
 
         return $altas;
+    }
+
+    /**
+     * La caja tiene comprobantes en la jornada que no son operaciones de Anita (alta manual en el ERP).
+     *
+     * @param  list<object>  $filas
+     */
+    private function operadaEnErp(TesoreriaCrownJornada $jornada, int $caja, array $filas): bool
+    {
+        $numerosAnita = array_map(fn ($fila) => (int) $fila->efe_nro_oper, $filas);
+
+        return TesoreriaCrownComprobante::query()
+            ->where('jornada_id', $jornada->id)
+            ->whereHas('asignacion.deposito', fn ($q) => $q
+                ->where('codigo', (string) $caja)
+                ->whereHas('tipoDeposito', fn ($t) => $t->where('codigo', 'CAJA')))
+            ->whereNotIn('numero', $numerosAnita)
+            ->exists();
     }
 
     /**
@@ -430,6 +468,106 @@ class TesoreriaCrownCajaAnitaImportService
     }
 
     /**
+     * Cierres Z de cierrefiscal (p-cierrefact) que el ERP no tiene. Los X entran con la rendición.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function planCierresZ(string $fechaYmd): array
+    {
+        $jornada = TesoreriaCrownJornada::query()->whereDate('fecha', $fechaYmd)->first();
+        if ($jornada === null) {
+            return [];
+        }
+        $crear = [];
+        foreach ($this->cierresFiscales((int) str_replace('-', '', $fechaYmd)) as $fila) {
+            if ((int) $fila->nro_z <= 0) {
+                continue;
+            }
+            $existe = TesoreriaCrownCierreFiscal::query()
+                ->whereDate('fecha_jor', $fechaYmd)
+                ->where('sucursal', (int) $fila->sucursal)
+                ->where('nro_z', (int) $fila->nro_z)
+                ->exists();
+            if ($existe) {
+                continue;
+            }
+            $hora = trim((string) $fila->hora);
+            $crear[] = [
+                'jornada_id' => (int) $jornada->id,
+                'sucursal' => (int) $fila->sucursal,
+                'fecha_jor' => $fechaYmd,
+                'hora' => $hora !== '' ? $hora : '00:00:00',
+                'nro_x' => 0,
+                'nro_z' => (int) $fila->nro_z,
+                'tipo' => 'Z',
+                'nombre_sucursal' => trim((string) ($fila->nombre ?? '')) ?: null,
+                'tot_venta' => round((float) $fila->tot_venta, 2),
+                'tot_cred' => round((float) $fila->tot_cred, 2),
+                'tot_iva' => round((float) $fila->tot_iva, 2),
+                'tot_iva_cred' => round((float) $fila->tot_iva_cred, 2),
+                'ult_fact_b' => (int) $fila->ult_fact_b,
+            ];
+        }
+
+        return $crear;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $plan
+     */
+    public function aplicarCierresZ(array $plan): int
+    {
+        DB::transaction(function () use ($plan) {
+            foreach ($plan as $fila) {
+                TesoreriaCrownCierreFiscal::query()->create($fila);
+            }
+        });
+
+        return count($plan);
+    }
+
+    /**
+     * Cierres X y Z del día leídos solo de Anita `cierrefiscal`, con el nombre de la sucursal.
+     * Lo usa la rendición de gastronomía/hotel cuando el ERP no tiene cierres de ese día.
+     *
+     * @return list<object>
+     *
+     * @throws RuntimeException si Anita no responde
+     */
+    public function cierresFiscalesAnita(string $fechaYmd): array
+    {
+        $filas = $this->consultar(
+            'sucursal,nro_x,nro_z,hora,tot_venta,tot_cred,tot_iva,tot_iva_cred,ult_fact_b',
+            'SELECT cief_sucursal, cief_nro_x, cief_nro_z, cief_hora, cief_tot_venta, cief_tot_cred, cief_tot_iva, cief_tot_iva_cred, cief_ult_fact_b FROM cierrefiscal WHERE cief_fecha_jor = '.(int) str_replace('-', '', $fechaYmd),
+            'ventas'
+        );
+        $sucursales = [];
+        foreach ($filas as $fila) {
+            $fila->nombre = '';
+            $sucursales[(int) $fila->sucursal] = true;
+        }
+        if ($sucursales !== []) {
+            try {
+                $nombres = [];
+                foreach ($this->consultar(
+                    'numero,empresa',
+                    'SELECT suc_numero, suc_empresa FROM sucursal WHERE suc_numero IN ('.implode(',', array_keys($sucursales)).')',
+                    'ventas'
+                ) as $suc) {
+                    $nombres[(int) $suc->numero] = trim((string) $suc->empresa);
+                }
+                foreach ($filas as $fila) {
+                    $fila->nombre = $nombres[(int) $fila->sucursal] ?? '';
+                }
+            } catch (RuntimeException) {
+                // nombres opcionales
+            }
+        }
+
+        return array_values($filas);
+    }
+
+    /**
      * @return array<string, object>
      */
     private function cierresFiscales(int $fechaInt): array
@@ -508,7 +646,7 @@ class TesoreriaCrownCajaAnitaImportService
      * @param  list<int>  $numeros
      * @return array<int, string>
      */
-    private function ultimaAprobacion(array $numeros): array
+    public function ultimaAprobacion(array $numeros): array
     {
         $filas = $this->enLotes($numeros, function (string $lista) {
             return $this->consultar(

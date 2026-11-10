@@ -18,10 +18,10 @@ use App\Models\Caja\TesoreriaCrownTipoValor;
  *
  * En venta, kiosco y cashless la diferencia es lo rendido menos lo habilitado:
  * efectivo, fichas, cashless (pagos del Z − ventas), vouchers (pagos − ventas),
- * online (pagos − ventas) y apuestas (pagos − ventas). El listado impreso y el
+ * online (neto) y apuestas (pagos − ventas). El listado impreso y el
  * importe guardado coinciden en este caso. El término de tokens queda en cero:
- * este módulo no mueve tokens. En gastronomía y hotel usa el X, las notas de
- * crédito y el fallo de mozo, y suma la transferencia y la cuenta corriente.
+ * este módulo no mueve tokens. En gastronomía y hotel usa el X (ya neto de notas
+ * de crédito) y el fallo de mozo, y suma la transferencia y la cuenta corriente.
  * En empleados la diferencia queda en cero.
  */
 final class TesoreriaCrownCierreCalculo
@@ -40,16 +40,20 @@ final class TesoreriaCrownCierreCalculo
      *     formula: string,
      *     componentes: array{formula: string, filas: list<array{concepto: string, importe: float, entra: bool}>}
      * }
+     *
+     * Con `$conPiezas = false` no arma el detalle por comprobante (`piezas`): los totales
+     * son los mismos y el Anexo I lo pide así por cada caja del año.
      */
-    public static function de(TesoreriaCrownAsignacion $asignacion): array
+    public static function de(TesoreriaCrownAsignacion $asignacion, bool $conPiezas = true): array
     {
         $tolerancia = TesoreriaCrownCierreSupport::tolerancia();
-        $asignacion->loadMissing(['jornada', 'cierre', 'comprobantes.lineas.valor.tipoValor', 'comprobantes.reversa']);
+        self::cargarRelaciones($asignacion);
         $docs = $asignacion->comprobantes;
         $pendiente = $docs->first(fn (TesoreriaCrownComprobante $doc) => in_array($doc->estado, [
             TesoreriaCrownComprobanteSupport::BORRADOR,
             TesoreriaCrownComprobanteSupport::PENDIENTE,
         ], true));
+        $sinResolver = $docs->first(fn (TesoreriaCrownComprobante $doc) => in_array($doc->estado, TesoreriaCrownComprobanteSupport::SIN_RESOLVER, true));
         $conforme = $docs->filter(fn (TesoreriaCrownComprobante $doc) => $doc->estado === TesoreriaCrownComprobanteSupport::CONFORME);
         $hayRendicion = $conforme->contains(fn (TesoreriaCrownComprobante $doc) => $doc->tipo === TesoreriaCrownComprobanteSupport::RENDICION);
 
@@ -82,16 +86,19 @@ final class TesoreriaCrownCierreCalculo
                 }
                 $fichasRend += $partes['fichas'];
                 $cashless += (float) $doc->pago_cash - (float) $doc->venta_cash;
-                $online += (float) $doc->pago_online - (float) $doc->venta_online;
+                $online += self::onlineNeto($doc);
                 $vouchers += (float) $doc->pago_voucher - (float) $doc->venta_voucher;
                 $apuestas += (float) $doc->pago_apuesta - (float) $doc->vta_apuesta;
                 $recargo += (float) $doc->recargo_fin;
-                $aRendir += (float) $doc->total_x - (float) $doc->total_nc - (float) $doc->fallo_mozo;
+                $aRendir += self::aRendirDoc($doc);
                 $hotel += (float) $doc->transferencia_hotel + (float) $doc->ctacte_hotel;
                 $ventaZ += (float) $doc->total_z;
             } else {
                 $hab += $partes['efectivo'];
                 $fichasHab += $partes['fichas'];
+            }
+            if (! $conPiezas) {
+                continue;
             }
             $piezas[] = self::pieza($doc, $partes, $esRendicion, $formula, $salaId, $fecha, $asignacion->cierre === null && $asignacion->jornada->estaAbierta());
         }
@@ -129,6 +136,9 @@ final class TesoreriaCrownCierreCalculo
         if ($pendiente !== null) {
             $puede = false;
             $motivo = 'Hay comprobantes en borrador o pendientes de firma.';
+        } elseif ($sinResolver !== null) {
+            $puede = false;
+            $motivo = 'Hay comprobantes no conformes sin resolver: auditoría los corrige o los anula.';
         } elseif (! $hayRendicion) {
             $puede = false;
             $motivo = 'El cajero no tiene una rendición conforme.';
@@ -156,7 +166,24 @@ final class TesoreriaCrownCierreCalculo
         ];
     }
 
-    private static function formula(string $tarea): string
+    /**
+     * Neto on-line del cajero: efe_venta_online trae el neto; la carga vieja separaba pagos.
+     * Anita (a-transfefe.c al aprobar, l-anexo1 lee_online) usa venta − pago.
+     */
+    private static function onlineNeto(TesoreriaCrownComprobante $doc): float
+    {
+        return (float) $doc->venta_online - (float) $doc->pago_online;
+    }
+
+    /**
+     * a-transfefe.c descuenta las NC del X antes de grabar efe_total_x: rendg_tot_nc es informativo.
+     */
+    private static function aRendirDoc(TesoreriaCrownComprobante $doc): float
+    {
+        return (float) $doc->total_x - (float) $doc->fallo_mozo;
+    }
+
+    public static function formula(string $tarea): string
     {
         if (TesoreriaCrownRendicionCampos::esCajaGastroHotel($tarea)) {
             return 'gastro';
@@ -169,15 +196,57 @@ final class TesoreriaCrownCierreCalculo
     }
 
     /**
-     * @param  array<string, string>  $sinCotizacion
-     * @return array{efectivo: float, fichas: float}
+     * `loadMissing` recorre todo el árbol aunque ya esté cargado: con las relaciones
+     * eager-loaded (Anexo I del año) se evita ese recorrido por caja.
+     *
+     * @param  list<string>  $extra
      */
-    private static function partes(TesoreriaCrownComprobante $doc, int $salaId, string $fecha, array &$sinCotizacion, bool $conMedios): array
+    public static function cargarRelaciones(TesoreriaCrownAsignacion $asignacion, array $extra = []): void
     {
+        $cargado = $asignacion->relationLoaded('jornada')
+            && $asignacion->relationLoaded('cierre')
+            && $asignacion->relationLoaded('comprobantes');
+        foreach ($extra as $relacion) {
+            $cargado = $cargado && $asignacion->relationLoaded($relacion);
+        }
+        if ($cargado) {
+            foreach ($asignacion->comprobantes as $doc) {
+                if (! $doc->relationLoaded('lineas') || ! $doc->relationLoaded('reversa')) {
+                    $cargado = false;
+                    break;
+                }
+                $linea = $doc->lineas->first();
+                if ($linea !== null && (! $linea->relationLoaded('valor') || ($linea->valor !== null && ! $linea->valor->relationLoaded('tipoValor')))) {
+                    $cargado = false;
+                    break;
+                }
+            }
+        }
+        if ($cargado) {
+            return;
+        }
+        $asignacion->loadMissing(array_merge(['jornada', 'cierre', 'comprobantes.lineas.valor.tipoValor', 'comprobantes.reversa'], $extra));
+    }
+
+    /**
+     * Líneas del comprobante en pesos: efectivo (pesos + moneda extranjera cotizada) y fichas.
+     * Se recuerda por colección de líneas cargada: si la relación se recarga, se recalcula.
+     *
+     * @return array{efectivo: float, fichas: float, sin_cotizacion: list<string>}
+     */
+    public static function lineasEnPesos(TesoreriaCrownComprobante $doc, string $fecha): array
+    {
+        $coleccion = $doc->lineas;
+        self::$lineasEnPesos ??= new \WeakMap();
+        if (isset(self::$lineasEnPesos[$coleccion][$fecha])) {
+            return self::$lineasEnPesos[$coleccion][$fecha];
+        }
+
         $pesos = 0.0;
         $extranjera = 0.0;
         $fichas = 0.0;
-        foreach ($doc->lineas as $linea) {
+        $sinCotizacion = [];
+        foreach ($coleccion as $linea) {
             $valor = $linea->valor;
             $tipo = $valor?->tipoValor;
             if ($valor === null || $tipo === null) {
@@ -204,7 +273,30 @@ final class TesoreriaCrownCierreCalculo
             $extranjera += $importe * $tasa;
         }
 
-        $efectivo = $pesos + $extranjera;
+        $resultado = [
+            'efectivo' => $pesos + $extranjera,
+            'fichas' => $fichas,
+            'sin_cotizacion' => array_values($sinCotizacion),
+        ];
+        $porFecha = self::$lineasEnPesos[$coleccion] ?? [];
+        $porFecha[$fecha] = $resultado;
+        self::$lineasEnPesos[$coleccion] = $porFecha;
+
+        return $resultado;
+    }
+
+    /**
+     * @param  array<string, string>  $sinCotizacion
+     * @return array{efectivo: float, fichas: float}
+     */
+    private static function partes(TesoreriaCrownComprobante $doc, int $salaId, string $fecha, array &$sinCotizacion, bool $conMedios): array
+    {
+        $lineas = self::lineasEnPesos($doc, $fecha);
+        foreach ($lineas['sin_cotizacion'] as $codigo) {
+            $sinCotizacion[$codigo] = $codigo;
+        }
+        $fichas = $lineas['fichas'];
+        $efectivo = $lineas['efectivo'];
         if ($conMedios) {
             $efectivo += (float) $doc->tarjeta_credito - (float) $doc->recargo_fin
                 + (float) $doc->tarjeta_debito + (float) $doc->total_qr;
@@ -258,11 +350,11 @@ final class TesoreriaCrownCierreCalculo
         $ctacte = (float) $doc->ctacte_hotel;
         $fichas = (float) $partes['fichas'];
         $cashless = (float) $doc->pago_cash - (float) $doc->venta_cash;
-        $online = (float) $doc->pago_online - (float) $doc->venta_online;
+        $online = self::onlineNeto($doc);
         $vouchers = (float) $doc->pago_voucher - (float) $doc->venta_voucher;
         $apuestas = (float) $doc->pago_apuesta - (float) $doc->vta_apuesta;
         $hotel = (float) $doc->transferencia_hotel + $ctacte;
-        $aRendir = (float) $doc->total_x - (float) $doc->total_nc - (float) $doc->fallo_mozo;
+        $aRendir = self::aRendirDoc($doc);
         $valoresDoc = (float) $partes['efectivo'] + $recargo;
         if ($esRendicion && $formula !== 'gastro') {
             $valoresDoc += $ctacte;
@@ -301,7 +393,7 @@ final class TesoreriaCrownCierreCalculo
                 ];
                 $renglones['online'] = [
                     ['etiqueta' => 'Pagos casino on-line', 'importe' => (float) $doc->pago_online],
-                    ['etiqueta' => 'Ventas casino on-line', 'importe' => (float) $doc->venta_online],
+                    ['etiqueta' => 'Neto casino on-line', 'importe' => (float) $doc->venta_online],
                 ];
                 $renglones['voucher'] = [
                     ['etiqueta' => 'Pago vouchers', 'importe' => (float) $doc->pago_voucher],
@@ -317,7 +409,7 @@ final class TesoreriaCrownCierreCalculo
                 $aportes['ventaz'] = round((float) $doc->total_z, 2);
                 $renglones['arendir'] = [
                     ['etiqueta' => 'Ventas / X', 'importe' => (float) $doc->total_x],
-                    ['etiqueta' => 'Notas de crédito', 'importe' => (float) $doc->total_nc],
+                    ['etiqueta' => 'Notas de crédito (ya descontadas del X)', 'importe' => (float) $doc->total_nc],
                     ['etiqueta' => 'Fallo de mozo', 'importe' => (float) $doc->fallo_mozo],
                 ];
                 $renglones['hotel'] = [
@@ -371,7 +463,7 @@ final class TesoreriaCrownCierreCalculo
                 && $doc->revierte_id === null
                 && ! $yaRevertido,
             'puede_modificar' => $cajaAbierta && $doc->estado === TesoreriaCrownComprobanteSupport::BORRADOR,
-            'puede_volver' => $cajaAbierta && $doc->estado === TesoreriaCrownComprobanteSupport::PENDIENTE,
+            'puede_volver' => $cajaAbierta && $doc->estado === TesoreriaCrownComprobanteSupport::PENDIENTE && $doc->revierte_id === null,
             'reversa_id' => $yaRevertido ? (int) $doc->reversa->id : null,
             'reversa_numero' => $yaRevertido ? TesoreriaCrownNumeradorSupport::visible((int) $doc->reversa->numero) : '',
             'aportes' => $aportes,
@@ -489,7 +581,7 @@ final class TesoreriaCrownCierreCalculo
             $filas[] = ['clave' => 'apuestas', 'columna' => 'rendicion', 'concepto' => 'Apuestas deportivas', 'importe' => $apuestas, 'entra' => true];
         }
         if ($formula === 'gastro') {
-            $filas[] = ['clave' => 'arendir', 'columna' => '', 'concepto' => 'A rendir (X − notas de crédito − fallo de mozo)', 'importe' => $aRendir, 'entra' => true];
+            $filas[] = ['clave' => 'arendir', 'columna' => '', 'concepto' => 'A rendir (X neto de notas de crédito − fallo de mozo)', 'importe' => $aRendir, 'entra' => true];
             $filas[] = ['clave' => 'hotel', 'columna' => 'rendicion', 'concepto' => 'Transferencia y cuenta corriente', 'importe' => $hotel, 'entra' => true];
             $filas[] = ['clave' => 'ventaz', 'columna' => '', 'concepto' => 'Total Z', 'importe' => $ventaZ, 'entra' => false];
         }
@@ -508,6 +600,9 @@ final class TesoreriaCrownCierreCalculo
      */
     /** @var array<string, array{tasa: float, fecha: ?string}> */
     private static array $cotizacionCache = [];
+
+    /** @var \WeakMap<\Illuminate\Support\Collection, array<string, array{efectivo: float, fichas: float, sin_cotizacion: list<string>}>>|null */
+    private static ?\WeakMap $lineasEnPesos = null;
 
     public static function cotizacionVenta(int $salaId, string $fecha, int $tipoValorId): array
     {

@@ -9,9 +9,10 @@
     $required = ! empty($required);
     $colLabel = $col_label ?? 'col-lg-3 control-label text-right pr-2';
     $colInput = $col_input ?? 'col-lg-8';
+    $etiqueta = $etiqueta ?? 'Transacción';
 @endphp
 <div class="form-group row tm-boveda-tipo-campo">
-    <label for="boveda_tipo_codigo" class="{{ $colLabel }}{{ $required ? ' requerido' : '' }}">Transacción</label>
+    <label for="boveda_tipo_codigo" class="{{ $colLabel }}{{ $required ? ' requerido' : '' }}">{{ $etiqueta }}</label>
     <div class="{{ $colInput }}">
         <div class="d-flex flex-nowrap align-items-center w-100" style="gap:4px;">
             <input type="hidden" name="tipo_id" id="boveda_tipo_id" value="{{ $tipoId }}"

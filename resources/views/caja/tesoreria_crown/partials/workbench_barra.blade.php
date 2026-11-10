@@ -35,6 +35,11 @@
                 aria-expanded="{{ $qbeAbierto ? 'true' : 'false' }}" aria-controls="lw-qbe-panel">
             <i class="fa fa-filter"></i> QBE
         </button>
+        @if (! empty($conVisual))
+            <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-analisis-panel" aria-expanded="false" title="Gráfico">
+                <i class="fa fa-bar-chart"></i> Visual
+            </button>
+        @endif
         <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
                 @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
             <i class="fa fa-font"></i> Defaults instalación

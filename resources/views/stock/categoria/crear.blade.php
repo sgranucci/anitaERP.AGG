@@ -5,6 +5,9 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+@if (!empty($usaAreasCrown))
+<script src="{{ asset('assets/pages/scripts/stock/categoria/form_areas_comanda.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/categoria/form_areas_comanda.js')) }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -12,7 +15,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Crear Categor&iacute;a</h3>
                 <div class="card-tools">
@@ -24,7 +27,11 @@
             <form action="{{route('guardar_categoria')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="card-body">
-                    @include('stock.categoria.form')
+                    @if (!empty($usaAreasCrown))
+                        @include('stock.categoria.partials.areas_comanda_crown')
+                    @else
+                        @include('stock.categoria.form')
+                    @endif
                 </div>
                 <div class="card-footer">
                     <div class="row">

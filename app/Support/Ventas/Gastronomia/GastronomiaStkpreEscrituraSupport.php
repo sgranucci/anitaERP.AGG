@@ -7,7 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Alta/actualización de precios en Anita (stkpre) para listas de costo mensual (5000 + mes).
+ * Alta/actualización de precios en Anita (stkpre) para listas de costo mensual (base + mes).
  */
 final class GastronomiaStkpreEscrituraSupport
 {

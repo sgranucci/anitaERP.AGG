@@ -4,15 +4,17 @@ namespace App\Support\Caja;
 
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
 use App\Models\Caja\TesoreriaCrownComprobante;
+use App\Services\Caja\TesoreriaCrownCajaAnitaImportService;
 use RuntimeException;
 
 /**
  * Catálogo de cierres para rendiciones Crown gastro/hotel (como a-transfefe
  * → consulta_cierrefiscal.fc: solo tabla cierrefiscal, nunca resvta).
  *
- * Solo tesoreria_crown_cierre_fiscal ERP (incluye X generados por
- * Cierre X / mozo de gastronomía y Z de p-cierrefact ERP/sync).
- * Sin merge live de pendientes Anita.
+ * Por día: pendientes del ERP + los de Anita que todavía no están en el ERP
+ * (mismo X/Z/sucursal). Un cajero no opera a medias en los dos sistemas;
+ * el cruce sirve de red de seguridad en la transición. Al guardar la
+ * rendición, los elegidos quedan grabados en el ERP.
  */
 final class TesoreriaCrownCierreFiscalReader
 {
@@ -82,13 +84,81 @@ final class TesoreriaCrownCierreFiscalReader
     }
 
     /**
-     * Pendientes del día: solo ERP (sin comprobante).
+     * Pendientes del día: ERP primero; Anita completa lo que falta (sin repetir clave).
      *
      * @return list<array<string, mixed>>
      */
     public static function pendientes(string $fechaYmd): array
     {
-        return self::pendientesErp($fechaYmd);
+        $erp = self::pendientesErp($fechaYmd);
+        $anita = [];
+        try {
+            $anita = self::pendientesAnita($fechaYmd);
+        } catch (RuntimeException $e) {
+            if ($erp === []) {
+                throw $e;
+            }
+            // Con ERP hay filas: Anita caído no bloquea la rendición.
+        }
+
+        $vistos = [];
+        $out = [];
+        foreach (array_merge($erp, $anita) as $fila) {
+            if (isset($vistos[$fila['clave']])) {
+                continue;
+            }
+            $vistos[$fila['clave']] = true;
+            $out[] = $fila;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function pendientesAnita(string $fechaYmd): array
+    {
+        try {
+            $filas = app(TesoreriaCrownCajaAnitaImportService::class)->cierresFiscalesAnita($fechaYmd);
+        } catch (RuntimeException $e) {
+            throw new RuntimeException('No se pudieron leer los cierres de Anita: '.$e->getMessage());
+        }
+        $tomados = [];
+        foreach (TesoreriaCrownCierreFiscal::query()->whereDate('fecha_jor', $fechaYmd)->get(['sucursal', 'nro_x', 'nro_z']) as $erp) {
+            $tomados[(int) $erp->sucursal.'|'.(int) $erp->nro_x.'|'.(int) $erp->nro_z] = true;
+        }
+        $fechaClave = str_replace('-', '', $fechaYmd);
+        $out = [];
+        foreach ($filas as $fila) {
+            $nroX = (int) $fila->nro_x;
+            $nroZ = (int) $fila->nro_z;
+            if (($nroX === 0 && $nroZ === 0) || isset($tomados[(int) $fila->sucursal.'|'.$nroX.'|'.$nroZ])) {
+                continue;
+            }
+            $tipo = $nroZ > 0 ? 'Z' : 'X';
+            $hora = trim((string) $fila->hora);
+            $out[] = [
+                'clave' => TesoreriaCrownCierreFiscal::armarClave((int) $fila->sucursal, $fechaClave, $hora, $nroX, $nroZ),
+                'sucursal' => (int) $fila->sucursal,
+                'nombre' => trim((string) ($fila->nombre ?? '')),
+                'fecha' => $fechaYmd,
+                'hora' => $hora,
+                'tipo' => $tipo,
+                'numero' => $tipo === 'Z' ? $nroZ : $nroX,
+                'nro_x' => $nroX,
+                'nro_z' => $nroZ,
+                'venta' => round((float) $fila->tot_venta, 2),
+                'credito' => round((float) $fila->tot_cred, 2),
+                'iva' => round((float) $fila->tot_iva, 2),
+                'iva_credito' => round((float) $fila->tot_iva_cred, 2),
+                'ult_ticket' => (int) $fila->ult_fact_b,
+                'elegido' => false,
+                'fuente' => 'anita',
+            ];
+        }
+
+        return $out;
     }
 
     /**

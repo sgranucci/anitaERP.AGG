@@ -7,6 +7,7 @@ use App\Models\Configuracion\Sala;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\MesaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
 use App\Models\Ventas\Venta;
@@ -46,6 +47,11 @@ class GastroCrownCuenta extends Model implements Auditable
         'descuento_gastronomia_id',
         'porcentaje_descuento',
         'detalle_descuento',
+        'tipo_descuento',
+        'cliente_interno_descuento_id',
+        'autorizante_usuario_id',
+        'autorizante_nombre',
+        'centrocosto_id',
         'habitacion',
         'reserva_hotel',
         'tarjeta_gst',
@@ -62,6 +68,15 @@ class GastroCrownCuenta extends Model implements Auditable
     public const COBRO_HOTEL = 'hotel';
 
     public const COBRO_FACTURA_SOLA = 'factura_sola';
+
+    public const COBRO_MEDIOS = 'medios';
+
+    /** Paridad Anita fl_tipo_descuento: 1=Invitados, 2=Staff, 3=Descuento */
+    public const TIPO_DTO_INVITADOS = 'invitados';
+
+    public const TIPO_DTO_STAFF = 'staff';
+
+    public const TIPO_DTO_DESCUENTO = 'descuento';
 
     protected $casts = [
         'cubiertos' => 'integer',
@@ -98,6 +113,21 @@ class GastroCrownCuenta extends Model implements Auditable
     public function cliente(): BelongsTo
     {
         return $this->belongsTo(Cliente::class, 'cliente_id');
+    }
+
+    public function clienteInternoDescuento(): BelongsTo
+    {
+        return $this->belongsTo(Cliente::class, 'cliente_interno_descuento_id');
+    }
+
+    public function autorizanteUsuario(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'autorizante_usuario_id');
+    }
+
+    public function descuentoGastronomia(): BelongsTo
+    {
+        return $this->belongsTo(DescuentoGastronomia::class, 'descuento_gastronomia_id');
     }
 
     public function venta(): BelongsTo

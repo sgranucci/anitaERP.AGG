@@ -56,11 +56,11 @@
                 <h3 class="card-title">Jornada {{ $jornada->fecha->format('d/m/Y') }}</h3>
                 <div class="card-tools">
                     @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
-                        <button type="button" class="btn btn-primary btn-sm mr-1 tc-tool tc-tool-nuevo" data-toggle="collapse" data-target="#panel-abrir-caja" aria-expanded="{{ $abrirCaja ? 'true' : 'false' }}">
+                        <button type="button" class="btn btn-light btn-sm mr-1" data-toggle="collapse" data-target="#panel-abrir-caja" aria-expanded="{{ $abrirCaja ? 'true' : 'false' }}">
                             <i class="fa fa-folder-open"></i> Abrir caja
                         </button>
                     @endif
-                    <a href="{{ route('tesoreria_crown_jornada', ['sala_id' => $sala->id]) }}" class="btn btn-sm tc-tool tc-tool-volver">
+                    <a href="{{ route('tesoreria_crown_jornada', ['sala_id' => $sala->id]) }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
@@ -108,13 +108,25 @@
                 </p>
 
                 @if ($jornada)
+                    @php
+                        $bloqueosCierre = $bloqueosCierre
+                            ?? session('bloqueos_cierre_jornada')
+                            ?? [];
+                    @endphp
+                    @include('caja.tesoreria_crown.jornada.partials.bloqueos_cierre', [
+                        'bloqueosCierre' => $bloqueosCierre,
+                        'jornada' => $jornada,
+                    ])
                     <div class="d-flex flex-wrap align-items-center mb-3">
                         <h4 class="mb-0 mr-3">{{ $jornada->fecha->format('d/m/Y') }}</h4>
                         <span class="badge {{ $jornada->estaAbierta() ? 'badge-success' : 'badge-secondary' }} mr-3">
                             {{ $jornada->estaAbierta() ? 'Abierta' : 'Cerrada' }}
                         </span>
                         @if ($jornada->estaAbierta() && can('editar-tesoreria-crown-jornada', false))
-                            <form action="{{ route('cerrar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Cerrar esta jornada?');">
+                            <form action="{{ route('cerrar_tesoreria_crown_jornada', $jornada->id) }}"
+                                  method="POST"
+                                  class="d-inline js-tc-cerrar-jornada"
+                                  data-tiene-bloqueos="{{ !empty($bloqueosCierre) ? '1' : '0' }}">
                                 @csrf
                                 <button type="submit" class="btn btn-sm tc-tool tc-tool-cerrar"><i class="fa fa-lock"></i> Cerrar jornada</button>
                             </form>

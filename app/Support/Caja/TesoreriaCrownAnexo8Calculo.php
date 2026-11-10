@@ -33,6 +33,13 @@ use Throwable;
  */
 final class TesoreriaCrownAnexo8Calculo
 {
+    private static ?bool $tieneCacheViii = null;
+
+    private static function tieneCacheViii(): bool
+    {
+        return self::$tieneCacheViii ??= Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_viii');
+    }
+
     /**
      * Signo del ítem en el resumen final (transm_signo_resumen).
      * '0' = suma al bucket, '1' = resta. Informix no expone la columna
@@ -87,8 +94,9 @@ final class TesoreriaCrownAnexo8Calculo
      */
     public static function totalCacheadoOCalcular(TesoreriaCrownJornada $jornada, bool $forzar = false): float
     {
+        TesoreriaCrownRecalculoAdelanteSupport::asegurar($jornada);
         if (! $forzar
-            && Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_viii')
+            && self::tieneCacheViii()
             && $jornada->caja_final_viii !== null) {
             return round((float) $jornada->caja_final_viii, 2);
         }
@@ -99,7 +107,7 @@ final class TesoreriaCrownAnexo8Calculo
     /** Invalida el cache del VIII (p. ej. al confirmar bóveda / slots / drops / propina). */
     public static function invalidarCache(TesoreriaCrownJornada $jornada): void
     {
-        if (! Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_viii')) {
+        if (! self::tieneCacheViii()) {
             return;
         }
         if ($jornada->caja_final_viii === null) {
@@ -110,7 +118,7 @@ final class TesoreriaCrownAnexo8Calculo
 
     private static function persistirTotal(TesoreriaCrownJornada $jornada, float $total): void
     {
-        if (! Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_viii')) {
+        if (! self::tieneCacheViii()) {
             return;
         }
         $jornada->forceFill(['caja_final_viii' => round($total, 2)])->save();
@@ -121,6 +129,7 @@ final class TesoreriaCrownAnexo8Calculo
      */
     public static function deJornada(TesoreriaCrownJornada $jornada, bool $compararAnita = false): array
     {
+        TesoreriaCrownRecalculoAdelanteSupport::asegurar($jornada);
         $fecha = $jornada->fecha->format('Y-m-d');
         $fechaInt = (int) $jornada->fecha->format('Ymd');
         $salaId = (int) $jornada->sala_id;
@@ -129,13 +138,13 @@ final class TesoreriaCrownAnexo8Calculo
         $lugares = TesoreriaCrownBovedaSupport::lugares($salaId)
             ->filter(fn (TesoreriaCrownDeposito $lugar) => (string) ($lugar->tipoDeposito->codigo ?? '') === 'BOVEDA');
 
-        $slots = self::cantidadesSlots($jornada, $avisos);
-        $drops = self::cantidadesDropsMesa($jornada, $avisos);
+        $slots = self::cantidadesSlots($jornada);
+        $drops = self::cantidadesDropsMesa($jornada);
         $slotsMonto = self::montoPorCodigo($salaId, $slots, 'ARS');
         $dropsMonto = self::montoPorCodigo($salaId, $drops, 'ARS');
 
         // Stock del día: ERP stock_dia → arqueo turno conforme (sin Anita).
-        $arqueoDia = self::cantidadesArqueoDia($jornada, $salaId, $avisos);
+        $arqueoDia = self::cantidadesArqueoDia($jornada, $salaId);
         $pesosArqueo = self::montoPorCodigo($salaId, $arqueoDia['ARS'], 'ARS');
         $usdFaceArqueo = self::montoPorCodigo($salaId, $arqueoDia['USD'], 'USD');
         $eurFaceArqueo = self::montoPorCodigo($salaId, $arqueoDia['EUR'], 'EUR');
@@ -150,7 +159,6 @@ final class TesoreriaCrownAnexo8Calculo
                 );
             }
             $cantidadesStock = self::sumarCantidades($cantidadesStock, $slots, $drops);
-            $avisos[] = 'Anexo VIII sin arqueo del día: stock desde saldo ERP (puede no cerrar con l-estboveda).';
         }
 
         $pesosStock = self::montoPorCodigo($salaId, $cantidadesStock, 'ARS');
@@ -162,10 +170,10 @@ final class TesoreriaCrownAnexo8Calculo
             $eurFace = $eurFaceArqueo;
         }
 
-        $fx = self::monedaExtranjera($fecha, $fechaInt, $avisos);
+        $fx = self::monedaExtranjera($fecha, $fechaInt);
         $fxPesos = $fx['pesos'];
-        $propina = self::propinaAcumulada($jornada, $avisos);
-        $resumen = self::resumenFinal($fecha, $avisos);
+        $propina = self::propinaAcumulada($jornada);
+        $resumen = self::resumenFinal($fecha);
 
         // En l-estboveda slots/drops ya van dentro de Ptot_boveda1 (= pesosStock acá).
         $total = round($pesosStock + $resumen['total'] + $propina + $fxPesos, 2);
@@ -282,10 +290,6 @@ final class TesoreriaCrownAnexo8Calculo
 
         unset($compararAnita);
 
-        if ($out === [] || abs($total) < 0.001) {
-            $avisos[] = 'No hay saldo de bóveda para esta fecha.';
-        }
-
         // pesos = arqueo del día (vault); slots/drops se muestran aparte como en el desglose.
         $pesosVault = $pesosArqueo > 0.001
             ? $pesosArqueo
@@ -344,9 +348,6 @@ final class TesoreriaCrownAnexo8Calculo
 
             return null;
         }
-        foreach ($armado['avisos'] ?? [] as $aviso) {
-            $avisos[] = $aviso;
-        }
         $filas = [];
         $cantFichas = 0;
         $montoFichas = 0.0;
@@ -391,28 +392,21 @@ final class TesoreriaCrownAnexo8Calculo
      * Arqueo final del día por moneda → valor_id.
      * Orden: stock_dia ERP → arqueo turno conforme.
      *
-     * @param  list<string>  $avisos
      * @return array{ARS: array<int, float>, USD: array<int, float>, EUR: array<int, float>}
      */
     private static function cantidadesArqueoDia(
         TesoreriaCrownJornada $jornada,
-        int $salaId,
-        array &$avisos
+        int $salaId
     ): array {
         $vacio = ['ARS' => [], 'USD' => [], 'EUR' => []];
         $erp = TesoreriaCrownBovedaStockDiaSupport::cantidadesDeJornada($jornada);
         if (is_array($erp) && $erp !== []) {
-            $avisos[] = 'Arqueo del día desde stock ERP (import / arqueo conforme).';
-
             return self::partirCantidadesPorMoneda($salaId, $erp);
         }
         $conforme = TesoreriaCrownBovedaStockDiaSupport::cantidadesDesdeArqueoConforme($jornada);
         if ($conforme !== []) {
-            $avisos[] = 'Arqueo del día desde último arqueo de turno conforme.';
-
             return self::partirCantidadesPorMoneda($salaId, $conforme);
         }
-        $avisos[] = 'Sin arqueo ERP del día (stock_dia / arqueo conforme). Importá con tesoreria-crown:importar-anexo8-anita o confirmá el arqueo de turno.';
 
         return $vacio;
     }
@@ -433,21 +427,19 @@ final class TesoreriaCrownAnexo8Calculo
     /**
      * Conversión FX como l-monextr.c: saldo partida × cotización de ingreso (ledger ERP).
      *
-     * @param  list<string>  $avisos
      * @return array{pesos: float, usd_face: float, eur_face: float, usd_pesos: float, eur_pesos: float}
      */
-    private static function monedaExtranjera(string $fechaYmd, int $fechaInt, array &$avisos): array
+    private static function monedaExtranjera(string $fechaYmd, int $fechaInt): array
     {
         unset($fechaInt);
 
-        return self::monedaExtranjeraErp($fechaYmd, $avisos);
+        return self::monedaExtranjeraErp($fechaYmd);
     }
 
     /**
-     * @param  list<string>  $avisos
      * @return array{pesos: float, usd_face: float, eur_face: float, usd_pesos: float, eur_pesos: float}
      */
-    private static function monedaExtranjeraErp(string $fechaYmd, array &$avisos): array
+    private static function monedaExtranjeraErp(string $fechaYmd): array
     {
         $vacio = ['pesos' => 0.0, 'usd_face' => 0.0, 'eur_face' => 0.0, 'usd_pesos' => 0.0, 'eur_pesos' => 0.0];
         if (! Schema::hasTable('tesoreria_crown_moneda_extranjera')) {
@@ -484,9 +476,6 @@ final class TesoreriaCrownAnexo8Calculo
             }
         }
         $pesos = round($usdPesos + $eurPesos, 2);
-        if ($pesos > 0.001) {
-            $avisos[] = 'Moneda extranjera (ERP monextr): '.number_format($pesos, 2, ',', '.');
-        }
 
         return [
             'pesos' => $pesos,
@@ -498,10 +487,9 @@ final class TesoreriaCrownAnexo8Calculo
     }
 
     /**
-     * @param  list<string>  $avisos
      * @return array<int, float>
      */
-    private static function cantidadesSlots(TesoreriaCrownJornada $jornada, array &$avisos): array
+    private static function cantidadesSlots(TesoreriaCrownJornada $jornada): array
     {
         // Solo slots sin vínculo a bóveda: los CashBox ya asentados entran por el arqueo A.
         $filas = TesoreriaCrownSlot::query()
@@ -514,26 +502,20 @@ final class TesoreriaCrownAnexo8Calculo
             })
             ->get();
         $out = [];
-        $total = 0.0;
         foreach ($filas as $slot) {
-            $total = round($total + (float) $slot->total, 2);
             foreach ($slot->lineas as $linea) {
                 $valorId = (int) $linea->valor_id;
                 $out[$valorId] = ($out[$valorId] ?? 0.0) + (float) $linea->cantidad;
             }
-        }
-        if ($total > 0.001) {
-            $avisos[] = 'Slots (recuento) incluidos en el anexo VIII: '.number_format($total, 2, ',', '.');
         }
 
         return $out;
     }
 
     /**
-     * @param  list<string>  $avisos
      * @return array<int, float>
      */
-    private static function cantidadesDropsMesa(TesoreriaCrownJornada $jornada, array &$avisos): array
+    private static function cantidadesDropsMesa(TesoreriaCrownJornada $jornada): array
     {
         $rows = DB::table('tesoreria_crown_mesa as m')
             ->join('tesoreria_crown_mesa_linea as l', 'l.mesa_id', '=', 'm.id')
@@ -552,10 +534,6 @@ final class TesoreriaCrownAnexo8Calculo
         foreach ($rows as $row) {
             $out[(int) $row->valor_id] = (float) $row->cantidad;
         }
-        $monto = self::montoPorCodigo((int) $jornada->sala_id, $out, 'ARS');
-        if ($monto > 0.001) {
-            $avisos[] = 'Drops de mesa incluidos en el anexo VIII: '.number_format($monto, 2, ',', '.');
-        }
 
         return $out;
     }
@@ -564,10 +542,9 @@ final class TesoreriaCrownAnexo8Calculo
      * Ítems de resumen final (l-estboveda procesa_resumen_final).
      * Orden: snapshot diario ERP → movimientos bóveda ERP.
      *
-     * @param  list<string>  $avisos
      * @return array{total: float, detalle: list<array{codigo: int, descripcion: string, monto: float}>}
      */
-    private static function resumenFinal(string $fechaYmd, array &$avisos): array
+    private static function resumenFinal(string $fechaYmd): array
     {
         $grupoDeTipo = [
             21 => 1, 22 => 1,
@@ -580,13 +557,8 @@ final class TesoreriaCrownAnexo8Calculo
         ];
         $codigos = array_keys(self::SIGNO_RESUMEN);
         $porGrupo = self::resumenFinalSnapshot($fechaYmd);
-        $fuente = 'erp_snapshot';
         if ($porGrupo === []) {
             $porGrupo = self::resumenFinalErp($fechaYmd, $codigos, $grupoDeTipo);
-            $fuente = 'erp';
-        }
-        if ($porGrupo === []) {
-            $avisos[] = 'Sin resumen final ERP (snapshot ni bóveda). Importá con tesoreria-crown:importar-anexo8-anita.';
         }
 
         $descripciones = self::descripcionesResumen();
@@ -604,11 +576,6 @@ final class TesoreriaCrownAnexo8Calculo
                 'monto' => $monto,
             ];
             $total = round($total + $monto, 2);
-        }
-        if (abs($total) > 0.001) {
-            $origenTxt = $fuente === 'erp_snapshot' ? 'ERP snapshot' : 'ERP bóveda';
-            $avisos[] = 'Items resumen final ('.$origenTxt.') incluidos en el anexo VIII: '
-                .number_format($total, 2, ',', '.');
         }
 
         return ['total' => $total, 'detalle' => $detalle];
@@ -697,10 +664,8 @@ final class TesoreriaCrownAnexo8Calculo
     /**
      * Acumulado de propina hasta la fecha (l-estboveda procesa_propina).
      * Orden: propina_dia ERP → Σ mesas F ERP.
-     *
-     * @param  list<string>  $avisos
      */
-    private static function propinaAcumulada(TesoreriaCrownJornada $jornada, array &$avisos): float
+    private static function propinaAcumulada(TesoreriaCrownJornada $jornada): float
     {
         $fechaYmd = $jornada->fecha->format('Y-m-d');
         $salaId = (int) $jornada->sala_id;
@@ -711,8 +676,6 @@ final class TesoreriaCrownAnexo8Calculo
                 ->whereDate('fecha', $fechaYmd)
                 ->first();
             if ($fila !== null && abs((float) $fila->monto) > 0.001) {
-                $avisos[] = 'Propina acumulada desde ERP (propina_dia).';
-
                 return round((float) $fila->monto, 2);
             }
         }
@@ -727,9 +690,6 @@ final class TesoreriaCrownAnexo8Calculo
                 ->whereDate('fecha', '<=', $fechaYmd))
             ->sum('propina'), 2);
         if (abs($local) > 0.001) {
-            $avisos[] = 'Propina acumulada desde mesas ERP: '
-                .number_format($local, 2, ',', '.');
-
             return $local;
         }
 

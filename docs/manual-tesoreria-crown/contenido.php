@@ -8,7 +8,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Tesorería Crown (CROWN · bajadas reales Chromium)',
-    'version' => '1.2',
+    'version' => '1.3',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -18,8 +18,8 @@ return [
             'parrafos' => [
                 'Tesorería Crown es el módulo de caja del casino Crown en anitaERP. Solo existe cuando la instalación corre con EMPRESA=CROWN (EntornoEmpresaSupport::esCrown). En AGG, Interforming, El Bierzo u otras empresas el menú no aparece y las rutas responden 404.',
                 'Opera por sala de juego: Cipolletti (CIP), Catriel, General Roca, Choele Choel, Villa Regina, Viedma, Las Grutas, El Faro y Cinco Saltos. Cada sala tiene su jornada, sus cajeros, sus cotizaciones, su numeración de habilitaciones/rendiciones/cierres y su bóveda. Una sala no mezcla comprobantes con otra.',
-                'El menú raíz es Tesorería Crown. El día se vive en Jornada (escritorio con solapas Cajeros, Mesas, Bóveda, Slots, Bingo, Stock de fichas / Poder público y Anexos). El listado transversal de papeles está en Habilitaciones.',
-                'Este manual describe el circuito completo: apertura, habilitaciones con firma, rendiciones de cajero con firma, datos externos (hotel PXSol, cierres fiscales de gastronomía), cierres parciales de caja, mesas/propinas, slots/soft-count, bóveda, stocks, anexos con fórmulas, Flash Crown (apartado 18) y cierre de jornada. El cálculo de anexos y Flash es ERP-first; los imports Anita son carga histórica, no fuente viva del día.',
+                'El menú raíz es Tesorería Crown. El día se vive en Jornada (escritorio con solapas Cajeros, Mesas, Bóveda, Slots, Bingo, Stock de fichas / Poder público y Anexos). El listado transversal de papeles está en Habilitaciones. La bandeja de hallazgos está en Avisos.',
+                'Este manual (v1.3) describe el circuito completo: apertura, habilitaciones y rendiciones con PIN propio del cajero, no conforme / reversa, cierres fiscales ERP+Anita, cierres parciales con permiso de auditor, avisos de auditoría, mesas/propinas, slots, bóveda, Valores/conversión, anexos, Flash Crown y cierre de jornada. El cálculo de anexos y Flash es ERP-first; los imports Anita son carga histórica o fallback del día, no fuente viva exclusiva.',
             ],
             'items' => [
                 'Gate: EMPRESA=CROWN + TesoreriaCrownAcceso::abortSiNoEsCrown() en controllers.',
@@ -48,7 +48,9 @@ return [
                     ['Anexos', '…/anexo', 'I, II, resumen cajeros, III, VII, VIII — consulta y export.'],
                     ['Resultado online', '…/resultado-online', 'Coin-in/out, soft-count subtotal, vouchers (alimenta poder slot).'],
                     ['Cotizaciones', '…/cotizacion', 'Compra/venta por tipo de valor y jornada (USD/EUR del día).'],
-                    ['Valores / Depósitos', '…/valor, …/deposito', 'Maestros FCOL/FVAL/ARS/USD/EUR y lugares BOVEDA/CAJA/MESA.'],
+                    ['Valores / Depósitos', '…/valor, …/deposito', 'Maestros FCOL/FVAL/ARS/USD/EUR, conversión del día y lugares BOVEDA/CAJA/MESA.'],
+                    ['Cajeros', '…/cajero', 'Alta/consulta de cajeros por sala (número, legajo, PIN).'],
+                    ['Avisos', '…/aviso', 'Bandeja de auditoría: diferencias, reversas, VIII vs variación, cotización, etc.'],
                     ['Flash Crown', 'caja/flash-crown', 'Resumen gerencial del día por sala (Anexo I/II + resultado online).'],
                     ['Flash — reportes', 'caja/flash-crown/reporte', 'Período, export Excel y suscripciones de envío.'],
                 ],
@@ -66,12 +68,12 @@ return [
             'items' => [
                 '1) Abrir la jornada de la sala y la fecha (una sola abierta por sala).',
                 '2) Asignar cada caja: depósito, cajero, turno (M/T/N) y tarea (T/G/H/K/E/L).',
-                '3) Tesorería crea habilitación(es), carga efectivo, pide firmas: firma tesorería (entrega) + cajero PIN (recibe) → Conforme. Sale de bóveda (HAB).',
+                '3) Tesorería crea habilitación(es), carga efectivo, pide firmas: firma tesorería (entrega) + cajero con PIN propio (recibe) → Conforme. Sale de bóveda (HAB).',
                 '4) Durante el día: mesas (A/R/C/F/D), slots (drop/soft-count), bingo, movimientos de bóveda, resultado online.',
-                '5) Cajero rinde: efectivo + fichas + medios; en G/H aplica cierres fiscales y/o PXSol. Pide firmas: cajero entrega + tesorería recibe → Conforme. Entra a bóveda (REN).',
-                '6) Cerrar cada caja con movimiento (cierre parcial): control habilitación vs rendición, tolerancia, firmas. Estados terminales: conforme / revisada / cierre de auditoría.',
+                '5) Cajero rinde: efectivo + fichas + medios; en G/H aplica cierres fiscales (ERP, Anita si falta) y/o PXSol. Pide firmas: cajero entrega + tesorería recibe → Conforme. Entra a bóveda (REN).',
+                '6) Cerrar cada caja con movimiento (cierre parcial): control habilitación vs rendición, tolerancia, firmas. Estados terminales: conforme / revisada / cierre de auditoría (permiso auditor).',
                 '7) Cuando todas las cajas con comprobantes tienen cierre terminal → cerrar jornada.',
-                '8) Consultar y exportar anexos I–VIII (caja final = Anexo VIII).',
+                '8) Consultar y exportar anexos I–VIII (caja final = Anexo VIII). Revisar bandeja de Avisos / mail de la mañana.',
             ],
             'tabla' => [
                 'caption' => 'Estados que frenan o habilitan el cierre de jornada',
@@ -133,7 +135,7 @@ return [
                 'headers' => ['Lado', 'Quién', 'Cómo firma'],
                 'rows' => [
                     ['Entrega', 'Tesorería', 'Usuario y clave del sistema con permiso editar-tesoreria-crown-movimiento (o administrador).'],
-                    ['Recibe', 'Cajero de la caja', 'Número de cajero + PIN (PIN inicial = el mismo número si no se cambió la clave).'],
+                    ['Recibe', 'Cajero de la caja', 'Número de cajero + PIN propio (4–8 dígitos). Ver apartado 19.'],
                 ],
             ],
             'items' => [
@@ -141,11 +143,13 @@ return [
                 'Si nadie firmó: Modificar cantidades vuelve a borrador.',
                 'Si ya hay una firma: Volver a borrador borra firmas.',
                 'Al quedar Conforme: asiento automático HAB en bóveda (sale efectivo).',
-                'No conforme: pide motivo, estado Auditoría; deja de sumar en el cierre.',
-                'Revertir (caja abierta): crea comprobante inverso pendiente de las dos firmas; una sola vez.',
+                'No conforme: pide motivo, estado Auditoría; deja de sumar en el cierre. Hace falta otra rendición conforme.',
+                'Revertir (caja abierta): crea comprobante inverso pendiente de las dos firmas; una sola vez; no se revierte una reversa.',
+                'Mensaje de firmante genérico (no revela si falló usuario, clave o permiso). Tope de 5 intentos de PIN / usuario.',
+                'Banner amarillo si el cajero aún no tiene PIN propio.',
             ],
             'parrafos2' => [
-                'Soporte: TesoreriaCrownFirmaSupport (pasarAPendiente, aplicar, aplicarCajero, cerrarSiCorresponde). Al conforme también se sellan cotiz_dolar / cotiz_euro del día en el comprobante.',
+                'Soporte: TesoreriaCrownFirmaSupport (PIN propio, blanqueo, rate-limit, pasarAPendiente, aplicar, aplicarCajero, cerrarSiCorresponde). Al conforme también se sellan cotiz_dolar / cotiz_euro del día en el comprobante.',
             ],
         ],
         [
@@ -184,14 +188,14 @@ return [
                 'caption' => 'Fuentes externas',
                 'headers' => ['Fuente', 'Dónde se usa', 'Qué trae'],
                 'rows' => [
-                    ['Cierres fiscales de ventas (cierrefiscal / p-cierrefact)', 'Rendición tarea G u H', 'Z (barra), X (informe), NC, último ticket. Se marcan y “Aplicar a la rendición”; se pueden corregir; no se modifica Anita.'],
+                    ['Cierres fiscales ERP + Anita', 'Rendición tarea G u H', 'Pendientes del día: primero ERP (tesoreria_crown_cierre_fiscal / Cierre X); si falta alguno, Anita (cierrefiscal) sin repetir sucursal+X/Z. Aplicar a la rendición; carga manual si falta uno. No se modifica Anita.'],
                     ['PXSol (API / bridge)', 'Rendición hotel (H)', 'Facturado, crédito, IVA facturas e IVA NC entre 1ª habilitación y la consulta. Completa X/Z/NC. Config: TESORERIA_CROWN_PXSOL_*.'],
                     ['Imports Anita', 'Mesas, slots, bóveda, fichas, bingo, online, anexo VIII (arqueo A / propina / monextr)', 'Comandos tesoreria-crown:importar-*. Soft-count nativo no pisa el import.'],
                     ['Resultado online', 'Poder público slot / Anexo I', 'coin_in − coin_out − pago_manual; subtotal_slot (soft count).'],
                 ],
             ],
             'parrafos2' => [
-                'Si PXSol no está configurado, el botón avisa y no completa importes. Los importes traídos se pueden corregir antes de pedir firmas.',
+                'Un cajero no opera a medias en ERP y Anita: el cruce ERP+Anita es red de seguridad (transición o hueco del día). Cuando gastronomía vive completo en el ERP, casi todo sale del ERP; Anita solo completa lo que falta. Si PXSol no está configurado, el botón avisa. Los importes traídos se pueden corregir antes de pedir firmas.',
             ],
         ],
         [
@@ -203,7 +207,7 @@ return [
             'parrafos' => [
                 'El cierre de caja no es una rendición: es el control habilitación vs rendición de esa asignación. Se abre desde la columna Cierre del escritorio.',
                 'Condiciones para cerrar: ningún comprobante en borrador/pendiente (tampoco una reversa sin firmar); al menos una rendición conforme; cotización de venta > 0 para cada moneda extranjera usada.',
-                'Todo el cierre se expresa en pesos. Solo entran comprobantes conformes. Una reversa conforme resta. Al cerrar firman tesorería (usuario+clave) y cajero (clave) y eligen Conforme o A revisión.',
+                'Todo el cierre se expresa en pesos. Solo entran comprobantes conformes. Una reversa conforme resta. Al cerrar firman tesorería (usuario+clave) y cajero (PIN; si es inicial, elige uno nuevo) y eligen Conforme o A revisión.',
             ],
             'tabla' => [
                 'caption' => 'Fórmulas de diferencia (TesoreriaCrownCierreCalculo)',
@@ -219,6 +223,7 @@ return [
                 'Tolerancia: parámetro tesoreria_crown_tolerancia_auditoria (default 50.000). Si |diferencia| > tolerancia → nace en Auditoría aunque hayan elegido conforme.',
                 'Estados terminales (dejan cerrar jornada): conforme, revisada, cierre de auditoría.',
                 'A revisión / auditoría: caja ya no admite comprobantes nuevos, pero la jornada no cierra.',
+                'Cerrar auditoría: permiso auditar-tesoreria-crown-caja (Enc-contaduría); firmante distinto de quien mandó a auditoría.',
                 'Ajuste de auditoría (permiso ajustar-tesoreria-crown-caja): corrige importe sin reabrir; doble firma sistema.',
                 'Reapertura (permiso reabrir-tesoreria-crown-caja): vuelve la caja a operativa para revertir o cargar; puede reabrir la jornada si no hay otra abierta en la sala.',
             ],
@@ -310,6 +315,11 @@ return [
                     ['TESORERIA_CROWN_PXSOL_TIMEOUT', 'Timeout segundos (default 20)'],
                     ['tesoreria_crown_tolerancia_auditoria', 'Parámetro sistema; default 50.000'],
                     ['tesoreria_crown_empresa_id', 'Empresa sueldos/legajos bóveda'],
+                    ['tesoreria_crown_avisos_mails', 'Destinatarios del resumen diario de avisos (uno por línea)'],
+                    ['tesoreria_crown_avisos_hora', 'Hora de la corrida nocturna (default 07:30)'],
+                    ['tesoreria_crown_avisos_fallos_*', 'Cantidad / días / mínimo $ para fallos repetidos'],
+                    ['tesoreria_crown_avisos_jornada_abierta_dias', 'Días abiertos antes de avisar (default 2)'],
+                    ['AUDIT_CONSOLE', 'Si true, OwenIt audita también comandos Artisan'],
                     ['CAJERO_CROWN_ANITA_*', 'Import de cajeros desde Anita'],
                 ],
             ],
@@ -319,7 +329,7 @@ return [
             'captura_id' => 'kardex_valores',
             'parrafos' => [
                 'El ledger unificado (TesoreriaCrownValorLedgerSupport) concentra el stock físico en movimientos de bóveda (y lugares equivalentes). El Kardex de valores lista movimientos confirmados de bóveda, pre-depósito y caja chica con workbench (QBE, vistas, columnas).',
-                'Maestros: tipos de valor (FCOL, FVAL, ARS, USD, EUR) y valores por denominación; tipos de depósito (BOVEDA, CAJA, MESA, PREDEPOSITO, CAJA_CHICA) y depósitos por sala.',
+                'Maestros: tipos de valor (FCOL, FVAL, ARS, USD, EUR) y valores por denominación; tipos de depósito (BOVEDA, CAJA, MESA, PREDEPOSITO, CAJA_CHICA) y depósitos por sala. La conversión de fichas del día se abre desde Valores (ya no hay ABM Fichas aparte); el Poder público enlaza a esa conversión.',
             ],
         ],
         [
@@ -378,12 +388,14 @@ return [
         [
             'titulo' => '17. Casos de uso rápidos',
             'parrafos' => [
-                'Día de una caja de venta: abrir jornada → asignar T → habilitar y firmar → operar → rendir y firmar → cerrar caja conforme → repetir → cerrar jornada → anexos.',
+                'Día de una caja de venta: abrir jornada → asignar T → habilitar y firmar (PIN propio) → operar → rendir y firmar → cerrar caja conforme → repetir → cerrar jornada → anexos.',
                 'Error antes de firmar: corregir en borrador; si ya pidieron firmas sin firmar, Modificar cantidades; si ya firmó uno, Volver a borrador.',
                 'No conforme del papel: motivo → auditoría; otra rendición conforme para poder cerrar.',
+                'PIN olvidado: en pendiente, “El cajero se olvidó el PIN” → tesorería firma → blanqueo → en la próxima firma elige PIN nuevo.',
                 'Diferencia chica a revisar: cerrar A revisión; después Revisada o Auditoría.',
-                'Diferencia > tolerancia: nace en auditoría; otra persona firma Cerrar auditoría.',
-                'Hotel: tarea H desde la asignación; en rendición aplicar cierres fiscales y/o Traer de PXSol; el cierre suma ctacte/transferencia.',
+                'Diferencia > tolerancia: nace en auditoría; otra persona con auditar-tesoreria-crown-caja firma Cerrar auditoría.',
+                'Hotel/gastro: tarea G/H; en rendición tildar cierres ERP (o Anita si faltan) y/o Traer de PXSol; el cierre suma ctacte/transferencia en H.',
+                'Avisos: a la mañana Enc-contaduría revisa la bandeja y el mail de resumen; marca Revisado o Descartado.',
             ],
         ],
         [
@@ -413,6 +425,54 @@ return [
             ],
             'parrafos2' => [
                 'Captura: php artisan manual:capturar-tesoreria-crown --solo=flash-crown && php artisan config:clear && php docs/manual-tesoreria-crown/generar.php',
+            ],
+        ],
+        [
+            'titulo' => '19. PIN del cajero',
+            'herramientas_grupos' => [
+                ['titulo' => 'PIN', 'clave' => 'pin_cajero'],
+            ],
+            'parrafos' => [
+                'Cada cajero firma con un PIN propio (4 a 8 dígitos). No puede ser el código ni el legajo, ni series obvias (1111, 1234, 4321…). El PIN inicial de migración (código/legajo) o un PIN blanqueado no sirve para firmar: en esa misma pantalla el cajero elige uno nuevo y lo repite.',
+                'Si se olvidó el PIN, tesorería en el comprobante pendiente abre “El cajero se olvidó el PIN”, firma con usuario y clave, y blanquea. En la próxima firma el cajero elige uno nuevo delante de tesorería. El blanqueo no genera aviso en la bandeja.',
+                'El movimiento y el cierre muestran un banner amarillo cuando el cajero asignado todavía no tiene PIN propio. Hay tope de 5 intentos fallidos de PIN (y de usuario/clave de firmante); después hay que esperar.',
+            ],
+            'items' => [
+                'Soporte: TesoreriaCrownFirmaSupport::pinEsInicial, autenticarCajero, blanquearPin.',
+                'Ruta de blanqueo: blanquear_pin_tesoreria_crown_movimiento.',
+                'No confundir el PIN del cajero con la clave de usuario de tesorería.',
+            ],
+        ],
+        [
+            'titulo' => '20. Bandeja de avisos de auditoría',
+            'herramientas_grupos' => [
+                ['titulo' => 'Avisos', 'clave' => 'avisos'],
+            ],
+            'parrafos' => [
+                'Menú Tesorería Crown → Avisos (caja/tesoreria-crown/aviso). No reemplaza el cierre de caja: concentra hallazgos del día/mes para Enc-contaduría y auditoría.',
+                'Estados: Abierto → Revisado o Descartado (con nota). Superado lo marca el sistema cuando la condición deja de cumplirse. Severidades: Alta / Media / Baja. Cada fila enlaza a la jornada o al comprobante (solapa sin menú).',
+                'Corrida: php artisan tesoreria-crown:avisos [--desde=] [--hasta=] [--anita] [--ejecutar]; hooks al cerrar caja / firmar comprobante; schedule diario a la hora de tesoreria_crown_avisos_hora (default 07:30) con mail si hay destinatarios.',
+            ],
+            'tabla' => [
+                'caption' => 'Reglas (TesoreriaCrownAvisoSupport::REGLAS)',
+                'headers' => ['Regla', 'Sev.', 'Qué mira'],
+                'rows' => [
+                    ['Diferencia de cierre sobre la tolerancia', 'Alta', '|diferencia| > tolerancia'],
+                    ['Comprobante no conforme sin resolver', 'Alta', 'Papel en auditoría abierto'],
+                    ['Rendición sin habilitación conforme', 'Alta', 'F sin H conforme'],
+                    ['Comprobante modificado después del cierre', 'Alta', 'Edición post-cierre'],
+                    ['Misma persona firma las dos partes', 'Alta', 'Entrega = recibe'],
+                    ['Reversa / Caja reabierta / Cajero en dos cajas', 'Media', 'Operación sensible del día'],
+                    ['Gastro/hotel con X sin cierre de ventas', 'Media', 'X sin fila de cierre'],
+                    ['Fallos repetidos / Jornada abierta N días / Diff Anita', 'Media', 'Patrones y control'],
+                    ['Anexo VIII ≠ variación del Anexo I', 'Media', 'caja_final_viii vs final por variación'],
+                    ['Cotización de otra fecha / Recálculo pendiente', 'Baja', 'ME / invalidación hacia adelante'],
+                ],
+            ],
+            'items' => [
+                'Permisos: listar-tesoreria-crown-aviso (ver) y auditar-tesoreria-crown-caja (resolver, firmar auditoría, reabrir en A). Enc-contaduría tiene ambos.',
+                'Parámetros en Configuración → Tesorería Crown: mails, hora, fallos cantidad/días/mínimo, días jornada abierta.',
+                'Mail: TesoreriaCrownAvisosResumen con abiertos del día y pendientes.',
             ],
         ],
     ],

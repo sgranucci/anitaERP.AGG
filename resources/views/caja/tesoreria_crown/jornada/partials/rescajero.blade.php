@@ -6,6 +6,30 @@
 
         return number_format((float) $importe, 2, ',', '.');
     };
+    $celdasAudit = [
+        'egresos', 'ingresos', 'fichas_casino', 'pago_cashless', 'vta_cashless',
+        'pago_voucher', 'venta_voucher', 'online', 'resultado', 'diferencia',
+    ];
+    $auditCelda = function (float $valor, string $columna, string $scope, ?int $asignacionId = null, ?string $tipo = null) use ($pesos) {
+        $texto = $pesos($valor);
+        if ($texto === '') {
+            return '';
+        }
+        $attrs = ' data-columna="'.e($columna).'" data-scope="'.e($scope).'"';
+        if ($asignacionId) {
+            $attrs .= ' data-asignacion-id="'.(int) $asignacionId.'"';
+        }
+        if ($tipo) {
+            $attrs .= ' data-tipo="'.e($tipo).'"';
+        }
+        $title = 'Ver cómo se calcula y auditar '.e($columna);
+
+        return '<span class="tc-audit-celda">'
+            .'<button type="button" class="js-tc-audit"'.$attrs.' title="'.$title.'">'.$texto.'</button>'
+            .'<button type="button" class="tc-audit-btn-info js-tc-audit"'.$attrs.' title="'.$title.'" aria-label="'.$title.'">'
+            .'<i class="fa fa-info" aria-hidden="true"></i></button>'
+            .'</span>';
+    };
 @endphp
 <div class="card card-outline card-info mb-3">
     <div class="card-header py-2">
@@ -15,7 +39,7 @@
         @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
         <p class="text-muted small mb-2">
             Formato de <code>l-rescajero.c</code>: agrupado por tipo de caja. Ingresos = efectivo rendido (sin fichas ni cashless).
-           
+            Cada importe azul (o el botón <i class="fa fa-info"></i>) abre la explicación del cálculo y los documentos para auditarlo.
         </p>
         @if ($rescajero === null)
             <div class="alert alert-warning mb-0">No se pudo armar el resumen. {{ $rescajeroError }}</div>
@@ -49,33 +73,30 @@
                                     <td colspan="12">{{ $grupo['titulo'] }}</td>
                                 </tr>
                                 @foreach ($grupo['filas'] as $fila)
+                                    @php
+                                        $scopeFila = ! empty($fila['propina']) ? 'propina' : 'fila';
+                                        $asignacionId = (int) ($fila['asignacion_id'] ?? 0) ?: null;
+                                    @endphp
                                     <tr>
-                                        <td>{{ $fila['caja'] }}</td>
+                                        <td>
+                                            @if ($asignacionId && empty($fila['propina']))
+                                                <a class="text-primary" target="_blank" rel="noopener"
+                                                   href="{{ route('ver_tesoreria_crown_cierre', $asignacionId) }}">{{ $fila['caja'] }}</a>
+                                            @else
+                                                {{ $fila['caja'] }}
+                                            @endif
+                                        </td>
                                         <td>{{ $fila['cajero'] }}</td>
-                                        <td class="text-right">{{ $pesos($fila['egresos']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['ingresos']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['fichas_casino']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['pago_cashless']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['vta_cashless']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['pago_voucher']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['venta_voucher']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['online']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['resultado']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['diferencia']) }}</td>
+                                        @foreach ($celdasAudit as $columna)
+                                            <td class="text-right">{!! $auditCelda((float) ($fila[$columna] ?? 0), $columna, $scopeFila, $asignacionId) !!}</td>
+                                        @endforeach
                                     </tr>
                                 @endforeach
                                 <tr style="font-weight:bold;background:#f5f5f5;" data-tc-fija="1">
                                     <td colspan="2">Total {{ $grupo['titulo'] }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['egresos']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['ingresos']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['fichas_casino']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['pago_cashless']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['vta_cashless']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['pago_voucher']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['venta_voucher']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['online']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['resultado']) }}</td>
-                                    <td class="text-right">{{ $pesos($grupo['totales']['diferencia']) }}</td>
+                                    @foreach ($celdasAudit as $columna)
+                                        <td class="text-right">{!! $auditCelda((float) ($grupo['totales'][$columna] ?? 0), $columna, 'grupo', null, (string) $grupo['tipo']) !!}</td>
+                                    @endforeach
                                 </tr>
                             @empty
                                 <tr data-tc-fija="1"><td colspan="12" class="text-center text-muted">Sin filas.</td></tr>
@@ -83,16 +104,9 @@
                             @if (($rescajero['grupos'] ?? []) !== [])
                                 <tr style="font-weight:bold;background:#D5F5E3;" data-tc-fija="1">
                                     <td colspan="2">Total general</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['egresos']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['ingresos']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['fichas_casino']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['pago_cashless']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['vta_cashless']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['pago_voucher']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['venta_voucher']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['online']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['resultado']) }}</td>
-                                    <td class="text-right">{{ $pesos($rescajero['totales']['diferencia']) }}</td>
+                                    @foreach ($celdasAudit as $columna)
+                                        <td class="text-right">{!! $auditCelda((float) ($rescajero['totales'][$columna] ?? 0), $columna, 'total') !!}</td>
+                                    @endforeach
                                 </tr>
                             @endif
                         </tbody>
@@ -102,3 +116,8 @@
         @endif
     </div>
 </div>
+
+@include('caja.tesoreria_crown.jornada.partials.modal_auditoria_importe', [
+    'urlAuditoria' => route('auditoria_rescajero_tesoreria_crown_jornada', $jornada->id),
+])
+<script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js')) }}"></script>

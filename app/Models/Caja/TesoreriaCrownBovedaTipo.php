@@ -5,6 +5,7 @@ namespace App\Models\Caja;
 use App\Models\Configuracion\Sala;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class TesoreriaCrownBovedaTipo extends Model implements Auditable
@@ -31,6 +32,16 @@ class TesoreriaCrownBovedaTipo extends Model implements Auditable
     public function sala(): BelongsTo
     {
         return $this->belongsTo(Sala::class, 'sala_id');
+    }
+
+    public function subtipos(): HasMany
+    {
+        return $this->hasMany(TesoreriaCrownBovedaSubtipo::class, 'tipo_id');
+    }
+
+    public function movimientos(): HasMany
+    {
+        return $this->hasMany(TesoreriaCrownBoveda::class, 'tipo_id');
     }
 
     public function etiqueta(): string

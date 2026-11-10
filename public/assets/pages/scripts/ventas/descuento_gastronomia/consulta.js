@@ -87,17 +87,19 @@ $(document).on('keyup', '#consultadescuento', function () {
 });
 
 function activa_eventos_consultadescuento() {
-    $('.consultadescuento').on('click', function () {
-        ptrDescuento_id = $(this).parents('tr').find('.descuento_gastronomia_id');
-        if (!ptrDescuento_id || !ptrDescuento_id.length) {
+    $('.consultadescuento').off('click.consultaDescuento').on('click.consultaDescuento', function () {
+        var $btn = $(this);
+        var $ctx = $btn.closest('tr, .gc-campo-consulta, .gastro-campo-consulta, .form-group, .tm-descuento-campo');
+        ptrDescuento_id = $ctx.find('.descuento_gastronomia_id').first();
+        if (!ptrDescuento_id.length) {
             ptrDescuento_id = $('#descuento_gastronomia_id');
         }
-        ptrCodigoDescuento_id = $(this).parents('tr').find('.codigodescuento');
-        if (!ptrCodigoDescuento_id || !ptrCodigoDescuento_id.length) {
+        ptrCodigoDescuento_id = $ctx.find('.codigodescuento').first();
+        if (!ptrCodigoDescuento_id.length) {
             ptrCodigoDescuento_id = $('#codigodescuento');
         }
-        ptrNombreDescuento = $(this).parents('tr').find('.nombredescuento');
-        if (!ptrNombreDescuento || !ptrNombreDescuento.length) {
+        ptrNombreDescuento = $ctx.find('.nombredescuento').first();
+        if (!ptrNombreDescuento.length) {
             ptrNombreDescuento = $('#nombredescuento');
         }
 

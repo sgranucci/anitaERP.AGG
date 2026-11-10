@@ -7,7 +7,7 @@ use App\Models\Stock\Precio;
 use Carbon\Carbon;
 
 /**
- * Precios viandas: costo desde lista 5000+mes (vigente a la jornada); venta desde lista configurada en la terminal.
+ * Precios viandas: costo desde lista (base + mes, vigente a la jornada); venta desde lista configurada en la terminal.
  */
 final class ViandaPrecioSupport
 {
@@ -47,8 +47,21 @@ final class ViandaPrecioSupport
 
     public static function precioDesdeLista(int $articuloId, ?int $listaprecioId, ?string $fechaVigenciaMax = null): float
     {
-        if ($listaprecioId === null || $listaprecioId <= 0) {
-            return 0.0;
+        $fila = self::filaVigente($articuloId, $listaprecioId, $fechaVigenciaMax);
+
+        return $fila !== null ? (float) $fila->precio : 0.0;
+    }
+
+    /** Hay fila de precio vigente (aunque el importe sea 0 = sin cargo). */
+    public static function tienePrecioVigente(int $articuloId, ?int $listaprecioId, ?string $fechaVigenciaMax = null): bool
+    {
+        return self::filaVigente($articuloId, $listaprecioId, $fechaVigenciaMax) !== null;
+    }
+
+    private static function filaVigente(int $articuloId, ?int $listaprecioId, ?string $fechaVigenciaMax = null): ?Precio
+    {
+        if ($listaprecioId === null || $listaprecioId <= 0 || $articuloId <= 0) {
+            return null;
         }
 
         $query = Precio::query()
@@ -61,8 +74,6 @@ final class ViandaPrecioSupport
             $query->whereDate('fechavigencia', '<=', $fechaVigenciaMax);
         }
 
-        $precio = $query->value('precio');
-
-        return $precio !== null ? (float) $precio : 0.0;
+        return $query->first();
     }
 }

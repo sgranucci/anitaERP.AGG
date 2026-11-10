@@ -13,22 +13,25 @@
         'pago_cashless', 'vta_cashless', 'pago_online', 'venta_online', 'online', 'apuestas',
         'resultado', 'diferencia',
     ];
-    $auditLink = function (float $valor, string $columna, string $scope, ?int $asignacionId = null, ?string $tipo = null) use ($pesos) {
+    $auditCelda = function (float $valor, string $columna, string $scope, ?int $asignacionId = null, ?string $tipo = null) use ($pesos) {
         $texto = $pesos($valor);
         if ($texto === '') {
             return '';
         }
-        $attrs = 'type="button" class="btn btn-link btn-sm p-0 text-primary js-anexo3-audit"';
-        $attrs .= ' data-columna="'.e($columna).'" data-scope="'.e($scope).'"';
+        $attrs = ' data-columna="'.e($columna).'" data-scope="'.e($scope).'"';
         if ($asignacionId) {
             $attrs .= ' data-asignacion-id="'.(int) $asignacionId.'"';
         }
         if ($tipo) {
             $attrs .= ' data-tipo="'.e($tipo).'"';
         }
-        $attrs .= ' title="Auditar movimientos de '.e($columna).'"';
+        $title = 'Ver cómo se calcula y auditar '.e($columna);
 
-        return '<button '.$attrs.'>'.$texto.'</button>';
+        return '<span class="tc-audit-celda">'
+            .'<button type="button" class="js-tc-audit"'.$attrs.' title="'.$title.'">'.$texto.'</button>'
+            .'<button type="button" class="tc-audit-btn-info js-tc-audit"'.$attrs.' title="'.$title.'" aria-label="'.$title.'">'
+            .'<i class="fa fa-info" aria-hidden="true"></i></button>'
+            .'</span>';
     };
 @endphp
 <div class="card card-outline card-info mb-3">
@@ -38,7 +41,7 @@
     <div class="card-body pb-2">
         @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
         <p class="text-muted small mb-2">
-            Formato de <code>l-anexo3new.c</code> (ENCAB1). Cada importe azul abre el detalle de los movimientos que lo componen.
+            Formato de <code>l-anexo3new.c</code> (ENCAB1). Cada importe azul (o el botón <i class="fa fa-info"></i>) abre la explicación del cálculo y los documentos para auditarlo.
         </p>
         @if ($anexo3 === null)
             <div class="alert alert-warning mb-0">No se pudo armar el anexo III. {{ $anexo3Error }}</div>
@@ -77,7 +80,7 @@
                                     <th class="text-right">Pago cashless</th>
                                     <th class="text-right">Vta. cashless</th>
                                     <th class="text-right">Pagos online</th>
-                                    <th class="text-right">Ventas online</th>
+                                    <th class="text-right">Neto on-line</th>
                                     <th class="text-right">Del Rio ONLINE</th>
                                     <th class="text-right">Apuestas Dep.</th>
                                     <th class="text-right">Resultado</th>
@@ -106,7 +109,7 @@
                                             </td>
                                             <td class="col-fija-2">{{ $fila['cajero'] }}</td>
                                             @foreach ($celdasAudit as $columna)
-                                                <td class="text-right">{!! $auditLink((float) ($fila[$columna] ?? 0), $columna, $scopeFila, $asignacionId) !!}</td>
+                                                <td class="text-right">{!! $auditCelda((float) ($fila[$columna] ?? 0), $columna, $scopeFila, $asignacionId) !!}</td>
                                             @endforeach
                                         </tr>
                                     @endforeach
@@ -114,7 +117,7 @@
                                     <tr style="font-weight:bold;background:#f5f5f5;" data-tc-fija="1">
                                         <td class="col-fija-1" colspan="2">Total {{ $grupo['titulo'] }}</td>
                                         @foreach ($celdasAudit as $columna)
-                                            <td class="text-right">{!! $auditLink((float) ($tg[$columna] ?? 0), $columna, 'grupo', null, (string) $grupo['tipo']) !!}</td>
+                                            <td class="text-right">{!! $auditCelda((float) ($tg[$columna] ?? 0), $columna, 'grupo', null, (string) $grupo['tipo']) !!}</td>
                                         @endforeach
                                     </tr>
                                 @empty
@@ -125,13 +128,13 @@
                                     <tr style="font-weight:bold;background:#D5F5E3;" data-tc-fija="1">
                                         <td class="col-fija-1" colspan="2">Total general</td>
                                         @foreach ($celdasAudit as $columna)
-                                            <td class="text-right">{!! $auditLink((float) ($t[$columna] ?? 0), $columna, 'total') !!}</td>
+                                            <td class="text-right">{!! $auditCelda((float) ($t[$columna] ?? 0), $columna, 'total') !!}</td>
                                         @endforeach
                                     </tr>
                                     <tr style="font-weight:bold;" data-tc-fija="1">
                                         <td class="col-fija-1" colspan="2">Total de Tarj. Credito + Tarj. Debito + Total QR + Recargo fin.</td>
                                         <td colspan="{{ $cols - 2 }}" class="text-right">
-                                            {!! $auditLink((float) ($anexo3['total_tarjetas'] ?? 0), 'pie_tarjetas', 'pie_tarjetas') !!}
+                                            {!! $auditCelda((float) ($anexo3['total_tarjetas'] ?? 0), 'pie_tarjetas', 'pie_tarjetas') !!}
                                         </td>
                                     </tr>
                                 @endif
@@ -144,34 +147,7 @@
     </div>
 </div>
 
-<div class="modal fade" id="modal-anexo3-auditoria" tabindex="-1" role="dialog" aria-labelledby="anexo3-auditoria-titulo"
-     data-url="{{ route('auditoria_anexo3_tesoreria_crown_jornada', $jornada->id) }}">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <div>
-                    <h5 class="modal-title mb-0" id="anexo3-auditoria-titulo">Auditoría</h5>
-                    <div class="small text-muted" id="anexo3-auditoria-subtitulo"></div>
-                </div>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <p class="small text-muted mb-2" id="anexo3-auditoria-formula" hidden></p>
-                <div id="anexo3-auditoria-avisos"></div>
-                <p class="text-muted mb-2" id="anexo3-auditoria-cargando" hidden>Cargando movimientos…</p>
-                <p class="text-muted mb-0" id="anexo3-auditoria-vacio" hidden>Ningún movimiento aporta a este importe.</p>
-                <div id="anexo3-auditoria-lista"></div>
-            </div>
-            <div class="modal-footer py-2">
-                <a href="#" class="btn btn-outline-info btn-sm" id="anexo3-auditoria-cierre" target="_blank" rel="noopener" hidden>
-                    Abrir cierre de caja
-                </a>
-                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/anexo3_auditoria.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/anexo3_auditoria.js')) }}"></script>
+@include('caja.tesoreria_crown.jornada.partials.modal_auditoria_importe', [
+    'urlAuditoria' => route('auditoria_anexo3_tesoreria_crown_jornada', $jornada->id),
+])
+<script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js')) }}"></script>

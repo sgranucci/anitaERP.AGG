@@ -7,6 +7,7 @@ use App\Models\Caja\TesoreriaCrownBingo;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownBingoListadoFiltros;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use Illuminate\Http\Request;
@@ -24,11 +25,12 @@ class TesoreriaCrownBingoController extends Controller
 
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $filtros = TesoreriaCrownBingoListadoFiltros::resolverDesdeRequest($request);
+        $filtros['sala_id'] = (int) ($sala->id ?? 0);
+        $filtrosQuery = TesoreriaCrownBingoListadoFiltros::paraQueryString($filtros);
         $query = TesoreriaCrownBingo::query()->with(['sala', 'empresa'])->orderByDesc('fecha');
-        if ($sala) {
-            $query->where('sala_id', $sala->id);
-        }
-        $filas = $query->paginate(20)->appends($request->query());
+        TesoreriaCrownBingoListadoFiltros::aplicar($query, $filtros);
+        $filas = $query->paginate(20)->appends($filtrosQuery);
         $jornadasPorFecha = [];
         if ($filas->isNotEmpty()) {
             $pares = $filas->map(fn (TesoreriaCrownBingo $f) => [
@@ -51,9 +53,9 @@ class TesoreriaCrownBingoController extends Controller
             'sala' => $sala,
             'filas' => $filas,
             'jornadasPorFecha' => $jornadasPorFecha,
-            'filtrosQuery' => array_filter([
-                'sala_id' => $sala?->id,
-            ]),
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'tieneCriterios' => TesoreriaCrownBingoListadoFiltros::tieneCriteriosAplicados($filtros),
         ]);
     }
 
@@ -65,10 +67,10 @@ class TesoreriaCrownBingoController extends Controller
 
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
+        $filtros = TesoreriaCrownBingoListadoFiltros::resolverDesdeRequest($request);
+        $filtros['sala_id'] = (int) ($sala->id ?? 0);
         $query = TesoreriaCrownBingo::query()->with(['sala', 'empresa'])->orderByDesc('fecha');
-        if ($sala) {
-            $query->where('sala_id', $sala->id);
-        }
+        TesoreriaCrownBingoListadoFiltros::aplicar($query, $filtros);
         $coleccion = $query->get();
         foreach ($coleccion as $fila) {
             $fila->nombreempresa = $fila->empresa->nombre ?? '';
@@ -99,7 +101,7 @@ class TesoreriaCrownBingoController extends Controller
             return $respuesta;
         }
 
-        return redirect()->route('tesoreria_crown_bingo', array_filter(['sala_id' => $sala?->id]));
+        return redirect()->route('tesoreria_crown_bingo', TesoreriaCrownBingoListadoFiltros::paraQueryString($filtros));
     }
 
     public function crear(Request $request)

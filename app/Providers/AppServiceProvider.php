@@ -5,6 +5,8 @@ namespace App\Providers;
 use App;
 use App\Models\Admin\Menu;
 use App\Models\Contable\Asiento;
+use App\Observers\Caja\TesoreriaCrownRecalculoObserver;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Articulo_Movimiento_Talle;
@@ -166,6 +168,27 @@ class AppServiceProvider extends ServiceProvider
         Ordentrabajo::observe(OrdentrabajoObserver::class);
         Asiento_Movimiento::observe(Asiento_MovimientoObserver::class);
         Asiento::observe(AsientoObserver::class);
+        if (EntornoEmpresaSupport::esCrown()) {
+            foreach ([
+                \App\Models\Caja\TesoreriaCrownAjuste::class,
+                \App\Models\Caja\TesoreriaCrownAsignacion::class,
+                \App\Models\Caja\TesoreriaCrownBoveda::class,
+                \App\Models\Caja\TesoreriaCrownBovedaLinea::class,
+                \App\Models\Caja\TesoreriaCrownBovedaArqueo::class,
+                \App\Models\Caja\TesoreriaCrownBovedaArqueoLinea::class,
+                \App\Models\Caja\TesoreriaCrownBovedaStockDia::class,
+                \App\Models\Caja\TesoreriaCrownBovedaStockDiaLinea::class,
+                \App\Models\Caja\TesoreriaCrownComprobante::class,
+                \App\Models\Caja\TesoreriaCrownComprobanteLinea::class,
+                \App\Models\Caja\TesoreriaCrownMesa::class,
+                \App\Models\Caja\TesoreriaCrownSlot::class,
+                \App\Models\Caja\TesoreriaCrownResultadoOnline::class,
+                \App\Models\Caja\TesoreriaCrownBingo::class,
+                \App\Models\Caja\TesoreriaCrownPropinaDia::class,
+            ] as $modeloRecalculo) {
+                $modeloRecalculo::observe(TesoreriaCrownRecalculoObserver::class);
+            }
+        }
 
         $url = env('APP_URL');
         if (is_string($url) && str_contains($url, 'https')) {

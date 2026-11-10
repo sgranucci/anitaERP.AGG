@@ -6,11 +6,18 @@
         cuentaId: null,
         cuenta: null,
         lineaSeleccionadaId: null,
+        lineaDestinoId: null,
         busy: false,
         areas: [],
         planos: [],
         mesasPorId: {},
+        cuentasAbiertas: [],
         planoAbierto: null,
+        mediosCaja: [],
+        mediosPorId: {},
+        cuentacajaEfectivo: null,
+        cuentacajaEfectivoError: null,
+        pollKdsTimer: null,
         opc: {
             grupos: [],
             seleccion: {},
@@ -18,6 +25,54 @@
             contexto: null
         }
     };
+
+    function badgeEstadoKds(l) {
+        if (!l || l.es_separador || l.prepara === false) {
+            return '';
+        }
+        var est = l.kds_estado || (l.fired || l.fired_postre ? 'fired' : null);
+        if (!est) {
+            return '';
+        }
+        var label = l.kds_estado_label || ({
+            fired: 'En KDS',
+            preparing: 'Preparando',
+            ready: 'Listo',
+            delivered: 'Entregado',
+            void: 'Anulada'
+        }[est] || est);
+        var cls = ({
+            fired: 'badge-primary',
+            preparing: 'badge-warning',
+            ready: 'badge-success',
+            delivered: 'badge-dark',
+            void: 'badge-secondary'
+        }[est] || 'badge-dark');
+        return ' <span class="badge ' + cls + '" title="Estado en cocina">' + $('<div>').text(label).html() + '</span>';
+    }
+
+    function programarPollKds() {
+        if (estado.pollKdsTimer) {
+            window.clearInterval(estado.pollKdsTimer);
+            estado.pollKdsTimer = null;
+        }
+        if (!estado.cuentaId) {
+            return;
+        }
+        var tieneMarcha = (estado.cuenta && estado.cuenta.lineas || []).some(function (l) {
+            return l && (l.fired || l.fired_postre) && l.kds_estado !== 'delivered' && l.kds_estado !== 'void';
+        });
+        if (!tieneMarcha) {
+            return;
+        }
+        var segundos = Math.max(5, parseInt(cfg.kdsRefrescoSegundos, 10) || 5);
+        estado.pollKdsTimer = window.setInterval(function () {
+            if (estado.busy || !estado.cuentaId) {
+                return;
+            }
+            recargarCuenta();
+        }, segundos * 1000);
+    }
 
     function toast(msg, tipo) {
         if (window.toastr) {
@@ -59,11 +114,54 @@
         return true;
     }
 
+    /** Normaliza IDs de línea (JSON a veces trae string). */
+    function idLineaNum(v) {
+        var n = parseInt(v, 10);
+        return n > 0 ? n : null;
+    }
+
+    function lineaPorId(id) {
+        id = idLineaNum(id);
+        if (!id || !estado.cuenta) {
+            return null;
+        }
+        return (estado.cuenta.lineas || []).find(function (l) {
+            return idLineaNum(l.id) === id;
+        }) || null;
+    }
+
+    /**
+     * Línea activa: clic en fila, tr.seleccionada en DOM, o única marcada.
+     * @returns {object|null}
+     */
+    function resolverLineaActiva() {
+        var id = idLineaNum(estado.lineaSeleccionadaId);
+        var linea = id ? lineaPorId(id) : null;
+        if (linea && !linea.es_separador) {
+            return linea;
+        }
+        var domId = idLineaNum($('#gc-tabla-lineas tr.seleccionada').first().attr('data-linea-id'));
+        linea = domId ? lineaPorId(domId) : null;
+        if (linea && !linea.es_separador) {
+            estado.lineaSeleccionadaId = domId;
+            return linea;
+        }
+        var marcadas = (estado.cuenta && estado.cuenta.lineas || []).filter(function (l) {
+            return l.marcado && !l.es_separador;
+        });
+        if (marcadas.length === 1) {
+            estado.lineaSeleccionadaId = idLineaNum(marcadas[0].id);
+            return marcadas[0];
+        }
+        return null;
+    }
+
     function aplicarCuenta(cuenta) {
         estado.cuenta = cuenta || null;
         estado.cuentaId = cuenta ? cuenta.id : null;
         pintarEstado();
         pintarLineas();
+        programarPollKds();
         $('.gc-mesa-btn').removeClass('activa');
         if (cuenta) {
             $('.gc-mesa-btn[data-cuenta-id="' + cuenta.id + '"]').addClass('activa');
@@ -72,6 +170,7 @@
             }
         }
         pintarPlanos();
+        actualizarBotonesCierreCuenta();
         $('#gc-codigo-articulo').trigger('focus');
         $('.gc-pos-topbar').addClass('gc-pulse');
         setTimeout(function () { $('.gc-pos-topbar').removeClass('gc-pulse'); }, 450);
@@ -149,10 +248,18 @@
         var pref = String(cfg.skuPrefijo || '').toUpperCase();
         var n = parseInt(cfg.skuDigitos, 10) || 0;
         sku = String(sku || '').toUpperCase();
+        var suf = sku;
         if (n > 0 && pref && sku.indexOf(pref) === 0) {
-            return sku.substring(pref.length);
+            suf = sku.substring(pref.length);
         }
-        return sku;
+        // Solo dígitos significativos en pantalla (V00001 → 1); al marchar se rellena.
+        if (n > 0 && /^\d+$/.test(suf)) {
+            suf = String(parseInt(suf, 10));
+            if (suf === 'NaN') {
+                suf = sku;
+            }
+        }
+        return suf;
     }
 
     function pintarTotales() {
@@ -176,7 +283,7 @@
         var $tb = $('#gc-tabla-lineas tbody');
         var lineas = (estado.cuenta && estado.cuenta.lineas) ? estado.cuenta.lineas : [];
         if (!lineas.length) {
-            $tb.html('<tr><td colspan="5" class="text-muted text-center py-3">Sin ítems</td></tr>');
+            $tb.html('<tr><td colspan="6" class="text-muted text-center py-3">Sin ítems</td></tr>');
             pintarTotales();
             return;
         }
@@ -184,7 +291,7 @@
         lineas.forEach(function (l) {
             if (l.es_separador) {
                 html += '<tr class="gc-separador" data-linea-id="' + l.id + '">'
-                    + '<td colspan="5" class="text-center text-muted small py-1">— separador —</td></tr>';
+                    + '<td colspan="6" class="text-center text-muted small py-1">— separador —</td></tr>';
                 return;
             }
             var cls = [];
@@ -194,7 +301,7 @@
             if (l.fired) {
                 cls.push('fired');
             }
-            if (estado.lineaSeleccionadaId === l.id) {
+            if (idLineaNum(estado.lineaSeleccionadaId) === idLineaNum(l.id)) {
                 cls.push('seleccionada');
             }
             var cantTxt = textoCantidad(l.cantidad);
@@ -210,20 +317,27 @@
                     opcPartes.push($('<div>').text(t).html());
                 }
             });
+            var skuTxt = $('<div>').text(l.sku || '').html();
+            var obsTxt = l.observacion ? $('<div>').text(l.observacion).html() : '';
             html += '<tr class="' + cls.join(' ') + '" data-linea-id="' + l.id + '">'
                 + '<td class="text-center"><input type="checkbox" class="gc-marca-linea" title="Marcar ítem"'
                 + (l.marcado ? ' checked' : '') + '></td>'
                 + '<td class="text-nowrap">' + qtyHtml + '</td>'
-                + '<td><span class="gc-linea-desc">' + $('<div>').text(l.descripcion || l.sku || '').html() + '</span>'
-                + (opcPartes.length ? '<br><small class="text-muted">+ ' + opcPartes.join(' · ') + '</small>' : '')
-                + (l.observacion ? '<br><small class="text-muted">' + $('<div>').text(l.observacion).html() + '</small>' : '')
-                + (l.area ? ' <span class="badge badge-info" title="KDS">' + $('<div>').text(l.area_codigo || l.area).html() + '</span>' : '')
-                + (l.prepara === false ? ' <span class="badge badge-secondary">no prepara</span>' : '')
-                + (l.fired ? ' <span class="badge badge-dark">marcha</span>' : '')
+                + '<td class="text-nowrap">'
+                + (skuTxt ? '<span class="gc-linea-sku" title="Código artículo">' + skuTxt + '</span>' : '—')
                 + '</td>'
-                + '<td class="text-right">' + money(l.importe) + '</td>'
-                + '<td class="text-center">'
-                + '<button type="button" class="btn btn-xs btn-link gc-destino-linea" title="KDS / prepara"><i class="fa fa-utensils"></i></button>'
+                + '<td><span class="gc-linea-desc">' + $('<div>').text(l.descripcion || '').html() + '</span>'
+                + (opcPartes.length ? '<br><small class="text-muted">+ ' + opcPartes.join(' · ') + '</small>' : '')
+                + (obsTxt ? '<span class="gc-linea-obs"><i class="fa fa-sticky-note"></i> ' + obsTxt + '</span>' : '')
+                + (l.area ? ' <span class="badge badge-info" title="KDS destino">' + $('<div>').text(l.area_codigo || l.area).html() + '</span>' : '')
+                + (l.prepara === false ? ' <span class="badge badge-secondary">no prepara</span>' : '')
+                + badgeEstadoKds(l)
+                + '</td>'
+                + '<td class="text-right text-nowrap">' + money(l.importe) + '</td>'
+                + '<td class="text-center text-nowrap gc-linea-acciones">'
+                + '<button type="button" class="btn btn-xs btn-link gc-obs-linea' + (l.observacion ? ' has-obs' : '') + '"'
+                + ' title="Observación para comanda"><i class="fa fa-sticky-note"></i></button>'
+                + '<button type="button" class="btn btn-xs btn-link gc-destino-linea" title="Elegir KDS / prepara"><i class="fa fa-utensils"></i></button>'
                 + '<button type="button" class="btn btn-xs btn-link text-danger gc-void-linea" title="Anular ítem"><i class="fa fa-times"></i></button>'
                 + '</td>'
                 + '</tr>';
@@ -281,6 +395,7 @@
                     estado.mesasPorId[String(m.id)] = m;
                 });
                 renderPlanos();
+                cargarCuentasAbiertas();
             })
             .fail(function () {
                 $panel.html('<div class="text-danger small p-2">No se pudo conectar</div>');
@@ -345,9 +460,6 @@
                 montarVisor(p);
             }
         });
-        pintarCuentasAbiertas(Object.keys(estado.mesasPorId).map(function (id) {
-            return estado.mesasPorId[id];
-        }));
     }
 
     function planoPorId(planoId) {
@@ -427,6 +539,7 @@
                 } else {
                     renderCuentas(resp.cuentas || []);
                 }
+                cargarCuentasAbiertas();
             })
             .fail(function () {
                 $panel.html('<div class="text-danger small p-2">No se pudo conectar</div>');
@@ -439,53 +552,161 @@
             $panel.html('<div class="text-muted small p-2">No hay mesas para este filtro.</div>');
             return;
         }
-        var html = '<div class="gc-cuentas-ayuda">Verde: tocá para abrir la cuenta. Ocupada: tocá para seguirla.</div>';
+        var html = '';
         mesas.forEach(function (m) {
-            var label = (m.codigo ? m.codigo + ' — ' : '') + (m.nombre || '');
+            var codigo = (m.codigo || '').toString();
+            var nombre = (m.nombre || '').toString();
+            var corto = codigo || nombre;
+            var title = (codigo ? codigo + ' — ' : '') + nombre;
             html += '<button type="button" class="btn btn-sm btn-outline-secondary gc-mesa-btn'
                 + (m.ocupada ? ' ocupada' : '')
                 + (estado.cuentaId && m.cuenta_abierta_id === estado.cuentaId ? ' activa' : '')
-                + '" data-mesa-id="' + m.id + '" data-cuenta-id="' + (m.cuenta_abierta_id || '') + '">'
-                + '<strong>' + $('<div>').text(label).html() + '</strong>'
+                + '" data-mesa-id="' + m.id + '" data-cuenta-id="' + (m.cuenta_abierta_id || '') + '"'
+                + ' title="' + $('<div>').text(title).html() + '">'
+                + '<strong>' + $('<div>').text(corto).html() + '</strong>'
                 + (m.ocupada
-                    ? ' <span class="badge badge-warning">cuenta #' + m.cuenta_abierta_id + '</span>'
+                    ? ' <span class="badge badge-warning">#' + m.cuenta_abierta_id + '</span>'
                     : ' <span class="badge badge-success">libre</span>')
                 + '</button>';
         });
         $panel.html(html);
-        pintarCuentasAbiertas(mesas);
     }
 
-    function pintarCuentasAbiertas(mesas) {
+    function etiquetaCuentaAbierta(c) {
+        if (c.mesa) {
+            return String(c.mesa);
+        }
+        var obs = (c.observacion || '').toString().trim();
+        if (obs) {
+            return obs.length > 22 ? obs.slice(0, 22) + '…' : obs;
+        }
+        return 'Barra';
+    }
+
+    function cargarCuentasAbiertas() {
+        var $box = $('#gc-panel-cuentas');
+        if (!$box.length || !cfg.urls.cuentas) {
+            return;
+        }
+        $.getJSON(cfg.urls.cuentas)
+            .done(function (resp) {
+                estado.cuentasAbiertas = (resp && resp.ok) ? (resp.cuentas || []) : [];
+                pintarCuentasAbiertasLista(estado.cuentasAbiertas);
+            })
+            .fail(function () {
+                $box.html('<div class="text-danger small">No se pudieron cargar las cuentas</div>');
+                $('#gc-cuentas-contador').text('0');
+                actualizarBotonesCierreCuenta();
+            });
+    }
+
+    function pintarCuentasAbiertasLista(cuentas) {
         var $box = $('#gc-panel-cuentas');
         if (!$box.length) {
             return;
         }
-        var abiertas = (mesas || []).filter(function (m) {
-            return m && m.cuenta_abierta_id;
-        });
-        var html = '<div class="gc-cuentas-titulo">Cuentas abiertas</div>';
-        if (!abiertas.length) {
-            html += '<div class="text-muted small">Ninguna todavía. Tocá una mesa libre.</div>';
-            $box.html(html);
+        var list = cuentas || [];
+        $('#gc-cuentas-contador').text(String(list.length));
+        if (!list.length) {
+            $box.html('<div class="text-muted small">Ninguna abierta</div>');
+            actualizarBotonesCierreCuenta();
             return;
         }
-        abiertas.forEach(function (m) {
-            var label = (m.codigo ? m.codigo + ' — ' : '') + (m.nombre || 'Mesa');
-            html += '<button type="button" class="btn btn-sm btn-outline-secondary gc-mesa-btn'
-                + (estado.cuentaId && m.cuenta_abierta_id === estado.cuentaId ? ' activa' : '')
-                + '" data-cuenta-id="' + m.cuenta_abierta_id + '">'
-                + '<strong>#' + m.cuenta_abierta_id + '</strong> '
+        var html = '';
+        list.forEach(function (c) {
+            var sinMesa = !c.mesa_id && !c.mesa;
+            var label = etiquetaCuentaAbierta(c);
+            html += '<button type="button" class="btn btn-sm '
+                + (sinMesa ? 'btn-outline-primary' : 'btn-outline-secondary')
+                + ' gc-mesa-btn'
+                + (estado.cuentaId === c.id ? ' activa' : '')
+                + '" data-cuenta-id="' + c.id + '"'
+                + ' title="Cuenta #' + c.id + (sinMesa ? ' · sin mesa' : '') + '">'
+                + '<strong>#' + c.id + '</strong> '
+                + (sinMesa ? '<i class="fa fa-glass-martini-alt"></i> ' : '')
                 + $('<div>').text(label).html()
+                + ' <span class="text-muted">' + money(c.total || 0) + '</span>'
                 + '</button>';
         });
         $box.html(html);
+        actualizarBotonesCierreCuenta();
+    }
+
+    function actualizarBotonesCierreCuenta() {
+        var $btn = $('#gc-btn-cerrar-cuenta');
+        if (!$btn.length) {
+            return;
+        }
+        if (estado.cuentaId) {
+            $btn.removeClass('d-none');
+        } else {
+            $btn.addClass('d-none');
+        }
+        var n = (estado.cuentasAbiertas || []).length;
+        $('#gc-btn-cerrar-todas').prop('disabled', n === 0);
+    }
+
+    function cerrarCuentaActivaSinFacturar() {
+        if (!estado.cuentaId) {
+            toast('Seleccione una cuenta abierta.', 'warning');
+            return;
+        }
+        var c = (estado.cuentasAbiertas || []).find(function (x) { return x.id === estado.cuentaId; })
+            || estado.cuenta;
+        var tieneItems = c && c.lineas && c.lineas.some(function (l) { return !l.es_separador; });
+        var msg = tieneItems
+            ? '¿Cerrar cuenta #' + estado.cuentaId + ' sin facturar? Los consumos no se facturarán.'
+            : '¿Cerrar cuenta #' + estado.cuentaId + ' (vacía)?';
+        if (!window.confirm(msg)) {
+            return;
+        }
+        post(urlCuenta(cfg.urls.cerrarCuenta || cfg.urls.anular, estado.cuentaId, 'cerrar'))
+            .done(function (resp) {
+                if (!resp.ok) {
+                    toast(resp.mensaje || 'No se pudo cerrar', 'error');
+                    return;
+                }
+                toast(resp.mensaje || 'Cuenta cerrada', 'success');
+                aplicarCuenta(null);
+                cargarMesasOCuentas();
+            })
+            .fail(function (xhr) {
+                toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo cerrar', 'error');
+            });
+    }
+
+    function cerrarTodasCuentasSinFacturar() {
+        var n = (estado.cuentasAbiertas || []).length;
+        if (!n) {
+            toast('No hay cuentas abiertas.', 'warning');
+            return;
+        }
+        if (!window.confirm('¿Cerrar TODAS las cuentas abiertas (' + n + ') sin facturar?')) {
+            return;
+        }
+        if (!cfg.urls.cerrarTodas) {
+            toast('Ruta de cierre masivo no configurada.', 'error');
+            return;
+        }
+        post(cfg.urls.cerrarTodas, {})
+            .done(function (resp) {
+                if (!resp.ok) {
+                    toast(resp.mensaje || 'No se pudo cerrar', 'error');
+                    return;
+                }
+                toast(resp.mensaje || ((resp.cerradas || 0) + ' cuentas cerradas'), 'success');
+                aplicarCuenta(null);
+                cargarMesasOCuentas();
+            })
+            .fail(function (xhr) {
+                toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo cerrar', 'error');
+            });
     }
 
     function renderCuentas(cuentas) {
         var $panel = $('#gc-panel-mesas');
         if (!cuentas.length) {
-            $panel.html('<div class="text-muted small p-2">Sin cuentas activas. Use + para abrir una.</div>');
+            $panel.html('<div class="text-muted small p-2">Sin cuentas en el listado lateral. Use + Barra.</div>');
             return;
         }
         var html = '';
@@ -543,12 +764,43 @@
                     return;
                 }
                 aplicarCuenta(resp.cuenta);
+                toast('Cuenta de barra #' + resp.cuenta.id + ' (sin mesa)', 'success');
                 cargarMesasOCuentas();
+                $('#gc-codigo-articulo').trigger('focus');
             })
             .fail(function (xhr) {
                 toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'Error al abrir cuenta', 'error');
             })
             .always(function () { estado.busy = false; });
+    }
+
+    function setDescCarga(texto, sinPrecio) {
+        var t = (texto || '').toString().trim();
+        $('#gc-desc-articulo').text(t).toggleClass('gc-sin-precio', !!sinPrecio);
+        $('#gc-desc-articulo-hidden').val(t);
+    }
+
+    function setPrecioCarga(articulo) {
+        var $p = $('#gc-precio-articulo');
+        $p.removeClass('gc-precio-cero gc-precio-faltante');
+        if (!articulo) {
+            $p.text('—');
+            return;
+        }
+        if (articulo.tiene_precio_vigente === false) {
+            $p.text('Sin precio').addClass('gc-precio-faltante');
+            return;
+        }
+        var n = Number(articulo.precio);
+        if (!isFinite(n)) {
+            $p.text('—');
+            return;
+        }
+        if (Math.abs(n) < 0.00001) {
+            $p.text('Sin cargo').addClass('gc-precio-cero');
+            return;
+        }
+        $p.text('$ ' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
 
     function cargarAreasKds() {
@@ -599,7 +851,8 @@
                     return;
                 }
                 $('#gc-codigo-articulo').val('');
-                $('#gc-desc-articulo').val('');
+                setDescCarga('');
+                setPrecioCarga(null);
                 $('#gc-cantidad').val(1);
                 aplicarCuenta(resp.cuenta);
             })
@@ -769,10 +1022,7 @@
         if (!requiereCuenta()) {
             return;
         }
-        var id = estado.lineaSeleccionadaId;
-        var linea = id
-            ? (estado.cuenta.lineas || []).find(function (l) { return l.id === id; })
-            : null;
+        var linea = resolverLineaActiva();
         if (!linea || linea.es_separador || !linea.articulo_id) {
             toast('Seleccione un ítem con artículo (clic en la fila).', 'warning');
             return;
@@ -800,15 +1050,9 @@
     }
 
     function abrirReceta() {
-        var articuloId = null;
-        var id = estado.lineaSeleccionadaId;
-        if (id && estado.cuenta) {
-            var linea = (estado.cuenta.lineas || []).find(function (l) { return l.id === id; });
-            if (linea && linea.articulo_id) {
-                articuloId = linea.articulo_id;
-            }
-        }
-        if (articuloId) {
+        var linea = resolverLineaActiva();
+        var articuloId = linea && linea.articulo_id ? parseInt(linea.articulo_id, 10) : 0;
+        if (articuloId > 0) {
             abrirRecetaPorArticulo(articuloId);
             return;
         }
@@ -849,11 +1093,34 @@
             });
     }
 
+    function pintarChipsDestinoKds(areaIdSel) {
+        var sel = parseInt(areaIdSel, 10) || 0;
+        var $box = $('#gc-destino-areas').empty();
+        var chips = [{ id: 0, codigo: 'Auto', nombre: 'según categoría' }].concat(estado.areas || []);
+        chips.forEach(function (a) {
+            var id = parseInt(a.id, 10) || 0;
+            var $btn = $('<button type="button" class="gc-kds-chip"></button>')
+                .attr('data-area-id', id)
+                .toggleClass('activo', id === sel);
+            if (id === 0) {
+                $btn.html('<span class="gc-kds-chip-cod">Auto</span> categoría');
+            } else {
+                $btn.html(
+                    '<span class="gc-kds-chip-cod">' + $('<div>').text(a.codigo || id).html() + '</span>'
+                    + $('<div>').text(a.nombre || '').html()
+                );
+            }
+            $box.append($btn);
+        });
+        $('#gc-destino-area-id').val(sel);
+    }
+
     function editarDestinoLinea(lineaId) {
         if (!requiereCuenta() || !lineaId) {
             return;
         }
-        var linea = (estado.cuenta.lineas || []).find(function (l) { return l.id === lineaId; });
+        var id = idLineaNum(lineaId);
+        var linea = id ? lineaPorId(id) : null;
         if (!linea || linea.es_separador) {
             return;
         }
@@ -861,27 +1128,29 @@
             toast('Ítem ya comandado: no se cambia el KDS.', 'warning');
             return;
         }
-        var opciones = ['0 = Auto / sin área'];
-        estado.areas.forEach(function (a) {
-            opciones.push(a.id + ' = ' + (a.codigo || '') + ' ' + (a.nombre || ''));
-        });
-        var areaStr = window.prompt(
-            'KDS destino (id):\n' + opciones.join('\n'),
-            String(linea.area_id || 0)
-        );
-        if (areaStr === null) {
+        estado.lineaDestinoId = id;
+        estado.lineaSeleccionadaId = id;
+        var titulo = [linea.sku, linea.descripcion].filter(Boolean).join(' — ');
+        $('#gc-destino-articulo').text(titulo || ('Ítem #' + id));
+        pintarChipsDestinoKds(linea.area_id || 0);
+        $('#gc-destino-prepara').prop('checked', linea.prepara !== false).trigger('change');
+        $('#gc-modal-destino-kds').modal('show');
+    }
+
+    function guardarDestinoLinea() {
+        var lineaId = estado.lineaDestinoId;
+        if (!requiereCuenta() || !lineaId) {
             return;
         }
-        var preparaStr = window.prompt('¿Prepara? (1=sí / 0=no):', linea.prepara ? '1' : '0');
-        if (preparaStr === null) {
-            return;
-        }
+        var areaId = parseInt($('#gc-destino-area-id').val(), 10) || 0;
+        var prepara = $('#gc-destino-prepara').is(':checked') ? 1 : 0;
         post(urlCuenta(cfg.urls.agregarLinea, estado.cuentaId, 'linea/' + lineaId + '/destino'), {
-            area_comanda_gastronomia_id: parseInt(areaStr, 10) || 0,
-            prepara: parseInt(preparaStr, 10) ? 1 : 0
+            area_comanda_gastronomia_id: areaId,
+            prepara: prepara
         })
             .done(function (resp) {
                 if (resp.ok) {
+                    $('#gc-modal-destino-kds').modal('hide');
                     aplicarCuenta(resp.cuenta);
                     toast('Destino KDS actualizado', 'success');
                 }
@@ -923,13 +1192,8 @@
         if (!requiereCuenta()) {
             return;
         }
-        var id = estado.lineaSeleccionadaId;
-        if (!id) {
-            var marcadas = (estado.cuenta.lineas || []).filter(function (l) { return l.marcado && !l.es_separador; });
-            if (marcadas.length === 1) {
-                id = marcadas[0].id;
-            }
-        }
+        var linea = resolverLineaActiva();
+        var id = linea ? idLineaNum(linea.id) : null;
         if (!id) {
             toast('Seleccione o marque un ítem para borrar.', 'warning');
             return;
@@ -950,31 +1214,60 @@
             });
     }
 
-    function obsItem() {
+    function abrirObsItem(lineaId) {
         if (!requiereCuenta()) {
             return;
         }
-        var id = estado.lineaSeleccionadaId;
-        if (!id) {
-            toast('Seleccione un ítem (clic en la fila).', 'warning');
+        var id = idLineaNum(lineaId) || idLineaNum(estado.lineaSeleccionadaId);
+        var linea = id ? lineaPorId(id) : resolverLineaActiva();
+        id = linea ? idLineaNum(linea.id) : null;
+        if (!id || !linea) {
+            toast('Seleccione un ítem (clic en la fila o el ícono de nota).', 'warning');
             return;
         }
-        var linea = (estado.cuenta.lineas || []).find(function (l) { return l.id === id; });
-        var obs = window.prompt('Observación del ítem:', (linea && linea.observacion) || '');
-        if (obs === null) {
+        if (linea.es_separador) {
+            toast('Ese renglón no admite observación.', 'warning');
+            return;
+        }
+        estado.lineaSeleccionadaId = id;
+        $('#gc-obs-linea-id').val(id);
+        var titulo = [linea.sku, linea.descripcion].filter(Boolean).join(' — ');
+        $('#gc-obs-articulo').text(titulo || ('Ítem #' + id));
+        $('#gc-obs-texto').val(linea.observacion || '');
+        $('#gc-modal-obs-item')
+            .one('shown.bs.modal', function () {
+                var el = document.getElementById('gc-obs-texto');
+                if (!el) {
+                    return;
+                }
+                el.focus();
+                el.select();
+            })
+            .modal('show');
+    }
+
+    function guardarObsItem(texto) {
+        var id = parseInt($('#gc-obs-linea-id').val(), 10) || estado.lineaSeleccionadaId;
+        if (!requiereCuenta() || !id) {
             return;
         }
         post(urlCuenta(cfg.urls.agregarLinea, estado.cuentaId, 'linea/' + id + '/observacion'), {
-            observacion: obs
+            observacion: texto == null ? '' : String(texto)
         })
             .done(function (resp) {
                 if (resp.ok) {
+                    $('#gc-modal-obs-item').modal('hide');
                     aplicarCuenta(resp.cuenta);
+                    toast(String(texto || '').trim() ? 'Observación guardada' : 'Observación quitada', 'success');
                 }
             })
             .fail(function (xhr) {
                 toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'Error', 'error');
             });
+    }
+
+    function obsItem() {
+        abrirObsItem(estado.lineaSeleccionadaId);
     }
 
     function obsMesa() {
@@ -1121,10 +1414,293 @@
         var c = estado.cuenta;
         $('#gc-cobro-cuenta').text('Cuenta #' + c.id + (c.mesa ? ' — ' + c.mesa : ''));
         $('#gc-cobro-total').text(money(c.total || 0));
-        $('#gc-modal-cobrar').modal('show');
+        limpiarGrillaCobranza();
+        cargarMediosRapidos().always(function () {
+            agregarRenglonCobranza(true);
+            actualizarResumenCobranza();
+            $('#gc-modal-cobrar').modal('show');
+        });
     }
 
-    function cobrar(tipo) {
+    /** F5 Anita: efectivo directo, sin modal ni confirmación. */
+    function cobrarEfectivoDirecto() {
+        cobrar('efectivo');
+    }
+
+    function htmlIconoMedio(cuenta) {
+        if (!cuenta) {
+            return '<i class="fa fa-cash-register text-secondary"></i>';
+        }
+        var icono = cuenta.icono || 'fa fa-cash-register';
+        var color = cuenta.icono_color || 'text-secondary';
+        if (String(icono).indexOf('gastro-icon-') === 0) {
+            return '<span class="' + icono + '" aria-hidden="true"></span>';
+        }
+        return '<i class="' + icono + ' ' + color + '" aria-hidden="true"></i>';
+    }
+
+    function cargarMediosRapidos() {
+        if (!cfg.urls.cuentasCaja) {
+            return $.Deferred().resolve().promise();
+        }
+        return $.getJSON(cfg.urls.cuentasCaja)
+            .done(function (resp) {
+                estado.mediosCaja = resp.cuentas_caja || [];
+                estado.mediosPorId = {};
+                estado.cuentacajaEfectivo = resp.cuentacaja_efectivo || null;
+                estado.cuentacajaEfectivoError = resp.cuentacaja_efectivo_error || null;
+                estado.mediosCaja.forEach(function (c) {
+                    if (c && c.id) {
+                        estado.mediosPorId[String(c.id)] = c;
+                    }
+                });
+                renderMediosRapidos();
+            })
+            .fail(function () {
+                toast('No se pudieron cargar los medios de cobro', 'warning');
+            });
+    }
+
+    function renderMediosRapidos() {
+        var $wrap = $('#gc-medios-rapidos');
+        if (!$wrap.length) {
+            return;
+        }
+        $wrap.empty();
+        (estado.mediosCaja || []).forEach(function (cuenta) {
+            var $btn = $('<button type="button" class="gc-medio-chip"/>')
+                .attr('title', (cuenta.codigo ? cuenta.codigo + ' — ' : '') + (cuenta.nombre || ''))
+                .attr('data-cuentacaja-id', cuenta.id)
+                .html(htmlIconoMedio(cuenta) + '<span>' + (cuenta.etiqueta_boton || cuenta.codigo || 'Medio') + '</span>');
+            $btn.on('click', function () {
+                seleccionarMedioRapido(cuenta);
+            });
+            $wrap.append($btn);
+        });
+    }
+
+    function limpiarGrillaCobranza() {
+        $('#gc-tbody-cuenta-table').empty();
+        actualizarResumenCobranza();
+    }
+
+    function filaCobranzaDesdeTemplate() {
+        var tpl = document.getElementById('gc-template-renglon-cuenta');
+        if (!tpl || !tpl.content) {
+            return null;
+        }
+        return tpl.content.firstElementChild.cloneNode(true);
+    }
+
+    function agregarRenglonCobranza(enfocar) {
+        var tr = filaCobranzaDesdeTemplate();
+        if (!tr) {
+            return null;
+        }
+        $('#gc-tbody-cuenta-table').append(tr);
+        wireFilaCobranza(tr);
+        if (enfocar !== false) {
+            $(tr).find('.codigo').trigger('focus');
+        }
+        return tr;
+    }
+
+    function wireFilaCobranza(tr) {
+        var $tr = $(tr);
+        $tr.find('.gc-eliminar-cuenta').on('click', function () {
+            $tr.remove();
+            if (!$('#gc-tbody-cuenta-table tr').length) {
+                agregarRenglonCobranza(false);
+            }
+            actualizarResumenCobranza();
+        });
+        $tr.find('.monto').on('input change', actualizarResumenCobranza);
+        $tr.find('.codigo').on('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                resolverCodigoCuentacaja($tr);
+            }
+        });
+        $tr.find('.codigo').on('blur', function () {
+            resolverCodigoCuentacaja($tr);
+        });
+        if (typeof activa_eventos_consultacuentacaja === 'function') {
+            activa_eventos_consultacuentacaja();
+        }
+    }
+
+    function asignarCuentaEnFila(tr, cuenta) {
+        if (!tr || !cuenta) {
+            return;
+        }
+        var $tr = $(tr);
+        $tr.find('.cuentacaja_id').val(cuenta.id);
+        $tr.find('.codigo').val(cuenta.codigo || '');
+        $tr.find('.nombre').val(cuenta.nombre || '');
+        $tr.find('.moneda_id').val(cuenta.moneda_id || 1);
+        $tr.find('.moneda-label').text(cuenta.moneda_abreviatura || cuenta.moneda_id || '—');
+        var $btn = $tr.find('.consultacuentacaja');
+        $btn.find('i, .gastro-icon-mercadopago').remove();
+        $btn.prepend(htmlIconoMedio(cuenta));
+        var pendiente = saldoPendienteCobranza();
+        if (!$tr.find('.monto').val() && pendiente > 0) {
+            $tr.find('.monto').val(pendiente.toFixed(2));
+        }
+        actualizarResumenCobranza();
+    }
+
+    function seleccionarMedioRapido(cuenta) {
+        var $vacia = $('#gc-tbody-cuenta-table tr').filter(function () {
+            return !$(this).find('.cuentacaja_id').val();
+        }).first();
+        var tr = $vacia.length ? $vacia.get(0) : agregarRenglonCobranza(false);
+        asignarCuentaEnFila(tr, cuenta);
+        $(tr).find('.monto').trigger('focus').select();
+    }
+
+    function resolverCodigoCuentacaja($tr) {
+        var codigo = $.trim($tr.find('.codigo').val() || '');
+        if (!codigo) {
+            return;
+        }
+        var hallada = (estado.mediosCaja || []).find(function (c) {
+            return String(c.codigo) === codigo || String(c.codigo).replace(/^0+/, '') === codigo.replace(/^0+/, '');
+        });
+        if (hallada) {
+            asignarCuentaEnFila($tr.get(0), hallada);
+        }
+    }
+
+    function recogerMediosPago() {
+        var medios = [];
+        $('#gc-tbody-cuenta-table tr').each(function () {
+            var $tr = $(this);
+            var id = parseInt($tr.find('.cuentacaja_id').val() || '0', 10);
+            var mon = parseInt($tr.find('.moneda_id').val() || '0', 10);
+            var monto = parseFloat($tr.find('.monto').val() || '0');
+            if (id > 0 && mon > 0 && monto > 0) {
+                medios.push({
+                    cuentacaja_id: id,
+                    moneda_id: mon,
+                    monto: Math.round(monto * 100) / 100
+                });
+            }
+        });
+        return medios;
+    }
+
+    function totalCobranzaGrilla() {
+        return recogerMediosPago().reduce(function (s, m) { return s + m.monto; }, 0);
+    }
+
+    function saldoPendienteCobranza() {
+        var total = estado.cuenta ? Number(estado.cuenta.total || 0) : 0;
+        return Math.round((total - totalCobranzaGrilla()) * 100) / 100;
+    }
+
+    function actualizarResumenCobranza() {
+        var total = estado.cuenta ? Number(estado.cuenta.total || 0) : 0;
+        var cobrado = totalCobranzaGrilla();
+        var dif = Math.round((total - cobrado) * 100) / 100;
+        var cls = Math.abs(dif) <= 0.02 ? 'ok' : 'warn';
+        $('#gc-totales-cobranza').attr('data-estado', cls).html(
+            'Cobrado ' + money(cobrado) + ' · Diff ' + money(dif)
+        );
+    }
+
+    function cobrarConMediosGrilla() {
+        var medios = recogerMediosPago();
+        if (!medios.length) {
+            toast('Indique al menos un medio de cobro.', 'warning');
+            return;
+        }
+        var total = estado.cuenta ? Number(estado.cuenta.total || 0) : 0;
+        if (total > 0 && Math.abs(totalCobranzaGrilla() - total) > 0.02) {
+            toast('El total de la grilla debe coincidir con el total a facturar.', 'warning');
+            return;
+        }
+        $('#gc-modal-cobrar').modal('hide');
+        cobrar('medios', { medios_pago: medios });
+    }
+
+    function abrirF8() {
+        if (!requiereCuenta() || estado.busy) {
+            return;
+        }
+        if (cfg.soloMarcha) {
+            toast('Este puesto es solo marcha.', 'warning');
+            return;
+        }
+        $('#gc-f8-tipo').val('invitados');
+        $('.gc-f8-tipo').removeClass('active');
+        $('.gc-f8-tipo[data-tipo="invitados"]').addClass('active');
+        $('#gc-f8-bloque-codigo').hide();
+        $('#gc-f8-autorizante-id, #gc-f8-autorizante-codigo, #gc-f8-autorizante-nombre').val('');
+        $('#gc-f8-ccosto-id, #gc-f8-ccosto-codigo, #gc-f8-ccosto-nombre').val('');
+        $('#gc-f8-cliente-id, #gc-f8-cliente-codigo, #gc-f8-cliente-nombre').val('');
+        $('#gc-f8-descuento-id, #gc-f8-descuento-codigo, #gc-f8-descuento-nombre').val('');
+        $('#gc-f8-dto-valor').text('');
+        $('#gc-modal-f8').modal('show');
+        if (typeof activa_eventos_consultausuario === 'function') {
+            activa_eventos_consultausuario();
+        }
+        if (typeof activa_eventos_consultacentrocosto === 'function') {
+            activa_eventos_consultacentrocosto();
+        }
+        if (typeof activa_eventos_consultacliente === 'function') {
+            activa_eventos_consultacliente();
+        }
+        if (typeof activa_eventos_consultadescuento === 'function') {
+            activa_eventos_consultadescuento();
+        }
+        // Enter en CC: pasar al cliente interno dentro del F8.
+        window.afterCentrocostoEnterOk = function (data, inputCodigo) {
+            if (!data || !data.id) {
+                return;
+            }
+            var $modal = $(inputCodigo).closest('#gc-modal-f8');
+            if (!$modal.length) {
+                return;
+            }
+            $modal.find('#gc-f8-cliente-codigo').trigger('focus').select();
+        };
+    }
+
+    function confirmarF8() {
+        var tipo = $('#gc-f8-tipo').val() || 'invitados';
+        var data = {
+            tipo: 'efectivo',
+            aplicar_descuento_autorizante: 1,
+            tipo_descuento: tipo,
+            autorizante_usuario_id: parseInt($('#gc-f8-autorizante-id').val() || '0', 10),
+            centrocosto_id: parseInt($('#gc-f8-ccosto-id').val() || '0', 10),
+            cliente_interno_descuento_id: parseInt($('#gc-f8-cliente-id').val() || '0', 10)
+        };
+        if (!data.autorizante_usuario_id) {
+            toast('Indique el autorizante.', 'warning');
+            return;
+        }
+        if (!data.centrocosto_id) {
+            toast('Indique el centro de costo.', 'warning');
+            return;
+        }
+        if (!data.cliente_interno_descuento_id) {
+            toast('Indique el cliente interno.', 'warning');
+            return;
+        }
+        if (tipo === 'descuento') {
+            data.descuento_gastronomia_id = parseInt($('#gc-f8-descuento-id').val() || '0', 10) || null;
+            data.descuento_codigo = $.trim($('#gc-f8-descuento-codigo').val() || '');
+            if (!data.descuento_gastronomia_id && !data.descuento_codigo) {
+                toast('Indique el código de descuento.', 'warning');
+                return;
+            }
+        }
+        $('#gc-modal-f8').modal('hide');
+        cobrar('efectivo', data);
+    }
+
+    function cobrar(tipo, extra) {
         if (!requiereCuenta() || estado.busy) {
             return;
         }
@@ -1133,29 +1709,29 @@
             return;
         }
         var total = estado.cuenta ? estado.cuenta.total : 0;
-        var data = { tipo: tipo };
-        var label = tipo;
+        var data = $.extend({ tipo: tipo }, extra || {});
 
         if (tipo === 'hotel') {
             if (!cfg.habilitaHotel) {
                 toast('Hotel no habilitado en este PC.', 'warning');
                 return;
             }
-            var hab = window.prompt('Habitación:', (estado.cuenta && estado.cuenta.habitacion) || '');
-            if (hab === null || !$.trim(hab)) {
-                return;
+            if (!data.habitacion) {
+                var hab = window.prompt('Habitación:', (estado.cuenta && estado.cuenta.habitacion) || '');
+                if (hab === null || !$.trim(hab)) {
+                    return;
+                }
+                data.habitacion = $.trim(hab);
+                var res = window.prompt('Reserva (opcional):', (estado.cuenta && estado.cuenta.reserva_hotel) || '');
+                if (res === null) {
+                    return;
+                }
+                if ($.trim(res)) {
+                    data.reserva_hotel = $.trim(res);
+                }
             }
-            data.habitacion = $.trim(hab);
-            var res = window.prompt('Reserva (opcional):', (estado.cuenta && estado.cuenta.reserva_hotel) || '');
-            if (res === null) {
-                return;
-            }
-            if ($.trim(res)) {
-                data.reserva_hotel = $.trim(res);
-            }
-            label = 'Hotel hab. ' + data.habitacion;
         } else if (tipo === 'interna') {
-            if (cfg.habilitaGst) {
+            if (cfg.habilitaGst && data.sin_gst == null && !data.tarjeta_gst) {
                 var gst = window.prompt(
                     'Tarjeta GST / track (vacío = interna sin canje):',
                     (estado.cuenta && estado.cuenta.tarjeta_gst) || ''
@@ -1168,14 +1744,9 @@
                 } else {
                     data.sin_gst = 1;
                 }
-            } else {
+            } else if (data.sin_gst == null && !data.tarjeta_gst) {
                 data.sin_gst = 1;
             }
-            label = 'Interna / GST';
-        } else if (tipo === 'efectivo') {
-            label = 'Efectivo';
-        } else if (tipo === 'factura_sola') {
-            label = 'Factura sola';
         }
 
         estado.busy = true;
@@ -1254,6 +1825,7 @@
                 obsMesa();
                 break;
             case 'cobrar':
+                // Misma grilla que F7 (solo si la piden; F5 es efectivo directo).
                 abrirCobranza();
                 break;
             case 'anular_mesa':
@@ -1268,7 +1840,14 @@
         if ($(e.target).is('textarea')) {
             return;
         }
-        if ($('#gc-modal-opcionales').hasClass('show') || $('#consultaarticuloModal').hasClass('show') || $('#gc-modal-cobrar').hasClass('show')) {
+        // Ctrl/Cmd/Alt+Fx → dejar al navegador (p. ej. Ctrl+F5 / Ctrl+Shift+R recargar).
+        if (e.ctrlKey || e.metaKey || e.altKey) {
+            return;
+        }
+        if ($('#gc-modal-opcionales').hasClass('show')
+            || $('#consultaarticuloModal').hasClass('show')
+            || $('#gc-modal-cobrar').hasClass('show')
+            || $('#gc-modal-f8').hasClass('show')) {
             return;
         }
         var key = e.key;
@@ -1290,6 +1869,11 @@
         if (key === 'F6') {
             e.preventDefault();
             $('#gc-btn-f6').trigger('click');
+            return;
+        }
+        if (key === 'F7') {
+            e.preventDefault();
+            $('#gc-btn-f7').trigger('click');
             return;
         }
         if (key === 'F8') {
@@ -1328,6 +1912,50 @@
         if (typeof window.activa_eventos_consultaarticulo === 'function') {
             window.activa_eventos_consultaarticulo();
         }
+        if (typeof window.activa_eventos_consultausuario === 'function') {
+            window.activa_eventos_consultausuario();
+        }
+        if (typeof window.activa_eventos_consultacliente === 'function') {
+            window.activa_eventos_consultacliente();
+        }
+        if (typeof window.activa_eventos_consultacentrocosto === 'function') {
+            window.activa_eventos_consultacentrocosto();
+        }
+        if (typeof window.activa_eventos_consultadescuento === 'function') {
+            window.activa_eventos_consultadescuento();
+        }
+
+        // Consultas anidadas sobre F8 / cobranza: subir z-index (mismo patrón AGG).
+        ['#consultausuarioModal', '#consultaclienteModal', '#consultacentrocostoModal', '#consultadescuentoModal', '#consultaarticuloModal', '#consultacuentacajaModal'].forEach(function (sel) {
+            var $m = $(sel);
+            if (!$m.length) {
+                return;
+            }
+            $m.on('show.bs.modal.gcStack', function () {
+                if (!$m.parent().is('body')) {
+                    $m.appendTo('body');
+                }
+            });
+            $m.on('shown.bs.modal.gcStack', function () {
+                var hayPadre = $('#gc-modal-f8').hasClass('show') || $('#gc-modal-cobrar').hasClass('show');
+                if (!hayPadre) {
+                    return;
+                }
+                var z = 2060;
+                $m.css('z-index', z).addClass('gc-modal-sobre-f8');
+                $('.modal-backdrop').last().css('z-index', z - 10);
+            });
+            $m.on('hidden.bs.modal.gcStack', function () {
+                $m.css('z-index', '').removeClass('gc-modal-sobre-f8');
+                if ($('#gc-modal-f8').hasClass('show') || $('#gc-modal-cobrar').hasClass('show')) {
+                    $('body').addClass('modal-open');
+                }
+            });
+        });
+
+        $('#gc-modal-f8').on('shown.bs.modal', function () {
+            $('#gc-f8-autorizante-codigo').trigger('focus');
+        });
 
         $('#gc-campo-articulo .consultaarticulo').on('click', function () {
             $('#gc-campo-articulo .codigoarticulo').val($.trim($('#gc-codigo-articulo').val()));
@@ -1341,7 +1969,7 @@
                 $('#gc-codigo-articulo').val(sufijoVisible(sku));
             }
             if (nombre) {
-                $('#gc-desc-articulo').val(nombre);
+                setDescCarga(nombre);
             }
         });
 
@@ -1355,7 +1983,7 @@
             }
             $('#gc-codigo-articulo').val(sufijoVisible(data.sku));
             if (data.descripcion) {
-                $('#gc-desc-articulo').val(data.descripcion);
+                setDescCarga(data.descripcion);
             }
             $('#gc-codigo-articulo').trigger('blur');
             $('#gc-codigo-articulo').trigger('focus');
@@ -1363,6 +1991,8 @@
 
         $('#gc-btn-refresh-mesas').on('click', cargarMesasOCuentas);
         $('#gc-btn-nueva-cuenta').on('click', abrirCuentaLibre);
+        $('#gc-btn-cerrar-cuenta').on('click', cerrarCuentaActivaSinFacturar);
+        $('#gc-btn-cerrar-todas').on('click', cerrarTodasCuentasSinFacturar);
 
         $('#gc-panel-mesas, #gc-panel-cuentas').on('click', '.gc-mesa-btn', function () {
             var $b = $(this);
@@ -1429,18 +2059,18 @@
         });
 
         $('#gc-tabla-lineas').on('click', 'tr[data-linea-id]', function (e) {
-            if ($(e.target).closest('.gc-marca-linea, .gc-void-linea, .gc-destino-linea, .gc-qty-btn').length) {
+            if ($(e.target).closest('.gc-marca-linea, .gc-void-linea, .gc-destino-linea, .gc-obs-linea, .gc-qty-btn').length) {
                 return;
             }
-            estado.lineaSeleccionadaId = parseInt($(this).data('linea-id'), 10) || null;
+            estado.lineaSeleccionadaId = idLineaNum($(this).attr('data-linea-id'));
             pintarLineas();
         });
 
         $('#gc-tabla-lineas').on('click', '.gc-qty-btn', function (e) {
             e.stopPropagation();
-            var id = parseInt($(this).closest('tr').data('linea-id'), 10) || 0;
+            var id = idLineaNum($(this).closest('tr').attr('data-linea-id')) || 0;
             var dir = parseInt($(this).data('dir'), 10) || 0;
-            var linea = (estado.cuenta && estado.cuenta.lineas || []).find(function (l) { return l.id === id; });
+            var linea = lineaPorId(id);
             if (!linea || !estado.cuentaId) {
                 return;
             }
@@ -1462,7 +2092,41 @@
 
         $('#gc-tabla-lineas').on('click', '.gc-destino-linea', function (e) {
             e.stopPropagation();
-            editarDestinoLinea(parseInt($(this).closest('tr').data('linea-id'), 10) || null);
+            editarDestinoLinea(idLineaNum($(this).closest('tr').attr('data-linea-id')));
+        });
+
+        $('#gc-tabla-lineas').on('click', '.gc-obs-linea', function (e) {
+            e.stopPropagation();
+            abrirObsItem(idLineaNum($(this).closest('tr').attr('data-linea-id')));
+        });
+
+        $('#gc-destino-areas').on('click', '.gc-kds-chip', function () {
+            var id = parseInt($(this).attr('data-area-id'), 10) || 0;
+            $('#gc-destino-area-id').val(id);
+            $('#gc-destino-areas .gc-kds-chip').removeClass('activo');
+            $(this).addClass('activo');
+        });
+
+        $('#gc-destino-prepara').on('change', function () {
+            $('#gc-destino-prepara-label').text($(this).is(':checked') ? 'Sí' : 'No');
+        });
+
+        $('#gc-destino-guardar').on('click', guardarDestinoLinea);
+
+        $('#gc-obs-guardar').on('click', function () {
+            guardarObsItem($('#gc-obs-texto').val());
+        });
+
+        $('#gc-obs-limpiar').on('click', function () {
+            $('#gc-obs-texto').val('');
+            guardarObsItem('');
+        });
+
+        $('#gc-obs-texto').on('keydown', function (e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                guardarObsItem($(this).val());
+            }
         });
 
         $('#gc-prepara').on('change', function () {
@@ -1477,33 +2141,39 @@
             $.getJSON(cfg.urls.articulo, { sku: sku })
                 .done(function (resp) {
                     if (!resp.ok || !resp.articulo) {
-                        $('#gc-desc-articulo').val('');
+                        setDescCarga('');
+                        setPrecioCarga(null);
                         if (resp && resp.mensaje) {
                             toast(resp.mensaje, 'warning');
                         }
                         return;
                     }
                     var a = resp.articulo;
-                    $('#gc-desc-articulo').val(a.descripcion);
+                    setDescCarga(a.descripcion, a.tiene_precio_vigente === false);
+                    setPrecioCarga(a);
                     if (typeof a.prepara === 'boolean') {
                         $('#gc-prepara').prop('checked', a.prepara).trigger('change');
                     }
                     if (a.area_comanda_gastronomia_id) {
                         $('#gc-area-kds').val(String(a.area_comanda_gastronomia_id));
+                    } else {
+                        $('#gc-area-kds').val('');
                     }
                 })
                 .fail(function (xhr) {
                     var r = xhr.responseJSON || {};
-                    $('#gc-desc-articulo').val('');
+                    setDescCarga('');
+                    setPrecioCarga(null);
                     toast(r.mensaje || r.error || 'Artículo no encontrado', 'error');
                 });
         });
 
         $('#gc-tabla-lineas').on('change', '.gc-marca-linea', function () {
-            var id = $(this).closest('tr').data('linea-id');
+            var id = idLineaNum($(this).closest('tr').attr('data-linea-id'));
             if (!id || !estado.cuentaId) {
                 return;
             }
+            estado.lineaSeleccionadaId = id;
             post(urlCuenta(cfg.urls.agregarLinea, estado.cuentaId, 'linea/' + id + '/marcar'), {
                 marcado: $(this).is(':checked') ? 1 : 0
             }).done(function (resp) {
@@ -1515,24 +2185,67 @@
 
         $('#gc-tabla-lineas').on('click', '.gc-void-linea', function (e) {
             e.stopPropagation();
-            estado.lineaSeleccionadaId = parseInt($(this).closest('tr').data('linea-id'), 10) || null;
+            estado.lineaSeleccionadaId = idLineaNum($(this).closest('tr').attr('data-linea-id'));
             voidLineaSeleccionada();
         });
 
         $('#gc-btn-f1').on('click', consultarArticulo);
-        $('#gc-btn-f2').on('click', abrirCobranza);
-        $('#gc-btn-f5').on('click', abrirCobranza);
+        $('#gc-btn-f2').on('click', function () { cobrar('hotel'); });
+        $('#gc-btn-f5').on('click', cobrarEfectivoDirecto);
+        $('#gc-btn-f7').on('click', abrirCobranza);
         $('#gc-modal-cobrar').on('click', '[data-cobro]', function () {
             var tipo = $(this).data('cobro');
             $('#gc-modal-cobrar').modal('hide');
             cobrar(tipo);
         });
+        $('#gc-agrega-renglon-cuenta').on('click', function () { agregarRenglonCobranza(true); });
+        $('#gc-cobrar-medios').on('click', cobrarConMediosGrilla);
         $('#gc-btn-f6').on('click', voidLineaSeleccionada);
-        $('#gc-btn-f8').on('click', abrirCobranza);
-        $('#gc-btn-f9').on('click', abrirCobranza);
+        $('#gc-btn-f8').on('click', abrirF8);
+        $('#gc-btn-f9').on('click', function () { cobrar('factura_sola'); });
         $('#gc-btn-f10').on('click', descuentoMesa);
         $('#gc-btn-f11').on('click', obsItem);
         $('#gc-btn-f12').on('click', function () { marcha('normal', false); });
+
+        $('.gc-f8-tipo').on('click', function () {
+            var tipo = $(this).data('tipo');
+            $('.gc-f8-tipo').removeClass('active');
+            $(this).addClass('active');
+            $('#gc-f8-tipo').val(tipo);
+            $('#gc-f8-bloque-codigo').toggle(tipo === 'descuento');
+        });
+        $('#gc-f8-confirmar').on('click', confirmarF8);
+        $('#gc-f8-descuento-codigo').on('keydown', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+            var codigo = $.trim($(this).val() || '');
+            if (!codigo || !cfg.urls.resolverDescuento) {
+                return;
+            }
+            $.getJSON(cfg.urls.resolverDescuento, { codigo: codigo })
+                .done(function (resp) {
+                    if (!resp.ok || !resp.descuento) {
+                        toast((resp && resp.mensaje) || 'Descuento inexistente', 'warning');
+                        return;
+                    }
+                    $('#gc-f8-descuento-id').val(resp.descuento.id);
+                    $('#gc-f8-descuento-codigo').val(resp.descuento.codigo);
+                    $('#gc-f8-descuento-nombre').val(resp.descuento.nombre);
+                    $('#gc-f8-dto-valor').text(
+                        (resp.descuento.tipovalor === 'I' ? '$ ' : '')
+                        + resp.descuento.valor
+                        + (resp.descuento.tipovalor === 'P' ? ' %' : '')
+                    );
+                    if (resp.descuento.cliente_id && !$('#gc-f8-cliente-id').val()) {
+                        $('#gc-f8-cliente-id').val(resp.descuento.cliente_id);
+                    }
+                })
+                .fail(function (xhr) {
+                    toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'Descuento inexistente', 'error');
+                });
+        });
 
         $('#gc-pos-tools').on('click', '.gc-tool-btn:not(:disabled)', function () {
             ejecutarHerramienta($(this).data('action'));

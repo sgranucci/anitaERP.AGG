@@ -9,6 +9,7 @@ use App\Models\Caja\TesoreriaCrownBovedaTipo;
 use App\Models\Caja\TesoreriaCrownDeposito;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
+use App\Support\Caja\TesoreriaCrownBovedaMonedaExtranjeraPesosSupport;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\DB;
@@ -74,6 +75,11 @@ class TesoreriaCrownBovedaAnitaImportService
         $siguientes = array_slice($cabeceras, $indiceCorte + 1);
         $numeros = array_map(fn ($fila) => (int) $fila->efeb_nro_oper, $siguientes);
         $lineas = $numeros === [] ? [] : $this->lineasDe($numeros);
+        $numerosMonedaExtranjera = array_map(
+            fn ($fila) => (int) $fila->efeb_nro_oper,
+            array_filter($siguientes, fn ($fila) => isset(TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::MONEDAS[(int) $fila->efeb_cod_trans]))
+        );
+        $pesosAnita = $this->importePesosAnita($numerosMonedaExtranjera);
         $porOperacion = [];
         foreach ($lineas as $linea) {
             $porOperacion[(int) $linea->renmb_nro_oper][] = $linea;
@@ -81,6 +87,7 @@ class TesoreriaCrownBovedaAnitaImportService
 
         $crear = [];
         $omitir = [];
+        $usadosManual = [];
         foreach ($siguientes as $fila) {
             $numero = (int) $fila->efeb_nro_oper;
             if (TesoreriaCrownBoveda::query()->where('sala_id', $jornada->sala_id)->where('numero', $numero)->exists()) {
@@ -109,6 +116,12 @@ class TesoreriaCrownBovedaAnitaImportService
                     'denominacion' => (float) $valor->denominacion,
                 ];
             }
+            $manual = $this->cargadoAMano($jornada, (int) $tipo->id, $detalle, $usadosManual);
+            if ($manual !== null) {
+                $usadosManual[] = (int) $manual->id;
+                $omitir[] = $numero.' ya está cargado a mano en el ERP (movimiento '.$manual->numero.').';
+                continue;
+            }
             $hora = trim((string) $fila->efeb_hora);
             if (preg_match('/^(\d{2}:\d{2})/', $hora, $coincide) === 1) {
                 $hora = $coincide[1];
@@ -121,6 +134,7 @@ class TesoreriaCrownBovedaAnitaImportService
                 'legajo' => (int) $fila->efeb_legajo > 0 ? (int) $fila->efeb_legajo : null,
                 'comentario' => mb_substr(trim((string) $fila->efeb_comentario), 0, 80),
                 'lineas' => $detalle,
+                'importe_pesos' => $pesosAnita[$numero] ?? null,
                 'jornada_id' => (int) $jornada->id,
                 'sala_id' => (int) $jornada->sala_id,
                 'empresa_id' => (int) $jornada->empresa_id,
@@ -158,6 +172,7 @@ class TesoreriaCrownBovedaAnitaImportService
                     'hora' => $fila['hora'] !== '' ? $fila['hora'] : null,
                     'legajo' => $fila['legajo'],
                     'confirmado_at' => $fila['fecha'].' '.($fila['hora'] !== '' ? $fila['hora'] : '00:00').':00',
+                    'importe_pesos' => $fila['importe_pesos'] ?? null,
                 ]);
                 foreach ($fila['lineas'] as $linea) {
                     TesoreriaCrownBovedaLinea::query()->create([
@@ -171,6 +186,80 @@ class TesoreriaCrownBovedaAnitaImportService
         });
 
         return $altas;
+    }
+
+    /**
+     * Movimiento de bóveda dado de alta en el ERP (no viene de un comprobante de caja) con el
+     * mismo tipo y las mismas líneas que la operación de Anita. Evita duplicar lo ya operado.
+     *
+     * @param  list<array{valor_id: int, cantidad: float}>  $detalle
+     * @param  list<int>  $usados
+     */
+    private function cargadoAMano(TesoreriaCrownJornada $jornada, int $tipoId, array $detalle, array $usados): ?TesoreriaCrownBoveda
+    {
+        $firma = $this->firmaLineas($detalle);
+        $candidatos = TesoreriaCrownBoveda::query()
+            ->with('lineas')
+            ->where('jornada_id', $jornada->id)
+            ->where('tipo_id', $tipoId)
+            ->whereNull('comprobante_id')
+            ->whereNull('revierte_id')
+            ->whereNotIn('id', $usados)
+            ->get();
+        foreach ($candidatos as $candidato) {
+            $lineas = $candidato->lineas
+                ->map(fn ($l) => ['valor_id' => (int) $l->valor_id, 'cantidad' => (float) $l->cantidad])
+                ->all();
+            if ($this->firmaLineas($lineas) === $firma) {
+                return $candidato;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<array{valor_id: int, cantidad: float}>  $lineas
+     */
+    private function firmaLineas(array $lineas): string
+    {
+        $suma = [];
+        foreach ($lineas as $linea) {
+            $suma[(int) $linea['valor_id']] = round(($suma[(int) $linea['valor_id']] ?? 0) + (float) $linea['cantidad'], 2);
+        }
+        $suma = array_filter($suma, fn ($cantidad) => abs($cantidad) > 0.0001);
+        ksort($suma);
+
+        return json_encode($suma);
+    }
+
+    /**
+     * Pesos con que Anita valorizó cada retiro de moneda extranjera: monemov de la operación
+     * de bóveda (origen B) × cotización de la partida consumida (FIFO de lee_monextr).
+     *
+     * @param  list<int>  $numeros  efeb_nro_oper
+     * @return array<int, float>  numero => pesos (positivo)
+     */
+    public function importePesosAnita(array $numeros): array
+    {
+        $numeros = array_values(array_unique(array_filter(array_map('intval', $numeros))));
+        if ($numeros === []) {
+            return [];
+        }
+        $filas = $this->consultar(
+            'id,mon,cot,monto',
+            "SELECT monev_id, monev_cod_mon, monev_cotizacion, monev_monto FROM monemov WHERE monev_origen = 'B' AND monev_id IN (".implode(',', $numeros).')'
+        );
+        $out = [];
+        foreach ($filas as $fila) {
+            if (trim((string) $fila->mon) === '1') {
+                continue;
+            }
+            $id = (int) $fila->id;
+            $out[$id] = ($out[$id] ?? 0.0) + (float) $fila->monto * (float) $fila->cot;
+        }
+
+        return array_map(fn (float $pesos) => round(abs($pesos), 2), $out);
     }
 
     /**

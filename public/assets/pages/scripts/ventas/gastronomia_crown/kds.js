@@ -85,18 +85,50 @@
     }
 
     function renderLinea(l) {
+        var btnReceta = '';
+        if (l.url_receta || l.articulo_id) {
+            btnReceta = '<button type="button" class="btn btn-xs btn-outline-info gck-btn-receta"'
+                + (l.url_receta ? ' data-url="' + esc(l.url_receta) + '"' : '')
+                + (l.articulo_id ? ' data-articulo-id="' + l.articulo_id + '"' : '')
+                + ' title="Ver receta"><i class="fa fa-book"></i> Receta</button>';
+        }
         return '<li class="gck-linea">'
             + '<div class="gck-linea-head">'
             + foto(l.foto_url, l.descripcion, 'gck-plato-foto')
             + '<div class="gck-linea-txt">'
             + '<span class="gck-linea-cant">' + cantidadTexto(l.cantidad) + '×</span> '
             + '<span class="gck-linea-desc">' + esc(l.descripcion || l.sku || '') + '</span>'
+            + btnReceta
             + (l.observacion ? '<div class="gck-linea-obs"><i class="fa fa-comment"></i> ' + esc(l.observacion) + '</div>' : '')
             + renderOpcionales(l.opcionales)
             + '</div>'
             + '</div>'
             + renderInsumos(l.insumos)
             + '</li>';
+    }
+
+    function abrirReceta($btn) {
+        var url = $btn.data('url');
+        if (url) {
+            window.open(url, '_blank', 'noopener');
+            return;
+        }
+        var articuloId = parseInt($btn.data('articulo-id'), 10);
+        if (!articuloId || !cfg.urls.recetaArticulo) {
+            toast('Sin receta asociada', 'warning');
+            return;
+        }
+        $.getJSON(cfg.urls.recetaArticulo + '/' + articuloId + '/receta')
+            .done(function (resp) {
+                if (!resp.ok || !resp.url) {
+                    toast(resp.mensaje || 'El artículo no tiene receta asociada.', 'warning');
+                    return;
+                }
+                window.open(resp.url, '_blank', 'noopener');
+            })
+            .fail(function (xhr) {
+                toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'El artículo no tiene receta asociada.', 'warning');
+            });
     }
 
     function renderComandas(comandas) {
@@ -202,6 +234,43 @@
 
         $('#gck-btn-refresh').on('click', cargar);
         $('#gck-auto').on('change', programarAuto);
+        $('#gck-btn-config').on('click', function () {
+            $('#gck-modal-estacion').modal('show');
+        });
+        $('#gck-cfg-guardar').on('click', function () {
+            var areaId = parseInt($('#gck-cfg-area').val(), 10) || 0;
+            if (!areaId) {
+                toast('Elija el área KDS de esta PC.', 'warning');
+                return;
+            }
+            var salaId = parseInt($('#gck-cfg-sala').val(), 10) || 0;
+            $.ajax({
+                url: cfg.urls.estacion,
+                method: 'POST',
+                data: {
+                    area_id: areaId,
+                    sala_id: salaId > 0 ? salaId : null,
+                    descripcion: 'KDS ' + (cfg.identificadorPc || '')
+                },
+                headers: { 'X-CSRF-TOKEN': csrf() }
+            })
+                .done(function (resp) {
+                    if (!resp.ok) {
+                        toast(resp.mensaje || 'No se pudo guardar', 'error');
+                        return;
+                    }
+                    toast(resp.mensaje || 'Estación guardada', 'success');
+                    $('#gck-modal-estacion').modal('hide');
+                    if (resp.url) {
+                        window.location.href = resp.url;
+                        return;
+                    }
+                    window.location.reload();
+                })
+                .fail(function (xhr) {
+                    toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo guardar la estación', 'error');
+                });
+        });
 
         $('#gck-grid').on('click', '.gck-btn-estado', function () {
             var $card = $(this).closest('.gck-card');
@@ -210,6 +279,12 @@
                 return;
             }
             cambiarEstado(id, $(this).data('estado'));
+        });
+
+        $('#gck-grid').on('click', '.gck-btn-receta', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            abrirReceta($(this));
         });
 
         cargar();

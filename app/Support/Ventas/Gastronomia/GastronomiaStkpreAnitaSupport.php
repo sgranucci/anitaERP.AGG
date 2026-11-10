@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Consulta costos en Anita (stkpre) por SKU y código de lista (prem_lista).
  *
- * No filtra por stkp_fe_ult_act ni vigencia: la lista 5000+mes ya identifica el costo del mes.
+ * No filtra por stkp_fe_ult_act ni vigencia: la lista (base + mes) ya identifica el costo del mes.
  */
 final class GastronomiaStkpreAnitaSupport
 {

@@ -2,10 +2,12 @@
 
 namespace App\Support\Caja;
 
+use App\ApiAnita;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownMesa;
 use App\Models\Caja\TesoreriaCrownPoderPublico;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -35,9 +37,13 @@ final class TesoreriaCrownPoderPublicoGenerador
      */
     public static function obtenerOGenerar(int $salaId, string $fechaYmd, bool $regenerar = false): array
     {
+        TesoreriaCrownRecalculoAdelanteSupport::aplicarPendientes($salaId);
         $existente = TesoreriaCrownPoderPublico::deSalaFecha($salaId, $fechaYmd);
         if ($existente && ! $regenerar) {
             return self::presentar($existente, []);
+        }
+        if ($existente && (string) $existente->origen === TesoreriaCrownPoderPublico::ORIGEN_ANITA) {
+            return self::presentar($existente, ['Tomado del poder público grabado en Anita: no se regenera.']);
         }
 
         $modelo = self::generar($salaId, $fechaYmd);
@@ -59,10 +65,10 @@ final class TesoreriaCrownPoderPublicoGenerador
         // Mes/acum se encadenan desde el ERP del día anterior.
         $anterior = self::anteriorParaCadena($salaId, $ayer, $avisos);
         $esPrimero = substr(str_replace('-', '', $fechaYmd), 6, 2) === '01';
-        $fichaMes = ($esPrimero ? 0.0 : (float) ($anterior['ficha_mes'] ?? 0)) + $fichaDia;
-        $fichaAcum = (float) ($anterior['ficha_acum'] ?? 0) + $fichaDia;
-        $slotMes = ($esPrimero ? 0.0 : (float) ($anterior['slot_mes'] ?? 0)) + $slotDia;
-        $slotAcum = (float) ($anterior['slot_acum'] ?? 0) + $slotDia;
+        $fichaMes = ($esPrimero ? 0.0 : self::enteroAnita((float) ($anterior['ficha_mes'] ?? 0))) + $fichaDia;
+        $fichaAcum = self::enteroAnita((float) ($anterior['ficha_acum'] ?? 0)) + $fichaDia;
+        $slotMes = ($esPrimero ? 0.0 : self::enteroAnita((float) ($anterior['slot_mes'] ?? 0))) + $slotDia;
+        $slotAcum = self::enteroAnita((float) ($anterior['slot_acum'] ?? 0)) + $slotDia;
 
         $origen = self::origenDe($origenes);
         $detalle = [
@@ -187,8 +193,16 @@ final class TesoreriaCrownPoderPublicoGenerador
         $subtotal = (float) ($piezas['subtotal_slot'] ?? 0);
         $slotR = (float) ($piezas['slot_resultado'] ?? 0);
         $voucher = (float) ($piezas['voucher_mesa'] ?? 0);
-
         return round($subtotal - $slotR - $voucher, 2);
+    }
+
+    /**
+     * l-anexo1.c imprime día y mes con centavos, pero graba ppublico como long: el día siguiente
+     * arranca del mes/acum anterior truncado hacia cero.
+     */
+    private static function enteroAnita(float $valor): float
+    {
+        return $valor < 0 ? ceil($valor) : floor($valor);
     }
 
     /**
@@ -256,9 +270,62 @@ final class TesoreriaCrownPoderPublicoGenerador
             ];
         }
 
+        $anita = self::anteriorDesdeAnita($ayerYmd);
+        if ($anita !== null) {
+            $avisos[] = 'Mes y acumulado arrancan del poder público grabado en Anita el '.date('d/m/Y', strtotime($ayerYmd)).'.';
+
+            return $anita;
+        }
+
         $avisos[] = 'Sin poder público ERP del día anterior: mes y acumulado arrancan solo con el día.';
 
         return null;
+    }
+
+    /**
+     * Fila ppublico de Anita del día anterior: arranque de la cadena cuando el ERP todavía no la tiene.
+     *
+     * @return array{ficha_mes: float, ficha_acum: float, slot_mes: float, slot_acum: float}|null
+     */
+    private static function anteriorDesdeAnita(string $ayerYmd): ?array
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return null;
+        }
+        try {
+            $payload = [
+                'acc' => 'customSql',
+                'campos' => 'ppub_ppublico_mes,ppub_ppublico_acum,ppub_pp_slot_mes,ppub_pp_slot_acum',
+                'customSql' => 'SELECT ppub_ppublico_mes, ppub_ppublico_acum, ppub_pp_slot_mes, ppub_pp_slot_acum FROM ppublico WHERE ppub_fecha = '
+                    .(int) str_replace('-', '', $ayerYmd),
+                'sistema' => config('caja_anita.sistema'),
+            ];
+            $ifx = trim((string) config('caja_anita.ifx_server', ''));
+            if ($ifx !== '') {
+                $payload['ifx_server'] = $ifx;
+            }
+            $path = rtrim(trim((string) config('caja_anita.path_sistema', '')), '/');
+            if ($path !== '') {
+                $payload['path_sistema'] = $path;
+            }
+            $raw = (new ApiAnita)->apiCall($payload);
+            if (ApiAnita::extraerMensajeError(is_string($raw) ? $raw : null)) {
+                return null;
+            }
+            $fila = (json_decode(is_string($raw) ? $raw : '[]') ?: [])[0] ?? null;
+        } catch (Throwable) {
+            return null;
+        }
+        if ($fila === null) {
+            return null;
+        }
+
+        return [
+            'ficha_mes' => (float) $fila->ppub_ppublico_mes,
+            'ficha_acum' => (float) $fila->ppub_ppublico_acum,
+            'slot_mes' => (float) $fila->ppub_pp_slot_mes,
+            'slot_acum' => (float) $fila->ppub_pp_slot_acum,
+        ];
     }
 
     /**

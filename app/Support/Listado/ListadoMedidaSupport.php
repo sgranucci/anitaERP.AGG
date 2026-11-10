@@ -34,6 +34,16 @@ final class ListadoMedidaSupport
             'valor_origen' => ['Suma de valor origen', true],
             'valor_baja' => ['Suma de valor baja', true],
             'monto_factura' => ['Suma de monto factura', true],
+            'slot_resultado' => ['Suma de res. slots', false],
+            'coin_in' => ['Suma de coin in', false],
+            'coin_out' => ['Suma de coin out', false],
+            'pago_manual' => ['Suma de pago man.', false],
+            'cantidad_slots' => ['Suma de slots', false],
+            'subtotal_slot' => ['Suma de subtotal soft', false],
+            'tot_carton' => ['Suma de cartones', false],
+            'tot_premio' => ['Suma de premios', false],
+            'tot_rse' => ['Suma de RSE', false],
+            'resultado' => ['Suma de resultado', false],
         ] as $key => [$label, $parteMoneda]) {
             if (! isset($campos[$key])) {
                 continue;

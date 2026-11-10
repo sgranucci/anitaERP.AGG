@@ -10,6 +10,13 @@
 
 @section('contenido')
 @include('includes.mensaje')
+@if (($asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::pinEsInicial($asignacion->cajero) && $asignacion->cierre === null && $asignacion->jornada->estaAbierta())
+    <div class="alert alert-warning">
+        <strong>PIN del cajero.</strong>
+        {{ $asignacion->cajero->nombre }} todavía no tiene un PIN propio.
+        Al cerrar la caja el sistema le va a pedir que elija uno nuevo (y lo repita) en este mismo formulario.
+    </div>
+@endif
 @php
     $pesos = fn ($importe) => number_format((float) $importe, 2, ',', '.');
     $numeros = $cierre ?? null;
@@ -317,9 +324,16 @@
                         <div class="form-group row">
                             <label for="clave_cajero" class="col-lg-4 control-label text-right pr-2">Cajero</label>
                             <div class="col-lg-8">
-                                <input type="text" name="clave_cajero" id="clave_cajero" class="form-control tc-pin-cajero" placeholder="Clave del cajero" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" required style="max-width:16rem;">
+                                <input type="text" name="clave_cajero" id="clave_cajero" class="form-control tc-pin-cajero" placeholder="PIN del cajero" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" @unless (session('tc_pin_nuevo')) required @endunless style="max-width:16rem;">
                             </div>
                         </div>
+                        @if (session('tc_pin_nuevo'))
+                            <div class="form-group row">
+                                <div class="col-lg-8 offset-lg-4" style="max-width:32rem;">
+                                    @include('caja.tesoreria_crown.partials.pin_nuevo_cajero', ['nuevoName' => 'clave_cajero_nueva', 'repetirName' => 'clave_cajero_repetir'])
+                                </div>
+                            </div>
+                        @endif
                         <button type="submit" class="btn btn-primary">Cerrar caja</button>
                     </form>
                 @endif

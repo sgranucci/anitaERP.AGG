@@ -624,17 +624,41 @@ function mostrarSolapaArticulo(numero) {
 	
     function muestraBotonAnulacion(estadoArticulo)
 	{
-		switch(estadoArticulo)
-		{
-			case 'INACTIVO':
-				$('#anulaarticulo').html('<i class="fas fa-check"></i>Activar el Artículo');
-				$( "#anulaarticulo" ).css( "background-color", "green" ); 
-				break;
-			case 'ACTIVO':
-				$('#anulaarticulo').html('<i class="fas fa-cross"></i>Inactivar el Artículo');
-				$( "#anulaarticulo" ).css( "background-color", "yellow" ); 
-				break;
+		var $btns = $('.btn-cambiar-estado-articulo');
+		if (!$btns.length) {
+			$btns = $('#anulaarticulo');
 		}
+		if (!$btns.length) {
+			return;
+		}
+		var activo = estadoArticulo === 'ACTIVO';
+		var titulo = activo ? 'Inactivar el artículo' : 'Activar el artículo';
+		var $toolbar = $btns.filter('.js-anula-articulo-toolbar');
+		var $icono = $btns.not('.js-anula-articulo-toolbar');
+
+		$toolbar
+			.toggleClass('btn-warning', activo)
+			.toggleClass('btn-success', !activo)
+			.css('background-color', '')
+			.attr('title', titulo)
+			.html(
+				activo
+					? '<i class="fa fa-fw fa-ban"></i> Inactivar el Artículo'
+					: '<i class="fa fa-fw fa-check"></i> Activar el Artículo'
+			);
+
+		$icono
+			.toggleClass('text-warning', activo)
+			.toggleClass('text-success', !activo)
+			.removeClass('btn-warning btn-success text-secondary')
+			.css('background-color', '')
+			.attr('title', titulo)
+			.attr('aria-label', titulo)
+			.html(
+				activo
+					? '<i class="fa fa-fw fa-ban"></i>'
+					: '<i class="fa fa-fw fa-check-circle"></i>'
+			);
 	}
 
     function leeHistoria()

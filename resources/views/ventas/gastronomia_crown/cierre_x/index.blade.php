@@ -79,12 +79,28 @@
                         @endif
                     </div>
 
+                    @php $abiertasSala = $abiertas_sala ?? ['total' => 0, 'con_mesa' => 0, 'sin_mesa' => 0]; @endphp
+                    @if ((int) ($abiertasSala['total'] ?? 0) > 0)
+                        <div class="alert alert-warning">
+                            <strong>Hay {{ (int) $abiertasSala['total'] }} cuenta(s) abierta(s) sin facturar en la sala</strong>
+                            @if ((int) ($abiertasSala['con_mesa'] ?? 0) > 0)
+                                — {{ (int) $abiertasSala['con_mesa'] }} en mesa
+                            @endif
+                            @if ((int) ($abiertasSala['sin_mesa'] ?? 0) > 0)
+                                — {{ (int) $abiertasSala['sin_mesa'] }} de barra
+                            @endif
+                            .
+                            No se puede rendir un mozo que todavía deje cuentas abiertas; cobralas o cerralas en el POS.
+                        </div>
+                    @endif
+
                     <div class="table-responsive">
                         <table class="table table-sm table-striped table-bordered" id="tabla-cierre-x">
                             <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
                                     <th>Mozo</th>
-                                    <th class="text-right">Cuentas</th>
+                                    <th class="text-right">Cuentas X</th>
+                                    <th class="text-right">Abiertas</th>
                                     <th class="text-right">Total X a rendir</th>
                                     <th class="text-right">Total facturado</th>
                                     <th>Estado</th>
@@ -93,19 +109,39 @@
                             </thead>
                             <tbody>
                                 @forelse ($totales as $fila)
-                                    <tr>
+                                    <tr @if ((int) ($fila['abiertas_total'] ?? 0) > 0) class="table-warning" @endif>
                                         <td>
                                             {{ $fila['mozo_nombre'] }}
                                             @if ($fila['mozo_codigo'] !== '')
                                                 <small class="text-muted">({{ $fila['mozo_codigo'] }})</small>
                                             @endif
+                                            @if (! empty($fila['aviso_abiertas']))
+                                                <div class="small text-danger mt-1">{{ $fila['aviso_abiertas'] }}</div>
+                                            @endif
                                         </td>
                                         <td class="text-right">{{ $fila['cuentas'] }}</td>
+                                        <td class="text-right">
+                                            @if ((int) ($fila['abiertas_total'] ?? 0) > 0)
+                                                <span class="badge badge-danger">{{ (int) $fila['abiertas_total'] }}</span>
+                                                <small class="d-block text-muted">
+                                                    @if ((int) ($fila['abiertas_con_mesa'] ?? 0) > 0)
+                                                        {{ (int) $fila['abiertas_con_mesa'] }} mesa
+                                                    @endif
+                                                    @if ((int) ($fila['abiertas_sin_mesa'] ?? 0) > 0)
+                                                        {{ (int) $fila['abiertas_sin_mesa'] }} barra
+                                                    @endif
+                                                </small>
+                                            @else
+                                                <span class="text-muted">0</span>
+                                            @endif
+                                        </td>
                                         <td class="text-right">{{ number_format($fila['total_x'], 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format($fila['total_facturado'], 2, ',', '.') }}</td>
                                         <td>
                                             @if ($fila['ya_rendido'])
                                                 <span class="badge badge-success">Rendido</span>
+                                            @elseif ((int) ($fila['abiertas_total'] ?? 0) > 0)
+                                                <span class="badge badge-danger">Deja abiertas</span>
                                             @else
                                                 <span class="badge badge-warning">Pendiente</span>
                                             @endif
@@ -116,6 +152,11 @@
                                                    class="btn btn-outline-info btn-sm" target="_blank" rel="noopener">
                                                     <i class="fa fa-eye"></i> Ver en tesorería
                                                 </a>
+                                            @elseif ($puede_crear && (int) ($fila['abiertas_total'] ?? 0) > 0)
+                                                <button type="button" class="btn btn-secondary btn-sm" disabled
+                                                        title="{{ $fila['aviso_abiertas'] }}">
+                                                    <i class="fa fa-ban"></i> Cerrar y rendir
+                                                </button>
                                             @elseif ($puede_crear)
                                                 <form method="post" action="{{ route('gastronomia_crown_cierre_x_crear_rendicion') }}" class="d-inline">
                                                     @csrf
@@ -135,7 +176,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="6" class="text-center text-muted">
+                                        <td colspan="7" class="text-center text-muted">
                                             Sin cuentas cerradas de mozos en esta jornada.
                                         </td>
                                     </tr>
@@ -144,7 +185,7 @@
                             @if (count($totales) > 0)
                                 <tfoot>
                                     <tr class="font-weight-bold">
-                                        <td colspan="2" class="text-right">Total X de la jornada</td>
+                                        <td colspan="3" class="text-right">Total X de la jornada</td>
                                         <td class="text-right">{{ number_format((float) $total_general, 2, ',', '.') }}</td>
                                         <td colspan="3"></td>
                                     </tr>

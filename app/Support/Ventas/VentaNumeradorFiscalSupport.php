@@ -217,9 +217,122 @@ final class VentaNumeradorFiscalSupport
     }
 
     /**
+     * Asegura la serie en venta_serie_numerador con max(Anita, ERP, fila actual).
+     * Crown sin Anita nativo: siembra una vez desde Informix (cncadmin) + ERP.
+     * Con sincronizar_anita: refresca el piso desde Anita en cada emisión.
+     *
+     * @return int último número persistido (piso para el próximo)
+     */
+    public static function sembrarSerieSiFalta(
+        int $puntoventaId,
+        int $codigoAfip,
+        ?int $empresaId = null,
+        ?string $ifxServer = null,
+        bool $forzarRefreshAnita = false,
+        ?string $pathSistema = null,
+    ): int {
+        if ($puntoventaId <= 0 || $codigoAfip <= 0) {
+            return 0;
+        }
+
+        $row = self::consultar($puntoventaId, $codigoAfip);
+        $actual = (int) ($row->ultimo_numero ?? 0);
+        if ($actual > 0 && ! $forzarRefreshAnita) {
+            return $actual;
+        }
+
+        $maxAnita = 0;
+        try {
+            $maxAnita = self::maximoAnitaParaSerie($puntoventaId, $codigoAfip, $ifxServer, $pathSistema);
+        } catch (RuntimeException $e) {
+            Log::warning('numerador_fiscal.sembrar_serie_anita_fallo', [
+                'puntoventa_id' => $puntoventaId,
+                'codigo_afip' => $codigoAfip,
+                'ifx_server' => $ifxServer,
+                'error' => $e->getMessage(),
+            ]);
+            if ($forzarRefreshAnita && $actual <= 0) {
+                // Sin fila y Anita caída: seguir con ERP.
+            } elseif ($forzarRefreshAnita) {
+                return $actual;
+            }
+        }
+
+        $maxErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpPorCodigoAfip(
+            $puntoventaId,
+            $codigoAfip,
+            $empresaId,
+        );
+        $max = max($actual, $maxAnita, $maxErp);
+        if ($max <= 0) {
+            return 0;
+        }
+
+        $origen = $maxAnita >= $maxErp && $maxAnita > 0 ? 'anita' : 'erp';
+        $obs = $origen === 'anita'
+            ? 'Sembrado desde Anita'.($ifxServer ? ' ('.$ifxServer.')' : '')
+            : 'Sembrado desde venta ERP (fallback)';
+
+        if ($row === null) {
+            Venta_Serie_Numerador::query()->create([
+                'empresa_id' => self::resolverEmpresaId($puntoventaId, $empresaId),
+                'puntoventa_id' => $puntoventaId,
+                'codigo_afip' => $codigoAfip,
+                'ultimo_numero' => $max,
+                'piso' => 0,
+                'observacion' => $obs,
+            ]);
+        } elseif ($actual < $max) {
+            $row->ultimo_numero = $max;
+            $row->observacion = $obs;
+            if ($empresaId !== null && $empresaId > 0) {
+                $row->empresa_id = $empresaId;
+            }
+            $row->save();
+        }
+
+        return $max;
+    }
+
+    /**
+     * Máximo ven_nro en Anita para un PV + tipo ARCA.
+     */
+    public static function maximoAnitaParaSerie(
+        int $puntoventaId,
+        int $codigoAfip,
+        ?string $ifxServer = null,
+        ?string $pathSistema = null,
+    ): int {
+        $omitidas = 0;
+        $pv = Puntoventa::query()->find($puntoventaId, ['id', 'codigo', 'empresa_id']);
+        if ($pv === null) {
+            return 0;
+        }
+
+        $filas = self::filasAnitaASeries(
+            self::consultarMaximosAnita($pathSistema, $ifxServer),
+            collect([$pv]),
+            [],
+            excluirDivision: false,
+            omitidas: $omitidas,
+        );
+
+        $max = 0;
+        foreach ($filas as $fila) {
+            if ((int) $fila['puntoventa_id'] === $puntoventaId
+                && (int) $fila['codigo_afip'] === $codigoAfip
+            ) {
+                $max = max($max, (int) $fila['max_nro']);
+            }
+        }
+
+        return $max;
+    }
+
+    /**
      * @return list<array{ven_sucursal: string, ven_tipo: string, ven_letra: string, max_nro: int}>
      */
-    private static function consultarMaximosAnita(?string $pathSistema): array
+    private static function consultarMaximosAnita(?string $pathSistema, ?string $ifxServer = null): array
     {
         $api = new ApiAnita;
         $data = [
@@ -232,6 +345,9 @@ final class VentaNumeradorFiscalSupport
         ];
         if ($pathSistema !== null && $pathSistema !== '') {
             $data['path_sistema'] = $pathSistema;
+        }
+        if ($ifxServer !== null && trim($ifxServer) !== '') {
+            $data['ifx_server'] = trim($ifxServer);
         }
 
         $parseado = ApiAnita::parsearRespuestaLista($api->apiCall($data));

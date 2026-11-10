@@ -53,8 +53,9 @@ class TesoreriaCrownListadoDocumento
             mkdir($directorio, 0775, true);
         }
         $ruta = $directorio.'/'.$armado['archivo'].'.pdf';
+        // Sin titulo_corto en canvas: el título ya va en la cabecera thead (no repetir arriba a la izquierda).
         DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
-            'titulo_corto' => $armado['titulo_corto'],
+            'titulo_corto' => '',
         ]);
 
         return response()->download($ruta, $armado['archivo'].'.pdf');

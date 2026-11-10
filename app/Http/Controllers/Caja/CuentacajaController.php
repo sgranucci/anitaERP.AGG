@@ -276,7 +276,7 @@ class CuentacajaController extends Controller
                     $output['data'] .= '<tr>';
                     for ($i = 0; $i < $count; $i++)
                         $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
-                    $output['data'] .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultacuentacaja">Elegir</a>';
+                    $output['data'] .= '<td class="text-nowrap" style="min-width: 11rem;"><a class="btn btn-warning btn-sm eligeconsultacuentacaja">Elegir</a>';
                     if (can('editar-cuentas-de-caja', false) || can('listar-cuentas-de-caja', false)) {
                         $urlAbm = route('editar_cuentacaja', [
                             'id' => (int) $row['cuentacaja_id'],

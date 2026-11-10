@@ -59,7 +59,7 @@ La rendición pide una habilitación conforme de esa misma caja, que no haya sid
 
 En la habilitación se cargan cantidades de pesos, dólares y euros. Las fichas no entran en la habilitación.
 
-En la rendición se cargan las mismas monedas y, además, las fichas. Después van los medios, en el orden de la pantalla de Anita: número de Z cashless, pagos y ventas cashless, pagos parcial, apuestas, ventas y pagos de casino on-line, débito, crédito, recargo, cuenta corriente, transferencia, vouchers y QR. En sala el recargo no se tipea: es la tarjeta de crédito menos ese crédito dividido 1,05 (desde el 8/11/2024; antes, dividido 1,10). Gastronomía y hotel no calculan ese recargo. Si la caja se abrió como gastronomía u hotel, la rendición muestra los cierres de ventas pendientes de esa fecha. Salen de `p-cierrefact` (tabla `cierrefiscal`), no de `p-vtagastro`. El Z es el cierre fiscal de una barra. El X es el informe que la rendición de hotel toma. Se marcan los que corresponden a esa caja y **Aplicar a la rendición** completa el X, el Z, las notas de crédito y el último ticket. Esos importes se pueden corregir antes de guardar. El cierre de Anita no se modifica. En hotel, además, se cargan la cuenta corriente y la transferencia. Si el cajero tiene código PXSol, **Traer de PXSol** pide facturado, crédito, IVA de facturas e IVA de notas de crédito entre la primera habilitación y el momento de la consulta. El facturado completa el X y el Z, y el crédito completa las notas de crédito. Esos importes se pueden corregir antes de guardar. El comando vive en `TESORERIA_CROWN_PXSOL_COMANDO`; si está vacío, el botón avisa que PXSol no está configurado.
+En la rendición se cargan las mismas monedas y, además, las fichas. Después van los medios, en el orden de la pantalla de Anita: número de Z cashless, pagos y ventas cashless, pagos parcial, apuestas, ventas y pagos de casino on-line, débito, crédito, recargo, cuenta corriente, transferencia, vouchers y QR. En sala el recargo no se tipea: es la tarjeta de crédito menos ese crédito dividido 1,05 (desde el 8/11/2024; antes, dividido 1,10). Gastronomía y hotel no calculan ese recargo. Si la caja se abrió como gastronomía u hotel, la rendición muestra los cierres de ventas pendientes de esa fecha. Primero salen los del ERP (`tesoreria_crown_cierre_fiscal` / Cierre X y `p-cierrefact`); si falta alguno del día, se completa con Anita (`cierrefiscal`), sin repetir el mismo sucursal+X/Z. No se lee `p-vtagastro`. El Z es el cierre fiscal de una barra. El X es el informe que la rendición de hotel toma. Se marcan los que corresponden a esa caja y **Aplicar a la rendición** completa el X, el Z, las notas de crédito y el último ticket. Esos importes se pueden corregir antes de guardar. Si falta un cierre, **Cargar un cierre a mano** lo deja pendiente del día. El cierre de Anita no se modifica. En hotel, además, se cargan la cuenta corriente y la transferencia. Si el cajero tiene código PXSol, **Traer de PXSol** pide facturado, crédito, IVA de facturas e IVA de notas de crédito entre la primera habilitación y el momento de la consulta. El facturado completa el X y el Z, y el crédito completa las notas de crédito. Esos importes se pueden corregir antes de guardar. El comando vive en `TESORERIA_CROWN_PXSOL_COMANDO`; si está vacío, el botón avisa que PXSol no está configurado.
 
 Los dólares y los euros quedan en su moneda en el comprobante. El cierre los pasa a pesos con la cotización de venta de esa jornada. Pesos y fichas de cotización fija entran por su valor. Si falta la cotización de una moneda usada, la caja no se puede cerrar hasta cargarla. Una cotización en cero no se usa.
 
@@ -85,9 +85,30 @@ Cada comprobante tiene dos lados y los firman dos personas distintas.
 | Habilitación | Tesorería, con usuario y clave del sistema. | El cajero, con su número y su PIN. |
 | Rendición | El cajero, con su número y su PIN. | Tesorería, con usuario y clave del sistema. |
 
-Las dos firmas se hacen en la misma pantalla, con el teclado. El cajero tipea el número de cajero asignado a esa caja y su PIN. El PIN inicial es ese mismo número. Tesorería firma con un usuario del sistema que tenga permiso para editar movimientos de Tesorería Crown. Ese usuario no puede ser el usuario vinculado al cajero de esa caja.
+Las dos firmas se hacen en la misma pantalla, con el teclado. El cajero tipea el número de cajero asignado a esa caja y su PIN. Tesorería firma con un usuario del sistema que tenga permiso para editar movimientos de Tesorería Crown. Ese usuario no puede ser el usuario vinculado al cajero de esa caja. El mensaje de error de firmante es genérico: no dice si falló el usuario, la clave o el permiso.
 
 Cuando firman los dos, el comprobante pasa a conforme. Desde la pantalla se imprime el PDF del comprobante.
+
+Hay un tope de intentos fallidos de PIN y de usuario/clave (cinco). Al superarlos hay que esperar unos minutos.
+
+### PIN del cajero
+
+El PIN es propio del cajero (4 a 8 dígitos). No puede ser el código ni el legajo, ni series obvias (1111, 1234, 4321…).
+
+| Situación | Qué pasa |
+|---|---|
+| Primera firma o PIN blanqueado | El sistema pide PIN nuevo + repetición en la misma pantalla. Hasta no elegir uno propio, no firma. |
+| PIN ya elegido | Firma con número + PIN actual. |
+| Se olvidó el PIN | En el comprobante pendiente, tesorería abre **El cajero se olvidó el PIN**, firma con usuario y clave, y blanquea. En la próxima firma el cajero elige uno nuevo. |
+| Banner amarillo | Si el cajero todavía no tiene PIN propio, el movimiento y el cierre lo avisan a tesorería. |
+
+El blanqueo no genera un aviso en la bandeja: es un trámite de firma en el mostrador.
+
+### No conforme y reversa
+
+**No conforme** (borrador o pendiente) pide motivo y deja el comprobante en auditoría. Deja de sumar. Para cerrar la caja hace falta otra rendición conforme.
+
+**Revertir** sobre un conforme crea un papel nuevo con el número siguiente, importes al revés y las dos firmas. Una sola vez; no se revierte una reversa. Hasta que la reversa esté conforme, la caja no cierra. Si la caja ya estaba cerrada, primero **Reabrir caja**.
 
 ## Cierre de la caja
 
@@ -169,7 +190,7 @@ En el borrador o en el pendiente, **No conforme** pide el motivo y lo pasa a aud
 
 ### Gastronomía u hotel
 
-La tarea tiene que ser gastronomía u hotel desde la asignación. En la rendición se eligen los cierres de ventas de esa fecha y se aplican al X y al Z. En el cierre de la caja, el resultado descuenta las notas de crédito. En hotel también suma la cuenta corriente. Una caja de venta y pago no muestra esos campos y su resultado de cierre es cero.
+La tarea tiene que ser gastronomía u hotel desde la asignación. En la rendición aparecen los cierres de ventas pendientes del día: primero los del ERP; si falta alguno, se completa con Anita (mismo sucursal + X/Z, sin repetir). Se marcan y **Aplicar a la rendición** completa X, Z, NC y último ticket. Si falta un cierre y Anita no respondió, se puede **Cargar un cierre a mano**. En hotel, además, **Traer de PXSol** si el cajero tiene código. El cierre de la caja descuenta las notas de crédito; en hotel suma la cuenta corriente. Una caja de venta y pago no muestra esos campos.
 
 ### La diferencia es chica y quieren revisarla después
 
@@ -177,7 +198,9 @@ Al cerrar eligen **A revisión**. La caja ya no acepta movimientos. Tesorería, 
 
 ### La diferencia supera la tolerancia
 
-El cierre nace en auditoría. Otra persona, con el mismo permiso de edición y distinta de quien cerró, firma **Cerrar auditoría**. Ahí la caja queda terminada y la jornada ya puede cerrarse.
+El cierre nace en auditoría. Otra persona, distinta de quien lo mandó a auditoría, con permiso **auditar-tesoreria-crown-caja** (Enc-contaduría lo tiene; administrador entra igual), firma **Cerrar auditoría**. Ahí la caja queda terminada y la jornada ya puede cerrarse.
+
+Proceso diario al final del día: en el escritorio de la jornada aparece el panel **Resolver para cerrar la jornada** con las cajas que todavía bloquean. Si hay auditorías pendientes, el mismo panel pide usuario y clave del auditor y con una sola firma cierra todas las que esa persona pueda firmar. El resto (sin cierre, a revisión, no conforme) se abre con el botón de cada fila y se resuelve en la pantalla de cierre. Cuando el panel desaparece, **Cerrar jornada** ya puede correr.
 
 ### Falta la cotización del dólar o del euro
 
@@ -220,6 +243,10 @@ En la jornada, la solapa Mesas es el piso del día: cada mesa muestra si está s
 El drop de máquinas y el recuento del stacker entran en la solapa **Slots** de la jornada. Los dos salen del mismo archivo de Anita: el drop es el tipo Drop y el recuento es Contadora, Manual o Corrección. Cada movimiento trae el número de Anita, la máquina, el total y el billetaje.
 
 La solapa lista el día y, al abrir un número, muestra las denominaciones que lo arman. Pdf, Excel y Csv salen de la barra de la sala con ese día.
+
+## Valores y conversión de fichas
+
+El catálogo de fichas y billetes está en **Tesorería Crown → Valores** (tipos FVAL/FCOL/ARS/USD/EUR). La **conversión del día** (antes en un ABM aparte de Fichas) se abre desde Valores o desde el enlace de la solapa Poder público. No hay menú propio de Fichas.
 
 ## Poder del público
 
@@ -284,6 +311,34 @@ Histórico Anita → ERP: `php artisan tesoreria-crown:importar-anexo8-anita --d
 Las fichas / poder público se listan aparte y **no** entran en ese total. La reserva de fichas alimenta el poder público / stock de fichas, no el total de caja final del VIII.
 
 El total del VIII se persiste en `tesoreria_crown_jornada.caja_final_viii` al calcular el anexo (panel o export). El Anexo I lo lee de ahí para la fila «Caja final (anexo VIII)» y para la caja inicial del día siguiente. `caja_final_dia` / `caja_final_mes` son otra cosa: la caja final **por variación** del Anexo I. Si confirman bóveda, slots o mesas, se invalida `caja_final_viii` y se recalcula la próxima vez que se abra el VIII o lo pida el I.
+
+## Bandeja de avisos de auditoría
+
+Menú **Tesorería Crown → Avisos** (`caja/tesoreria-crown/aviso`). Es la bandeja de hallazgos del día/mes: no reemplaza el cierre de caja.
+
+Cada aviso tiene regla, severidad (alta / media / baja), estado (abierto / revisado / descartado / superado) y enlace a la jornada o al comprobante. Desde la bandeja se marca **Revisado** o **Descartado** (con nota). El sistema puede pasar un aviso a **Superado** cuando la condición deja de cumplirse (por ejemplo, el no conforme se resolvió).
+
+| Regla | Severidad | Qué detecta |
+|---|---|---|
+| Diferencia de cierre sobre la tolerancia | Alta | Cierre con \|diferencia\| > tolerancia |
+| Comprobante no conforme sin resolver | Alta | Papel en auditoría sin cierre terminal |
+| Rendición sin habilitación conforme | Alta | F sin H conforme |
+| Comprobante modificado después del cierre | Alta | Edición post-cierre |
+| Misma persona firma las dos partes | Alta | Misma persona en entrega y recibe |
+| Reversa de comprobante | Media | Reversa creada |
+| Caja reabierta | Media | Reapertura |
+| Cajero en dos cajas el mismo día | Media | Mismo cajero en dos asignaciones |
+| Rendición gastro/hotel con X sin cierre | Media | X cargado sin cierre de ventas |
+| Fallos repetidos del cajero | Media | Varios cierres con diferencia en la ventana |
+| Jornada abierta hace varios días | Media | Jornada abierta más de N días |
+| Diferencia contra Anita | Media | Control Anita del día |
+| Anexo VIII distinto de la variación del I | Media | `caja_final_viii` ≠ caja final por variación |
+| Cotización de otra fecha | Baja | ME convertida con cotización ≠ día |
+| Recálculo hacia adelante pendiente | Baja | Hay días posteriores a invalidar |
+
+Corrida: comando `tesoreria-crown:avisos` (también al evento de cierre/comprobante) y schedule diario a la hora de **Mails del resumen de avisos** (default 07:30). Si hay mails cargados en Configuración → Tesorería Crown, manda el resumen de abiertos. Parámetros: cantidad/días/mínimo de fallos, días de jornada abierta, hora y lista de mails.
+
+Permisos: `listar-tesoreria-crown-aviso` (ver) y `auditar-tesoreria-crown-caja` (resolver / firmar auditoría / reabrir en A). Enc-contaduría tiene ambos.
 
 ## Ajuste de auditoría
 

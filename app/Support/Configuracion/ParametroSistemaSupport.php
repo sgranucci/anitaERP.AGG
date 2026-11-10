@@ -71,6 +71,25 @@ final class ParametroSistemaSupport
     /** Empresa de sueldos que la bóveda Crown usa para resolver el legajo. */
     public const CLAVE_TESORERIA_CROWN_EMPRESA_ID = 'tesoreria_crown_empresa_id';
 
+    /** Destinatarios del resumen diario de avisos de auditoría de tesorería Crown. */
+    public const CLAVE_TESORERIA_CROWN_AVISOS_MAILS = 'tesoreria_crown_avisos_mails';
+
+    /** Hora (HH:MM) de la corrida nocturna de avisos y del mail diario. */
+    public const CLAVE_TESORERIA_CROWN_AVISOS_HORA = 'tesoreria_crown_avisos_hora';
+
+    /** Cierres con diferencia del mismo cajero que disparan el aviso de fallos repetidos. */
+    public const CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_CANTIDAD = 'tesoreria_crown_avisos_fallos_cantidad';
+
+    /** Ventana en días para contar los fallos repetidos. */
+    public const CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_DIAS = 'tesoreria_crown_avisos_fallos_dias';
+
+    /** Diferencia mínima de un cierre para contarlo como fallo. */
+    public const CLAVE_TESORERIA_CROWN_AVISOS_FALLO_MINIMO = 'tesoreria_crown_avisos_fallo_minimo';
+
+    /** Días que una jornada puede seguir abierta antes de avisar. */
+    public const CLAVE_TESORERIA_CROWN_AVISOS_JORNADA_ABIERTA_DIAS = 'tesoreria_crown_avisos_jornada_abierta_dias';
+
+    /** Si gastronomía/hotel facturan en esta misma base ERP (Cierre X / p-cierrefact). */
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -214,6 +233,48 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Si el valor absoluto de la diferencia del cierre de caja supera este importe, el cierre pasa a auditoría. Mientras no se cargue, se usan 50.000.',
                 'tipo' => 'decimal',
                 'orden' => 10,
+            ];
+            $defs[self::CLAVE_TESORERIA_CROWN_AVISOS_MAILS] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Mails del resumen de avisos',
+                'ayuda' => 'Reciben cada mañana el resumen de avisos de auditoría abiertos (nuevos del día y pendientes). Uno por línea o separados por coma. Vacío: no se manda mail; los avisos igual quedan en la bandeja.',
+                'tipo' => 'emails',
+                'orden' => 20,
+            ];
+            $defs[self::CLAVE_TESORERIA_CROWN_AVISOS_HORA] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Hora de la corrida de avisos',
+                'ayuda' => 'A esta hora se revisan los últimos días, se compara el día anterior contra Anita y se manda el resumen. Mientras no se cargue, 07:30.',
+                'tipo' => 'hora',
+                'orden' => 21,
+            ];
+            $defs[self::CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_CANTIDAD] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Fallos repetidos: cantidad',
+                'ayuda' => 'Si un cajero tiene esta cantidad de cierres con diferencia dentro de la ventana de días, se avisa. Mientras no se cargue, 4.',
+                'tipo' => 'entero',
+                'orden' => 22,
+            ];
+            $defs[self::CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_DIAS] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Fallos repetidos: ventana en días',
+                'ayuda' => 'Días hacia atrás en los que se cuentan los cierres con diferencia de un mismo cajero. Mientras no se cargue, 30.',
+                'tipo' => 'entero',
+                'orden' => 23,
+            ];
+            $defs[self::CLAVE_TESORERIA_CROWN_AVISOS_FALLO_MINIMO] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Fallos repetidos: diferencia mínima',
+                'ayuda' => 'Diferencia de cierre (en valor absoluto) a partir de la cual el cierre cuenta como fallo. Mientras no se cargue, 5.000.',
+                'tipo' => 'decimal',
+                'orden' => 24,
+            ];
+            $defs[self::CLAVE_TESORERIA_CROWN_AVISOS_JORNADA_ABIERTA_DIAS] = [
+                'grupo' => 'Tesorería Crown',
+                'etiqueta' => 'Jornada abierta: días de aviso',
+                'ayuda' => 'Si una jornada sigue abierta más de estos días, se avisa. Mientras no se cargue, 2.',
+                'tipo' => 'entero',
+                'orden' => 25,
             ];
         }
 
@@ -636,6 +697,12 @@ final class ParametroSistemaSupport
                 5
             )),
             self::CLAVE_TESORERIA_CROWN_EMPRESA_ID => '1',
+            self::CLAVE_TESORERIA_CROWN_AVISOS_MAILS => '',
+            self::CLAVE_TESORERIA_CROWN_AVISOS_HORA => '07:30',
+            self::CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_CANTIDAD => '4',
+            self::CLAVE_TESORERIA_CROWN_AVISOS_FALLOS_DIAS => '30',
+            self::CLAVE_TESORERIA_CROWN_AVISOS_FALLO_MINIMO => '5000',
+            self::CLAVE_TESORERIA_CROWN_AVISOS_JORNADA_ABIERTA_DIAS => '2',
             default => '0',
         };
     }

@@ -1011,6 +1011,9 @@ class TesoreriaCrownBovedaController extends Controller
             ! can('listar-tesoreria-crown-boveda', false)
             && ! can('crear-tesoreria-crown-boveda', false)
             && ! can('listar-tesoreria-crown-kardex-valores', false)
+            && ! can('listar-tesoreria-crown-boveda-subtipo', false)
+            && ! can('crear-tesoreria-crown-boveda-subtipo', false)
+            && ! can('editar-tesoreria-crown-boveda-subtipo', false)
         ) {
             abort(403);
         }
@@ -1039,6 +1042,9 @@ class TesoreriaCrownBovedaController extends Controller
             ! can('listar-tesoreria-crown-boveda', false)
             && ! can('crear-tesoreria-crown-boveda', false)
             && ! can('listar-tesoreria-crown-kardex-valores', false)
+            && ! can('listar-tesoreria-crown-boveda-subtipo', false)
+            && ! can('crear-tesoreria-crown-boveda-subtipo', false)
+            && ! can('editar-tesoreria-crown-boveda-subtipo', false)
         ) {
             abort(403);
         }

@@ -61,7 +61,11 @@
                         <label for="nombre" class="col-lg-4 control-label text-right pr-2 requerido">Nombre</label>
                         <div class="col-lg-8">
                             <input type="text" name="nombre" id="nombre" class="form-control" maxlength="120" required value="{{ old('nombre', $deposito->nombre) }}">
-                            <small class="form-text text-muted">Bóveda, caja, mesa, pre-depósito o caja chica. El pre-depósito es el paquete que sale de bóveda para Caudales aunque siga físicamente adentro.</small>
+                            <small class="form-text text-muted">
+                                Bóveda, caja, mesa, pre-depósito o caja chica.
+                                Para una mesa de juego elegí tipo <strong>Mesa</strong> (código y nombre de la mesa).
+                                El pre-depósito es el paquete que sale de bóveda para Caudales aunque siga físicamente adentro.
+                            </small>
                         </div>
                     </div>
                     <div class="form-group row">

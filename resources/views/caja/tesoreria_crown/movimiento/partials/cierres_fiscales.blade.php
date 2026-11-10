@@ -2,6 +2,7 @@
     $filasFiscales = $cierresFiscales['filas'] ?? [];
     $errorFiscal = $cierresFiscales['error'] ?? null;
     $marcados = old('cierre_fiscal');
+    $cargaManual = $editable;
 @endphp
 <div class="card card-outline card-info mt-3 mb-0">
     <div class="card-header py-2 d-flex justify-content-between align-items-center">
@@ -16,7 +17,11 @@
         </span>
     </div>
     <div class="card-body pb-2">
-        <p class="text-muted small mb-3">Pendientes de {{ $comprobante->jornada->fecha->format('d/m/Y') }} en el cierre de facturación. El Z es el cierre fiscal. El X es el informe que la rendición de hotel deja rendido. No se modifica el cierre en Anita.</p>
+        <p class="text-muted small mb-3">
+            Pendientes de {{ $comprobante->jornada->fecha->format('d/m/Y') }}:
+            primero los del ERP; si falta alguno, se completa con Anita (sin repetir el mismo X/Z).
+            Los elegidos quedan grabados en el ERP al guardar. El Z es el cierre fiscal; el X, el informe de hotel. No se modifica Anita.
+        </p>
         @if ($editable && ($pxsolCodigos ?? []) !== [])
             <input type="hidden" name="pxsol_aplicado" id="pxsol_aplicado" value="{{ old('pxsol_aplicado') }}">
             <input type="hidden" name="pxsol_iva_facturas" id="pxsol_iva_facturas" value="{{ old('pxsol_iva_facturas', $comprobante->iva_facturas) }}">
@@ -31,6 +36,53 @@
         @endif
         @if ($errorFiscal)
             <div class="alert alert-warning">No se pudieron leer los cierres de ventas. {{ $errorFiscal }}</div>
+        @endif
+        @if ($cargaManual)
+            <details class="mb-3 border rounded p-2">
+                <summary class="text-primary" style="cursor:pointer;">Cargar un cierre a mano</summary>
+                <p class="small text-muted mt-2 mb-2">Queda pendiente del día para tildarlo y aplicar a la rendición. Sirve cuando Anita no responde o el cierre no llegó.</p>
+                <form method="POST" action="{{ route('cierre_fiscal_manual_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1" class="form-row align-items-end">
+                    @csrf
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-sucursal">Sucursal</label>
+                        <input type="number" name="sucursal" id="cf-sucursal" class="form-control form-control-sm" min="1" required value="{{ old('sucursal') }}">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-nombre">Nombre</label>
+                        <input type="text" name="nombre" id="cf-nombre" class="form-control form-control-sm" maxlength="80" value="{{ old('nombre') }}" placeholder="Opcional">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-hora">Hora</label>
+                        <input type="text" name="hora" id="cf-hora" class="form-control form-control-sm" maxlength="8" required value="{{ old('hora', now()->format('H:i:s')) }}" placeholder="HH:MM:SS">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-tipo">Tipo</label>
+                        <select name="tipo" id="cf-tipo" class="form-control form-control-sm" required>
+                            <option value="Z" @selected(old('tipo', 'Z') === 'Z')>Z</option>
+                            <option value="X" @selected(old('tipo') === 'X')>X</option>
+                        </select>
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-numero">Número</label>
+                        <input type="number" name="numero" id="cf-numero" class="form-control form-control-sm" min="1" required value="{{ old('numero') }}">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-venta">Venta</label>
+                        <input type="number" name="venta" id="cf-venta" class="form-control form-control-sm" step="0.01" required value="{{ old('venta', '0') }}">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-credito">Notas de crédito</label>
+                        <input type="number" name="credito" id="cf-credito" class="form-control form-control-sm" step="0.01" value="{{ old('credito', '0') }}">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <label class="small mb-0" for="cf-ticket">Último ticket</label>
+                        <input type="number" name="ult_ticket" id="cf-ticket" class="form-control form-control-sm" min="0" value="{{ old('ult_ticket', '0') }}">
+                    </div>
+                    <div class="col-auto mb-2">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Agregar</button>
+                    </div>
+                </form>
+            </details>
         @endif
         @if ($filasFiscales === [])
             <p class="text-muted mb-0">No hay cierres pendientes para esta fecha.</p>
@@ -70,7 +122,7 @@
                                         <input type="checkbox" name="cierre_fiscal[]" value="{{ $fila['clave'] }}" @checked($marcado)>
                                     </td>
                                 @endif
-                                <td>{{ $fila['sucursal'] }} {{ $fila['nombre'] }}</td>
+                                <td>{{ $fila['sucursal'] }} {{ $fila['nombre'] }}@if (($fila['fuente'] ?? '') === 'anita') <span class="badge badge-secondary">Anita</span>@endif</td>
                                 <td>{{ $fila['hora'] }}</td>
                                 <td>{{ $fila['tipo'] }}</td>
                                 <td class="text-right">{{ $fila['numero'] }}</td>
