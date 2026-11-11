@@ -265,6 +265,39 @@
                     <p class="text-muted">Efectivo, fichas y, al final, cashless y tarjetas.@if (\App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) Esta caja se abrió como {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea) }}, así que también pide el informe de gastronomía u hotel.@endif</p>
                 @endif
 
+                @php
+                    $mozoHabilitacion = $esHabilitacion
+                        ? ($comprobante->asignacion->cajero->mozoGastronomia ?? null)
+                        : null;
+                @endphp
+                @if ($mozoHabilitacion)
+                    <div class="border rounded px-3 py-2 mb-3 bg-light">
+                        <div class="form-group row mb-0 align-items-center">
+                            <label for="mozo_aplicacion" class="col-lg-3 control-label text-right pr-2 mb-0">
+                                Facultad del mozo
+                            </label>
+                            <div class="col-lg-6">
+                                <p class="mb-1 small text-muted">
+                                    {{ $mozoHabilitacion->codigo }} — {{ $mozoHabilitacion->nombre }}
+                                    (tarea caja: {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea ?? '') }})
+                                </p>
+                                @if ($editable)
+                                    <select name="mozo_aplicacion" id="mozo_aplicacion" class="form-control form-control-sm" form="form-cantidades-crown">
+                                        @foreach (\App\Support\Ventas\MozoGastronomiaAplicacionSupport::LABELS as $codigoApp => $etiquetaApp)
+                                            <option value="{{ $codigoApp }}" @if (old('mozo_aplicacion', $mozoHabilitacion->aplicacion ?? 'M') === $codigoApp) selected @endif>
+                                                {{ $etiquetaApp }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <small class="form-text text-muted mb-0">Si lo cambian acá, se actualiza el mozo para esta habilitación y el POS.</small>
+                                @else
+                                    <strong>{{ \App\Support\Ventas\MozoGastronomiaAplicacionSupport::etiqueta($mozoHabilitacion->aplicacion ?? null) }}</strong>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 <form method="POST" action="{{ route('guardar_tesoreria_crown_movimiento', $comprobante->id) }}" id="form-cantidades-crown" data-enter-campos="1">
                     @csrf
                     @if ($editable)

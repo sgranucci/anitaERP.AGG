@@ -184,6 +184,150 @@ class OrdencompraAnitaSyncService
     }
 
     /**
+     * Importa OC faltantes con pocas lecturas masivas (pendmaep + pendmovp [+ ocvley]),
+     * sin un bridge por documento. No alinea las ya existentes (eso queda en sincronizarConAnita).
+     *
+     * @return array{
+     *   en_anita: int,
+     *   faltantes: int,
+     *   importados: int,
+     *   omitidos: int,
+     *   lecturas_bridge: int,
+     *   errores: list<string>
+     * }
+     */
+    public function importarFaltantesLote(
+        ?int $usuarioId = null,
+        ?int $fechaDesde = null,
+        ?int $fechaHasta = null,
+        bool $dryRun = false,
+        ?callable $onProgreso = null,
+    ): array {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $uid = $usuarioId ?? (int) (Auth::id() ?? 0);
+        if ($uid <= 0) {
+            throw new \RuntimeException('Usuario de sincronización no definido.');
+        }
+
+        $desde = $fechaDesde ?? (int) config('ordencompra_anita.fecha_desde', 20250100);
+        $hasta = $fechaHasta ?? ($desde > 0 ? ((int) floor($desde / 10000)) * 10000 + 1231 : 20991231);
+
+        $ret = [
+            'en_anita' => 0,
+            'faltantes' => 0,
+            'importados' => 0,
+            'omitidos' => 0,
+            'lecturas_bridge' => 0,
+            'errores' => [],
+        ];
+
+        $api = new ApiAnita;
+        $rawMae = $api->apiCall([
+            'acc' => 'list',
+            'campos' => OrdencompraAnitaEsquemaSupport::camposPendmaepLectura(),
+            'tabla' => config('ordencompra_anita.tablas.cabecera'),
+            'sistema' => 'compras',
+            'whereArmado' => " WHERE penmp_fecha BETWEEN {$desde} AND {$hasta}",
+        ]);
+        $ret['lecturas_bridge']++;
+        $errMae = ApiAnita::extraerMensajeError($rawMae);
+        if ($errMae) {
+            throw new \RuntimeException('Anita pendmaep: '.$errMae);
+        }
+
+        /** @var array<string, object> $cabeceras */
+        $cabeceras = [];
+        foreach (ApiAnita::decodificarListaFilas($rawMae) as $fila) {
+            $clave = AnitaOcClave::desdePendmaep($fila);
+            if ($clave->nro <= 0) {
+                continue;
+            }
+            $cabeceras[$this->claveStr($clave)] = $fila;
+        }
+        $ret['en_anita'] = count($cabeceras);
+        if ($cabeceras === []) {
+            return $ret;
+        }
+
+        $nros = array_values(array_unique(array_map(
+            static fn (object $f) => (int) ($f->penmp_nro ?? 0),
+            $cabeceras
+        )));
+        $existentes = Ordencompra::query()
+            ->whereIn('numeroordencompra', $nros ?: [0])
+            ->get(['id', 'numeroordencompra', 'anita_tipo', 'anita_letra', 'anita_sucursal']);
+
+        $porClave = [];
+        foreach ($existentes as $oc) {
+            $nro = (int) $oc->numeroordencompra;
+            if ($oc->anita_sucursal !== null && $oc->anita_tipo !== null && $oc->anita_letra !== null) {
+                $porClave[$oc->anita_tipo.'/'.$oc->anita_letra.'/'.(int) $oc->anita_sucursal.'/'.$nro] = true;
+            } elseif (! OrdencompraAnitaEsquemaSupport::esCrown()) {
+                $porClave['nro:'.$nro] = true;
+            }
+        }
+
+        /** @var array<string, object> $faltantes */
+        $faltantes = [];
+        foreach ($cabeceras as $claveStr => $fila) {
+            $clave = AnitaOcClave::desdePendmaep($fila);
+            $existe = isset($porClave[$claveStr])
+                || ((! OrdencompraAnitaEsquemaSupport::esCrown()) && isset($porClave['nro:'.$clave->nro]));
+            if ($existe) {
+                $ret['omitidos']++;
+
+                continue;
+            }
+            $faltantes[$claveStr] = $fila;
+        }
+        $ret['faltantes'] = count($faltantes);
+
+        if ($faltantes === [] || $dryRun) {
+            return $ret;
+        }
+
+        $nrosFaltantes = array_values(array_unique(array_map(
+            static fn (object $f) => (int) ($f->penmp_nro ?? 0),
+            $faltantes
+        )));
+
+        $lineasPorClave = $this->leerPendmovpLotePorNros($nrosFaltantes);
+        $ret['lecturas_bridge'] += $lineasPorClave['lecturas'];
+
+        $leyendasPorClave = $this->leerOcvleyLotePorNros($nrosFaltantes);
+        $ret['lecturas_bridge'] += $leyendasPorClave['lecturas'];
+
+        $ctx = $this->nuevoContexto($uid);
+        $total = count($faltantes);
+        $i = 0;
+        foreach ($faltantes as $claveStr => $cabecera) {
+            $i++;
+            $clave = AnitaOcClave::desdePendmaep($cabecera);
+            if ($onProgreso !== null && ($i === 1 || $i % 100 === 0 || $i === $total)) {
+                $onProgreso($i, $total, $clave->nro);
+            }
+            try {
+                $this->importarDesdeDatosPrecargados(
+                    $clave,
+                    $cabecera,
+                    $lineasPorClave['lineas'][$claveStr] ?? [],
+                    $leyendasPorClave['leyendas'][$claveStr] ?? [],
+                    $ctx,
+                );
+                $ret['importados']++;
+            } catch (\Throwable $e) {
+                $msg = "OC {$claveStr}: ".$e->getMessage();
+                $ret['errores'][] = $msg;
+                Log::warning('OrdencompraAnitaSync lote: '.$msg, ['exception' => $e]);
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
      * Completa ítems faltantes cuando la cabecera ya está en ERP pero sin líneas en ordencompra_articulo.
      *
      * @return int Cantidad de líneas importadas
@@ -459,6 +603,165 @@ class OrdencompraAnitaSyncService
         }
         if (trim((string) ($payload['detalle'] ?? '')) === '') {
             throw new \InvalidArgumentException('detalle vacío (penmp_leyenda).');
+        }
+    }
+
+    private function claveStr(AnitaOcClave $clave): string
+    {
+        return $clave->tipo.'/'.$clave->letra.'/'.$clave->sucursal.'/'.$clave->nro;
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return array{lineas: array<string, list<object>>, lecturas: int}
+     */
+    private function leerPendmovpLotePorNros(array $nros): array
+    {
+        $nros = array_values(array_unique(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0)));
+        $out = ['lineas' => [], 'lecturas' => 0];
+        if ($nros === []) {
+            return $out;
+        }
+
+        $api = new ApiAnita;
+        foreach (array_chunk($nros, 400) as $chunk) {
+            $raw = $api->apiCall([
+                'acc' => 'list',
+                'tabla' => config('ordencompra_anita.tablas.linea'),
+                'sistema' => 'compras',
+                'campos' => OrdencompraAnitaEsquemaSupport::camposPendmovpLectura(),
+                'whereArmado' => ' WHERE penvp_nro IN ('.implode(',', $chunk).')',
+            ]);
+            $out['lecturas']++;
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err) {
+                throw new \RuntimeException('Anita pendmovp: '.$err);
+            }
+            foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
+                $clave = new AnitaOcClave(
+                    trim((string) ($fila->penvp_tipo ?? '')),
+                    trim((string) ($fila->penvp_letra ?? '')),
+                    (int) ($fila->penvp_sucursal ?? 0),
+                    (int) ($fila->penvp_nro ?? 0),
+                );
+                if ($clave->nro <= 0) {
+                    continue;
+                }
+                $out['lineas'][$this->claveStr($clave)][] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return array{leyendas: array<string, array<int, object>>, lecturas: int}
+     */
+    private function leerOcvleyLotePorNros(array $nros): array
+    {
+        $nros = array_values(array_unique(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0)));
+        $out = ['leyendas' => [], 'lecturas' => 0];
+        if ($nros === []) {
+            return $out;
+        }
+
+        $api = new ApiAnita;
+        foreach (array_chunk($nros, 400) as $chunk) {
+            $raw = $api->apiCall([
+                'acc' => 'list',
+                'tabla' => config('ordencompra_anita.tablas.leyenda_linea'),
+                'sistema' => 'compras',
+                'campos' => 'ocvl_tipo, ocvl_letra, ocvl_sucursal, ocvl_nro, ocvl_nro_orden, ocvl_linea, ocvl_leyenda',
+                'whereArmado' => ' WHERE ocvl_nro IN ('.implode(',', $chunk).')',
+            ]);
+            $out['lecturas']++;
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err) {
+                // ocvley puede faltar en algún esquema; no corta el lote.
+                Log::warning('OrdencompraAnitaSync lote ocvley: '.$err);
+
+                continue;
+            }
+            foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
+                $clave = new AnitaOcClave(
+                    trim((string) ($fila->ocvl_tipo ?? '')),
+                    trim((string) ($fila->ocvl_letra ?? '')),
+                    (int) ($fila->ocvl_sucursal ?? 0),
+                    (int) ($fila->ocvl_nro ?? 0),
+                );
+                if ($clave->nro <= 0) {
+                    continue;
+                }
+                $orden = (int) ($fila->ocvl_nro_orden ?? 0);
+                $out['leyendas'][$this->claveStr($clave)][$orden] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<object>  $lineas
+     * @param  array<int, object>  $leyendasPorOrden
+     */
+    private function importarDesdeDatosPrecargados(
+        AnitaOcClave $clave,
+        object $cabecera,
+        array $lineas,
+        array $leyendasPorOrden,
+        OrdencompraAnitaSyncContext $ctx,
+    ): void {
+        $numeroOc = $clave->nro;
+        $payload = CabeceraFieldMapper::mapAll($cabecera, $ctx);
+        $this->validarCabeceraMinima($payload, $numeroOc);
+        $payload['estadoordencompra'] = OrdencompraAnitaEstadosSupport::haciaEstadoErpImportacion(
+            $cabecera->penmp_estado ?? '0',
+            $lineas
+        );
+        if ($lineas === []) {
+            Log::warning('OrdencompraAnitaSync lote: OC sin líneas pendmovp', [
+                'numero_oc' => $numeroOc,
+                'clave' => $this->claveStr($clave),
+            ]);
+        }
+
+        $monedaDefault = $ctx->fkMoneda($cabecera->penmp_cod_mon ?? '1') ?? 1;
+        $cuotas = OrdencompraAnitaEsquemaSupport::leeOccuota() ? $this->leerOccuota($clave) : [];
+        $historias = OrdencompraAnitaEsquemaSupport::leeLegcompra() ? $this->leerLegcompra($numeroOc) : [];
+        $movpresup = OrdencompraAnitaEsquemaSupport::leeMovpresup() ? $this->indexarMovpresup($clave) : [];
+
+        DB::beginTransaction();
+        try {
+            $oc = $this->ordencompraRepository->createDesdeAnita($payload);
+
+            $this->ordencompraEstadoRepository->creaEstado(
+                $oc->id,
+                Carbon::now()->toDateTimeString(),
+                (string) ($payload['estadoordencompra'] ?? OrdencompraEstados::PENDIENTE),
+                $ctx->usuarioSyncId,
+                'Alta de orden de compra desde Anita'
+            );
+
+            $this->importarLineasPendmovp(
+                (int) $oc->id,
+                $lineas,
+                $cabecera,
+                $payload,
+                $movpresup,
+                $leyendasPorOrden,
+                $ctx,
+                $monedaDefault,
+            );
+
+            $this->importarComprobantesCuotas($cuotas, $cabecera, $ctx, (int) $oc->id);
+            $this->importarHistorias($historias, $ctx, (int) $oc->id, $payload['sector_legajocompra_id'] ?? null);
+            $this->regenerarCondicionesContratacion((int) $oc->id);
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            throw $e;
         }
     }
 

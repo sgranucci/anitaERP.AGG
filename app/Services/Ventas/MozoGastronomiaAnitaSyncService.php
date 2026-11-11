@@ -9,6 +9,7 @@ use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
 use App\Support\Stock\AnitaSync\Mozo\MozoFieldMapper;
 use App\Support\Ventas\GastronomiaSalaSupport;
 use App\Support\Ventas\GastronomiaTicketTarjetaAnitaBridgeSupport;
+use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -289,6 +290,7 @@ class MozoGastronomiaAnitaSyncService
             $codigoAnita,
             (string) $payload['nombre'],
             null,
+            MozoGastronomiaAplicacionSupport::normalizar($payload['aplicacion'] ?? null),
         );
     }
 
@@ -302,23 +304,36 @@ class MozoGastronomiaAnitaSyncService
             throw new \InvalidArgumentException("nombre vacío (mozo {$codigoAnita}).");
         }
 
-        return $this->persistirMozo($empresaId, $codigoAnita, $nombre, $claveAnita);
+        return $this->persistirMozo(
+            $empresaId,
+            $codigoAnita,
+            $nombre,
+            $claveAnita,
+            MozoFieldMapper::mapAplicacion($row),
+        );
     }
 
     /**
      * @return 'importado'|'actualizado'|'omitido'
      */
-    private function persistirMozo(int $empresaId, string $codigoAnita, string $nombre, ?string $claveAnita): string
-    {
+    private function persistirMozo(
+        int $empresaId,
+        string $codigoAnita,
+        string $nombre,
+        ?string $claveAnita,
+        ?string $aplicacion = null,
+    ): string {
         $salaId = GastronomiaSalaSupport::idPorCodigo(
             (string) config('mozo_gastronomia_anita.sala_codigo', '')
         );
+        $aplicacion = MozoGastronomiaAplicacionSupport::normalizar($aplicacion);
 
         $datos = [
             'codigo' => $codigoAnita,
             'nombre' => $nombre,
             'empresa_id' => $empresaId,
             'sala_id' => $salaId,
+            'aplicacion' => $aplicacion,
         ];
 
         $existente = MozoGastronomia::query()
@@ -335,18 +350,20 @@ class MozoGastronomiaAnitaSyncService
             if ($existente) {
                 $huboCambioNombre = $existente->nombre !== $datos['nombre'];
                 $huboCambioSala = (int) ($existente->sala_id ?? 0) !== (int) ($salaId ?? 0);
+                $huboCambioAplicacion = MozoGastronomiaAplicacionSupport::normalizar($existente->aplicacion ?? null) !== $aplicacion;
                 $huboCambioClave = $claveNueva !== null && ! $this->claveCoincide($existente->clave, $claveNueva);
-                if (! $huboCambioNombre && ! $huboCambioClave && ! $huboCambioSala) {
+                if (! $huboCambioNombre && ! $huboCambioClave && ! $huboCambioSala && ! $huboCambioAplicacion) {
                     DB::commit();
 
                     return 'omitido';
                 }
-                if ($huboCambioNombre || $huboCambioSala) {
+                if ($huboCambioNombre || $huboCambioSala || $huboCambioAplicacion) {
                     $existente->update([
                         'nombre' => $datos['nombre'],
                         'codigo' => $datos['codigo'],
                         'empresa_id' => $datos['empresa_id'],
                         'sala_id' => $datos['sala_id'],
+                        'aplicacion' => $datos['aplicacion'],
                     ]);
                 }
                 if ($huboCambioClave && $claveNueva !== null) {

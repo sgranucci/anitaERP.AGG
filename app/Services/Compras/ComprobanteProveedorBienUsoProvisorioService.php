@@ -9,6 +9,7 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\TipotransaccionCompraBienUsoSupport;
+use App\Support\Contable\BienUsoCodigoSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -209,9 +210,10 @@ final class ComprobanteProveedorBienUsoProvisorioService
         $creados = DB::transaction(function () use ($comprobante, $prefill, $limpios) {
             $out = [];
             $fecha = (string) ($prefill['fecha_factura'] ?? now()->format('Y-m-d'));
+            $empresaId = (int) $prefill['empresa_id'];
             foreach ($limpios as $row) {
-                $payload = [
-                    'empresa_id' => (int) $prefill['empresa_id'],
+                $payload = BienUsoCodigoSupport::completarSiVacio([
+                    'empresa_id' => $empresaId,
                     'descripcion' => $row['descripcion'],
                     'valor_origen' => $row['valor_origen'],
                     'tipo_bien' => $row['tipo_bien'],
@@ -229,7 +231,7 @@ final class ComprobanteProveedorBienUsoProvisorioService
                     'fecha_compra' => $fecha,
                     'moneda_id' => (int) $prefill['moneda_id'],
                     'observaciones' => 'Alta provisoria desde factura '.$prefill['factura_label'],
-                ];
+                ]);
                 $out[] = BienUso::query()->create($payload);
             }
 

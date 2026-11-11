@@ -3,9 +3,11 @@
 namespace App\Support\Stock\AnitaSync\Mozo;
 
 use App\Models\Configuracion\Empresa;
+use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
 
 /**
  * Mapeo campo a campo: vendedor (Anita) → mozo_gastronomia (ERP).
+ * vend_aplicacion en mozos Crown es M/E/A (a-mozo.c), no B/N de vendedores comerciales.
  */
 final class MozoFieldMapper
 {
@@ -43,6 +45,13 @@ final class MozoFieldMapper
         return (int) config('mozo_gastronomia_anita.empresa_default_id', 1);
     }
 
+    public static function mapAplicacion(object $row): string
+    {
+        return MozoGastronomiaAplicacionSupport::normalizar(
+            (string) ($row->vend_aplicacion ?? MozoGastronomiaAplicacionSupport::MOZO)
+        );
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -52,6 +61,7 @@ final class MozoFieldMapper
             'codigo' => self::mapCodigo($row),
             'nombre' => self::mapNombre($row),
             'empresa_id' => self::mapEmpresaId($row),
+            'aplicacion' => self::mapAplicacion($row),
         ];
     }
 }

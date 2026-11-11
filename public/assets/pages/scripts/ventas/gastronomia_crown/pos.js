@@ -18,6 +18,7 @@
         cuentacajaEfectivo: null,
         cuentacajaEfectivoError: null,
         pollKdsTimer: null,
+        mozo: null,
         opc: {
             grupos: [],
             seleccion: {},
@@ -25,6 +26,57 @@
             contexto: null
         }
     };
+
+    function pintarMozoSesion(mozo) {
+        estado.mozo = mozo || null;
+        var badge = $('#gc-mozo-badge');
+        var btnIn = $('#gc-btn-mozo-login');
+        var btnOut = $('#gc-btn-mozo-logout');
+        if (!estado.mozo) {
+            badge.addClass('d-none').text('');
+            btnIn.removeClass('d-none');
+            btnOut.addClass('d-none');
+            return;
+        }
+        badge
+            .removeClass('d-none')
+            .text((estado.mozo.codigo || '') + ' ' + (estado.mozo.nombre || '') + ' · ' + (estado.mozo.aplicacion_label || ''));
+        btnIn.addClass('d-none');
+        btnOut.removeClass('d-none');
+    }
+
+    function exigirMozoSesion() {
+        if (estado.mozo && estado.mozo.id) {
+            return true;
+        }
+        toast('Ingrese el mozo (código y clave) para operar.', 'warning');
+        $('#gc-modal-mozo').modal('show');
+        setTimeout(function () { $('#gc-mozo-codigo').trigger('focus'); }, 200);
+        return false;
+    }
+
+    function confirmarLoginMozo() {
+        var codigo = String($('#gc-mozo-codigo').val() || '').trim();
+        var clave = String($('#gc-mozo-clave').val() || '');
+        if (!codigo || !clave) {
+            toast('Complete código y clave.', 'warning');
+            return;
+        }
+        post(cfg.urls.mozoLogin, { codigo: codigo, clave: clave })
+            .done(function (res) {
+                if (!res || !res.ok) {
+                    toast((res && res.mensaje) || 'No se pudo ingresar', 'error');
+                    return;
+                }
+                pintarMozoSesion(res.mozo);
+                $('#gc-modal-mozo').modal('hide');
+                $('#gc-form-mozo')[0].reset();
+                toast('Mozo en sesión: ' + (res.mozo.nombre || ''), 'success');
+            })
+            .fail(function (xhr) {
+                toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo ingresar', 'error');
+            });
+    }
 
     function badgeEstadoKds(l) {
         if (!l || l.es_separador || l.prepara === false) {
@@ -723,6 +775,9 @@
     }
 
     function abrirMesa(mesaId) {
+        if (!exigirMozoSesion()) {
+            return;
+        }
         if (estado.busy) {
             return;
         }
@@ -735,7 +790,11 @@
             cubiertos = parseInt(n, 10) || 0;
         }
         estado.busy = true;
-        post(cfg.urls.abrirMesa, { mesa_id: mesaId, cubiertos: cubiertos })
+        post(cfg.urls.abrirMesa, {
+            mesa_id: mesaId,
+            cubiertos: cubiertos,
+            mozo_gastronomia_id: estado.mozo ? estado.mozo.id : null
+        })
             .done(function (resp) {
                 if (!resp.ok) {
                     toast(resp.mensaje || 'No se pudo abrir', 'error');
@@ -753,11 +812,16 @@
     }
 
     function abrirCuentaLibre() {
+        if (!exigirMozoSesion()) {
+            return;
+        }
         if (estado.busy) {
             return;
         }
         estado.busy = true;
-        post(cfg.urls.abrirCuenta, {})
+        post(cfg.urls.abrirCuenta, {
+            mozo_gastronomia_id: estado.mozo ? estado.mozo.id : null
+        })
             .done(function (resp) {
                 if (!resp.ok) {
                     toast(resp.mensaje || 'No se pudo abrir', 'error');
@@ -2012,6 +2076,30 @@
         $('#gc-btn-nueva-cuenta').on('click', abrirCuentaLibre);
         $('#gc-btn-cerrar-cuenta').on('click', cerrarCuentaActivaSinFacturar);
         $('#gc-btn-cerrar-todas').on('click', cerrarTodasCuentasSinFacturar);
+        $('#gc-btn-mozo-login').on('click', function () {
+            $('#gc-modal-mozo').modal('show');
+            setTimeout(function () { $('#gc-mozo-codigo').trigger('focus'); }, 200);
+        });
+        $('#gc-btn-mozo-logout').on('click', function () {
+            post(cfg.urls.mozoLogout, {})
+                .done(function () {
+                    pintarMozoSesion(null);
+                    toast('Mozo desconectado', 'info');
+                });
+        });
+        $('#gc-mozo-confirmar').on('click', confirmarLoginMozo);
+        $('#gc-form-mozo').on('submit', function (e) {
+            e.preventDefault();
+            confirmarLoginMozo();
+        });
+        if (cfg.urls.config) {
+            $.getJSON(cfg.urls.config)
+                .done(function (resp) {
+                    if (resp && resp.ok) {
+                        pintarMozoSesion(resp.mozo || null);
+                    }
+                });
+        }
 
         $('#gc-panel-mesas, #gc-panel-cuentas').on('click', '.gc-mesa-btn', function () {
             var $b = $(this);

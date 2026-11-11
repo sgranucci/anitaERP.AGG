@@ -24,6 +24,7 @@ use App\Support\Ventas\GastronomiaCrown\GastroPlanoMesaLayoutSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaSalaSupport;
+use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -118,7 +119,46 @@ class GastronomiaCrownPosController extends Controller
             ),
             'hotkeys' => $this->hotkeysParaConfig($config),
             'herramientas' => $this->herramientasParaConfig($config),
+            'mozo' => MozoGastronomiaAplicacionSupport::sesionActual(),
         ]);
+    }
+
+    public function apiLoginMozo(Request $request): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        $request->validate([
+            'codigo' => 'required|string|max:50',
+            'clave' => 'required|string|max:60',
+        ]);
+
+        $config = $this->requireCfg($request);
+        if ($config instanceof JsonResponse) {
+            return $config;
+        }
+
+        try {
+            $mozo = $this->posService->autenticarMozo(
+                $config,
+                (string) $request->input('codigo'),
+                (string) $request->input('clave'),
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true, 'mozo' => $mozo]);
+    }
+
+    public function apiLogoutMozo(Request $request): JsonResponse
+    {
+        $this->assertCrown();
+        can('usar-pos-gastronomia-crown');
+
+        MozoGastronomiaAplicacionSupport::limpiarSesion();
+
+        return response()->json(['ok' => true, 'mozo' => null]);
     }
 
     /**

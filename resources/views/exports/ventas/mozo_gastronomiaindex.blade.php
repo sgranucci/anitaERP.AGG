@@ -1,17 +1,18 @@
 @php
+    use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
     $esCrown = $esCrown ?? false;
 @endphp
 <table>
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="4" style="height: 52px;">&#160;</td>
+				<td colspan="5" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="4"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de mozos gastronomía</h2></td>
+			<td colspan="5"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de mozos gastronomía</h2></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -19,6 +20,7 @@
 			<th>ID</th>
 			<th>Nombre</th>
 			<th>Código Anita</th>
+			<th>Tipo</th>
 			<th>{{ $esCrown ? 'Sala' : 'Empresa' }}</th>
 		</tr>
 	</thead>
@@ -28,6 +30,7 @@
 				<td>{{ $data->id }}</td>
 				<td>{{ $data->nombre }}</td>
 				<td>{{ $data->codigo }}</td>
+				<td>{{ MozoGastronomiaAplicacionSupport::etiquetaCorta($data->aplicacion ?? null) }}</td>
 				<td>
 					@if ($esCrown)
 						{{ trim((optional($data->sala)->codigo ?? '').' '.(optional($data->sala)->nombre ?? '')) }}

@@ -12,6 +12,7 @@
 @section('contenido')
 @php
     use App\Support\Ventas\MozoGastronomiaListadoFiltros;
+    use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
     $esCrown = $esCrown ?? false;
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('consultar_mozo_gastronomia', MozoGastronomiaListadoFiltros::paraQueryString(array_merge(
@@ -71,6 +72,7 @@
                             <th style="width:3.2rem;">ID</th>
                             <th>Nombre</th>
                             <th>Código Anita</th>
+                            <th>Tipo</th>
                             @if ($esCrown)
                                 <th>Sala</th>
                             @else
@@ -85,6 +87,7 @@
                             <td>{{ $data->id }}</td>
                             <td>{{ $data->nombre }}</td>
                             <td>{{ $data->codigo }}</td>
+                            <td>{{ MozoGastronomiaAplicacionSupport::etiquetaCorta($data->aplicacion ?? null) }}</td>
                             @if ($esCrown)
                                 <td>{{ optional($data->sala)->codigo }} {{ optional($data->sala)->nombre }}</td>
                             @else
@@ -108,7 +111,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-3">Sin registros</td>
+                            <td colspan="6" class="text-center text-muted py-3">Sin registros</td>
                         </tr>
                         @endforelse
                     </tbody>

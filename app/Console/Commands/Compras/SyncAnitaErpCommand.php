@@ -15,9 +15,10 @@ class SyncAnitaErpCommand extends Command
                             {--usuario= : ID usuario ERP fallback}
                             {--solo-req : Solo requisiciones}
                             {--solo-oc : Solo órdenes de compra}
-                            {--dry-run : Solo informa requisiciones (OC no tiene simulación completa)}';
+                            {--alinear-oc : OC una a una (lento; también alinea existentes)}
+                            {--dry-run : Solo informa (req y OC lote); no escribe}';
 
-    protected $description = 'Trae requisiciones  (con aprobcomp) y luego OC Anita → ERP del año, sin pisar documentos nativos ERP';
+    protected $description = 'Trae requisiciones (con aprobcomp) y luego OC faltantes Anita → ERP del año en lote, sin pisar documentos nativos ERP';
 
     public function handle(
         RequisicionImportarFaltantesDesdeAnitaService $reqService,
@@ -77,42 +78,76 @@ class SyncAnitaErpCommand extends Command
             $errores += count($statsReq['errores_import']);
         }
 
-        if (! $soloReq && ! $dryRun) {
-            $this->info('2) Órdenes de compra…');
+        if (! $soloReq) {
             $desde = $anio * 10000 + 101;
             $hasta = $anio * 10000 + 1231;
-            try {
-                $statsOc = $ocService->sincronizarConAnita(
-                    $usuarioId,
-                    $desde,
-                    $hasta,
-                    function (int $i, int $total, int $nro) {
-                        if ($i === 1 || $i % 50 === 0 || $i === $total) {
-                            $this->line("   OC {$i}/{$total} (nro {$nro})");
-                        }
-                    }
-                );
-            } catch (\Throwable $e) {
-                $this->error($e->getMessage());
+            $alinear = (bool) $this->option('alinear-oc');
 
-                return self::FAILURE;
+            if ($alinear && ! $dryRun) {
+                $this->info('2) Órdenes de compra (modo lento: alinea existentes)…');
+                try {
+                    $statsOc = $ocService->sincronizarConAnita(
+                        $usuarioId,
+                        $desde,
+                        $hasta,
+                        function (int $i, int $total, int $nro) {
+                            if ($i === 1 || $i % 50 === 0 || $i === $total) {
+                                $this->line("   OC {$i}/{$total} (nro {$nro})");
+                            }
+                        }
+                    );
+                } catch (\Throwable $e) {
+                    $this->error($e->getMessage());
+
+                    return self::FAILURE;
+                }
+
+                $this->table(['Métrica OC', 'Cantidad'], [
+                    ['En Anita (año)', (string) $statsOc['en_anita']],
+                    ['Importadas', (string) $statsOc['importados']],
+                    ['Alineadas', (string) ($statsOc['alineadas'] ?? 0)],
+                    ['Líneas completadas', (string) ($statsOc['lineas_completadas'] ?? 0)],
+                    ['Omitidas', (string) $statsOc['omitidos']],
+                    ['ERP nativas omitidas', (string) ($statsOc['omitidos_erp_nativas'] ?? 0)],
+                    ['Errores', (string) count($statsOc['errores'])],
+                ]);
+            } else {
+                $this->info('2) Órdenes de compra faltantes (lote)…');
+                try {
+                    $statsOc = $ocService->importarFaltantesLote(
+                        $usuarioId,
+                        $desde,
+                        $hasta,
+                        $dryRun,
+                        function (int $i, int $total, int $nro) {
+                            if ($i === 1 || $i % 100 === 0 || $i === $total) {
+                                $this->line("   OC faltante {$i}/{$total} (nro {$nro})");
+                            }
+                        }
+                    );
+                } catch (\Throwable $e) {
+                    $this->error($e->getMessage());
+
+                    return self::FAILURE;
+                }
+
+                $this->table(['Métrica OC', 'Cantidad'], [
+                    ['En Anita (año)', (string) $statsOc['en_anita']],
+                    ['Faltantes', (string) $statsOc['faltantes']],
+                    ['Importadas', (string) $statsOc['importados']],
+                    ['Ya en ERP', (string) $statsOc['omitidos']],
+                    ['Lecturas bridge', (string) $statsOc['lecturas_bridge']],
+                    ['Errores', (string) count($statsOc['errores'])],
+                ]);
+                if ($dryRun) {
+                    $this->comment('Dry-run OC: no se grabó nada.');
+                }
             }
 
-            $this->table(['Métrica OC', 'Cantidad'], [
-                ['En Anita (año)', (string) $statsOc['en_anita']],
-                ['Importadas', (string) $statsOc['importados']],
-                ['Alineadas', (string) ($statsOc['alineadas'] ?? 0)],
-                ['Líneas completadas', (string) ($statsOc['lineas_completadas'] ?? 0)],
-                ['Omitidas', (string) $statsOc['omitidos']],
-                ['ERP nativas omitidas', (string) ($statsOc['omitidos_erp_nativas'] ?? 0)],
-                ['Errores', (string) count($statsOc['errores'])],
-            ]);
             foreach (array_slice($statsOc['errores'], 0, 40) as $err) {
                 $this->warn($err);
             }
             $errores += count($statsOc['errores']);
-        } elseif ($dryRun && ! $soloReq) {
-            $this->warn('Dry-run: no se importan OC (el bridge Anita no tiene modo simulación por documento).');
         }
 
         return $errores > 0 ? self::FAILURE : self::SUCCESS;

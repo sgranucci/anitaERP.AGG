@@ -12,6 +12,7 @@ use App\Models\Caja\TesoreriaCrownDeposito;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Models\Seguridad\Usuario;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -371,10 +372,19 @@ final class TesoreriaCrownBovedaSupport
      * Origen C de Anita (a-transfefe.c graba rendmbill con RENMB_CAJERO; l-estboveda.c):
      * la habilitación saca billetes de la bóveda y la rendición los devuelve.
      * Las fichas no están en rendmbill.
+     *
+     * Crown: el movimiento se refleja en bóveda desde borrador (ya es efectivo preparado),
+     * no recién al quedar conforme. Si no hay líneas ARS/USD/EUR, se anula el asiento.
      */
     public static function asentarCajero(TesoreriaCrownComprobante $comprobante): void
     {
-        if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::CONFORME) {
+        if (! in_array($comprobante->estado, [
+            TesoreriaCrownComprobanteSupport::BORRADOR,
+            TesoreriaCrownComprobanteSupport::PENDIENTE,
+            TesoreriaCrownComprobanteSupport::CONFORME,
+        ], true)) {
+            self::anularAsientoCajero($comprobante);
+
             return;
         }
         if (! in_array($comprobante->tipo, [
@@ -385,15 +395,6 @@ final class TesoreriaCrownBovedaSupport
         }
 
         DB::transaction(function () use ($comprobante) {
-            $yaAsentado = TesoreriaCrownBoveda::query()
-                ->where('comprobante_id', $comprobante->id)
-                ->where('estado', '<>', TesoreriaCrownBoveda::ANULADO)
-                ->lockForUpdate()
-                ->exists();
-            if ($yaAsentado) {
-                return;
-            }
-
             $abreviatura = $comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION ? 'HAB' : 'REN';
             $tipo = TesoreriaCrownBovedaTipo::query()
                 ->where('sala_id', $comprobante->sala_id)
@@ -417,7 +418,20 @@ final class TesoreriaCrownBovedaSupport
 
                     return abs((float) $linea->cantidad) >= 0.0001;
                 });
+
+            $movimiento = TesoreriaCrownBoveda::query()
+                ->where('comprobante_id', $comprobante->id)
+                ->where('estado', '<>', TesoreriaCrownBoveda::ANULADO)
+                ->lockForUpdate()
+                ->first();
+
             if ($lineas->isEmpty()) {
+                if ($movimiento !== null) {
+                    $movimiento->estado = TesoreriaCrownBoveda::ANULADO;
+                    $movimiento->save();
+                    self::invalidarAnexo8((int) $comprobante->jornada_id);
+                }
+
                 return;
             }
 
@@ -430,20 +444,37 @@ final class TesoreriaCrownBovedaSupport
                 $etiqueta = 'Reversa de '.mb_strtolower($etiqueta);
             }
             $comentario = trim($etiqueta.' '.TesoreriaCrownNumeradorSupport::visible((int) $comprobante->numero).' '.$cajero);
+            $usuarioId = $comprobante->recibe_usuario_id
+                ?: $comprobante->entrega_usuario_id
+                ?: (auth()->id() ?: null);
 
-            $movimiento = TesoreriaCrownBoveda::query()->create([
-                'sala_id' => $comprobante->sala_id,
-                'empresa_id' => $comprobante->empresa_id,
-                'jornada_id' => $comprobante->jornada_id,
-                'deposito_id' => $deposito->id,
-                'tipo_id' => $tipo->id,
-                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $comprobante->sala_id, 'V'),
-                'estado' => TesoreriaCrownBoveda::CONFIRMADO,
-                'comentario' => mb_substr($comentario, 0, 80),
-                'comprobante_id' => $comprobante->id,
-                'usuario_id' => $comprobante->recibe_usuario_id ?: $comprobante->entrega_usuario_id,
-                'confirmado_at' => now(),
-            ]);
+            if ($movimiento === null) {
+                $movimiento = TesoreriaCrownBoveda::query()->create([
+                    'sala_id' => $comprobante->sala_id,
+                    'empresa_id' => $comprobante->empresa_id,
+                    'jornada_id' => $comprobante->jornada_id,
+                    'deposito_id' => $deposito->id,
+                    'tipo_id' => $tipo->id,
+                    'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $comprobante->sala_id, 'V'),
+                    'estado' => TesoreriaCrownBoveda::CONFIRMADO,
+                    'comentario' => mb_substr($comentario, 0, 80),
+                    'comprobante_id' => $comprobante->id,
+                    'usuario_id' => $usuarioId,
+                    'confirmado_at' => now(),
+                ]);
+            } else {
+                $movimiento->comentario = mb_substr($comentario, 0, 80);
+                $movimiento->usuario_id = $usuarioId ?: $movimiento->usuario_id;
+                $movimiento->estado = TesoreriaCrownBoveda::CONFIRMADO;
+                if ($movimiento->confirmado_at === null) {
+                    $movimiento->confirmado_at = now();
+                }
+                $movimiento->save();
+                EloquentAuditDeleteSupport::each(
+                    TesoreriaCrownBovedaLinea::query()->where('boveda_id', $movimiento->id)
+                );
+            }
+
             foreach ($lineas as $linea) {
                 TesoreriaCrownBovedaLinea::query()->create([
                     'boveda_id' => $movimiento->id,
@@ -451,10 +482,25 @@ final class TesoreriaCrownBovedaSupport
                     'cantidad' => $linea->cantidad,
                 ]);
             }
-            $jornada = TesoreriaCrownJornada::query()->find((int) $comprobante->jornada_id);
-            if ($jornada) {
-                TesoreriaCrownAnexo8Calculo::invalidarCache($jornada);
+            self::invalidarAnexo8((int) $comprobante->jornada_id);
+        });
+    }
+
+    /** Anula el movimiento de bóveda ligado al comprobante (no conforme / anulado). */
+    public static function anularAsientoCajero(TesoreriaCrownComprobante $comprobante): void
+    {
+        DB::transaction(function () use ($comprobante) {
+            $movimiento = TesoreriaCrownBoveda::query()
+                ->where('comprobante_id', $comprobante->id)
+                ->where('estado', '<>', TesoreriaCrownBoveda::ANULADO)
+                ->lockForUpdate()
+                ->first();
+            if ($movimiento === null) {
+                return;
             }
+            $movimiento->estado = TesoreriaCrownBoveda::ANULADO;
+            $movimiento->save();
+            self::invalidarAnexo8((int) $comprobante->jornada_id);
         });
     }
 
@@ -464,5 +510,13 @@ final class TesoreriaCrownBovedaSupport
             ->where('comprobante_id', $comprobanteId)
             ->where('estado', '<>', TesoreriaCrownBoveda::ANULADO)
             ->exists();
+    }
+
+    private static function invalidarAnexo8(int $jornadaId): void
+    {
+        $jornada = TesoreriaCrownJornada::query()->find($jornadaId);
+        if ($jornada) {
+            TesoreriaCrownAnexo8Calculo::invalidarCache($jornada);
+        }
     }
 }

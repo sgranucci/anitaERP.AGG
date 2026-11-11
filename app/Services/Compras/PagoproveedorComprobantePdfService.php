@@ -10,9 +10,11 @@ use App\Support\Compras\AnitaImport\PagoproveedorAnitaImpresionAuxpagMapper;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorFirmaAgenteRetencionSupport;
 use App\Support\Compras\PagoproveedorRetencionCertificadoLineasSupport;
+use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\Retencion\RetencionesPagoBasesDesdeConceptosSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Sueldos\NumeroALetrasEs;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -221,6 +223,16 @@ class PagoproveedorComprobantePdfService
 
         $lugarFecha = 'Bs.As. '.optional($pago->fecha)->format('d/m/Y');
 
+        $cbuProveedor = '';
+        if (EntornoEmpresaSupport::esCrown() && $proveedor) {
+            $cbuProveedor = ProveedorCbuPagoSupport::cbuDesdeDocumento(
+                $pago->proveedor_formapago_id ? (int) $pago->proveedor_formapago_id : null,
+                $pago->cbu_pago !== null ? (string) $pago->cbu_pago : null,
+                (int) $proveedor->id,
+                $pago->detalle !== null ? (string) $pago->detalle : null,
+            );
+        }
+
         return [
             'pago' => $pago,
             'empresa' => $empresa,
@@ -230,6 +242,7 @@ class PagoproveedorComprobantePdfService
             'lugarFecha' => $lugarFecha,
             'direccionEmpresa' => $direccionEmpresa,
             'usuarioLogin' => $usuarioLogin,
+            'cbuProveedor' => $cbuProveedor,
             'aplicaciones' => $aplicaciones,
             'lineasRetencionPorId' => $lineasRetencionPorId,
             'mediosCaja' => $mediosCaja,

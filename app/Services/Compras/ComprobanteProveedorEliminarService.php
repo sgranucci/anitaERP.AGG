@@ -12,18 +12,25 @@ use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Contable\BienUso;
+use App\Models\Contable\BienUsoAmortizacion;
+use App\Models\Contable\BienUsoRevaluo;
+use App\Models\Contable\BienUsoUbicacion;
+use App\Models\Stock\Articulo_Movimiento;
+use App\Models\Stock\Recepcion_Proveedor;
+use App\Models\Stock\Transferencia_Mercaderia;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorAnitaBridgeGate;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
-use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Throwable;
 
@@ -41,7 +48,7 @@ class ComprobanteProveedorEliminarService
     ) {}
 
     /**
-     * @return array{mensaje: string, precarga_borrada: bool}
+     * @return array{mensaje: string, precarga_borrada: bool, bienes_uso_borrados: int}
      */
     public function eliminar(int $comprobanteId, bool $tambienPrecarga = false): array
     {
@@ -51,7 +58,7 @@ class ComprobanteProveedorEliminarService
     }
 
     /**
-     * @return array{mensaje: string, precarga_borrada: bool}
+     * @return array{mensaje: string, precarga_borrada: bool, bienes_uso_borrados: int}
      */
     private function eliminarConCandado(int $comprobanteId, bool $tambienPrecarga = false): array
     {
@@ -102,7 +109,7 @@ class ComprobanteProveedorEliminarService
         }
 
         // 2) ERP: CC, asiento, hijas y hard-delete cabecera.
-        DB::transaction(function () use ($comprobante, $asientoId, $tambienPrecarga) {
+        $bienesBorrados = (int) DB::transaction(function () use ($comprobante, $asientoId, $tambienPrecarga) {
             $actual = Comprobante_Proveedor::query()
                 ->whereKey((int) $comprobante->id)
                 ->lockForUpdate()
@@ -142,6 +149,9 @@ class ComprobanteProveedorEliminarService
 
             AsientoEloquentDeleteSupport::eliminarPorId($asientoId);
 
+            // Bienes de uso generados desde esta factura (antes de la cabecera: FK RESTRICT).
+            $bienesBorrados = $this->eliminarBienesUsoDelComprobante((int) $actual->id);
+
             // Hijas (también CASCADE en MySQL; se borran explícitas por claridad).
             EloquentAuditDeleteSupport::each(
                 Comprobante_Proveedor_Recepcion::query()->where('comprobante_proveedor_id', $actual->id)
@@ -175,6 +185,8 @@ class ComprobanteProveedorEliminarService
             }
 
             $comprobante->delete();
+
+            return $bienesBorrados;
         });
 
         $precargaBorrada = false;
@@ -191,6 +203,9 @@ class ComprobanteProveedorEliminarService
         $mensaje = 'Comprobante #'.$comprobanteId.' borrado físicamente en anitaERP'
             .($anitaNro > 0 || $asientoId > 0 ? ' y Anita' : '')
             .'.';
+        if ($bienesBorrados > 0) {
+            $mensaje .= ' También se eliminaron '.$bienesBorrados.' bien(es) de uso vinculados.';
+        }
         if ($precargaBorrada) {
             $mensaje .= ' También se eliminó la precarga #'.$precargaId.'.';
         }
@@ -198,7 +213,91 @@ class ComprobanteProveedorEliminarService
         return [
             'mensaje' => $mensaje,
             'precarga_borrada' => $precargaBorrada,
+            'bienes_uso_borrados' => $bienesBorrados,
         ];
+    }
+
+    /**
+     * Borra los bienes cargados desde la factura (comprobante_proveedor_id).
+     * No usa ON DELETE CASCADE: hay que auditar y cortar si el bien ya tiene movimientos.
+     */
+    private function eliminarBienesUsoDelComprobante(int $comprobanteId): int
+    {
+        if (! Schema::hasTable('bien_uso') || ! Schema::hasColumn('bien_uso', 'comprobante_proveedor_id')) {
+            return 0;
+        }
+
+        $ids = BienUso::query()
+            ->where('comprobante_proveedor_id', $comprobanteId)
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        $conMovimientos = Articulo_Movimiento::query()
+            ->whereIn('bien_uso_id', $ids)
+            ->distinct()
+            ->pluck('bien_uso_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $conTransferencias = Transferencia_Mercaderia::query()
+            ->where(function ($q) use ($ids) {
+                $q->whereIn('bien_uso_origen_id', $ids)
+                    ->orWhereIn('bien_uso_destino_id', $ids);
+            })
+            ->get(['id', 'bien_uso_origen_id', 'bien_uso_destino_id']);
+
+        $bloqueados = $conMovimientos;
+        foreach ($conTransferencias as $tm) {
+            foreach ([(int) ($tm->bien_uso_origen_id ?? 0), (int) ($tm->bien_uso_destino_id ?? 0)] as $bienId) {
+                if ($bienId > 0 && in_array($bienId, $ids, true)) {
+                    $bloqueados[] = $bienId;
+                }
+            }
+        }
+        $bloqueados = array_values(array_unique($bloqueados));
+
+        if ($bloqueados !== []) {
+            throw new RuntimeException(
+                'No se puede borrar la factura: el/los bien(es) de uso #'
+                .implode(', #', $bloqueados)
+                .' tienen movimientos de stock o transferencias. '
+                .'Revierta esas operaciones antes de eliminar el comprobante.'
+            );
+        }
+
+        if (Schema::hasTable('bien_uso_amortizacion')) {
+            EloquentAuditDeleteSupport::each(
+                BienUsoAmortizacion::query()->whereIn('bien_uso_id', $ids)
+            );
+        }
+        if (Schema::hasTable('bien_uso_revaluo')) {
+            EloquentAuditDeleteSupport::each(
+                BienUsoRevaluo::query()->whereIn('bien_uso_id', $ids)
+            );
+        }
+        if (Schema::hasTable('bien_uso_ubicacion')) {
+            EloquentAuditDeleteSupport::each(
+                BienUsoUbicacion::query()->whereIn('bien_uso_id', $ids)
+            );
+        }
+
+        // Otros bienes que apuntan a estos como reemplazo: la FK es SET NULL, pero
+        // al borrar por Eloquent conviene limpiar antes por claridad.
+        BienUso::query()
+            ->whereIn('bien_reemplazo_id', $ids)
+            ->update(['bien_reemplazo_id' => null]);
+
+        EloquentAuditDeleteSupport::each(
+            BienUso::query()->whereIn('id', $ids)
+        );
+
+        return count($ids);
     }
 
     private function assertPuedeBorrar(Comprobante_Proveedor $comprobante): void

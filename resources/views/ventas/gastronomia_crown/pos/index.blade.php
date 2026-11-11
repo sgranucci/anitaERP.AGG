@@ -22,6 +22,8 @@
     window.GastroCrownPos = {
         urls: {
             config: @json(route('gastronomia_crown_api_config')),
+            mozoLogin: @json(route('gastronomia_crown_api_mozo_login')),
+            mozoLogout: @json(route('gastronomia_crown_api_mozo_logout')),
             mesas: @json(route('gastronomia_crown_api_mesas')),
             cuentas: @json(route('gastronomia_crown_api_cuentas')),
             abrirMesa: @json(route('gastronomia_crown_api_abrir_mesa')),
@@ -111,7 +113,14 @@
                 <span class="badge badge-success">GST/Wigos</span>
             @endif
         </div>
-        <div class="gc-pos-actions-top">
+        <div class="gc-pos-actions-top d-flex align-items-center flex-wrap" style="gap:.35rem;">
+            <span id="gc-mozo-badge" class="badge badge-light text-dark d-none" title="Mozo en sesión"></span>
+            <button type="button" class="btn btn-outline-light btn-sm" id="gc-btn-mozo-login" title="Ingresar mozo">
+                <i class="fa fa-user"></i> Mozo
+            </button>
+            <button type="button" class="btn btn-outline-warning btn-sm d-none" id="gc-btn-mozo-logout" title="Salir mozo">
+                <i class="fa fa-sign-out"></i>
+            </button>
             <a href="{{ route('gastronomia_crown_kds', ['sala_id' => $config->sala_id]) }}"
                class="btn btn-outline-light btn-sm" target="_blank" rel="noopener">
                 <i class="fa fa-tv"></i> KDS
@@ -120,6 +129,33 @@
                class="btn btn-outline-light btn-sm" target="_blank" rel="noopener">
                 <i class="fa fa-cog"></i> Config PC
             </a>
+        </div>
+    </div>
+
+    <div class="modal fade" id="gc-modal-mozo" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-sm" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Ingreso de mozo</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <form id="gc-form-mozo" data-enter-campos="1" autocomplete="off">
+                        <div class="form-group mb-2">
+                            <label for="gc-mozo-codigo" class="mb-0">Código</label>
+                            <input type="text" id="gc-mozo-codigo" class="form-control form-control-sm" inputmode="numeric" autocomplete="off" required>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="gc-mozo-clave" class="mb-0">Clave</label>
+                            <input type="password" id="gc-mozo-clave" class="form-control form-control-sm" autocomplete="new-password" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="gc-mozo-confirmar">Ingresar</button>
+                </div>
+            </div>
         </div>
     </div>
 

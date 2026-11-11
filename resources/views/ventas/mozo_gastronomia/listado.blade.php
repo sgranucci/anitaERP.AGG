@@ -1,6 +1,7 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Configuracion\EntornoEmpresaSupport;
+    use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
     $esCrown = $esCrown ?? EntornoEmpresaSupport::esCrown();
     foreach ($datas as $row) {
         $row->nombreempresa = $row->empresa->nombre ?? '';
@@ -64,9 +65,10 @@
 		<thead>
 			<tr>
 				<th style="width: 8%;">ID</th>
-				<th style="width: 40%;">Nombre</th>
-				<th style="width: 18%;">Código Anita</th>
-				<th style="width: 34%;">{{ $esCrown ? 'Sala' : 'Empresa' }}</th>
+				<th style="width: 32%;">Nombre</th>
+				<th style="width: 14%;">Código Anita</th>
+				<th style="width: 14%;">Tipo</th>
+				<th style="width: 32%;">{{ $esCrown ? 'Sala' : 'Empresa' }}</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -75,6 +77,7 @@
 					<td>{{ $data->id }}</td>
 					<td>{{ $data->nombre }}</td>
 					<td>{{ $data->codigo }}</td>
+					<td>{{ MozoGastronomiaAplicacionSupport::etiquetaCorta($data->aplicacion ?? null) }}</td>
 					<td>
 						@if ($esCrown)
 							{{ trim((optional($data->sala)->codigo ?? '').' '.(optional($data->sala)->nombre ?? '')) }}

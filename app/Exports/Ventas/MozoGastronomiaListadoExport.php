@@ -24,7 +24,7 @@ class MozoGastronomiaListadoExport implements FromView, ShouldAutoSize, WithColu
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'D';
+    private const COL_ULTIMA = 'E';
 
     private MozoGastronomiaRepositoryInterface $repository;
 

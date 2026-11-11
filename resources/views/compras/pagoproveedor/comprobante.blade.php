@@ -119,6 +119,12 @@
         <td class="lbl">Contacto</td>
         <td colspan="3">{{ $proveedor->contacto ?? '—' }}</td>
     </tr>
+    @if (($cbuProveedor ?? '') !== '')
+        <tr>
+            <td class="lbl">CBU</td>
+            <td colspan="5">{{ $cbuProveedor }}</td>
+        </tr>
+    @endif
 </table>
 
 @if (trim((string) ($pago->detalle ?? '')) !== '')

@@ -31,7 +31,9 @@
     <label for="codigo_bien" class="col-lg-4 control-label text-right pr-2">C&oacute;digo bien</label>
     <div class="col-lg-3">
         <input type="number" name="codigo_bien" id="codigo_bien" class="form-control" min="1"
-               value="{{ old('codigo_bien', $data->codigo_bien ?? '') }}">
+               value="{{ old('codigo_bien', $data->codigo_bien ?? '') }}"
+               title="Vac&iacute;o = siguiente n&uacute;mero del ERP (m&aacute;ximo + 1 de la empresa)">
+        <small class="form-text text-muted">Vac&iacute;o = autom&aacute;tico (m&aacute;x. + 1 en el ERP).</small>
     </div>
     <label for="estado" class="col-lg-2 control-label text-right pr-2 requerido">Estado</label>
     <div class="col-lg-3">

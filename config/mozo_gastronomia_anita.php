@@ -4,8 +4,8 @@
  * Mapeo Anita → anitaERP para sincronización de mozos de gastronomía.
  * Tabla origen (Informix): vendedor → mozo_gastronomia
  *
- * Campos Anita (vendedor.sql):
- *   vend_codigo, vend_nombre, vend_empresa
+ * Campos Anita (vendedor.sql / a-mozo.c):
+ *   vend_codigo, vend_nombre, vend_empresa, vend_aplicacion (M/E/A)
  */
 return [
     'tabla' => 'vendedor',
@@ -22,7 +22,7 @@ return [
     /** CROWN: código sala (ej. CIP). Vacío = sin sala_id (AGG). */
     'sala_codigo' => env('MOZO_GASTRONOMIA_SYNC_SALA_CODIGO', ''),
 
-    'campos_listado' => 'vend_codigo, vend_nombre, vend_empresa',
+    'campos_listado' => 'vend_codigo, vend_nombre, vend_empresa, vend_aplicacion',
 
     'tabla_password' => 'mozopasswd',
 
@@ -35,5 +35,6 @@ return [
         ['origen' => 'vend_codigo', 'destino' => 'codigo', 'transform' => 'codigo_anita'],
         ['origen' => 'vend_nombre', 'destino' => 'nombre', 'transform' => 'trim'],
         ['origen' => 'vend_empresa', 'destino' => 'empresa_id', 'transform' => 'empresa_por_codigo_anita'],
+        ['origen' => 'vend_aplicacion', 'destino' => 'aplicacion', 'transform' => 'aplicacion_mozo'],
     ],
 ];

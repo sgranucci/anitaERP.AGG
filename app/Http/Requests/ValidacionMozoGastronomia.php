@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -30,6 +31,7 @@ class ValidacionMozoGastronomia extends FormRequest
             ],
             'empresa_id' => 'required|exists:empresa,id',
             'clave' => ($esAlta ? 'required' : 'nullable').'|string|min:4|max:60',
+            'aplicacion' => ['required', Rule::in(array_keys(MozoGastronomiaAplicacionSupport::LABELS))],
         ];
 
         if (EntornoEmpresaSupport::esCrown()) {

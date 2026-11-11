@@ -2476,6 +2476,8 @@ Route::get('ventas/gastronomia/proceso-facturacion', 'Ventas\GastronomiaProcesoF
 // POS Crown (módulo aislado; no usa Waitry)
 Route::get('ventas/gastronomia-crown/pos', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@index')->name('gastronomia_crown_pos');
 Route::get('ventas/gastronomia-crown/api/config', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiConfig')->name('gastronomia_crown_api_config');
+Route::post('ventas/gastronomia-crown/api/mozo/login', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiLoginMozo')->name('gastronomia_crown_api_mozo_login');
+Route::post('ventas/gastronomia-crown/api/mozo/logout', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiLogoutMozo')->name('gastronomia_crown_api_mozo_logout');
 Route::get('ventas/gastronomia-crown/api/mesas', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiMesas')->name('gastronomia_crown_api_mesas');
 Route::get('ventas/gastronomia-crown/api/cuentas', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiCuentasActivas')->name('gastronomia_crown_api_cuentas');
 Route::post('ventas/gastronomia-crown/api/abrir-mesa', 'Ventas\GastronomiaCrown\GastronomiaCrownPosController@apiAbrirMesa')->name('gastronomia_crown_api_abrir_mesa');

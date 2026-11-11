@@ -11,7 +11,10 @@ use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
+use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreFiscalReader;
+use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
+use App\Models\Ventas\MozoGastronomia;
 use App\Support\Caja\TesoreriaCrownCierreFiscalSync;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
@@ -294,6 +297,10 @@ class TesoreriaCrownComprobanteController extends Controller
             'cantidad' => ['array'],
             'cantidad.*' => ['nullable', 'integer', 'min:0'],
         ];
+        if ($comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION
+            && (int) ($comprobante->asignacion->cajero->mozo_gastronomia_id ?? 0) > 0) {
+            $reglas['mozo_aplicacion'] = ['nullable', Rule::in(array_keys(MozoGastronomiaAplicacionSupport::LABELS))];
+        }
         $camposMedio = $comprobante->tipo === TesoreriaCrownComprobanteSupport::RENDICION
             ? TesoreriaCrownRendicionCampos::camposDe($comprobante->asignacion->tipo_tarea ?? '')
             : [];
@@ -337,6 +344,14 @@ class TesoreriaCrownComprobanteController extends Controller
 
         try {
             DB::transaction(function () use ($comprobante, $datos, $idsSala, $camposMedio, $cierresElegidos) {
+            if (array_key_exists('mozo_aplicacion', $datos)
+                && $comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION) {
+                $mozoId = (int) ($comprobante->asignacion->cajero->mozo_gastronomia_id ?? 0);
+                if ($mozoId > 0 && $datos['mozo_aplicacion'] !== null && $datos['mozo_aplicacion'] !== '') {
+                    $aplicacion = MozoGastronomiaAplicacionSupport::normalizar((string) $datos['mozo_aplicacion']);
+                    MozoGastronomia::query()->whereKey($mozoId)->update(['aplicacion' => $aplicacion]);
+                }
+            }
             EloquentAuditDeleteSupport::each(
                 TesoreriaCrownComprobanteLinea::query()->where('comprobante_id', $comprobante->id)
             );
@@ -378,6 +393,8 @@ class TesoreriaCrownComprobanteController extends Controller
             if ($cierresElegidos !== [] || $comprobante->cierresFiscales()->exists()) {
                 $this->sincronizarCierresFiscales($comprobante, $cierresElegidos);
             }
+            $comprobante->refresh();
+            TesoreriaCrownBovedaSupport::asentarCajero($comprobante);
             });
         } catch (QueryException) {
             return back()->with('mensaje-error', 'Ese cierre de ventas ya fue tomado por otra rendición.')->withInput();
@@ -673,6 +690,7 @@ class TesoreriaCrownComprobanteController extends Controller
             'No conforme ('.(auth()->user()->usuario ?? '').' '.now()->format('d/m/Y H:i').'): '.trim($datos['observacion'])
         );
         $comprobante->save();
+        TesoreriaCrownBovedaSupport::anularAsientoCajero($comprobante);
 
         TesoreriaCrownAvisoGenerador::alEvento((int) $comprobante->jornada_id);
 
@@ -727,8 +745,10 @@ class TesoreriaCrownComprobanteController extends Controller
                 $comprobante->revierte_id = null;
                 $comprobante->save();
                 $this->sincronizarCierresFiscales($comprobante, []);
+                TesoreriaCrownBovedaSupport::anularAsientoCajero($comprobante);
             } else {
                 TesoreriaCrownFirmaSupport::volverABorrador($comprobante);
+                TesoreriaCrownBovedaSupport::asentarCajero($comprobante->fresh());
             }
 
             return true;
@@ -934,7 +954,21 @@ class TesoreriaCrownComprobanteController extends Controller
     private function comprobanteEnAlcance(int $id): TesoreriaCrownComprobante
     {
         $comprobante = TesoreriaCrownComprobante::query()
-            ->with(['jornada', 'sala', 'empresa', 'asignacion.deposito', 'asignacion.cajero.usuario', 'asignacion.cierre', 'lineas.valor.tipoValor', 'entregaUsuario', 'recibeUsuario', 'creadoUsuario', 'reversa.creadoUsuario', 'revierte'])
+            ->with([
+                'jornada',
+                'sala',
+                'empresa',
+                'asignacion.deposito',
+                'asignacion.cajero.usuario',
+                'asignacion.cajero.mozoGastronomia',
+                'asignacion.cierre',
+                'lineas.valor.tipoValor',
+                'entregaUsuario',
+                'recibeUsuario',
+                'creadoUsuario',
+                'reversa.creadoUsuario',
+                'revierte',
+            ])
             ->findOrFail($id);
         TesoreriaCrownSalaSupport::exigida((int) $comprobante->sala_id);
 

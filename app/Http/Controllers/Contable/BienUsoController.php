@@ -11,6 +11,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\BienUsoRepositoryInterface;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\Schema;
+use App\Support\Contable\BienUsoCodigoSupport;
 use App\Support\Contable\BienUsoListadoColumnas;
 use App\Support\Contable\BienUsoListadoFiltros;
 use App\Support\Contable\BienUsoListadoPreferenciasUsuario;
@@ -393,6 +394,14 @@ class BienUsoController extends Controller
         can('crear-bien-uso');
 
         $data = new BienUso;
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresaQuery->first())->id;
+        if (BienUsoCodigoSupport::columnaDisponible()) {
+            // Sugerido en pantalla; si lo dejan vacío al guardar, el repository toma max+1.
+            $data->codigo_bien = BienUsoCodigoSupport::sugerido(
+                $empresaDefault !== null ? (int) $empresaDefault : null
+            );
+        }
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, BienUsoListadoFiltros::class);
 
         return view('contable.bien_uso.crear', [
@@ -400,7 +409,7 @@ class BienUsoController extends Controller
             'estado_enum' => BienUso::$enumEstado,
             'centrocosto_opciones' => BienUsoVisibilidadSupport::opcionesCentrocostoAbm(),
             'tipo_bien_enum' => BienUso::$enumTipoBien,
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'empresa_query' => $empresaQuery,
             'moneda_query' => Moneda::query()->orderBy('id')->get(['id', 'nombre', 'codigo']),
             'filtrosQuery' => $filtrosQuery,
         ]);

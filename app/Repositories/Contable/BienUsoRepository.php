@@ -4,6 +4,7 @@ namespace App\Repositories\Contable;
 
 use App\Models\Contable\BienUso;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\BienUsoCodigoSupport;
 use App\Support\Contable\BienUsoListadoColumnas;
 use App\Support\Contable\BienUsoListadoFiltros;
 use App\Support\Contable\BienUsoVisibilidadSupport;
@@ -163,7 +164,9 @@ class BienUsoRepository implements BienUsoRepositoryInterface
 
     public function create(array $data)
     {
-        return $this->model->create($this->normalizarDatos($data));
+        $data = BienUsoCodigoSupport::completarSiVacio($this->normalizarDatos($data));
+
+        return $this->model->create($data);
     }
 
     public function update(array $data, $id)
@@ -194,6 +197,10 @@ class BienUsoRepository implements BienUsoRepositoryInterface
     {
         if (array_key_exists('codigo_inventario', $data) && $data['codigo_inventario'] === '') {
             $data['codigo_inventario'] = null;
+        }
+
+        if (array_key_exists('codigo_bien', $data) && ($data['codigo_bien'] === '' || $data['codigo_bien'] === null)) {
+            $data['codigo_bien'] = null;
         }
 
         if (array_key_exists('ip', $data) && $data['ip'] === '') {

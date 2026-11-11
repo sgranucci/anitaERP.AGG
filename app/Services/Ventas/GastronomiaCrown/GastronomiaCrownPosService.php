@@ -20,6 +20,7 @@ use App\Models\Ventas\GastronomiaCrown\GastroCrownCuenta;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaEvento;
 use App\Models\Ventas\GastronomiaCrown\GastroCrownCuentaLinea;
 use App\Models\Ventas\MesaGastronomia;
+use App\Models\Ventas\MozoGastronomia;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
 use App\Support\Seguridad\UsuarioOperativoSupport;
@@ -32,10 +33,12 @@ use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPrintSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaSalaSupport;
+use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
 use App\Support\Ventas\Vianda\ViandaPrecioSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 
 final class GastronomiaCrownPosService
@@ -69,12 +72,60 @@ final class GastronomiaCrownPosService
             ->first();
     }
 
+    /**
+     * Login mozo POS (paridad COMAND_pide_mozo / mozopasswd).
+     *
+     * @return array{id:int,codigo:string,nombre:string,aplicacion:string,aplicacion_label:string}
+     */
+    public function autenticarMozo(ConfiguracionPuntoventaGastronomia $cfg, string $codigo, string $clave): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            throw new InvalidArgumentException('Indique el código de mozo.');
+        }
+        if (trim($clave) === '') {
+            throw new InvalidArgumentException('Indique la clave del mozo.');
+        }
+
+        $candidatos = MozoGastronomia::query()
+            ->where('empresa_id', (int) $cfg->empresa_id)
+            ->where('codigo', $codigo)
+            ->when($cfg->sala_id, function ($q) use ($cfg) {
+                $q->where(function ($w) use ($cfg) {
+                    $w->where('sala_id', (int) $cfg->sala_id)->orWhereNull('sala_id');
+                });
+            })
+            ->get();
+        $salaId = $cfg->sala_id ? (int) $cfg->sala_id : 0;
+        $mozo = $candidatos->first(fn (MozoGastronomia $m) => (int) ($m->sala_id ?? 0) === $salaId)
+            ?? $candidatos->first();
+        if ($mozo === null) {
+            throw new InvalidArgumentException('Mozo no encontrado para esta empresa/sala.');
+        }
+
+        $claveAlmacenada = (string) ($mozo->clave ?? '');
+        if ($claveAlmacenada === '') {
+            throw new InvalidArgumentException('El mozo no tiene clave. Defínala en Mozos gastronomía.');
+        }
+        $ok = str_starts_with($claveAlmacenada, '$2y$')
+            ? Hash::check($clave, $claveAlmacenada)
+            : hash_equals($claveAlmacenada, $clave);
+        if (! $ok) {
+            throw new InvalidArgumentException('Clave incorrecta.');
+        }
+
+        MozoGastronomiaAplicacionSupport::guardarSesion($mozo);
+
+        return MozoGastronomiaAplicacionSupport::sesionActual() ?? [];
+    }
+
     public function abrirMesa(
         ConfiguracionPuntoventaGastronomia $cfg,
         int $mesaId,
         array $extra = [],
     ): GastroCrownCuenta {
         $this->exigirJornadaOperativa($cfg);
+        $mozo = $this->exigirMozoSesion((int) $cfg->empresa_id);
 
         $mesa = MesaGastronomia::query()
             ->where('id', $mesaId)
@@ -92,10 +143,14 @@ final class GastronomiaCrownPosService
             ->whereIn('estado', [GastroCrownCuenta::ESTADO_ABIERTA, GastroCrownCuenta::ESTADO_COBRANDO])
             ->first();
         if ($existente) {
+            $this->assertPuedeOperarCuenta($existente, $mozo);
+
             return $existente->load(['lineas', 'mesa', 'mozo']);
         }
 
-        return DB::transaction(function () use ($cfg, $mesa, $extra) {
+        $mozoId = (int) ($extra['mozo_gastronomia_id'] ?? $mozo->id);
+
+        return DB::transaction(function () use ($cfg, $mesa, $extra, $mozoId) {
             $cuenta = GastroCrownCuenta::query()->create([
                 'empresa_id' => $cfg->empresa_id,
                 'configuracion_puntoventa_gastronomia_id' => $cfg->id,
@@ -103,7 +158,7 @@ final class GastronomiaCrownPosService
                 'modo_pos' => $cfg->modoPosEfectivo(),
                 'sala_id' => $cfg->sala_id ?: $mesa->sala_id,
                 'mesa_gastronomia_id' => $mesa->id,
-                'mozo_gastronomia_id' => $extra['mozo_gastronomia_id'] ?? null,
+                'mozo_gastronomia_id' => $mozoId,
                 'cubiertos' => max(0, (int) ($extra['cubiertos'] ?? ($cfg->pide_cubiertos ? 1 : 0))),
                 'estado' => GastroCrownCuenta::ESTADO_ABIERTA,
                 'listaprecio_id' => $cfg->listaprecio_id,
@@ -120,15 +175,17 @@ final class GastronomiaCrownPosService
         array $extra = [],
     ): GastroCrownCuenta {
         $this->exigirJornadaOperativa($cfg);
+        $mozo = $this->exigirMozoSesion((int) $cfg->empresa_id);
+        $mozoId = (int) ($extra['mozo_gastronomia_id'] ?? $mozo->id);
 
-        return DB::transaction(function () use ($cfg, $extra) {
+        return DB::transaction(function () use ($cfg, $extra, $mozoId) {
             $cuenta = GastroCrownCuenta::query()->create([
                 'empresa_id' => $cfg->empresa_id,
                 'configuracion_puntoventa_gastronomia_id' => $cfg->id,
                 'identificador_pc' => $cfg->identificador_pc,
                 'modo_pos' => $cfg->modoPosEfectivo() ?: GastronomiaCrownPosModos::SALA,
                 'sala_id' => $cfg->sala_id,
-                'mozo_gastronomia_id' => $extra['mozo_gastronomia_id'] ?? null,
+                'mozo_gastronomia_id' => $mozoId,
                 'cubiertos' => max(0, (int) ($extra['cubiertos'] ?? 1)),
                 'estado' => GastroCrownCuenta::ESTADO_ABIERTA,
                 'listaprecio_id' => $cfg->listaprecio_id,
@@ -258,6 +315,11 @@ final class GastronomiaCrownPosService
     ): GastroCrownCuentaLinea {
         if ($cantidad <= 0) {
             throw new InvalidArgumentException('Cantidad inválida.');
+        }
+        $mozo = $this->exigirMozoSesion((int) $cfg->empresa_id);
+        $this->assertPuedeOperarCuenta($cuenta, $mozo);
+        if (! MozoGastronomiaAplicacionSupport::puedeAgregarArticulos($mozo->aplicacion ?? null)) {
+            throw new InvalidArgumentException('El adicionista no carga artículos de menú (paridad Anita).');
         }
 
         $articulo = $this->resolverArticuloPorSku($cfg, $sku);
@@ -498,6 +560,11 @@ final class GastronomiaCrownPosService
 
     public function anularCuenta(GastroCrownCuenta $cuenta): void
     {
+        $mozo = $this->exigirMozoSesion((int) $cuenta->empresa_id);
+        $this->assertPuedeOperarCuenta($cuenta, $mozo);
+        if (! MozoGastronomiaAplicacionSupport::puedeAnularCuenta($mozo->aplicacion ?? null)) {
+            throw new InvalidArgumentException('El colaborador no puede borrar la mesa.');
+        }
         $fireadas = $cuenta->lineas()->whereNotNull('fired_at')->exists();
         if ($fireadas) {
             throw new InvalidArgumentException('Hay ítems ya comandados; no se puede borrar la mesa sin void de cocina.');
@@ -752,6 +819,10 @@ final class GastronomiaCrownPosService
         if ($porcentaje < 0 || $porcentaje > 100) {
             throw new InvalidArgumentException('El descuento debe estar entre 0 y 100 %.');
         }
+        $mozo = MozoGastronomiaAplicacionSupport::mozoDeSesion((int) $cuenta->empresa_id);
+        if ($mozo !== null && ! MozoGastronomiaAplicacionSupport::puedeDescuentoDirecto($mozo->aplicacion ?? null)) {
+            throw new InvalidArgumentException('El colaborador no aplica descuento directo (F10). Use F8 con autorizante.');
+        }
         $cuenta->porcentaje_descuento = round($porcentaje, 2);
         $cuenta->detalle_descuento = $detalle ? mb_substr(trim($detalle), 0, 80) : $cuenta->detalle_descuento;
         $cuenta->save();
@@ -957,6 +1028,11 @@ final class GastronomiaCrownPosService
 
     public function transferirMesa(GastroCrownCuenta $cuenta, ConfiguracionPuntoventaGastronomia $cfg, int $mesaDestinoId): void
     {
+        $mozo = $this->exigirMozoSesion((int) $cfg->empresa_id);
+        if (! MozoGastronomiaAplicacionSupport::puedeTransferir($mozo->aplicacion ?? null)) {
+            throw new InvalidArgumentException('Solo encargado o adicionista pueden transferir la mesa.');
+        }
+        $this->assertPuedeOperarCuenta($cuenta, $mozo);
         $mesa = MesaGastronomia::query()
             ->where('id', $mesaDestinoId)
             ->where('empresa_id', $cfg->empresa_id)
@@ -1000,6 +1076,14 @@ final class GastronomiaCrownPosService
         }
 
         $this->exigirJornadaOperativa($cfg);
+        $mozo = $this->exigirMozoSesion((int) $cfg->empresa_id);
+        $this->assertPuedeOperarCuenta($cuenta, $mozo);
+        // Adicionista: al cobrar la mesa queda a su nombre (a-comandera).
+        if (MozoGastronomiaAplicacionSupport::esAdicionista($mozo->aplicacion ?? null)
+            && (int) ($cuenta->mozo_gastronomia_id ?? 0) !== (int) $mozo->id) {
+            $cuenta->mozo_gastronomia_id = (int) $mozo->id;
+            $cuenta->save();
+        }
 
         if (! in_array($tipoCobro, [
             GastroCrownCuenta::COBRO_EFECTIVO,
@@ -1158,6 +1242,8 @@ final class GastronomiaCrownPosService
                 : null,
             'mozo_id' => $cuenta->mozo_gastronomia_id,
             'mozo' => $cuenta->mozo->nombre ?? null,
+            'mozo_aplicacion' => MozoGastronomiaAplicacionSupport::normalizar($cuenta->mozo->aplicacion ?? null),
+            'mozo_aplicacion_label' => MozoGastronomiaAplicacionSupport::etiquetaCorta($cuenta->mozo->aplicacion ?? null),
             'cliente_id' => $cuenta->cliente_id,
             'cliente' => $cuenta->cliente
                 ? trim(($cuenta->cliente->codigo ? $cuenta->cliente->codigo.' — ' : '').$cuenta->cliente->nombre)
@@ -1270,6 +1356,27 @@ final class GastronomiaCrownPosService
         }
 
         return $out;
+    }
+
+    private function exigirMozoSesion(int $empresaId): MozoGastronomia
+    {
+        $mozo = MozoGastronomiaAplicacionSupport::mozoDeSesion($empresaId);
+        if ($mozo === null) {
+            throw new InvalidArgumentException('Inicie sesión de mozo (código y clave) para operar el POS.');
+        }
+
+        return $mozo;
+    }
+
+    private function assertPuedeOperarCuenta(GastroCrownCuenta $cuenta, MozoGastronomia $mozo): void
+    {
+        $dueñoId = (int) ($cuenta->mozo_gastronomia_id ?? 0);
+        if ($dueñoId <= 0 || $dueñoId === (int) $mozo->id) {
+            return;
+        }
+        if (! MozoGastronomiaAplicacionSupport::puedeAbrirMesaAjena($mozo->aplicacion ?? null)) {
+            throw new InvalidArgumentException('No coincide el nro. de mozo con el de la mesa.');
+        }
     }
 
     private function resolverAreaComandaId(Articulo $articulo): ?int

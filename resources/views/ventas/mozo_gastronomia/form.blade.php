@@ -1,6 +1,8 @@
 @php
     use App\Support\Configuracion\EntornoEmpresaSupport;
+    use App\Support\Ventas\MozoGastronomiaAplicacionSupport;
     $esCrown = EntornoEmpresaSupport::esCrown();
+    $aplicacionActual = old('aplicacion', $data->aplicacion ?? MozoGastronomiaAplicacionSupport::MOZO);
 @endphp
 <div class="form-group row">
     <label for="nombre" class="col-lg-3 col-form-label requerido">Nombre</label>
@@ -32,9 +34,20 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="clave" class="col-lg-3 col-form-label @empty($data->id) requerido @endempty">Clave POS</label>
+    <label for="clave" class="col-lg-3 control-label text-right pr-2 @empty($data->id) requerido @endempty">Clave POS</label>
     <div class="col-lg-8">
         <input type="password" name="clave" id="clave" class="form-control" value="" maxlength="60" autocomplete="new-password" @empty($data->id) required minlength="4" @endempty/>
-        <small class="form-text text-muted">Clave para ingresar al facturador de canjes marketing.@if ($data->id) Dejar vacío al editar para no cambiar.@else Obligatoria (mínimo 4 caracteres).@endif</small>
+        <small class="form-text text-muted">Clave para ingresar al POS / facturador de canjes.@if ($data->id) Dejar vacío al editar para no cambiar.@else Obligatoria (mínimo 4 caracteres).@endif</small>
+    </div>
+</div>
+<div class="form-group row">
+    <label for="aplicacion" class="col-lg-3 control-label text-right pr-2 requerido">Tipo / facultad</label>
+    <div class="col-lg-8">
+        <select name="aplicacion" id="aplicacion" class="form-control" required>
+            @foreach (MozoGastronomiaAplicacionSupport::LABELS as $codigo => $etiqueta)
+                <option value="{{ $codigo }}" @if ($aplicacionActual === $codigo) selected @endif>{{ $etiqueta }}</option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">Paridad Anita (<code>vend_aplicacion</code>): colaborador, encargado o adicionista. Por defecto colaborador.</small>
     </div>
 </div>
