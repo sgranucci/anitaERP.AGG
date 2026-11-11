@@ -185,48 +185,62 @@
     border-color: #f4d03f;
 }
 
-/* Toolbar de acciones en card-header del módulo */
+/* Toolbar de acciones en card-header del módulo.
+   AdminLTE fuerza color:#fff en a del card-header info; hay que ganar
+   especificidad o el fondo pastel deja el texto blanco ilegible. */
 .card-info .card-tools .btn.tc-tool,
 .card-primary .card-tools .btn.tc-tool {
     border-radius: 999px;
     font-weight: 600;
 }
 
+.card-info:not(.card-outline) > .card-header .btn.tc-tool-arqueo,
+.card-primary:not(.card-outline) > .card-header .btn.tc-tool-arqueo,
 .btn.tc-tool-arqueo {
-    color: #6c3483;
-    border-color: #d2b4de;
-    background: #f5eef8;
+    color: #fff;
+    border-color: #6c3483;
+    background: #6c3483;
 }
+.card-info:not(.card-outline) > .card-header .btn.tc-tool-arqueo:hover,
+.card-primary:not(.card-outline) > .card-header .btn.tc-tool-arqueo:hover,
 .btn.tc-tool-arqueo:hover {
     color: #fff;
-    background: #6c3483;
-    border-color: #6c3483;
+    background: #5b2c6f;
+    border-color: #5b2c6f;
 }
 
+.card-info:not(.card-outline) > .card-header .btn.tc-tool-kardex,
+.card-primary:not(.card-outline) > .card-header .btn.tc-tool-kardex,
 .btn.tc-tool-kardex {
-    color: #1e8449;
-    border-color: #82e0aa;
-    background: #eafaf1;
+    color: #fff;
+    border-color: #1e8449;
+    background: #1e8449;
 }
+.card-info:not(.card-outline) > .card-header .btn.tc-tool-kardex:hover,
+.card-primary:not(.card-outline) > .card-header .btn.tc-tool-kardex:hover,
 .btn.tc-tool-kardex:hover {
     color: #fff;
-    background: #1e8449;
-    border-color: #1e8449;
+    background: #196f3d;
+    border-color: #196f3d;
 }
 
 .btn.tc-tool-nuevo {
     box-shadow: 0 2px 6px rgba(36, 113, 163, .25);
 }
 
+.card-info:not(.card-outline) > .card-header .btn.tc-tool-cerrar,
+.card-primary:not(.card-outline) > .card-header .btn.tc-tool-cerrar,
 .btn.tc-tool-cerrar {
-    color: #922b21;
-    border-color: #f5b7b1;
-    background: #fdedec;
+    color: #fff;
+    border-color: #922b21;
+    background: #922b21;
 }
+.card-info:not(.card-outline) > .card-header .btn.tc-tool-cerrar:hover,
+.card-primary:not(.card-outline) > .card-header .btn.tc-tool-cerrar:hover,
 .btn.tc-tool-cerrar:hover {
     color: #fff;
-    background: #922b21;
-    border-color: #922b21;
+    background: #7b241c;
+    border-color: #7b241c;
 }
 
 .tc-anexos-tabs .btn {

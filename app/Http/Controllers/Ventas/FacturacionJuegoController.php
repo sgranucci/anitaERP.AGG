@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\FacturacionJuegoConciliacionExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Sala;
@@ -11,19 +12,26 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\FacturacionJuegoSala;
 use App\Services\Ventas\FacturacionJuegoService;
+use App\Support\Reportes\DompdfListadoSupport;
+use App\Support\Ventas\FacturacionJuegoConciliacionSupport;
 use App\Support\Ventas\FacturacionJuegoConfigSupport;
 use App\Support\Ventas\FacturacionJuegoSemillaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FacturacionJuegoController extends Controller
 {
     public function __construct(
         private readonly FacturacionJuegoService $service,
         private readonly FacturacionJuegoSemillaAnitaSupport $semillaAnita,
+        private readonly FacturacionJuegoConciliacionSupport $conciliacionSupport,
     ) {
     }
 
@@ -41,6 +49,10 @@ class FacturacionJuegoController extends Controller
             $preview = $this->service->preview($fechaDesde, $fechaHasta, $salaId > 0 ? $salaId : null);
         }
 
+        $helpSalas = $this->conciliacionSupport->armarHelpSalas(
+            FacturacionJuegoConfigSupport::salasActivas()
+        );
+
         return view('ventas.facturacion_juego.index', [
             'fechaDesde' => $fechaDesde,
             'fechaHasta' => $fechaHasta,
@@ -51,7 +63,113 @@ class FacturacionJuegoController extends Controller
             'listos' => collect($preview)->where('listo', true)->count(),
             'pendientesConfig' => collect($preview)->where('listo', false)->count(),
             'totalMonto' => collect($preview)->sum('monto'),
+            'helpSalas' => $helpSalas,
         ]);
+    }
+
+    public function conciliacion(Request $request): View
+    {
+        can('usar-facturacion-juego');
+
+        $fechaDesde = $this->fecha($request->input('fecha_desde'), Carbon::now()->startOfMonth()->toDateString());
+        $fechaHasta = $this->fecha($request->input('fecha_hasta'), Carbon::now()->toDateString());
+        $salaId = (int) $request->input('sala_id', 0);
+        $consultar = (string) $request->input('consultar', '') === '1';
+
+        $resultado = null;
+        $filasPagina = null;
+        $filtrosQuery = [
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'sala_id' => $salaId > 0 ? $salaId : null,
+            'consultar' => 1,
+        ];
+
+        if ($consultar) {
+            ini_set('memory_limit', '512M');
+            ini_set('max_execution_time', '180');
+            $resultado = $this->conciliacionSupport->conciliar(
+                $fechaDesde,
+                $fechaHasta,
+                $salaId > 0 ? $salaId : null,
+            );
+            $filas = $resultado['filas'] ?? [];
+            $page = max(1, (int) $request->input('page', 1));
+            $perPage = 50;
+            $filasPagina = new LengthAwarePaginator(
+                array_slice($filas, ($page - 1) * $perPage, $perPage),
+                count($filas),
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => array_filter($filtrosQuery, static fn ($v) => $v !== null && $v !== '')]
+            );
+        }
+
+        return view('ventas.facturacion_juego.conciliacion', [
+            'fechaDesde' => $fechaDesde,
+            'fechaHasta' => $fechaHasta,
+            'salaId' => $salaId,
+            'consultar' => $consultar,
+            'resultado' => $resultado,
+            'filasPagina' => $filasPagina,
+            'filtrosQuery' => array_filter($filtrosQuery, static fn ($v) => $v !== null && $v !== ''),
+            'salas' => Sala::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']),
+            'helpSalas' => $resultado['help_salas']
+                ?? $this->conciliacionSupport->armarHelpSalas(FacturacionJuegoConfigSupport::salasActivas()),
+        ]);
+    }
+
+    public function exportarConciliacion(Request $request, ?string $formato = null): BinaryFileResponse|StreamedResponse|RedirectResponse
+    {
+        can('usar-facturacion-juego');
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '180');
+
+        $fechaDesde = $this->fecha($request->input('fecha_desde'), '');
+        $fechaHasta = $this->fecha($request->input('fecha_hasta'), '');
+        $salaId = (int) $request->input('sala_id', 0);
+        $redirectQuery = array_filter([
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'sala_id' => $salaId > 0 ? $salaId : null,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        $formato = strtoupper(trim((string) $formato));
+        if ($fechaDesde === '' || $fechaHasta === '' || ! in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
+            return redirect()
+                ->route('facturacion_juego_conciliacion', $redirectQuery)
+                ->with('mensaje_error', 'Indique fechas y formato de exportación.');
+        }
+
+        $resultado = $this->conciliacionSupport->conciliar(
+            $fechaDesde,
+            $fechaHasta,
+            $salaId > 0 ? $salaId : null,
+        );
+
+        if ($formato === 'PDF') {
+            $html = view('ventas.facturacion_juego.conciliacion_listado', [
+                'resultado' => $resultado,
+                'filas' => $resultado['filas'] ?? [],
+                'titulo' => 'Conciliación facturación juego',
+            ])->render();
+            $ruta = storage_path('pdf/listados/conciliacion_facturacion_juego.pdf');
+            DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
+                'titulo_corto' => 'Conciliación facturación juego',
+            ]);
+
+            return response()->download($ruta)->deleteFileAfterSend(true);
+        }
+
+        $export = new FacturacionJuegoConciliacionExport($resultado, $formato === 'CSV');
+        $nombre = 'conciliacion_facturacion_juego_'.date('Ymd_His');
+
+        if ($formato === 'CSV') {
+            return Excel::download($export, $nombre.'.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return Excel::download($export, $nombre.'.xlsx');
     }
 
     public function ejecutar(Request $request): RedirectResponse

@@ -8,6 +8,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownAnitaConsulta;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownAsientoBuilder;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
+use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownCriterioFecha;
 use Carbon\Carbon;
 use RuntimeException;
 
@@ -27,13 +28,19 @@ final class TransferenciaVentaGastronomiaService
 
     /**
      * @param  array{codigo: string, nombre: string, ifx_server: string}  $sala
-     * @return array{filas: list<array<string, mixed>>, resumen: array<string, mixed>, advertencias: list<string>}
+     * @return array{filas: list<array<string, mixed>>, resumen: array<string, mixed>, advertencias: list<string>, criterio_fecha: string}
      */
-    public function previsualizar(array $sala, string $desde, string $hasta): array
-    {
+    public function previsualizar(
+        array $sala,
+        string $desde,
+        string $hasta,
+        string $criterioFecha = TransferenciaCrownCriterioFecha::JORNADA,
+    ): array {
         ini_set('memory_limit', '1024M');
         ini_set('max_execution_time', '600');
 
+        $criterioFecha = TransferenciaCrownCriterioFecha::normalizar($criterioFecha);
+        $campoFecha = TransferenciaCrownCriterioFecha::campoAnita($criterioFecha);
         $desdeYmd = (int) Carbon::parse($desde)->format('Ymd');
         $hastaYmd = (int) Carbon::parse($hasta)->format('Ymd');
         $dias = Carbon::parse($desde)->diffInDays(Carbon::parse($hasta)) + 1;
@@ -48,7 +55,7 @@ final class TransferenciaVentaGastronomiaService
             'ventas',
             'venta',
             'ven_tipo, ven_letra, ven_sucursal, ven_nro, ven_fecha, ven_fecha_vto, ven_exento, ven_gravado, ven_gravado_ot, ven_tasa_iva_ot, ven_impuesto1, ven_no_inscripto, ven_percepcion_iva, ven_monto, ven_cod_mon, ven_cotizacion, ven_cuit_cli, ven_nombre_cliente',
-            ' WHERE ven_fecha_vto >= '.$desdeYmd.' AND ven_fecha_vto <= '.$hastaYmd.' AND ven_tipo IN ('.$tipos.')',
+            ' WHERE '.$campoFecha.' >= '.$desdeYmd.' AND '.$campoFecha.' <= '.$hastaYmd.' AND ven_tipo IN ('.$tipos.')',
             $sala['ifx_server'],
         );
 
@@ -90,6 +97,7 @@ final class TransferenciaVentaGastronomiaService
         }
         $filas = $this->writer->marcarExistentes($filas);
 
+        $advertencias[] = 'Criterio de rango: '.TransferenciaCrownCriterioFecha::etiqueta($criterioFecha).'.';
         $advertencias[] = 'Solo se graba en el ERP. No escribe en Anita (ni venta ni asiento/ctamov).';
         $advertencias[] = 'La factura, la factura hotel y el ticket entran como factura (FAC). La nota de crédito entra como nota de crédito. Si la factura ya está y no tiene asiento, este proceso se lo engancha.';
         if ($porComprobante !== []) {
@@ -102,6 +110,7 @@ final class TransferenciaVentaGastronomiaService
             'filas' => $filas,
             'resumen' => $this->resumen($filas),
             'advertencias' => $advertencias,
+            'criterio_fecha' => $criterioFecha,
         ];
     }
 

@@ -167,8 +167,19 @@ return [
     */
     'caea' => [
         'pedido_automatico' => filter_var(env('ARCA_CAEA_PEDIDO_AUTOMATICO', true), FILTER_VALIDATE_BOOLEAN),
+        /**
+         * Presentación automática quincenal (cron arca:presentar-caea-quincena).
+         * Ferli queda fuera por entorno; el resto se apaga con este flag.
+         */
+        'presentacion_automatica' => filter_var(env('ARCA_CAEA_PRESENTACION_AUTOMATICA', true), FILTER_VALIDATE_BOOLEAN),
         /** Réplica cada CAEA autorizado en Informix (tabla caea) vía bridge Anita */
         'replicar_en_anita' => filter_var(env('ARCA_CAEA_REPLICAR_ANITA', true), FILTER_VALIDATE_BOOLEAN),
+        /**
+         * Mientras Anita siga en uso: el informe presenta también comprobantes
+         * que solo están en Informix (vencae). Una sola lectura de bridge por CAEA.
+         * Cuando Anita se deje de usar, poner false.
+         */
+        'informe_fallback_anita' => filter_var(env('ARCA_CAEA_INFORME_FALLBACK_ANITA', true), FILTER_VALIDATE_BOOLEAN),
         /** Máximo de comprobantes por lote SOAP dentro del job de presentación */
         'informe_lote_max' => (int) env('ARCA_CAEA_INFORME_LOTE_MAX', 100),
         /** Cola Laravel para InformarArcaCaeaPeriodoJob (requiere QUEUE_CONNECTION≠sync + worker) */

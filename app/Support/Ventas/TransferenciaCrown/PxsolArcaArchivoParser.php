@@ -256,6 +256,26 @@ final class PxsolArcaArchivoParser
         $tipoAfip = (int) preg_replace('/\D+/', '', $tipoComp);
         [$tipo, $letra] = $this->tipoLetra($tipoAfip);
 
+        $gravado21 = abs($gravado21);
+        $iva21 = abs($iva21);
+        $gravado105 = abs($gravado105);
+        $iva105 = abs($iva105);
+        $gravado27 = abs($gravado27);
+        $iva27 = abs($iva27);
+        $exentoAbs = abs($noGravado + $exento);
+        $otrosAbs = abs($otros);
+        $totalAbs = abs($total);
+
+        // Mis Comprobantes (ARCA) en Factura/ND/NC T (195-197) deja Imp. Total = neto
+        // sin sumar el IVA. En A/B el total sí viene completo. Recomponemos el total fiscal.
+        $totalAbs = $this->totalFiscalFacturaT(
+            $tipoAfip,
+            $totalAbs,
+            $gravado21 + $gravado105 + $gravado27 + $exentoAbs,
+            $iva21 + $iva105 + $iva27,
+            $otrosAbs,
+        );
+
         return [
             'fecha' => $fecha,
             'tipo_afip' => $tipoAfip,
@@ -268,18 +288,44 @@ final class PxsolArcaArchivoParser
             'nombre' => trim($nombre),
             'cotizacion' => abs($this->numero($cotizacion)),
             'moneda' => $this->moneda($moneda),
-            'gravado21' => abs($gravado21),
-            'iva21' => abs($iva21),
-            'gravado105' => abs($gravado105),
-            'iva105' => abs($iva105),
-            'gravado27' => abs($gravado27),
-            'iva27' => abs($iva27),
-            'exento' => abs($noGravado + $exento),
-            'otros' => abs($otros),
-            'total' => abs($total),
+            'gravado21' => $gravado21,
+            'iva21' => $iva21,
+            'gravado105' => $gravado105,
+            'iva105' => $iva105,
+            'gravado27' => $gravado27,
+            'iva27' => $iva27,
+            'exento' => $exentoAbs,
+            'otros' => $otrosAbs,
+            'total' => $totalAbs,
             'noi' => 0.0,
             'percepcion_iva' => 0.0,
         ];
+    }
+
+    /**
+     * En tipos T el CSV a veces trae Imp. Total = neto (sin IVA). Si el total cuadra
+     * con el neto y hay IVA, el total fiscal es neto + IVA + otros.
+     */
+    private function totalFiscalFacturaT(
+        int $tipoAfip,
+        float $total,
+        float $neto,
+        float $iva,
+        float $otros,
+    ): float {
+        if (! in_array($tipoAfip, [195, 196, 197], true)) {
+            return $total;
+        }
+        if ($iva <= 0.005) {
+            return $total;
+        }
+        $netoRed = round($neto, 2);
+        $totalRed = round($total, 2);
+        if (abs($totalRed - $netoRed) > 0.05) {
+            return $total;
+        }
+
+        return round($neto + $iva + $otros, 2);
     }
 
     /**

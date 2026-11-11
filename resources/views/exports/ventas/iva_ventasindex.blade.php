@@ -128,4 +128,35 @@
             </tr>
         @endforeach
     @endif
+    @if (! empty($exportar_totales_sucursal) && ! empty($resultado['totales_por_puntoventa']))
+        <tr>
+            <td colspan="{{ $colspanTotal }}" style="font-weight: bold;">Totales por sucursal</td>
+        </tr>
+        <tr>
+            <th>Sección</th>
+            <th>PV</th>
+            <th>Nombre</th>
+            <th>Cant.</th>
+            @foreach ($resultado['columnas'] ?? [] as $col)
+                <th>{{ $col['label'] }}</th>
+            @endforeach
+            @for ($i = 0; $i < max(0, $columnasFijas - 4); $i++)
+                <th></th>
+            @endfor
+        </tr>
+        @foreach ($resultado['totales_por_puntoventa'] as $tot)
+            <tr>
+                <td>{{ $tot['seccion_label'] ?? '' }}</td>
+                <td>{{ $tot['puntoventa_codigo'] ?? '' }}</td>
+                <td>{{ $tot['puntoventa_nombre'] ?? '' }}</td>
+                <td>{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                @foreach ($resultado['columnas'] ?? [] as $col)
+                    <td>{{ $fmtMonto($tot['columnas'][$col['key']] ?? 0) }}</td>
+                @endforeach
+                @for ($i = 0; $i < max(0, $columnasFijas - 4); $i++)
+                    <td></td>
+                @endfor
+            </tr>
+        @endforeach
+    @endif
 </table>

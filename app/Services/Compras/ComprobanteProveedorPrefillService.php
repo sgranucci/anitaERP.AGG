@@ -90,7 +90,7 @@ class ComprobanteProveedorPrefillService
             'moneda_id' => 1,
             'es_fce' => false,
             'pararevisar' => false,
-            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::defaultProvinciaId(),
         ]);
 
         return [
@@ -542,7 +542,7 @@ class ComprobanteProveedorPrefillService
             'cotizacion' => $cotizacion,
             'es_fce' => false,
             'pararevisar' => false,
-            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::defaultProvinciaId(),
         ]);
 
         $data->setRelation('empresas', $ordencompra->empresas);

@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Support\Compras\TipotransaccionCompraGeneraAsiAnitaSupport;
 use App\Support\Compras\TipotransaccionCompraListadoFiltros;
 use App\Support\Compras\TipotransaccionCompraRetencionFiltro;
 use App\Support\Compras\AnitaSync\TipotransaccionCompra\TipotransaccionCompraAnitaEsquemaSupport;
@@ -139,7 +140,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
     public function listarParaConsulta(?string $consulta = null, ?int $centrocostoId = null): \Illuminate\Support\Collection
     {
         $query = $this->model->newQuery()
-            ->select('id', 'abreviatura', 'nombre', 'asientocontable', 'retieneiva', 'retieneganancia', 'retieneIIBB')
+            ->select('id', 'abreviatura', 'nombre', 'asientocontable', 'genera_bien_de_uso', 'retieneiva', 'retieneganancia', 'retieneIIBB')
             ->orderBy('nombre')
             ->limit(200);
 
@@ -259,6 +260,7 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 			else	
 				$operacion = 'I';
 
+			$flagsGenera = TipotransaccionCompraGeneraAsiAnitaSupport::desdeAnita($data->tcomp_genera_asi);
 			$arr_campos = [
 				"nombre" => $data->tcomp_desc,
 				'operacion' => $operacion, 
@@ -266,7 +268,8 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'codigoafip' => $data->tcomp_tipo_comp, 
 				'signo' => $data->tcomp_oper,
 				'subdiario' => ($data->tcomp_subdiar == 'N' ? 'N' : 'C'), 
-				'asientocontable' => $data->tcomp_genera_asi, 
+				'asientocontable' => $flagsGenera['asientocontable'],
+				'genera_bien_de_uso' => $flagsGenera['genera_bien_de_uso'],
 				'retieneiva' => $retieneIva, 
 				'retieneganancia' => $retieneGanancia, 
 				'retieneIIBB' => $retieneIIBB, 
@@ -379,7 +382,10 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 				'".'000'."',
 				'".$subdiario."',
 				'".' '."',
-				'".$request['asientocontable']."',
+				'".TipotransaccionCompraGeneraAsiAnitaSupport::haciaAnita(
+					$request['asientocontable'] ?? 'N',
+					$request['genera_bien_de_uso'] ?? 'N'
+				)."',
 				'".'0'."',
 				'".$request['codigoafip']."', 
 				'".$tipoOperacion."',
@@ -412,7 +418,10 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
 					tcomp_desc        = '".$request['nombre']."',
 					tcomp_oper        = '".$request['signo']."', 
 					tcomp_subdiar     = '".$subdiario."', 
-					tcomp_genera_asi  = '".$request['asientocontable']."',
+					tcomp_genera_asi  = '".TipotransaccionCompraGeneraAsiAnitaSupport::haciaAnita(
+						$request['asientocontable'] ?? 'N',
+						$request['genera_bien_de_uso'] ?? 'N'
+					)."',
 					tcomp_tipo_comp   = '".$request['codigoafip']."',
 					tcomp_tipo_oper   = '".$tipoOperacion."', 
 					tcomp_toma_ret    = '".$tomaRetencion."',

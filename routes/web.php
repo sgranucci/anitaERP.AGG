@@ -1110,6 +1110,13 @@ Route::get('configuracion/modulo-aviso/{id}/editar', 'Configuracion\ModuloAvisoC
 Route::put('configuracion/modulo-aviso/{id}', 'Configuracion\ModuloAvisoController@actualizar')->name('actualizar_modulo_aviso');
 
 /*
+ * Reemplazo de destinatario en avisos (vacaciones / suplencia con vencimiento)
+ */
+Route::get('configuracion/reemplazo-destinatario-aviso', 'Configuracion\ModuloAvisoReemplazoDestinatarioController@index')->name('consultar_reemplazo_destinatario_aviso');
+Route::post('configuracion/reemplazo-destinatario-aviso/previsualizar', 'Configuracion\ModuloAvisoReemplazoDestinatarioController@previsualizar')->name('previsualizar_reemplazo_destinatario_aviso');
+Route::post('configuracion/reemplazo-destinatario-aviso/aplicar', 'Configuracion\ModuloAvisoReemplazoDestinatarioController@aplicar')->name('aplicar_reemplazo_destinatario_aviso');
+
+/*
  * Arbol de aprobacion
  */
 
@@ -2928,6 +2935,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
  */
 Route::get('ventas/facturacion-juego', 'Ventas\FacturacionJuegoController@index')->name('facturacion_juego');
 Route::post('ventas/facturacion-juego/ejecutar', 'Ventas\FacturacionJuegoController@ejecutar')->name('ejecutar_facturacion_juego');
+Route::get('ventas/facturacion-juego/conciliacion', 'Ventas\FacturacionJuegoController@conciliacion')->name('facturacion_juego_conciliacion');
+Route::get('ventas/facturacion-juego/listar-conciliacion/{formato}', 'Ventas\FacturacionJuegoController@exportarConciliacion')->name('listar_facturacion_juego_conciliacion');
 Route::get('ventas/facturacion-juego/configuracion', 'Ventas\FacturacionJuegoController@configuracion')->name('facturacion_juego_configuracion');
 Route::post('ventas/facturacion-juego/configuracion', 'Ventas\FacturacionJuegoController@guardarConfiguracion')->name('guardar_facturacion_juego_configuracion');
 Route::post('ventas/facturacion-juego/configuracion/sembrar-anita', 'Ventas\FacturacionJuegoController@sembrarDesdeAnita')->name('sembrar_facturacion_juego_anita');
@@ -4370,6 +4379,7 @@ Route::delete('compras/comprobante-proveedor/{id}/con-precarga', 'Compras\Compro
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/{id}/bienes-uso-provisorios', 'Compras\Comprobante_ProveedorController@guardarBienesUsoProvisorios')->name('guardar_bienes_uso_provisorios_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/liberar-bloqueo-pago', 'Compras\Comprobante_ProveedorController@liberarBloqueoPago')->name('liberar_bloqueo_pago_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/excluir-circuito-pago', 'Compras\Comprobante_ProveedorController@excluirCircuitoPago')->name('excluir_circuito_pago_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@editarComprobante')->name('editar_validacion_abono_comprobante');

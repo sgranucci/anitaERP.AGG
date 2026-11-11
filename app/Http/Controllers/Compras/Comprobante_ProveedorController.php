@@ -31,8 +31,10 @@ use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorDuplicadoException;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
@@ -67,6 +69,8 @@ use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\TipotransaccionCompraAsientoSupport;
+use App\Support\Compras\TipotransaccionCompraBienUsoSupport;
+use App\Services\Compras\ComprobanteProveedorBienUsoProvisorioService;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
@@ -104,6 +108,7 @@ class Comprobante_ProveedorController extends Controller
         private PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService,
         private TrackingPdfResolverService $trackingPdfResolver,
         private ComprobanteProveedorInternoPdfService $pdfInternoService,
+        private ComprobanteProveedorBienUsoProvisorioService $bienUsoProvisorioService,
     ) {}
 
     public function index(Request $request)
@@ -498,13 +503,80 @@ class Comprobante_ProveedorController extends Controller
 
         $prefill = $this->prefillService->paraEdicion($comprobante);
 
+        $bienUsoModal = $this->bienUsoProvisorioService->datosModal($comprobante);
+
         return view('compras.comprobante_proveedor.editar', $this->datosFormulario($prefill) + [
             'retornoListadoQuery' => $this->queryRetornoListado($request),
             'retornoLegajo' => ComprobanteProveedorRetornoLegajoSupport::paraVista(
                 $request,
                 (int) ($comprobante->ordencompra_id ?? 0)
             ),
+            'bien_uso_modal' => $bienUsoModal,
+            'abrir_modal_bienes_uso' => (bool) session('abrir_modal_bienes_uso'),
+            'puede_cargar_bienes_uso' => ($bienUsoModal['puede'] ?? false)
+                && (
+                    can('crear-bien-uso', false)
+                    || can('contabilizar-comprobante-proveedor', false)
+                    || can('editar-comprobante-proveedor', false)
+                ),
         ]);
+    }
+
+    public function guardarBienesUsoProvisorios(Request $request, int $id)
+    {
+        if (! can('crear-bien-uso', false)
+            && ! can('contabilizar-comprobante-proveedor', false)
+            && ! can('editar-comprobante-proveedor', false)
+        ) {
+            can('crear-bien-uso');
+        }
+
+        $comprobante = $this->comprobanteRepository->find($id);
+        if (! $comprobante) {
+            abort(404);
+        }
+
+        $renglones = $request->input('renglones', []);
+        if (! is_array($renglones)) {
+            $renglones = [];
+        }
+
+        try {
+            $creados = $this->bienUsoProvisorioService->crearDesdeComprobante($comprobante, $renglones);
+        } catch (\Throwable $e) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+            }
+
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
+                ->with('error', $e->getMessage());
+        }
+
+        $ids = array_map(static fn ($b) => (int) $b->id, $creados);
+        $urlListado = route('bien_uso', [
+            'comprobante_proveedor_id' => (int) $comprobante->id,
+            'filtro_estado' => 'P',
+        ]);
+        $mensaje = count($creados) === 1
+            ? 'Se creó 1 bien de uso provisorio (id '.$ids[0].'). Está en estado Provisorio: en Bienes de uso usá el filtro «Provisorio».'
+            : 'Se crearon '.count($creados).' bienes de uso provisorios (ids '.implode(', ', $ids).'). Están en estado Provisorio: en Bienes de uso usá el filtro «Provisorio».';
+
+        if ($request->expectsJson() || $request->ajax()) {
+            // Persiste para el reload de la factura (includes.mensaje).
+            session()->flash('mensaje', $mensaje);
+
+            return response()->json([
+                'ok' => true,
+                'message' => $mensaje,
+                'ids' => $ids,
+                'url_listado' => $urlListado,
+            ]);
+        }
+
+        return redirect()
+            ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
+            ->with('mensaje', $mensaje);
     }
 
     public function documentosRelacionados(int $id)
@@ -880,6 +952,14 @@ class Comprobante_ProveedorController extends Controller
 
         $fecha = substr((string) $request->query('fecha'), 0, 10);
         $monedaId = (int) $request->query('moneda_id');
+        if ((int) substr($fecha, 0, 4) < ComprobanteProveedorFechaContableSupport::anioMinimoComprobante()) {
+            return response()->json([
+                'cotizacion' => null,
+                'moneda_id' => $monedaId,
+                'fecha' => $fecha,
+                'message' => 'Fecha fuera de rango.',
+            ]);
+        }
         $cot = ComprobanteProveedorCotizacionSupport::resolverParaMonedaYFecha(
             $this->cotizacionQuery,
             $fecha,
@@ -1795,6 +1875,9 @@ class Comprobante_ProveedorController extends Controller
             'recepciones_disponibles' => $recepcionesDisponibles,
             'recepciones_seleccionadas' => $recepcionesSeleccionadas,
             'com_obligatoria' => $comObligatoria,
+            'com_genera_contabilidad' => ComprobanteProveedorComContabilidadSupport::generaAsientoCom(
+                (int) ($data->empresa_id ?? 0)
+            ),
             'com_politica' => $comPolitica,
             'com_tolerancia_pct' => $toleranciaPct,
             'com_ya_facturado_por_recepcion' => (object) $yaFacturadoPorRecepcion,
@@ -1810,6 +1893,7 @@ class Comprobante_ProveedorController extends Controller
             'mostrarSolapaAsiento' => $mostrarSolapaAsiento,
             'generaAsientoTipo' => $generaAsientoTipo,
             'tipos_asiento_contable' => TipotransaccionCompraAsientoSupport::mapaDesdeColeccion($tiposCompra),
+            'tipos_genera_bien_de_uso' => TipotransaccionCompraBienUsoSupport::mapaDesdeColeccion($tiposCompra),
             'tiene_pagos' => $tienePagos,
             'origen_ingreso_egreso' => $origenIngresoEgreso,
             'url_ingreso_egreso' => $urlIngresoEgreso,
@@ -1957,7 +2041,10 @@ class Comprobante_ProveedorController extends Controller
 
     private function mensajeContabilizadoConLegajo(mixed $comprobante): string
     {
-        $base = 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.';
+        $id = (int) ($comprobante->id ?? 0);
+        $base = $id > 0
+            ? 'Comprobante ID '.$id.' contabilizado: asiento, cuenta corriente y sync Anita.'
+            : 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.';
         $ocId = (int) ($comprobante->ordencompra_id ?? 0);
         if ($ocId <= 0) {
             return $base;
@@ -1989,16 +2076,39 @@ class Comprobante_ProveedorController extends Controller
 
     private function redirectTrasContabilizar(Request $request, mixed $comprobante, string $mensaje)
     {
+        // El ID queda en el cartel verde para anotarlo en la factura física: no auto-cerrar.
+        $persistirMensaje = fn ($redirect) => $redirect->with('mensaje_sin_auto_dismiss', 1);
+
+        if ($comprobante instanceof \App\Models\Compras\Comprobante_Proveedor
+            || (is_object($comprobante) && isset($comprobante->id))
+        ) {
+            $cp = $comprobante instanceof \App\Models\Compras\Comprobante_Proveedor
+                ? $comprobante
+                : $this->comprobanteRepository->find((int) $comprobante->id);
+            if ($cp && TipotransaccionCompraBienUsoSupport::generaDesdeComprobante($cp)) {
+                return $persistirMensaje(
+                    redirect()
+                        ->route('editar_comprobante_proveedor', ['id' => (int) $cp->id] + $this->queryRetornoListado($request))
+                        ->with('mensaje', $mensaje)
+                        ->with('abrir_modal_bienes_uso', 1)
+                );
+            }
+        }
+
         $origenRetorno = ComprobanteProveedorRetornoLegajoSupport::origenDesdeRequest($request);
         if (in_array($origenRetorno, [
             ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
             ComprobanteProveedorRetornoLegajoSupport::ORIGEN_OC,
         ], true)) {
-            return $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index');
+            return $persistirMensaje(
+                $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index')
+            );
         }
 
         if (! EntornoEmpresaSupport::esCrown()) {
-            return $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index');
+            return $persistirMensaje(
+                $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index')
+            );
         }
 
         $tipo = ComprobanteProveedorTipoCargaSesion::actual();
@@ -2012,12 +2122,16 @@ class Comprobante_ProveedorController extends Controller
         }
 
         if ($tipo === null) {
-            return $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index');
+            return $persistirMensaje(
+                $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'index')
+            );
         }
 
-        return redirect()
-            ->to(ComprobanteProveedorTipoCargaSesion::urlContinuar($tipo))
-            ->with('mensaje', $mensaje);
+        return $persistirMensaje(
+            redirect()
+                ->to(ComprobanteProveedorTipoCargaSesion::urlContinuar($tipo))
+                ->with('mensaje', $mensaje)
+        );
     }
 
     private function redirectTrasGuardarComprobante(

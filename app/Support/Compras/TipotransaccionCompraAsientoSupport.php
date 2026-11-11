@@ -8,6 +8,9 @@ use App\Models\Compras\Tipotransaccion_Compra;
 /**
  * Flag del ABM tipo de transacción compra: asientocontable S/N.
  * S = genera asiento (y ctamov). N = solo cuenta corriente / circuito interno.
+ *
+ * Bien de uso (Anita U) vive en `genera_bien_de_uso`, no en este campo.
+ * Ver TipotransaccionCompraGeneraAsiAnitaSupport.
  */
 final class TipotransaccionCompraAsientoSupport
 {
@@ -17,7 +20,7 @@ final class TipotransaccionCompraAsientoSupport
 
     public static function generaValor(mixed $asientocontable): bool
     {
-        // Solo "N" = no genera. S, U (legado bienes de uso) u otro valor ≠ N sí generan.
+        // Solo "N" = no genera. S (o legado U mal guardado) sí generan.
         return strtoupper(trim((string) ($asientocontable ?? ''))) !== self::NO_GENERA;
     }
 

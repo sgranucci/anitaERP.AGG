@@ -18,6 +18,15 @@ class ClienteCuentacorrienteAnitaImportFormatoSupportTest extends TestCase
             'B',
             ClienteCuentacorrienteAnitaImportVentaMatchSupport::letraDesdeCodigoVenta('NCA B-00001-00000012')
         );
+        // Crown gastronomía: letra + espacio (sin guión) antes del PV
+        $this->assertSame(
+            'B',
+            ClienteCuentacorrienteAnitaImportVentaMatchSupport::letraDesdeCodigoVenta('FAC B 00090-00062712')
+        );
+        $this->assertSame(
+            'B',
+            ClienteCuentacorrienteAnitaImportVentaMatchSupport::letraDesdeCodigoVenta('NCD B 00090-00000906')
+        );
     }
 
     public function test_perfil_agg_incluye_cliv_empresa(): void

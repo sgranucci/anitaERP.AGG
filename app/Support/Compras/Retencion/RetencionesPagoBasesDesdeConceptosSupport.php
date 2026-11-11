@@ -13,7 +13,7 @@ use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
  * Arma bases de retención desde conceptos del comprobante aplicado.
  *
  * - Ganancias / IIBB: líneas con retieneganancia=S / retieneIIBB=S
- * - IIBB ARBA: solo facturas con destino Buenos Aires (provincia_destino_id)
+ * - IIBB: Crown = destino Río Negro; resto = destino Buenos Aires (ARBA)
  * - SUSS: importe aplicado menos IVA líquido (tipoconcepto I o fórmula con(código)*alícuota).
  *   Anita deja el IVA en tipoconcepto N; sin esa fórmula la base incluye el IVA.
  * - IVA-sobre-neto: tipoconcepto G (gravado); IVA discriminado = tipoconcepto I
@@ -101,8 +101,8 @@ final class RetencionesPagoBasesDesdeConceptosSupport
             $bruto = round($bruto + $equivPago, 2);
 
             $cp = $cc->comprobante_proveedores;
-            $destinoBa = ComprobanteProveedorProvinciaDestinoSupport::esDestinoBuenosAires($cp);
-            if ($destinoBa) {
+            $destinoAgente = ComprobanteProveedorProvinciaDestinoSupport::esDestinoJurisdiccionAgente($cp);
+            if ($destinoAgente) {
                 $brutoIibbBa = round($brutoIibbBa + $equivPago, 2);
             }
             $lineas = $cp?->comprobante_proveedor_conceptos ?? collect();
@@ -111,7 +111,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                     'cc_id' => $ccId,
                     'sin_conceptos' => true,
                     'signo' => $signo,
-                    'destino_buenos_aires' => $destinoBa,
+                    'destino_jurisdiccion_agente' => $destinoAgente,
                     'monto_aplicado' => $montoApl,
                     'equivalente_pago' => $equivPago,
                 ];
@@ -149,7 +149,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 if ($retGan) {
                     $netoGan = round($netoGan + $porcionPago, 2);
                 }
-                if ($retIibb && $destinoBa) {
+                if ($retIibb && $destinoAgente) {
                     $netoIibb = round($netoIibb + $porcionPago, 2);
                 }
 
@@ -175,7 +175,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                     'tipoconcepto' => $tipo,
                     'retieneganancia' => $retGan ? 'S' : 'N',
                     'retieneIIBB' => $retIibb ? 'S' : 'N',
-                    'destino_buenos_aires' => $destinoBa,
+                    'destino_jurisdiccion_agente' => $destinoAgente,
                     'signo' => $signo,
                     'monto_linea' => $montoLinea,
                     'porcion_pago' => $porcionPago,

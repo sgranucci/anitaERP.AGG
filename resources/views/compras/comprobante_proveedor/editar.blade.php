@@ -16,10 +16,18 @@
 <script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/comprobante_proveedor/formulario.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@if (! empty($puede_cargar_bienes_uso))
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/bienes_uso_provisorios.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/comprobante_proveedor/bienes_uso_provisorios.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 @section('contenido')
 @include('compras.partials.documentos_relacionados_circuito_modal')
 @include('compras.comprobante_proveedor.partials.formulario_card', ['esEdicion' => true])
+@if (! empty($puede_cargar_bienes_uso))
+    @include('compras.comprobante_proveedor.partials.modal_bienes_uso')
+    @include('includes.contable.modalconsultacentrocosto')
+@endif
 @endsection

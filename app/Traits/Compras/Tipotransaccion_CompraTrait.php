@@ -24,6 +24,12 @@ trait Tipotransaccion_CompraTrait {
 		'S' => 'Genera asiento contable',
 		'N' => 'No genera asiento contable',
 		];
+
+	/** Separado de asientocontable: en Anita era el valor U de tcomp_genera_asi. */
+	public static $enumGeneraBienDeUso = [
+		'S' => 'Genera bien de uso',
+		'N' => 'No genera bien de uso',
+		];
 	
 	public static $enumEstado = [
 		'A' => 'Activa',

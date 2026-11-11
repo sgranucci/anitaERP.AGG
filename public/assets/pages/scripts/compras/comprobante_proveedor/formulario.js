@@ -4702,6 +4702,16 @@ $(function () {
             return (($('#fechacomprobante').val() || '') + '').substring(0, 10);
         }
 
+        // Mientras se tipea el año (0026, 0202…) el date ya trae valor: no consultar
+        // cotización con una fecha anterior al mínimo del campo.
+        function fechaComprobanteValidaParaCotizacion(fecha) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+                return false;
+            }
+            var min = String($('#fechacomprobante').attr('min') || '');
+            return !(min && fecha < min);
+        }
+
         function actualizarHintDia(cotDia, cotFactura) {
             var $hint = $('#cp-cotizacion-dia-hint');
             if (!$hint.length) {
@@ -4726,11 +4736,16 @@ $(function () {
             var forzarCampo = !!opciones.forzarCampo;
             var mid = monedaIdForm();
             var fecha = fechaComprobanteForm();
-            if (!fecha) {
-                return;
-            }
             if (refrescoXhr && refrescoXhr.readyState !== 4) {
                 refrescoXhr.abort();
+            }
+            if (!fechaComprobanteValidaParaCotizacion(fecha)) {
+                if (fecha) {
+                    $('#cp-cotizacion-dia-hint').html(
+                        '<span class="text-danger">Revise la fecha del comprobante: no se puede tomar la cotización del día.</span>'
+                    );
+                }
+                return;
             }
             refrescoXhr = $.getJSON(carpetaBase + '/compras/comprobante-proveedor/api/cotizacion-moneda-fecha', {
                 fecha: fecha,

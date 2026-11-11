@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Ventas\TransferenciaCrown\TransferenciaVentaGastronomiaService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownControlSupport;
+use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownCriterioFecha;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownPreviewStore;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownResumenImportSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownSalas;
@@ -44,6 +45,10 @@ class TransferenciaVentaGastronomiaController extends Controller
             }
         }
 
+        $criterioFecha = TransferenciaCrownCriterioFecha::normalizar(
+            $preview['criterio_fecha'] ?? $request->query('criterio_fecha', TransferenciaCrownCriterioFecha::JORNADA)
+        );
+
         return view('ventas.transferencia_gastronomia.index', [
             'salas' => TransferenciaCrownSalas::gastronomia(),
             'preview' => $preview,
@@ -52,6 +57,7 @@ class TransferenciaVentaGastronomiaController extends Controller
             'sala' => (string) $request->query('sala', ''),
             'desde' => (string) $request->query('desde', date('Y-m-01')),
             'hasta' => (string) $request->query('hasta', date('Y-m-d')),
+            'criterio_fecha' => $criterioFecha,
             'controlPostImport' => session('control_transferencia'),
             'resumenCarga' => session('resumen_transferencia'),
         ]);
@@ -65,6 +71,7 @@ class TransferenciaVentaGastronomiaController extends Controller
         $salaCodigo = strtoupper(trim((string) $request->input('sala', '')));
         $desde = (string) $request->input('desde', '');
         $hasta = (string) $request->input('hasta', '');
+        $criterioFecha = TransferenciaCrownCriterioFecha::normalizar($request->input('criterio_fecha'));
         $sala = TransferenciaCrownSalas::gastronomiaPorCodigo($salaCodigo);
         if ($sala === null || $desde === '' || $hasta === '' || $hasta < $desde) {
             return redirect()->route('transferencia_gastronomia_crown')
@@ -72,7 +79,7 @@ class TransferenciaVentaGastronomiaController extends Controller
         }
 
         try {
-            $resultado = $this->service->previsualizar($sala, $desde, $hasta);
+            $resultado = $this->service->previsualizar($sala, $desde, $hasta, $criterioFecha);
             $token = $this->preview->guardar((int) auth()->id(), [
                 'origen' => 'gastronomia',
                 'titulo' => 'Ventas de '.$sala['nombre'],
@@ -80,6 +87,7 @@ class TransferenciaVentaGastronomiaController extends Controller
                 'sala_nombre' => $sala['nombre'],
                 'desde' => $desde,
                 'hasta' => $hasta,
+                'criterio_fecha' => $criterioFecha,
                 'filas' => $resultado['filas'],
                 'resumen' => $resultado['resumen'],
                 'advertencias' => $resultado['advertencias'],
@@ -89,6 +97,7 @@ class TransferenciaVentaGastronomiaController extends Controller
                 'sala' => $salaCodigo,
                 'desde' => $desde,
                 'hasta' => $hasta,
+                'criterio_fecha' => $criterioFecha,
             ])->with('mensaje_error', $e->getMessage());
         }
 
@@ -97,6 +106,7 @@ class TransferenciaVentaGastronomiaController extends Controller
             'sala' => $salaCodigo,
             'desde' => $desde,
             'hasta' => $hasta,
+            'criterio_fecha' => $criterioFecha,
         ]);
     }
 

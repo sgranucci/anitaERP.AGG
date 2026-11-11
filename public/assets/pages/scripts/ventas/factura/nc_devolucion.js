@@ -183,12 +183,17 @@ function ncDevolucionPintarConceptos(filas) {
         }
         $body.append(tpl);
         var $tr = $body.find('tr').last();
+        var fmt = typeof window.facturaFmtImporteTotal === 'function'
+            ? window.facturaFmtImporteTotal
+            : function (n) {
+                return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            };
         $tr.find('.conceptototal').val(fila.concepto);
-        $tr.find('.tasatotal').val(fila.tasa > 0 ? Number(fila.tasa).toFixed(2) : '').css('text-align', 'right');
-        $tr.find('.importetotal').val(Number(fila.importe).toFixed(2)).css('text-align', 'right');
+        $tr.find('.tasatotal').val(fila.tasa > 0 ? fmt(fila.tasa) : '').css('text-align', 'right');
+        $tr.find('.importetotal').val(fmt(fila.importe)).css('text-align', 'right');
         if (fila.concepto === 'Total') {
             $tr.find('.conceptototal, .importetotal').css('fontWeight', 'bold');
-            $('#montototalfactura').val(Number(fila.importe).toFixed(2));
+            $('#montototalfactura').val(fmt(fila.importe));
         }
     });
 }

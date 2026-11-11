@@ -54,7 +54,7 @@ class ValidacionBienUso extends FormRequest
             'vendor' => 'nullable|max:255',
             'tema' => 'nullable|max:255',
             'numero_serie' => 'nullable|max:100',
-            'estado' => 'required|in:A,I',
+            'estado' => 'required|in:A,I,P',
             'centrocosto_id' => 'required|integer|exists:centrocosto,id',
             'tipo_bien' => 'required|in:I,M,P',
             'observaciones' => 'nullable|max:2000',
@@ -63,6 +63,8 @@ class ValidacionBienUso extends FormRequest
         if (! $tieneContable) {
             return $rules;
         }
+
+        // Descripción y valor siempre; rubro/cuentas los completa el destinatario al activar un P.
 
         return array_merge($rules, [
             'codigo_bien' => [
@@ -75,7 +77,7 @@ class ValidacionBienUso extends FormRequest
                         : $q->whereNull('empresa_id'))
                     ->ignore($id),
             ],
-            'descripcion' => 'nullable|max:80',
+            'descripcion' => 'required|max:80',
             'bien_uso_rubro_id' => Schema::hasTable('bien_uso_rubro')
                 ? 'nullable|integer|exists:bien_uso_rubro,id'
                 : 'nullable|integer',
@@ -87,7 +89,7 @@ class ValidacionBienUso extends FormRequest
             'fecha_baja' => 'nullable|date',
             'fecha_baja_reemplazo' => 'nullable|date',
             'vida_util' => 'nullable|integer|min:0',
-            'valor_origen' => 'nullable|numeric|min:0',
+            'valor_origen' => 'required|numeric|min:0.01',
             'valor_baja' => 'nullable|numeric|min:0',
             'cuentacontable_origen_id' => 'nullable|integer|exists:cuentacontable,id',
             'cuentacontable_amort_id' => 'nullable|integer|exists:cuentacontable,id',
@@ -96,6 +98,7 @@ class ValidacionBienUso extends FormRequest
             'fl_amort_unid' => ['nullable', 'string', 'size:1', Rule::in(BienUsoAmortizacionUnidad::todas())],
             'marca' => 'nullable|max:20',
             'proveedor_id' => 'nullable|integer|exists:proveedor,id',
+            'comprobante_proveedor_id' => 'nullable|integer|exists:comprobante_proveedor,id',
             'tipo_factura' => 'nullable|max:3',
             'letra_factura' => 'nullable|max:1',
             'sucursal_factura' => 'nullable|integer|min:0',

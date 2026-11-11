@@ -157,6 +157,18 @@
             </div>
         </div>
         <div class="form-group row">
+            <label for="genera_bien_de_uso" class="col-lg-4 control-label text-right pr-2 requerido">Bien de uso</label>
+            <div class="col-lg-8">
+                <select name="genera_bien_de_uso" id="genera_bien_de_uso" class="form-control" required>
+                    <option value="">Elija si genera bien de uso</option>
+                    @foreach ($generaBienDeUsoEnum as $value => $generaBienDeUso)
+                        <option value="{{ $value }}" @selected($value == $valorEnum('genera_bien_de_uso'))>{{ $generaBienDeUso }}</option>
+                    @endforeach
+                </select>
+                <small class="form-text text-muted">En Anita era el valor U de &laquo;genera asiento&raquo; (asiento + alta en bienes de uso).</small>
+            </div>
+        </div>
+        <div class="form-group row">
             <label for="retieneiva" class="col-lg-4 control-label text-right pr-2 requerido">Retiene IVA</label>
             <div class="col-lg-8">
                 <select name="retieneiva" id="retieneiva" class="form-control" required>

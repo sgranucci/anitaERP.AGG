@@ -124,6 +124,7 @@ class Tipotransaccion_CompraController extends Controller
         $signoEnum = Tipotransaccion_Compra::$enumSigno;
         $subdiarioEnum = Tipotransaccion_Compra::$enumSubdiario;
         $asientocontableEnum = Tipotransaccion_Compra::$enumAsientoContable;
+        $generaBienDeUsoEnum = Tipotransaccion_Compra::$enumGeneraBienDeUso;
         $estadoEnum = Tipotransaccion_Compra::$enumEstado;
         $retieneEnum = Tipotransaccion_Compra::$enumRetiene;
 
@@ -132,6 +133,7 @@ class Tipotransaccion_CompraController extends Controller
             'signoEnum' => $signoEnum,
             'subdiarioEnum' => $subdiarioEnum,
             'asientocontableEnum' => $asientocontableEnum,
+            'generaBienDeUsoEnum' => $generaBienDeUsoEnum,
             'estadoEnum' => $estadoEnum,
             'retieneEnum' => $retieneEnum,
             'filasCentrocosto' => $this->filasCentrocosto(null),
@@ -181,6 +183,7 @@ class Tipotransaccion_CompraController extends Controller
         $signoEnum = Tipotransaccion_Compra::$enumSigno;
         $subdiarioEnum = Tipotransaccion_Compra::$enumSubdiario;
         $asientocontableEnum = Tipotransaccion_Compra::$enumAsientoContable;
+        $generaBienDeUsoEnum = Tipotransaccion_Compra::$enumGeneraBienDeUso;
         $estadoEnum = Tipotransaccion_Compra::$enumEstado;
         $retieneEnum = Tipotransaccion_Compra::$enumRetiene;
 
@@ -190,6 +193,7 @@ class Tipotransaccion_CompraController extends Controller
             'signoEnum' => $signoEnum,
             'subdiarioEnum' => $subdiarioEnum,
             'asientocontableEnum' => $asientocontableEnum,
+            'generaBienDeUsoEnum' => $generaBienDeUsoEnum,
             'estadoEnum' => $estadoEnum,
             'retieneEnum' => $retieneEnum,
             'filasCentrocosto' => $this->filasCentrocosto($data),
@@ -277,10 +281,12 @@ class Tipotransaccion_CompraController extends Controller
                 if ($asientoFlag !== 'N') {
                     $asientoFlag = 'S';
                 }
+                $bienUsoFlag = strtoupper(trim((string) ($row->genera_bien_de_uso ?? 'N'))) === 'S' ? 'S' : 'N';
                 $output['data'] .= '<td class="id">'.e($row->id).'</td>';
                 $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura).'</td>';
                 $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
                 $output['data'] .= '<td class="asientocontable d-none">'.e($asientoFlag).'</td>';
+                $output['data'] .= '<td class="genera_bien_de_uso d-none">'.e($bienUsoFlag).'</td>';
                 $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->retieneiva ?? null)).'</td>';
                 $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->retieneganancia ?? null)).'</td>';
                 $output['data'] .= '<td>'.e($this->etiquetaRetiene($row->getAttribute('retieneIIBB'))).'</td>';
@@ -325,12 +331,14 @@ class Tipotransaccion_CompraController extends Controller
         if ($asientoFlag !== 'N') {
             $asientoFlag = 'S';
         }
+        $bienUsoFlag = strtoupper(trim((string) ($tipo->genera_bien_de_uso ?? 'N'))) === 'S' ? 'S' : 'N';
 
         return response()->json([
             'id' => (int) $tipo->id,
             'abreviatura' => (string) $tipo->abreviatura,
             'nombre' => (string) $tipo->nombre,
             'asientocontable' => $asientoFlag,
+            'genera_bien_de_uso' => $bienUsoFlag,
         ]);
     }
 

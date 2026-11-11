@@ -69,9 +69,32 @@ final class FacturacionJuegoTipoSupport
         return $tipo;
     }
 
-    /** p-resultado checksigno == SUMA → asiento H en cuenta de ventas. */
+    /**
+     * p-resultado checksigno == SUMA → asiento H en cuenta de ventas.
+     *
+     * Tipotransaccion expone signo vía accessor como S/R (BD: 1/-1).
+     * Cast a int de "R"/"S" da 0 y trataba créditos (CME/CSL/CRE) como ganancia.
+     */
     public static function esGanancia(Tipotransaccion $tipo): bool
     {
-        return (int) ($tipo->signo ?? 0) >= 0;
+        $signo = $tipo->signo;
+        if (is_string($signo) && ! is_numeric($signo)) {
+            return strtoupper(trim($signo)) === 'S';
+        }
+
+        return (int) ($signo ?? 0) > 0;
+    }
+
+    /**
+     * Descripción de movimiento al estilo p-resultado (subd_desc_mov, 30 chars):
+     * "CME B-00015-00017046 Mesas de j".
+     */
+    public static function conceptoMayor(string $codigoVenta, string $nombreCliente = ''): string
+    {
+        $codigo = trim($codigoVenta);
+        $nombre = trim($nombreCliente);
+        $txt = $nombre !== '' ? trim($codigo.' '.$nombre) : $codigo;
+
+        return mb_substr($txt !== '' ? $txt : 'Facturacion juego', 0, 30);
     }
 }

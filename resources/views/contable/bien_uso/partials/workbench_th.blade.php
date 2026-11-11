@@ -1,4 +1,45 @@
 @php
     $titulo = ($etiquetasColumnas ?? [])[$key] ?? ($key);
+    $camposOrden = $camposOrdenablesThead ?? [];
+    $ordenActual = $ordenActualThead ?? [];
+    $esOrdenable = isset($camposOrden[$key]);
+    $dirCol = $esOrdenable
+        ? \App\Support\Listado\ListadoOrdenamientoSupport::direccionDeCampo($ordenActual, $key)
+        : null;
+    $idxCol = $esOrdenable
+        ? \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActual, $key)
+        : null;
+    $claseCol = '';
+    $titleTh = $titulo;
+    if ($esOrdenable) {
+        $claseCol = 'lw-col-sortable'.($dirCol ? ' lw-col-sorted' : '');
+        $titleTh .= ' — clic para ordenar';
+        $qsSort = $filtrosQuery ?? [];
+        unset($qsSort['sort']);
+        $qsSort = array_merge(
+            $qsSort,
+            \App\Support\Listado\ListadoOrdenamientoSupport::paraQueryString(
+                \App\Support\Listado\ListadoOrdenamientoSupport::togglePrimario($ordenActual, $key, $camposOrden)
+            )
+        );
+    }
 @endphp
-<th>{{ $titulo }}</th>
+<th class="{{ $claseCol }}" title="{{ $titleTh }}">
+    @if ($esOrdenable)
+        <a href="{{ route('bien_uso', $qsSort) }}" class="lw-sort-link">
+            {{ $titulo }}
+            @if ($dirCol === 'asc')
+                <i class="fa fa-sort-up lw-sort-icon"></i>
+            @elseif ($dirCol === 'desc')
+                <i class="fa fa-sort-down lw-sort-icon"></i>
+            @else
+                <i class="fa fa-sort lw-sort-icon lw-sort-muted"></i>
+            @endif
+            @if ($idxCol !== null && count($ordenActual) > 1)
+                <sup class="lw-sort-prio">{{ $idxCol + 1 }}</sup>
+            @endif
+        </a>
+    @else
+        {{ $titulo }}
+    @endif
+</th>

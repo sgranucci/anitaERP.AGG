@@ -569,7 +569,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'creousuario_id' => $usuarioId,
         ];
         if (Schema::hasColumn('comprobante_proveedor', 'provincia_destino_id')) {
-            $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
+            $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::defaultProvinciaId();
         }
         $comprobante = Comprobante_Proveedor::query()->create($datosCp);
         app(ComprobanteProveedorCierrePrecargaLegajoService::class)->cerrarSinFallar($comprobante, $usuarioId);
@@ -1570,7 +1570,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'creousuario_id' => $usuarioId,
         ];
         if (Schema::hasColumn('comprobante_proveedor', 'provincia_destino_id')) {
-            $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
+            $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::defaultProvinciaId();
         }
 
         $comprobante = Comprobante_Proveedor::query()->create($datosCp);

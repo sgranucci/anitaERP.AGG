@@ -232,7 +232,8 @@ class Kernel extends ConsoleKernel
             ->dailyAt(ParametroSistemaSupport::caeaPresentacionHora())
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/arca-caea-presentacion.log'))
-            ->when(fn () => ! EntornoEmpresaSupport::esFerli());
+            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
+                && (bool) config('arca.caea.presentacion_automatica', true));
 
         $schedule->command('arca:avisar-vencimiento-certificados')
             ->dailyAt((string) config('arca.certificado_aviso.hora', '08:10'))
@@ -272,6 +273,13 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(30)
             ->appendOutputTo(storage_path('logs/arbol-reemplazo-firmante-vencidos.log'));
+
+        // Reemplazo destinatario de avisos: misma lógica de vence_el.
+        $schedule->command('configuracion:restaurar-reemplazos-destinatario-aviso-vencidos')
+            ->dailyAt((string) config('modulo_aviso.reemplazo_destinatario_vencidos.hora', '00:05'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/modulo-aviso-reemplazo-vencidos.log'));
 
         $schedule->command('compras:conciliar-cc-proveedor')
             ->dailyAt((string) config('compras.conciliacion_cc_proveedor.hora', '07:40'))

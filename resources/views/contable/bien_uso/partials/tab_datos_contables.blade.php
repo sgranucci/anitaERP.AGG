@@ -10,12 +10,39 @@
     $amortOpciones = \App\Support\Contable\BienUsoAmortizacionUnidad::opciones();
 @endphp
 
+@if (! $tieneContable)
+<div class="form-group row">
+    <label for="estado" class="col-lg-4 control-label text-right pr-2 requerido">Estado</label>
+    <div class="col-lg-3">
+        <select id="estado" name="estado" class="form-control" required>
+            @foreach ($estado_enum as $item)
+                <option value="{{ $item['valor'] }}"
+                    {{ (string) old('estado', $data->estado ?? 'A') === $item['valor'] ? 'selected' : '' }}>
+                    {{ $item['nombre'] }}
+                </option>
+            @endforeach
+        </select>
+    </div>
+</div>
+@endif
+
 @if ($tieneContable)
 <div class="form-group row">
     <label for="codigo_bien" class="col-lg-4 control-label text-right pr-2">C&oacute;digo bien</label>
     <div class="col-lg-3">
         <input type="number" name="codigo_bien" id="codigo_bien" class="form-control" min="1"
                value="{{ old('codigo_bien', $data->codigo_bien ?? '') }}">
+    </div>
+    <label for="estado" class="col-lg-2 control-label text-right pr-2 requerido">Estado</label>
+    <div class="col-lg-3">
+        <select id="estado" name="estado" class="form-control" required>
+            @foreach ($estado_enum as $item)
+                <option value="{{ $item['valor'] }}"
+                    {{ (string) old('estado', $data->estado ?? 'A') === $item['valor'] ? 'selected' : '' }}>
+                    {{ $item['nombre'] }}
+                </option>
+            @endforeach
+        </select>
     </div>
 </div>
 
@@ -173,20 +200,6 @@
     'col_input' => 'col-lg-7',
 ])
 @endif
-
-<div class="form-group row">
-    <label for="estado" class="col-lg-4 control-label text-right pr-2 requerido">Estado</label>
-    <div class="col-lg-3">
-        <select id="estado" name="estado" class="form-control" required>
-            @foreach ($estado_enum as $item)
-                <option value="{{ $item['valor'] }}"
-                    {{ (string) old('estado', $data->estado ?? 'A') === $item['valor'] ? 'selected' : '' }}>
-                    {{ $item['nombre'] }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
 
 <div class="form-group row">
     <label for="observaciones" class="col-lg-4 control-label text-right pr-2">Observaciones</label>

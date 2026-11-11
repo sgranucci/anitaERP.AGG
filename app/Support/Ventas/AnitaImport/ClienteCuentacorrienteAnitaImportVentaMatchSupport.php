@@ -132,11 +132,11 @@ final class ClienteCuentacorrienteAnitaImportVentaMatchSupport
 
     public static function letraDesdeCodigoVenta(string $codigo): string
     {
-        // "FAC A-00012-00083016"
-        if (preg_match('/^[A-Z0-9]{1,3}\s+([A-Z0-9])-/i', trim($codigo), $m)) {
+        // "FAC A-00012-00083016" (Anita / FOL) o "FAC B 00090-00062712" (Crown gastronomía)
+        if (preg_match('/^[A-Z0-9]{1,3}\s+([A-Z0-9])(?:-|\s)/i', trim($codigo), $m)) {
             return ClienteCuentacorrienteAnitaImportClaveSupport::letra($m[1]);
         }
-        if (preg_match('/\s([A-Z0-9])-/i', $codigo, $m)) {
+        if (preg_match('/\s([A-Z0-9])(?:-|\s)/i', $codigo, $m)) {
             return ClienteCuentacorrienteAnitaImportClaveSupport::letra($m[1]);
         }
 

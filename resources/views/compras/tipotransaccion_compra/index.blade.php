@@ -155,6 +155,7 @@
                                         'signo' => (string) $data->desc_signo,
                                         'subdiario' => (string) $data->desc_subdiario,
                                         'asientocontable' => (string) $data->desc_asientocontable,
+                                        'genera_bien_de_uso' => (string) $data->desc_genera_bien_de_uso,
                                         'estado' => (string) $data->desc_estado,
                                         'retieneiva' => (string) $data->desc_retieneiva,
                                         'retieneganancia' => (string) $data->desc_retieneganancia,
@@ -169,7 +170,7 @@
                                         },
                                         'signo' => $signoMarca,
                                         'subdiario' => (string) $data->subdiario === 'C' ? 'Sí' : 'No',
-                                        'asientocontable' => (string) $data->asientocontable === 'S' ? 'Sí' : 'No',
+                                        'asientocontable', 'genera_bien_de_uso' => (string) $data->{$keyColumna} === 'S' ? 'Sí' : 'No',
                                         'retieneiva', 'retieneganancia', 'retieneIIBB' => match ((string) $data->{$keyColumna}) {
                                             'S' => 'Sí',
                                             'N' => 'No',
@@ -177,7 +178,7 @@
                                         },
                                         default => $textoCompleto,
                                     };
-                                    $centrar = in_array($keyColumna, ['id', 'abreviatura', 'signo', 'subdiario', 'asientocontable', 'retieneiva', 'retieneganancia', 'retieneIIBB'], true);
+                                    $centrar = in_array($keyColumna, ['id', 'abreviatura', 'signo', 'subdiario', 'asientocontable', 'genera_bien_de_uso', 'retieneiva', 'retieneganancia', 'retieneIIBB'], true);
                                 @endphp
                                 <td class="lw-col {{ $centrar ? 'text-center' : '' }}" style="{{ $styleCol }}" title="{{ $textoCompleto }}">
                                     <span class="lw-celda-texto">{{ $textoCelda }}</span>

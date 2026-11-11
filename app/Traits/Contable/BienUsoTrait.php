@@ -8,6 +8,7 @@ trait BienUsoTrait
     public static array $enumEstado = [
         ['id' => '1', 'valor' => 'A', 'nombre' => 'Activo'],
         ['id' => '2', 'valor' => 'I', 'nombre' => 'Inactivo'],
+        ['id' => '3', 'valor' => 'P', 'nombre' => 'Provisorio'],
     ];
 
     /** @var list<array{id: string, valor: string, nombre: string}> */

@@ -11,8 +11,8 @@ use InvalidArgumentException;
 /**
  * Piernas del asiento de facturación juego (paridad asiento_contable en p-resultado.c).
  *
- * Ganancia (signo +): H en ventas / D en caja.
- * Pérdida (signo -): D en ventas / H en caja.
+ * Ganancia (checksigno SUMA / FME·FSL·FRE): H en ventas / D en caja.
+ * Pérdida (checksigno RESTA / CME·CSL·CRE): D en ventas / H en caja.
  */
 final class FacturacionJuegoAsientoSupport
 {

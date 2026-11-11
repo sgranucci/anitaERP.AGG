@@ -2480,20 +2480,41 @@
             programarPreview();
         });
 
-        // Lupa / F1 usan .consultacuentacontable (consulta.js → abrirModalConsultaCuentaContableDesdeContexto).
-        // Al abrir desde el modal IVA, apilar z-index y marcar fila para el hook de Elegir.
-        $(document).on('click', '#ie-cp-tbody-conceptos .consultacuentacontable', function () {
-            ptrFilaCuentaConcepto = $(this).closest('.ie-cp-fila-concepto');
-            window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
+        // Lupa / F1 / tipeo abren consulta.js. Desde el modal IVA: apilar z-index y marcar fila.
+        $(document).on('click', '#ie-cp-tbody-conceptos .consultacuentacontable, #ie-cp-preview-asiento .consultacuentacontable', function () {
+            var $filaConcepto = $(this).closest('.ie-cp-fila-concepto');
+            if ($filaConcepto.length) {
+                ptrFilaCuentaConcepto = $filaConcepto;
+                window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
+            }
             apilarModalCuentaSobreComprobanteIva();
         });
 
-        $(document).on('keydown', '#ie-cp-tbody-conceptos .codigocuentacontable', function (e) {
+        $(document).on('keydown', '#ie-cp-tbody-conceptos .codigocuentacontable, #ie-cp-preview-asiento .codigocuentacontable', function (e) {
             if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
-                ptrFilaCuentaConcepto = $(this).closest('.ie-cp-fila-concepto');
-                window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
+                var $filaConcepto = $(this).closest('.ie-cp-fila-concepto');
+                if ($filaConcepto.length) {
+                    ptrFilaCuentaConcepto = $filaConcepto;
+                    window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
+                }
                 apilarModalCuentaSobreComprobanteIva();
             }
+        });
+
+        $(document).on('cuentacontable:antes-abrir-consulta', function (_e, $ctx, $input) {
+            if (!$('#modal-ie-comprobante-iva').hasClass('show')) {
+                return;
+            }
+            var $origen = ($input && $input.length) ? $input : (($ctx && $ctx.length) ? $ctx : $());
+            if (!$origen.closest('#modal-ie-comprobante-iva').length) {
+                return;
+            }
+            var $filaConcepto = $origen.closest('.ie-cp-fila-concepto');
+            if ($filaConcepto.length) {
+                ptrFilaCuentaConcepto = $filaConcepto;
+                window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
+            }
+            apilarModalCuentaSobreComprobanteIva();
         });
 
         $('#consultacuentaModal')

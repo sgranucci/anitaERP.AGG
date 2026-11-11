@@ -62,30 +62,7 @@
 			}
 		});
 
-		$(document).on('input.asientoAbreCuenta', '#cuenta-table .codigocuentacontable', function () {
-			if (this.readOnly || this.disabled) {
-				return;
-			}
-			var texto = $.trim(this.value || '');
-			if (texto === '' || $(this).data('cta-pegado-codigo') === 1) {
-				return;
-			}
-			if (typeof abrirModalConsultaCuentaContableDesdeContexto !== 'function') {
-				return;
-			}
-			var $fila = $(this).closest('tr');
-			if (typeof empresaIdParaConsultaCuentaContable === 'function' && !(empresaIdParaConsultaCuentaContable($fila) > 0)) {
-				return;
-			}
-			$('#consultacuentacontable').val(texto);
-			if (typeof modalCuentaContableAbierto === 'function' && modalCuentaContableAbierto()) {
-				if (typeof buscar_datos === 'function') {
-					buscar_datos(texto);
-				}
-				return;
-			}
-			abrirModalConsultaCuentaContableDesdeContexto($fila, { caretAlFinal: true });
-		});
+		// Abrir modal al tipear: consulta.js (input.consultactaAbre sobre .codigocuentacontable).
 
 		$("#tbody-cuenta-table tr.item-cuenta").each(function () {
 			asientoRefreshDetallePreview($(this));
@@ -1259,7 +1236,12 @@
 					if (data.url_impresion_asiento) {
 						window.open(data.url_impresion_asiento, '_blank', 'noopener');
 					}
-					alert("Se grabó el asiento con éxito");
+					var nroGrabado = (data.numeroasiento !== undefined && data.numeroasiento !== null && String(data.numeroasiento).trim() !== '')
+						? String(data.numeroasiento).trim()
+						: '';
+					alert(nroGrabado !== ''
+						? ("Se grabó el asiento N° " + nroGrabado + " con éxito")
+						: "Se grabó el asiento con éxito");
 					salirTrasGrabarAsiento();
 					return;
 				}

@@ -2823,6 +2823,19 @@
 	var calculaFacturaSeq = 0;
 	var calculaFacturaXhr = null;
 
+	/** Importe del bloque de totales (Concepto/Tasa/Importe): miles con punto, decimales con coma. */
+	function facturaFmtImporteTotal(n) {
+		var x = Number(n);
+		if (!isFinite(x)) {
+			x = 0;
+		}
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.fmt === 'function') {
+			return AsientoMontosFormato.fmt(x);
+		}
+		return x.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	}
+	window.facturaFmtImporteTotal = facturaFmtImporteTotal;
+
 	function calculaFactura()
 	{
 		if (typeof window.sumarCantidadesFacturaBierzo === 'function') {
@@ -2930,13 +2943,13 @@
 
 					$('#total-factura-table').find('tr').last().find('.conceptototal').val(item.concepto);
 					if (item.tasa > 0)
-						$('#total-factura-table').find('tr').last().find('.tasatotal').val(parseFloat(item.tasa).toFixed(2));
+						$('#total-factura-table').find('tr').last().find('.tasatotal').val(facturaFmtImporteTotal(item.tasa));
 
-					$('#total-factura-table').find('tr').last().find('.importetotal').val(importeNum.toFixed(2));
+					$('#total-factura-table').find('tr').last().find('.importetotal').val(facturaFmtImporteTotal(importeNum));
 
 					if (item.concepto == "Total")
 					{
-						$('#montototalfactura').val(importeNum.toFixed(2));
+						$('#montototalfactura').val(facturaFmtImporteTotal(importeNum));
 						$('#total-factura-table').find('tr').last().find('.conceptototal').css('fontWeight', 'bold');
 						$('#total-factura-table').find('tr').last().find('.importetotal').css('fontWeight', 'bold');
 						if (typeof window.actualizarFceNcMostrador === 'function') {

@@ -1086,16 +1086,16 @@
 									</td>	
 									<td>
 										@if ($impuesto->tasa != 0)
-											<input type="text" style="text-align:right;" name="tasatotales[]" class="form-control tasatotal" value="{{number_format($impuesto->tasa,2)}}" readonly/>
+											<input type="text" style="text-align:right;" name="tasatotales[]" class="form-control tasatotal" value="{{ number_format($impuesto->tasa, 2, ',', '.') }}" readonly/>
 										@else
 											<input type="text" style="text-align:right;" name="tasatotales[]" class="form-control tasatotal" value="" readonly/>
 										@endif
 									</td>			
 									<td>
 										@if ($impuesto->concepto == 'Total')
-											<input type="text" style="text-align:right; font-weight: bold;" name="montototales[]" class="form-control importetotal" value="{{number_format($impuesto->importe,2)}}" readonly/>
+											<input type="text" style="text-align:right; font-weight: bold;" name="montototales[]" class="form-control importetotal" value="{{ number_format($impuesto->importe, 2, ',', '.') }}" readonly/>
 										@else
-											<input type="text" style="text-align:right;" name="montototales[]" class="form-control importetotal" value="{{number_format($impuesto->importe,2)}}" readonly/>
+											<input type="text" style="text-align:right;" name="montototales[]" class="form-control importetotal" value="{{ number_format($impuesto->importe, 2, ',', '.') }}" readonly/>
 										@endif
 										<input type="hidden" name="baseimponibles[]" class="baseimponible" value="{{$impuesto->baseimponible}}"/>
 										<input type="hidden" name="provincia_ids[]" class="provincia_id" value="{{$impuesto->provincia_id}}"/>

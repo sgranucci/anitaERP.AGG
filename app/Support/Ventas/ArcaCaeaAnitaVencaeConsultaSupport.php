@@ -66,14 +66,22 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
         $nroCaea = trim($nroCaea);
         $sucursales = array_values(array_unique(array_filter(
             array_map(static fn ($s): int => (int) $s, $sucursales),
-            static fn (int $s): bool => $s > 0,
+            static fn (int $s): bool => ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($s),
         )));
         sort($sucursales);
         $clave = $nroCaea.'|'.implode(',', $sucursales);
+        if ($nroCaea === '' || $sucursales === []) {
+            self::$indiceLecturaUnica = [];
+            self::$lecturaUnicaClave = $clave;
+
+            return;
+        }
         if (self::$lecturaUnicaClave === $clave && self::$indiceLecturaUnica !== null) {
             return;
         }
 
+        // Una sola ida al bridge: listarPorCaeaIvaVentas llena el cache;
+        // después el índice sirve las búsquedas por número sin reconsultar.
         $indice = [];
         foreach (self::listarPorCaeaIvaVentas($nroCaea, $sucursales, $curlTimeout) as $item) {
             $indice[$item['sucursal'].'|'.$item['tipo_afip'].'|'.$item['numero']] = $item;
@@ -187,17 +195,32 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             array_map(static fn ($s): int => (int) $s, $sucursales),
             static fn (int $s): bool => ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($s),
         )));
+        sort($sucursales);
         if ($nroCaea === '' || $sucursales === []) {
             return [];
         }
 
-        if (self::$bridgeNoResponde) {
-            return [];
+        $cacheKey = $nroCaea.'|'.implode(',', $sucursales);
+
+        // Si ya hubo una lectura única de esta quincena, no volver al bridge.
+        if (self::$lecturaUnicaClave === $cacheKey && self::$indiceLecturaUnica !== null) {
+            $desdeIndice = array_values(self::$indiceLecturaUnica);
+            usort(
+                $desdeIndice,
+                static fn (array $a, array $b): int => [$a['sucursal'], $a['tipo_afip'], $a['numero']]
+                    <=> [$b['sucursal'], $b['tipo_afip'], $b['numero']],
+            );
+            self::$cachePorCaea[$cacheKey] = $desdeIndice;
+
+            return $desdeIndice;
         }
 
-        $cacheKey = $nroCaea.'|'.implode(',', $sucursales);
         if (isset(self::$cachePorCaea[$cacheKey])) {
             return self::$cachePorCaea[$cacheKey];
+        }
+
+        if (self::$bridgeNoResponde) {
+            return [];
         }
 
         $in = implode(',', $sucursales);
@@ -281,6 +304,8 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             return null;
         }
 
+        // Con lectura única activa no se vuelve al bridge ni a venta Anita
+        // (evitar N lecturas por hueco). Solo memoria de la lista vencae.
         if (self::$indiceLecturaUnica !== null) {
             $item = self::$indiceLecturaUnica[$sucursal.'|'.$tipoAfip.'|'.$numero] ?? null;
 

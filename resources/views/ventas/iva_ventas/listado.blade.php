@@ -194,8 +194,8 @@
         </table>
     @endif
 
-    @if (! empty($resultado['totales_por_puntoventa']))
-        <h3 class="seccion">Totales por punto de venta</h3>
+    @if (! empty($filtros['exportar_totales_sucursal']) && ! empty($resultado['totales_por_puntoventa']))
+        <h3 class="seccion">Totales por sucursal</h3>
         @php $columnas = $resultado['columnas'] ?? []; @endphp
         <table class="data" style="margin-bottom: 10px;">
             <thead>

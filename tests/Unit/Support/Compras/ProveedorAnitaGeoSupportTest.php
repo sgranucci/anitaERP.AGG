@@ -99,4 +99,33 @@ class ProveedorAnitaGeoSupportTest extends TestCase
         $this->assertNull($geo['localidad_id']);
         $this->assertNull($geo['provincia_id']);
     }
+
+    public function test_provincia_texto_sin_localidad_resuelve_buenos_aires(): void
+    {
+        $geo = ProveedorAnitaGeoSupport::resolver(
+            $this->localidades,
+            $this->provincias,
+            '0',
+            ' ',
+            'BUENOS AIRES',
+            false,
+        );
+
+        $this->assertNull($geo['localidad_id']);
+        $this->assertSame(2, $geo['provincia_id']);
+    }
+
+    public function test_caba_resuelve_a_ciudad_de_buenos_aires_si_no_hay_capital_federal(): void
+    {
+        $provinciasCrown = [
+            ['id' => 1, 'nombre' => 'Ciudad de Buenos Aires'],
+            ['id' => 11, 'nombre' => 'Buenos Aires'],
+        ];
+
+        $id = ProveedorAnitaGeoSupport::resolverProvinciaId($provinciasCrown, 'CABA');
+        $this->assertSame(1, $id);
+
+        $idBsAs = ProveedorAnitaGeoSupport::resolverProvinciaId($provinciasCrown, 'BUENOS AIRES');
+        $this->assertSame(11, $idBsAs);
+    }
 }

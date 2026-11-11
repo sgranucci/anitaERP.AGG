@@ -15,8 +15,8 @@ class Tipotransaccion_Compra extends Model implements Auditable
 	use Tipotransaccion_CompraTrait;
 
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['nombre', 'operacion', 'abreviatura', 'codigoafip', 'signo', 'subdiario', 
-                            'asientocontable', 'retieneiva', 'retieneganancia', 'retieneIIBB', 'estado'];
+    protected $fillable = ['nombre', 'operacion', 'abreviatura', 'codigoafip', 'signo', 'subdiario',
+                            'asientocontable', 'genera_bien_de_uso', 'retieneiva', 'retieneganancia', 'retieneIIBB', 'estado'];
     protected $table = 'tipotransaccion_compra';
 
     public function tipotransaccion_compra_centrocostos()
@@ -89,6 +89,11 @@ class Tipotransaccion_Compra extends Model implements Auditable
     public function getDescAsientocontableAttribute()
 	{
 	  	return Arr::get(Tipotransaccion_Compra::$enumAsientoContable, $this->asientocontable);
+	}
+
+    public function getDescGeneraBienDeUsoAttribute()
+	{
+	  	return Arr::get(Tipotransaccion_Compra::$enumGeneraBienDeUso, $this->genera_bien_de_uso);
 	}
 
     public function getDescEstadoAttribute()

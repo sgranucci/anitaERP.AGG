@@ -701,7 +701,9 @@ final class ParametroSistemaSupport
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
             self::CLAVE_MAIL_CONSULTA_PROVEEDOR => '',
             self::CLAVE_CAEA_PRESENTACION_HORA => '14:00',
-            self::CLAVE_CAEA_PRESENTACION_MAILS => '',
+            self::CLAVE_CAEA_PRESENTACION_MAILS => EntornoEmpresaSupport::esCrown()
+                ? 'lroldan@casinosdelrio.com.ar'
+                : '',
             self::CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS => (string) max(0, (int) config(
                 'comprobante_proveedor.fecha_comprobante_tolerancia_dias_contabilizacion',
                 5

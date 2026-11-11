@@ -15,8 +15,9 @@ use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Conciliación SICORE vs mayor del ERP: suma del período vs col. P
- * al último movimiento ≤ fecha_hasta de la quincena/mes elegida.
+ * Conciliación SICORE vs mayor del ERP:
+ * 1) saldo de ejercicio (col. P) al cierre del rango;
+ * 2) opcional: solo movimientos del período vs retenciones emitidas.
  */
 final class SicoreConciliacionContableService
 {
@@ -43,6 +44,7 @@ final class SicoreConciliacionContableService
             $desde = $hasta;
         }
         $tolerancia = SicoreFormatoV8Support::toleranciaConciliacion();
+        $mostrarControlPeriodo = ! empty($filtros['control_periodo']);
 
         // Precarga saldos de ejercicio (col. P) de todas las cuentas del proceso en un solo mayor plano.
         $codigosSaldo = [];
@@ -115,7 +117,15 @@ final class SicoreConciliacionContableService
                     $tolerancia,
                 );
 
+            // Solo movimientos del rango consultado (retenciones emitidas / anuladas),
+            // sin arrastrar el saldo desde principio de ejercicio.
+            $totalMayorPeriodo = round(array_sum(array_map(
+                static fn (array $m) => SicoreConciliacionAuditoriaSupport::importeLineaMayorFirmado($m),
+                $particion['comparables'],
+            )), 2);
+
             $dif = round($totalSicore - $totalMayor, 2);
+            $difPeriodo = round($totalSicore - $totalMayorPeriodo, 2);
 
             $items[] = [
                 'config_id' => $configId,
@@ -130,6 +140,9 @@ final class SicoreConciliacionContableService
                 'total_mayor' => $totalMayor,
                 'diferencia' => $dif,
                 'cuadra' => SicoreFormatoV8Support::cuadraConciliacion($totalSicore, $totalMayor),
+                'total_mayor_periodo' => $totalMayorPeriodo,
+                'diferencia_periodo' => $difPeriodo,
+                'cuadra_periodo' => SicoreFormatoV8Support::cuadraConciliacion($totalSicore, $totalMayorPeriodo),
                 'registros' => count($registrosConfig),
                 'tolerancia' => $tolerancia,
                 'auditoria' => $auditoria,
@@ -141,6 +154,9 @@ final class SicoreConciliacionContableService
             'habilitada' => true,
             'items' => $items,
             'tolerancia' => $tolerancia,
+            'control_periodo' => $mostrarControlPeriodo,
+            'periodo_desde' => $desde,
+            'periodo_hasta' => $hasta,
             'saldo_ejercicio_desde' => self::ymdAIso(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD),
             'saldo_ejercicio_hasta' => $hasta,
         ];

@@ -65,6 +65,8 @@
                                 <p class="card-text small flex-grow-1">
                                     Alta directa del comprobante vinculado a una orden de compra (número de
                                     <strong>6 dígitos</strong>, como en Anita).
+                                    Si el legajo tiene recepción COM, en el formulario puede elegir
+                                    <em>Factura contra recepción (COM)</em> (match); no exige provisión FAR.
                                 </p>
                                 <form id="form-cp-desde-oc" class="mt-auto"
                                       data-url-resolver="{{ route('comprobante_proveedor_resolver_oc') }}">

@@ -53,6 +53,40 @@
                             <input type="date" name="hasta" id="hasta" class="form-control" required value="{{ $preview['hasta'] ?? $hasta }}">
                         </div>
                     </div>
+                    @php
+                        $criterioFechaActivo = $preview['criterio_fecha'] ?? $criterio_fecha ?? \App\Support\Ventas\TransferenciaCrown\TransferenciaCrownCriterioFecha::JORNADA;
+                        $criterioFechaActivo = \App\Support\Ventas\TransferenciaCrown\TransferenciaCrownCriterioFecha::normalizar($criterioFechaActivo);
+                    @endphp
+                    <div class="form-group row mb-2">
+                        <label class="col-lg-3 control-label text-right pr-2">Criterio de fecha</label>
+                        <div class="col-lg-8">
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio"
+                                       id="criterio_fecha_jornada"
+                                       name="criterio_fecha"
+                                       value="jornada"
+                                       class="custom-control-input"
+                                       @checked($criterioFechaActivo === 'jornada')>
+                                <label class="custom-control-label" for="criterio_fecha_jornada">
+                                    Fecha de jornada <span class="text-muted">(ven_fecha_vto, default)</span>
+                                </label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio"
+                                       id="criterio_fecha_fisica"
+                                       name="criterio_fecha"
+                                       value="fisica"
+                                       class="custom-control-input"
+                                       @checked($criterioFechaActivo === 'fisica')>
+                                <label class="custom-control-label" for="criterio_fecha_fisica">
+                                    Fecha física <span class="text-muted">(ven_fecha)</span>
+                                </label>
+                            </div>
+                            <small class="form-text text-muted d-block">
+                                Si el cierre pasa la medianoche, la emisión queda al día siguiente y la jornada en el día de la venta.
+                            </small>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <button type="submit" class="btn btn-primary btn-sm">

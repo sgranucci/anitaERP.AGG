@@ -50,4 +50,23 @@
             });
         });
     }
+
+    // El tilde de totales por sucursal solo afecta PDF/Excel: actualiza los href sin reconsultar.
+    var chkTotalesSucursal = document.getElementById('exportar_totales_sucursal');
+    if (chkTotalesSucursal) {
+        var syncExportTotalesSucursal = function () {
+            var activo = chkTotalesSucursal.checked ? '1' : '0';
+            document.querySelectorAll('a[href*="listar-iva-ventas"]').forEach(function (a) {
+                try {
+                    var url = new URL(a.href, window.location.origin);
+                    url.searchParams.set('exportar_totales_sucursal', activo);
+                    a.href = url.pathname + url.search + url.hash;
+                } catch (e) {
+                    /* ignore */
+                }
+            });
+        };
+        chkTotalesSucursal.addEventListener('change', syncExportTotalesSucursal);
+        syncExportTotalesSucursal();
+    }
 })();

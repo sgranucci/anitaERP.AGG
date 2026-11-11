@@ -82,6 +82,8 @@ class ArcaCaeaPresentacionService
         $error = (clone $query)->where('venta.caea_informado_estado', 'error')->count();
         $pendientes = (clone $query)->whereNull('venta.caea_informado_estado')->count();
 
+        $incluirAnita = $incluirAnita && $this->usaFallbackAnita();
+
         if ($incluirAnita) {
             $anita = $this->resumenAnitaIvaVentasPeriodo($registro, $ultimosArca ?? []);
             $total += $anita['total'];
@@ -1750,6 +1752,10 @@ class ArcaCaeaPresentacionService
      */
     private function activarLecturaAnitaUnica(ArcaCaea $registro): void
     {
+        if (! $this->usaFallbackAnita()) {
+            return;
+        }
+
         ArcaCaeaAnitaVencaeConsultaSupport::activarLecturaUnica(
             trim((string) $registro->nro_caea),
             $this->sucursalesCaeaEmpresa((int) $registro->empresa_id),
@@ -1758,13 +1764,35 @@ class ArcaCaeaPresentacionService
     }
 
     /**
+     * Fallback Anita mientras Informix siga siendo fuente de ventas CAEA.
+     * Apagar con ARCA_CAEA_INFORME_FALLBACK_ANITA=false cuando Anita se deje de usar.
+     */
+    private function usaFallbackAnita(): bool
+    {
+        return (bool) config('arca.caea.informe_fallback_anita', true);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private function listarAnitaIvaVentasPeriodo(ArcaCaea $registro): array
     {
+        if (! $this->usaFallbackAnita()) {
+            return [];
+        }
+
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
         if ($nroCaea === '') {
             return [];
+        }
+
+        // Si ya se cargó la única lectura de la quincena, reutilizar memoria
+        // aunque el presupuesto de pantalla se haya agotado.
+        if (ArcaCaeaAnitaVencaeConsultaSupport::lecturaUnicaActiva()) {
+            return ArcaCaeaAnitaVencaeConsultaSupport::listarPorCaeaIvaVentas(
+                $nroCaea,
+                $this->sucursalesCaeaEmpresa((int) $registro->empresa_id),
+            );
         }
 
         $timeout = null;

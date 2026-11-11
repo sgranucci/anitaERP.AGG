@@ -35,6 +35,23 @@ final class ProveedorAnitaGeoSupport
         'CIUDAD DE BUENOS AIRES' => 'CAPITAL FEDERAL',
     ];
 
+    /**
+     * Nombres canónicos del ERP que equivalen al alias (Ferli: Capital Federal;
+     * Crown/AGG: Ciudad de Buenos Aires).
+     *
+     * @var array<string, list<string>>
+     */
+    private const EQUIVALENTES_PROVINCIA = [
+        'CAPITAL FEDERAL' => [
+            'CAPITAL FEDERAL',
+            'CIUDAD DE BUENOS AIRES',
+            'CIUDAD AUTONOMA DE BUENOS AIRES',
+        ],
+        'BUENOS AIRES' => [
+            'BUENOS AIRES',
+        ],
+    ];
+
     /** @var list<array{id:int,codigo:string,nombre:string,provincia_id:int}>|null */
     private static ?array $localidades = null;
 
@@ -137,8 +154,10 @@ final class ProveedorAnitaGeoSupport
             }
         }
 
-        if (isset($mapa[$norm])) {
-            return $mapa[$norm];
+        foreach (self::EQUIVALENTES_PROVINCIA[$norm] ?? [$norm] as $candidato) {
+            if (isset($mapa[$candidato])) {
+                return $mapa[$candidato];
+            }
         }
 
         $mejorId = null;

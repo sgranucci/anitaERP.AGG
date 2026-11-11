@@ -166,12 +166,17 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 				$provincia_id = 1;
 	
 			// Crea registro 
-            $retencionIIBB = $this->model->create([
+            $payloadCab = [
                 'id' => $key,
                 'nombre' => $data->proib_desc_prov,
 				'provincia_id' => $provincia_id,
-				'cuentacontable_id' => $cuentacontable_id
-            ]);
+				'cuentacontable_id' => $cuentacontable_id,
+            ];
+			if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+				$payloadCab['porcentajeretencion_fuera'] = $porcNoInscripto > 0 ? $porcNoInscripto : 5;
+			}
+
+            $retencionIIBB = $this->model->create($payloadCab);
 
 			if ($retencionIIBB)
 			{
@@ -189,15 +194,17 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 													'minimoimponible' => $data->proib_minimo_local,
 													'minimoretencion' => 0,
 													'porcentajeretencion' => $data->proib_porc_local,
-													]);													
+													]);
 
-				$retencionIIBB_condicion = $this->model_Condicion->create([
-													'retencionIIBB_id' => $retencionIIBB->id,
-													'condicionIIBB_id' => 3,
-													'minimoimponible' => $data->proib_minimo_noins,
-													'minimoretencion' => 0,
-													'porcentajeretencion' => $porcNoInscripto,
-													]);																										
+				if (! \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+					$retencionIIBB_condicion = $this->model_Condicion->create([
+														'retencionIIBB_id' => $retencionIIBB->id,
+														'condicionIIBB_id' => 3,
+														'minimoimponible' => $data->proib_minimo_noins,
+														'minimoretencion' => 0,
+														'porcentajeretencion' => $porcNoInscripto,
+														]);
+				}
 			}
     }
 
@@ -243,6 +250,15 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 				$minimoExento = $minimoImponibles[$i];
 				$porcentajeExento = $porcentajeRetenciones[$i];
 				break;				
+			}
+		}
+
+		if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+			$fuera = is_array($data)
+				? (float) ($data['porcentajeretencion_fuera'] ?? 0)
+				: (float) ($data->porcentajeretencion_fuera ?? 0);
+			if ($fuera > 0) {
+				$porcentajeExento = $fuera;
 			}
 		}
 
@@ -320,6 +336,13 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 				$minimoExento = $minimoImponibles[$i];
 				$porcentajeExento = $porcentajeRetenciones[$i];
 				break;				
+			}
+		}
+
+		if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+			$fuera = (float) ($request['porcentajeretencion_fuera'] ?? 0);
+			if ($fuera > 0) {
+				$porcentajeExento = $fuera;
 			}
 		}
 

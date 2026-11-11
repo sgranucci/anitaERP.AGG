@@ -54,24 +54,31 @@ var totalHaberAsiento = 0;
 		window.ptrIeCpFilaCuentaConcepto = null;
 	}
 
-	function abrirConsultaCuentaAsientoFila($tr) {
+	function abrirConsultaCuentaAsientoFila($tr, opciones) {
 		var empresaId = $('#empresa_id').val();
 		if (!empresaId) {
 			alert('Debe ingresar empresa');
 			return;
 		}
+		opciones = opciones || {};
+		var texto = opciones.texto != null ? String(opciones.texto) : '';
 		apuntarPtrsConsultaCuentaAsiento($tr);
 		window.__asientoConsultaCuentaOrigen = true;
 		window.__asientoAbriendoModalCuenta = true;
 		if (typeof abriendoModalCuentaContable !== 'undefined') {
 			abriendoModalCuentaContable = true;
 		}
-		$('#consultacuentacontable').val('');
-		$('#datoscuentas').html('');
+		if (typeof consultaCuentaContableCaretAlFinal !== 'undefined') {
+			consultaCuentaContableCaretAlFinal = !!opciones.caretAlFinal;
+		}
+		$('#consultacuentacontable').val(texto);
+		if (!texto) {
+			$('#datoscuentas').html('');
+		}
 		$('#consultaempresa_id').val(empresaId);
 		$('#consultacuentaModal').modal('show');
 		if (typeof buscar_datos === 'function') {
-			buscar_datos('');
+			buscar_datos(texto);
 		}
 	}
 
@@ -627,7 +634,30 @@ var totalHaberAsiento = 0;
 		$(document)
 			.off('input.asientoExt', '#cuenta-asiento-table .codigoasiento')
 			.on('input.asientoExt', '#cuenta-asiento-table .codigoasiento', function () {
-				$(this).removeData('asiento-codigo-invalido');
+				var $input = $(this);
+				$input.removeData('asiento-codigo-invalido');
+				if (this.readOnly || this.disabled) {
+					return;
+				}
+				var texto = $.trim(this.value || '');
+				if (texto === '' || $input.data('cta-pegado-codigo') === 1) {
+					return;
+				}
+				if (!$('#empresa_id').val()) {
+					return;
+				}
+				var $tr = $input.closest('tr.item-cuenta-asiento');
+				if (!$tr.length) {
+					return;
+				}
+				$('#consultacuentacontable').val(texto);
+				if (modalConsultaCuentaAsientoAbierto()) {
+					if (typeof buscar_datos === 'function') {
+						buscar_datos(texto);
+					}
+					return;
+				}
+				abrirConsultaCuentaAsientoFila($tr, { texto: texto, caretAlFinal: true });
 			});
 
 		$(document)

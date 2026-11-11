@@ -38,11 +38,17 @@ class IvaVentasReporteController extends Controller
         $monedaQuery = $this->monedaRepository->all();
         $filtros = IvaVentasListadoFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarPreferenciasEmpresa($request, $filtros, $empresaQuery);
+        $filtros = $this->aplicarPreferenciasExportTotalesSucursal($request, $filtros);
 
         if ($request->boolean('consultar')) {
             ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
                 'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             ]);
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
+                'exportar_totales_sucursal',
+                ! empty($filtros['exportar_totales_sucursal']),
+            );
         }
 
         $consultado = false;
@@ -127,6 +133,13 @@ class IvaVentasReporteController extends Controller
         ini_set('max_execution_time', '0');
 
         $filtros = IvaVentasListadoFiltros::resolverDesdeRequest($request);
+        if (! $request->has('exportar_totales_sucursal')) {
+            $filtros['exportar_totales_sucursal'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'exportar_totales_sucursal',
+                false,
+            );
+        }
 
         if (! IvaVentasListadoFiltros::tieneCriteriosAplicados($filtros)) {
             return redirect()->route('iva_ventas');
@@ -215,6 +228,24 @@ class IvaVentasReporteController extends Controller
             } elseif ($empresaQuery->count() === 1) {
                 $filtros['empresa_id'] = (int) $empresaQuery->first()->id;
             }
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function aplicarPreferenciasExportTotalesSucursal(Request $request, array $filtros): array
+    {
+        // Hidden 0 + checkbox: si no vino en el request (primer ingreso), usar preferencia del usuario.
+        if (! $request->has('exportar_totales_sucursal')) {
+            $filtros['exportar_totales_sucursal'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'exportar_totales_sucursal',
+                false,
+            );
         }
 
         return $filtros;
