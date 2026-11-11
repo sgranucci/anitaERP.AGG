@@ -18,7 +18,7 @@ use Throwable;
 /**
  * Calcula campos del flash diario desde Wigos (slots/ruletas) + venta directa ERP
  * (AyB, estacionamiento y vending netos = facturas − NC) + ERP (bingo/vehículos).
- * AyB incluye el CAEA de cierre Waitry si ya está emitido (ver FlashCajaAybCierreWaitrySupport).
+ * AyB incluye el CAEA de cierre Waitry si el proceso lo emitió (ver FlashCajaAybCierreWaitrySupport).
  * Drop/win slots: suma venta de fichas (rendición C) y resta impuesto_drop
  * del turno completo (C) de rendmaquina Anita (fallback ERP rendicion_maquina).
  * No entran ventas tickets slots/caja ni impuesto venta. Ruletas: solo bill (sin ventas tickets).

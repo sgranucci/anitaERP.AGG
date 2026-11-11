@@ -117,8 +117,8 @@ final class FlashCajaOrigenTotalSupport
         'ayb' => [
             'titulo' => 'AyB (food & beverage)',
             'origen' => 'erp',
-            'formula' => 'Neto gastronomía ERP del día (facturas − NC), incluye CAEA de cierre Waitry',
-            'explicacion' => 'No viene de Wigos. Se calcula desde ventas de gastronomía del ERP para la empresa/fecha, incluido el CAEA del proceso de cierre Waitry (CIERRE-JORNADA-WAITRY). Si el flash se armó antes de ese CAEA, hay que recalcular AyB.',
+            'formula' => 'Neto gastronomía ERP del día (facturas − NC), incluye CAEA de cierre Waitry si hubo',
+            'explicacion' => 'No viene de Wigos. Se calcula desde ventas de gastronomía del ERP para la empresa/fecha. Si el proceso de cierre Waitry emitió CAEA (CIERRE-JORNADA-WAITRY), entra en el neto; si terminó solo con ajuste de insumos, no suma factura. Si el flash se armó antes de completar el proceso, hay que recalcular AyB.',
             'grupos_wigos' => [],
         ],
         'estac' => [

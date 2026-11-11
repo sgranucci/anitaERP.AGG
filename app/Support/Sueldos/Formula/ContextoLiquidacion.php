@@ -481,6 +481,49 @@ class ContextoLiquidacion implements EntornoFormula
         } catch (\Throwable $e) {
             // Tabla ausente o sin migrar: novedad() queda en 0.
         }
+
+        // Vacaciones: si no hay novedad 420/422, tomar días de la grilla de ausencias
+        // del período (planificada/aprobada/tomada/liquidada) según LVAC.
+        $this->incorporarDiasVacacionesDesdeAusencias();
+    }
+
+    /**
+     * Anita liquida vacaciones desde el plan/grilla sin novedad ABM obligatoria.
+     * Si no hay novedad explícita 420/422, suma días de ausencias de vacaciones
+     * que solapan el período de la corrida → novedad(420|422).
+     */
+    private function incorporarDiasVacacionesDesdeAusencias(): void
+    {
+        if ($this->tipoCorrida !== 'vacaciones' || $this->empleadoId <= 0 || $this->periodoYm <= 0) {
+            return;
+        }
+
+        $lvac = (int) ($this->vars['periodo.tipo_vacaciones'] ?? Liquidacion_Sueldos::TIPO_VACACIONES_PLUS);
+        $conceptoDias = $lvac === Liquidacion_Sueldos::TIPO_VACACIONES_ADELANTO ? 420 : 422;
+        if ((float) ($this->novedadesV1[$conceptoDias] ?? 0.0) > 0.5) {
+            return;
+        }
+
+        try {
+            [$ini, $fin] = NovedadSueldosVigencia::limitesPeriodo($this->periodoYm);
+            $dias = (float) DB::table('empleado_ausencia_sueldos as a')
+                ->join('tipo_ausencia_sueldos as t', 't.id', '=', 'a.tipo_ausencia_id')
+                ->where('a.empleado_id', $this->empleadoId)
+                ->whereIn('a.estado', ['planificada', 'aprobada', 'tomada', 'liquidada'])
+                ->where(function ($q) {
+                    $q->where('t.categoria', 'vacaciones')
+                        ->orWhere('t.afecta_saldo_vacaciones', true);
+                })
+                ->whereDate('a.fecha_desde', '<=', $fin->toDateString())
+                ->whereDate('a.fecha_hasta', '>=', $ini->toDateString())
+                ->sum('a.dias');
+        } catch (\Throwable $e) {
+            return;
+        }
+
+        if ($dias > 0.5) {
+            $this->novedadesV1[$conceptoDias] = $dias;
+        }
     }
 
     private function novedadValor(int $conceptoCodigo, int $cual): float
@@ -576,6 +619,30 @@ class ContextoLiquidacion implements EntornoFormula
         }
     }
 
+    /**
+     * IC/VC: 2º arg absoluto YYYYMM (>=190001) o meses relativos
+     * (0 = período de la corrida, 1 = mes anterior, …).
+     */
+    private function resolverPeriodoYmNovedad(int $periodoOMeses): int
+    {
+        if ($periodoOMeses >= 190001) {
+            return $periodoOMeses;
+        }
+        if ($this->periodoYm <= 0) {
+            return 0;
+        }
+        $mesesAtras = max(0, $periodoOMeses);
+        $anio = (int) floor($this->periodoYm / 100);
+        $mes = $this->periodoYm % 100;
+        $mes -= $mesesAtras;
+        while ($mes <= 0) {
+            $mes += 12;
+            $anio--;
+        }
+
+        return $anio * 100 + $mes;
+    }
+
     private function novedadEnPeriodo(int $conceptoCodigo, int $periodoYm, int $cual): float
     {
         if ($conceptoCodigo <= 0 || $periodoYm <= 0) {
@@ -608,15 +675,45 @@ class ContextoLiquidacion implements EntornoFormula
                 }
             }
         } catch (\Throwable $e) {
-            return 0.0;
+            $suma = 0.0;
         }
 
-        return $suma;
+        if (abs($suma) > 0.0000001) {
+            return $suma;
+        }
+
+        // Anita IC también lee el resultado del concepto en la liquidación del período
+        // (aux/historial). Conceptos como 230 no son novedad ABM.
+        if ($cual === 1) {
+            return $this->importeConceptoEnPeriodo($conceptoCodigo, $periodoYm);
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Importe liquidado del concepto en un período (cualquier tipo de corrida).
+     */
+    private function importeConceptoEnPeriodo(int $conceptoCodigo, int $periodoYm): float
+    {
+        if ($conceptoCodigo <= 0 || $periodoYm <= 0 || $this->empleadoId <= 0) {
+            return 0.0;
+        }
+        try {
+            return (float) DB::table('liquidacion_detalle_sueldos as d')
+                ->join('liquidacion_sueldos as l', 'l.id', '=', 'd.liquidacion_id')
+                ->where('d.empleado_id', $this->empleadoId)
+                ->where('d.concepto_codigo', $conceptoCodigo)
+                ->where('l.periodo', (string) $periodoYm)
+                ->sum('d.importe');
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
     }
 
     /**
      * VC(concepto, mesesAtras|periodoYYYYMM): valor1 histórico.
-     * Si el 2º arg >= 190001 se interpreta como período YYYYMM; si no, meses hacia atrás.
+     * Si el 2º arg >= 190001 se interpreta como período YYYYMM; si no, meses hacia atrás (mín. 1).
      */
     private function novedadHist(int $conceptoCodigo, int $mesesOPeriodo): float
     {
@@ -626,15 +723,8 @@ class ContextoLiquidacion implements EntornoFormula
         if ($mesesOPeriodo >= 190001) {
             return $this->novedadEnPeriodo($conceptoCodigo, $mesesOPeriodo, 1);
         }
-        $meses = max(1, $mesesOPeriodo);
-        $anio = (int) floor($this->periodoYm / 100);
-        $mes = $this->periodoYm % 100;
-        $mes -= $meses;
-        while ($mes <= 0) {
-            $mes += 12;
-            $anio--;
-        }
-        $periodo = $anio * 100 + $mes;
+        // VC histórico: meses atrás con mínimo 1 (compat Anita).
+        $periodo = $this->resolverPeriodoYmNovedad(max(1, $mesesOPeriodo));
 
         return $this->novedadEnPeriodo($conceptoCodigo, $periodo, 1);
     }
@@ -837,7 +927,12 @@ class ContextoLiquidacion implements EntornoFormula
             case 'novedad_rango':
                 return $this->novedadRango((int) ($args[0] ?? 0), (int) ($args[1] ?? 0));
             case 'novedad_periodo':
-                return $this->novedadEnPeriodo((int) ($args[0] ?? 0), (int) ($args[1] ?? 0), 1);
+                // Anita IC(concepto, n): n=0 período actual, n=1 mes anterior, o YYYYMM.
+                return $this->novedadEnPeriodo(
+                    (int) ($args[0] ?? 0),
+                    $this->resolverPeriodoYmNovedad((int) ($args[1] ?? 0)),
+                    1
+                );
             case 'novedad_hist':
                 return $this->novedadHist((int) ($args[0] ?? 0), (int) ($args[1] ?? 1));
             // ---- Dominio Anita: stubs seguros (0) hasta cablear aux / otras tablas ----

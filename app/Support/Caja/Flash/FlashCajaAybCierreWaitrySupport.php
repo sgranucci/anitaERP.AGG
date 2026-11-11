@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Support\Caja\Flash;
 
+use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaFacturaProcesoEmisionService;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use Carbon\Carbon;
 
 /**
- * CAEA de cierre Waitry (PV proceso / CIERRE-JORNADA-WAITRY) vs AyB del flash.
- * Punto único de detección y textos de aviso. El recálculo vive en FlashCajaAybRecalculoService.
+ * Cierre Waitry vs AyB del flash: el aviso de “faltante” mira si el proceso terminó
+ * (factura/omitida/solo_ajuste + asientos + rendgastro), no solo si hay CAEA.
+ * El CAEA sigue usándose para detectar AyB corto y para el recálculo.
  */
 final class FlashCajaAybCierreWaitrySupport
 {
@@ -21,6 +24,24 @@ final class FlashCajaAybCierreWaitrySupport
     public const NIVEL_CORTO = 'corto';
 
     public const TOLERANCIA = 0.02;
+
+    public static function procesoCompletado(int $empresaId, string $fecha): bool
+    {
+        if ($empresaId <= 0 || trim($fecha) === '') {
+            return false;
+        }
+
+        $jornada = JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', Carbon::parse($fecha)->toDateString())
+            ->first();
+
+        if ($jornada === null) {
+            return false;
+        }
+
+        return CierreJornadaProcesoAutomaticoSupport::procesoCompletado($jornada);
+    }
 
     /**
      * @return array{tiene: bool, monto: float, cantidad: int, venta_ids: list<int>}
@@ -84,56 +105,66 @@ final class FlashCajaAybCierreWaitrySupport
      *   tiene_caea: bool,
      *   monto_caea: float,
      *   cantidad: int,
+     *   proceso_completado: bool,
      *   ayb_referencia: float,
      *   ayb_erp: float
      * }
      */
-    public static function armarAviso(array $caea, float $aybReferencia, float $aybErp): array
+    public static function armarAviso(bool $procesoCompletado, array $caea, float $aybReferencia, float $aybErp): array
     {
         $tiene = (bool) ($caea['tiene'] ?? false);
         $monto = round((float) ($caea['monto'] ?? 0), 2);
         $cantidad = (int) ($caea['cantidad'] ?? 0);
         $aybReferencia = round($aybReferencia, 2);
         $aybErp = round($aybErp, 2);
-        $nivel = self::clasificar($tiene, $aybReferencia, $aybErp);
+        $nivel = self::clasificar($procesoCompletado, $tiene, $aybReferencia, $aybErp);
 
         return [
             'nivel' => $nivel,
-            'mensaje' => self::mensaje($nivel, $monto, $cantidad),
+            'mensaje' => self::mensaje($nivel, $monto, $cantidad, $tiene),
             'tiene_caea' => $tiene,
             'monto_caea' => $monto,
             'cantidad' => $cantidad,
+            'proceso_completado' => $procesoCompletado,
             'ayb_referencia' => $aybReferencia,
             'ayb_erp' => $aybErp,
         ];
     }
 
-    public static function clasificar(bool $tieneCaea, float $aybReferencia, float $aybErp): string
-    {
-        if (! $tieneCaea) {
+    public static function clasificar(
+        bool $procesoCompletado,
+        bool $tieneCaea,
+        float $aybReferencia,
+        float $aybErp,
+    ): string {
+        if (! $procesoCompletado) {
             return self::NIVEL_FALTANTE;
         }
 
-        if (($aybReferencia + self::TOLERANCIA) < $aybErp) {
+        if ($tieneCaea && ($aybReferencia + self::TOLERANCIA) < $aybErp) {
             return self::NIVEL_CORTO;
         }
 
         return self::NIVEL_INCLUIDO;
     }
 
-    public static function mensaje(string $nivel, float $montoCaea, int $cantidad): string
-    {
+    public static function mensaje(
+        string $nivel,
+        float $montoCaea,
+        int $cantidad,
+        bool $tieneCaea = false,
+    ): string {
         $montoTxt = number_format($montoCaea, 2, ',', '.');
 
         return match ($nivel) {
-            self::NIVEL_FALTANTE => 'Todavía no está el CAEA de cierre Waitry de esta jornada. '
+            self::NIVEL_FALTANTE => 'Todavía no terminó el cierre Waitry de esta jornada. '
                 .'Si grabás ahora, el AyB puede quedar corto. El cierre automático (~09:00) o un recálculo posterior lo completa.',
             self::NIVEL_CORTO => 'El AyB no incluye el CAEA de cierre Waitry'
                 .($cantidad > 0 ? ' ('.$cantidad.' factura'.($cantidad === 1 ? '' : 's').', $ '.$montoTxt.')' : '')
                 .'. Recalculá AyB antes de grabar.',
-            default => 'AyB incluye el CAEA de cierre Waitry'
-                .($montoCaea > self::TOLERANCIA ? ' ($ '.$montoTxt.')' : '')
-                .'.',
+            default => $tieneCaea && $montoCaea > self::TOLERANCIA
+                ? 'El cierre Waitry de esta jornada ya terminó. AyB incluye el CAEA ($ '.$montoTxt.').'
+                : 'El cierre Waitry de esta jornada ya terminó.',
         };
     }
 }

@@ -48,7 +48,7 @@ class AnitaFuncionMapa
 
         // --- Dominio implementado como stub/aprox en ContextoLiquidacion ---
         'IL' => ['erp' => 'im_liquidacion', 'exacto' => false, 'nota' => 'importe en otra liquidación / retroactivo'],
-        'IC' => ['erp' => 'novedad_periodo', 'exacto' => true, 'nota' => 'valor1 de novedad por período YYYYMM'],
+        'IC' => ['erp' => 'novedad_periodo', 'exacto' => true, 'nota' => 'valor1: n=0 período actual / n=1 mes anterior / o YYYYMM; fallback a importe liquidado'],
         // VC(concepto, mesesAtras|periodo): novedad histórica (parser.fc VC)
         'VC' => ['erp' => 'novedad_hist', 'exacto' => true, 'nota' => 'novedad valor1: meses atrás o período YYYYMM'],
         'VL' => ['erp' => 'valor_liquidacion', 'exacto' => false, 'nota' => 'valor en otra liquidación'],

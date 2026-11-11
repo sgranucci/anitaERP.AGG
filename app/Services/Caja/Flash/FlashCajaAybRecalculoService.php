@@ -36,16 +36,19 @@ final class FlashCajaAybRecalculoService
      *   tiene_caea: bool,
      *   monto_caea: float,
      *   cantidad: int,
+     *   proceso_completado: bool,
      *   ayb_referencia: float,
      *   ayb_erp: float
      * }
      */
     public function estadoFormulario(int $empresaId, string $fecha, ?float $aybReferencia = null): array
     {
+        $procesoCompletado = FlashCajaAybCierreWaitrySupport::procesoCompletado($empresaId, $fecha);
         $caea = FlashCajaAybCierreWaitrySupport::resumenCaea($empresaId, $fecha);
         $aybErp = $this->calculoService->totalAyB($empresaId, $fecha)['neto'];
 
         return FlashCajaAybCierreWaitrySupport::armarAviso(
+            $procesoCompletado,
             $caea,
             $aybReferencia ?? $aybErp,
             $aybErp,
@@ -79,6 +82,7 @@ final class FlashCajaAybRecalculoService
             $payload['ayb'] = $aybNuevo;
             $ajustado = true;
             $estado = FlashCajaAybCierreWaitrySupport::armarAviso(
+                true,
                 [
                     'tiene' => $estado['tiene_caea'],
                     'monto' => $estado['monto_caea'],
