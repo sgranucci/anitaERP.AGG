@@ -68,6 +68,13 @@ return [
             env('MAYOR_CONCEPTO_BINGO_LINEAS_NATIVAS', false),
             FILTER_VALIDATE_BOOLEAN
         ),
+        // IVA incluido (concepto 63 / 521130 / IVA crédito fiscal): el importe se fusiona
+        // al gasto de la misma operación; el concepto 63 debe dar cero. No toca 55 ni 58.
+        // false = comportamiento previo (reversible). No cambia el total Debe/Haber de la pata.
+        'iva_incluido_erp' => filter_var(
+            env('MAYOR_CONCEPTO_IVA_INCLUIDO_ERP', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
     ],
 
     /*

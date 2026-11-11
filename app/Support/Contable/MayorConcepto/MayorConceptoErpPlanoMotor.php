@@ -22,6 +22,10 @@ use Illuminate\Support\Facades\DB;
  * (flag bingo_lineas_nativas): las cuentas por encima del límite salen con su
  * Debe/Haber nativo; el cuadre con el mayor analítico es por neto
  * (neto analítico + neto concepto = 0). Misma regla que el motor Anita multilínea.
+ *
+ * IVA incluido (flag iva_incluido_erp, reversible): el concepto 63 / IVA crédito
+ * fiscal / 521130 se fusiona al gasto de la misma operación. No toca 55 ni 58.
+ * Solo reclasifica pesos: el Debe/Haber de cada pata hasta el límite no cambia.
  */
 class MayorConceptoErpPlanoMotor
 {
@@ -35,6 +39,23 @@ class MayorConceptoErpPlanoMotor
     private const VENTA_MAQUINAS_CUENTA_DESDE = 412010000;
 
     private const VENTA_MAQUINAS_CUENTA_HASTA = 413000000;
+
+    /** Concepto cash-flow IVA (crédito fiscal / no utilizado). Debe dar cero con IVA incluido. */
+    private const CONCEPTO_IVA = 63;
+
+    /** Percepción IIBB — no fusionar. */
+    private const CONCEPTO_PERC_IIBB = 55;
+
+    /** Percepción IVA — no fusionar. */
+    private const CONCEPTO_PERC_IVA = 58;
+
+    /** Retenciones depositadas — no absorber IVA ahí. */
+    private const CONCEPTO_RETENCIONES = 61;
+
+    /** IVA crédito fiscal no utilizado (FNB / bienes). */
+    private const IVA_NO_UTILIZADO_DESDE = 521130000;
+
+    private const IVA_NO_UTILIZADO_HASTA = 521140000;
 
     /**
      * @return array<string, mixed>
@@ -50,6 +71,7 @@ class MayorConceptoErpPlanoMotor
         $limite = (int) config('contable.mayor_concepto.limite_caja_banco', 112010008);
         $ventaMaquinasNativas = $this->ventaMaquinasLineasNativasHabilitado();
         $bingoNativas = $this->bingoLineasNativasHabilitado();
+        $ivaIncluidoErp = $this->ivaIncluidoErpHabilitado();
         $asientos = $empresaId > 0
             ? $this->cargarAsientos($empresaId, $fechaDesdeYmd, $fechaHastaYmd, $monedaReporteId, $soloMonedaOrigen, $monedaConverter)
             : [];
@@ -67,7 +89,15 @@ class MayorConceptoErpPlanoMotor
         $asientosProveedor = array_keys($conProveedor);
         $gastos = $this->cargarGastosPorAsiento($empresaId, $asientosProveedor);
         $retenciones = $this->cargarRetencionesPorAsiento($empresaId, $asientosProveedor);
-        $clasificado = $this->clasificar($asientos, $gastos, $limite, $retenciones, $ventaMaquinasNativas, $bingoNativas);
+        $clasificado = $this->clasificar(
+            $asientos,
+            $gastos,
+            $limite,
+            $retenciones,
+            $ventaMaquinasNativas,
+            $bingoNativas,
+            $ivaIncluidoErp,
+        );
         $lineas = $clasificado['lineas'];
         $analitico = $clasificado['analitico'];
         $auditoria = $this->auditar($analitico, $lineas);
@@ -101,6 +131,7 @@ class MayorConceptoErpPlanoMotor
                 'limite_caja_banco' => $limite,
                 'venta_maquinas_lineas_nativas' => $ventaMaquinasNativas,
                 'bingo_lineas_nativas' => $bingoNativas,
+                'iva_incluido_erp' => $ivaIncluidoErp,
             ],
             'secciones' => $this->agruparPorConcepto($lineas),
             'totales' => [
@@ -138,9 +169,15 @@ class MayorConceptoErpPlanoMotor
         array $retencionesPorAsiento = [],
         bool $ventaMaquinasLineasNativas = false,
         bool $bingoLineasNativas = false,
+        bool $ivaIncluidoErp = false,
     ): array {
         $lineas = [];
         $analitico = [];
+        if ($ivaIncluidoErp) {
+            foreach ($gastosPorAsiento as $asientoId => $gastos) {
+                $gastosPorAsiento[$asientoId] = $this->fusionarIvaIncluidoEnItems($gastos, 'peso');
+            }
+        }
 
         foreach ($asientos as $asiento) {
             $movimientos = $asiento['movimientos'] ?? [];
@@ -210,6 +247,10 @@ class MayorConceptoErpPlanoMotor
                             continue;
                         }
                         $opuestas[] = $otra;
+                    }
+                    // B: EGR / contrapartida no-proveedor — fusionar IVA al gasto del mismo asiento.
+                    if ($ivaIncluidoErp && $opuestas !== []) {
+                        $opuestas = $this->fusionarIvaIncluidoEnItems($opuestas, 'importe');
                     }
 
                     $destino = $opuestas !== []
@@ -285,6 +326,117 @@ class MayorConceptoErpPlanoMotor
     public function bingoLineasNativasHabilitado(): bool
     {
         return (bool) config('contable.mayor_concepto.bingo_lineas_nativas', false);
+    }
+
+    public function ivaIncluidoErpHabilitado(): bool
+    {
+        return (bool) config('contable.mayor_concepto.iva_incluido_erp', true);
+    }
+
+    /**
+     * IVA crédito fiscal / concepto 63 a absorber en el gasto (IVA incluido).
+     * Excluye explícitamente percepción IIBB (55) y percepción IVA (58).
+     *
+     * @param  array<string, mixed>  $item
+     */
+    public function esIvaIncluidoAFusionar(array $item): bool
+    {
+        $conceptoId = (int) ($item['concepto_id'] ?? 0);
+        if ($conceptoId === self::CONCEPTO_PERC_IIBB || $conceptoId === self::CONCEPTO_PERC_IVA) {
+            return false;
+        }
+        if ($conceptoId === self::CONCEPTO_IVA) {
+            return true;
+        }
+        $cuenta = (int) ($item['cuenta'] ?? 0);
+
+        return $cuenta >= self::IVA_NO_UTILIZADO_DESDE && $cuenta < self::IVA_NO_UTILIZADO_HASTA;
+    }
+
+    /**
+     * Destino válido para absorber el IVA: gasto/activo de la operación, no perc./retenciones.
+     *
+     * @param  array<string, mixed>  $item
+     */
+    public function esDestinoIvaIncluido(array $item): bool
+    {
+        if ($this->esIvaIncluidoAFusionar($item)) {
+            return false;
+        }
+        $conceptoId = (int) ($item['concepto_id'] ?? 0);
+        if (in_array($conceptoId, [
+            self::CONCEPTO_PERC_IIBB,
+            self::CONCEPTO_PERC_IVA,
+            self::CONCEPTO_RETENCIONES,
+            self::CONCEPTO_IVA,
+        ], true)) {
+            return false;
+        }
+        $cuenta = (int) ($item['cuenta'] ?? 0);
+
+        return $cuenta > 0 && ! $this->esProveedor($cuenta);
+    }
+
+    /**
+     * Fusiona importes/pesos de IVA (cpto 63) en los destinos de gasto.
+     * Conserva la suma del campo de peso: no altera la ecuación patrimonial de la pata.
+     * Si no hay destino, deja el IVA intacto (no se pierde el importe).
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    public function fusionarIvaIncluidoEnItems(array $items, string $campoPeso): array
+    {
+        if ($items === []) {
+            return [];
+        }
+
+        $destinos = [];
+        $otros = [];
+        $sumaIva = 0.0;
+        $sumaDestino = 0.0;
+
+        foreach ($items as $item) {
+            $peso = round((float) ($item[$campoPeso] ?? 0), 2);
+            if (abs($peso) < 0.005) {
+                continue;
+            }
+            if ($this->esIvaIncluidoAFusionar($item)) {
+                $sumaIva = round($sumaIva + $peso, 2);
+                continue;
+            }
+            if ($this->esDestinoIvaIncluido($item)) {
+                $destinos[] = $item;
+                $sumaDestino = round($sumaDestino + $peso, 2);
+                continue;
+            }
+            $otros[] = $item;
+        }
+
+        if ($sumaIva < 0.005 || $destinos === [] || $sumaDestino < 0.005) {
+            return array_values($items);
+        }
+
+        $acumulado = 0.0;
+        $ultimo = count($destinos) - 1;
+        foreach ($destinos as $i => $destino) {
+            $pesoDestino = round((float) ($destino[$campoPeso] ?? 0), 2);
+            if ($i === $ultimo) {
+                $extra = round($sumaIva - $acumulado, 2);
+            } else {
+                $extra = round($sumaIva * ($pesoDestino / $sumaDestino), 2);
+                $acumulado = round($acumulado + $extra, 2);
+            }
+            $destinos[$i][$campoPeso] = round($pesoDestino + $extra, 2);
+            $origen = trim((string) ($destinos[$i]['origen_linea'] ?? ''));
+            if ($origen !== '' && ! str_contains($origen, 'IVA incluido')) {
+                $destinos[$i]['origen_linea'] = $origen.' +IVA incluido';
+            } elseif ($origen === '') {
+                $destinos[$i]['origen_linea'] = 'IVA incluido';
+            }
+        }
+
+        return array_values(array_merge($destinos, $otros));
     }
 
     /**

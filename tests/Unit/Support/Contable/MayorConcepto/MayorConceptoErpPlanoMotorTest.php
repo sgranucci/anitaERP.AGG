@@ -430,6 +430,99 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
     }
 
+    public function test_iva_incluido_fusiona_cpto_63_al_gasto_y_deja_58_y_55(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $clasificado = $motor->clasificar([
+            $this->asiento(125350, 125350, [
+                $this->mov(111050009, 'Banco', 53, 'BANCOS', 1000, false),
+                $this->mov(211010001, 'Proveedores', 52, 'PROVEEDORES', 1000, true),
+            ]),
+        ], [
+            125350 => [
+                $this->mov(521170005, 'Luz', 17, 'SERVICIOS GENERALES', 0, true, 700),
+                $this->mov(114010009, 'Perc IVA', 58, 'RET Y PERC DE IVA', 0, true, 50),
+                $this->mov(114010002, 'IVA CF', 63, 'IVA', 0, true, 200),
+                $this->mov(214010004, 'Perc IIBB', 55, 'RET Y PERC DE IIBB', 0, true, 50),
+            ],
+        ], self::LIMITE, [], false, false, true);
+
+        $porConcepto = [];
+        $haber = 0.0;
+        foreach ($clasificado['lineas'] as $ln) {
+            $haber += $ln['haber'];
+            $porConcepto[$ln['concepto_id']] = ($porConcepto[$ln['concepto_id']] ?? 0) + $ln['haber'];
+        }
+        $this->assertEqualsWithDelta(1000.0, $haber, 0.001);
+        $this->assertArrayNotHasKey(63, $porConcepto);
+        $this->assertEqualsWithDelta(900.0, $porConcepto[17], 0.001);
+        $this->assertEqualsWithDelta(50.0, $porConcepto[58], 0.001);
+        $this->assertEqualsWithDelta(50.0, $porConcepto[55], 0.001);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
+    public function test_iva_incluido_flag_off_deja_cpto_63(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $clasificado = $motor->clasificar([
+            $this->asiento(125351, 125351, [
+                $this->mov(111050009, 'Banco', 53, 'BANCOS', 1000, false),
+                $this->mov(211010001, 'Proveedores', 52, 'PROVEEDORES', 1000, true),
+            ]),
+        ], [
+            125351 => [
+                $this->mov(521170005, 'Luz', 17, 'SERVICIOS GENERALES', 0, true, 800),
+                $this->mov(114010002, 'IVA CF', 63, 'IVA', 0, true, 200),
+            ],
+        ], self::LIMITE, [], false, false, false);
+
+        $porConcepto = [];
+        foreach ($clasificado['lineas'] as $ln) {
+            $porConcepto[$ln['concepto_id']] = ($porConcepto[$ln['concepto_id']] ?? 0) + $ln['haber'];
+        }
+        $this->assertEqualsWithDelta(800.0, $porConcepto[17], 0.001);
+        $this->assertEqualsWithDelta(200.0, $porConcepto[63], 0.001);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
+    public function test_iva_incluido_egr_fusiona_contrapartida_iva_al_gasto(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $asiento = $this->asiento(15231, 15231, [
+            $this->mov(111050031, 'Banco', 53, 'BANCOS', 1000, false),
+            $this->mov(114010002, 'IVA CF', 63, 'IVA', 150, true),
+            $this->mov(114010009, 'Perc IVA', 58, 'RET Y PERC DE IVA', 50, true),
+            $this->mov(532030002, 'Intereses', 46, 'INTERESES', 800, true),
+        ]);
+        $asiento['tipo'] = 'EGR';
+
+        $clasificado = $motor->clasificar([$asiento], [], self::LIMITE, [], false, false, true);
+
+        $porConcepto = [];
+        $haber = 0.0;
+        foreach ($clasificado['lineas'] as $ln) {
+            $haber += $ln['haber'];
+            $porConcepto[$ln['concepto_id']] = ($porConcepto[$ln['concepto_id']] ?? 0) + $ln['haber'];
+        }
+        $this->assertEqualsWithDelta(1000.0, $haber, 0.001);
+        $this->assertArrayNotHasKey(63, $porConcepto);
+        $this->assertEqualsWithDelta(950.0, $porConcepto[46], 0.001);
+        $this->assertEqualsWithDelta(50.0, $porConcepto[58], 0.001);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
+    public function test_fusionar_iva_sin_destino_conserva_items(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $items = [
+            $this->mov(114010002, 'IVA CF', 63, 'IVA', 0, true, 200),
+            $this->mov(114010009, 'Perc IVA', 58, 'RET Y PERC DE IVA', 0, true, 50),
+        ];
+        $out = $motor->fusionarIvaIncluidoEnItems($items, 'peso');
+        $this->assertCount(2, $out);
+        $this->assertEqualsWithDelta(250.0, array_sum(array_column($out, 'peso')), 0.001);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $movimientos
      * @return array<string, mixed>
