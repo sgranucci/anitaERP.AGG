@@ -14,7 +14,7 @@
 	<thead>
 		<tr>
 			<th>Empresa</th>
-			<th>N&deg;</th>
+			<th>C&oacute;d. Anita</th>
 			<th>Descripci&oacute;n</th>
 			<th>Tipo</th>
 			<th>Per&iacute;odo</th>

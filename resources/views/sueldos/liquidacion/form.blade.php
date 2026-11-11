@@ -28,6 +28,22 @@
 ])
 @endif
 
+{{-- Código Anita (mael_liquidacion). El id de la corrida es el PK automático del ERP. --}}
+<div class="form-group row">
+    <label for="numero" class="col-lg-3 col-form-label text-right">C&oacute;digo Anita @if($esEdicion)<span class="text-danger">*</span>@endif</label>
+    <div class="col-lg-3">
+        <input type="number" name="numero" id="numero" class="form-control" min="1"
+               value="{{ old('numero', $d->numero ?? ($numeroSugerido ?? '')) }}"
+               placeholder="Autom&aacute;tico si se deja vac&iacute;o"
+               @if($esEdicion) required @endif
+               data-url-proximo="{{ route('proximo_numero_liquidacion_sueldos') }}">
+        <small class="form-text text-muted">
+            N&deg; de corrida operativo (Anita). El ID interno del ERP es autom&aacute;tico.
+            @if(! $esEdicion) Si lo dej&aacute;s vac&iacute;o se asigna el pr&oacute;ximo disponible. @endif
+        </small>
+    </div>
+</div>
+
 {{-- Espejo help_4 l-recibolargo: Todos / Empresa actual / Multiempresa --}}
 <div class="form-group row">
     <label for="alcance" class="col-lg-3 col-form-label text-right">Alcance empresas</label>

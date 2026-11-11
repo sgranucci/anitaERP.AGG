@@ -14,7 +14,7 @@
         @include('includes.mensaje')
         <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar corrida N&deg; {{ $data->numero }} <span class="badge badge-info">{{ $data->estadoLabel() }}</span></h3>
+                <h3 class="card-title">Editar corrida · C&oacute;d. Anita {{ $data->numero }} <span class="badge badge-info">{{ $data->estadoLabel() }}</span></h3>
                 <div class="card-tools">
                     @if (can('listar-novedad-sueldos', false))
                         <a href="{{ route('novedades_liquidacion_sueldos', ['id' => $data->id]) }}" class="btn btn-outline-secondary btn-sm">

@@ -142,6 +142,12 @@ final class IngresosBrutosFormatoArbaSupport
     {
         $out = '';
         foreach ($registros as $reg) {
+            // Créditos (DEV RET / DEVOLUCION IIBB / AOP): restan en listado y totales.
+            // El diseño ARBA de retención no tiene NC; montoPunto() usa abs() y
+            // escribirlas sumaría bases falsas. AGIP las manda a archivo aparte.
+            if ((float) ($reg['importe'] ?? 0) < -0.001) {
+                continue;
+            }
             $out .= $tipo === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES
                 ? self::formatearLineaPercepcion($reg)
                 : self::formatearLineaRetencion($reg);

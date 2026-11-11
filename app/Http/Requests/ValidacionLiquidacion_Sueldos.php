@@ -16,10 +16,25 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
 
     public function rules()
     {
-        $esAlta = $this->route('id') === null;
+        $id = $this->route('id');
+        $esAlta = $id === null;
+        // En edición la empresa no cambia: unicidad del código Anita por empresa del registro.
+        $empresaId = $esAlta
+            ? $this->input('empresa_id')
+            : (Liquidacion_Sueldos::query()->whereKey($id)->value('empresa_id') ?? $this->input('empresa_id'));
 
         return [
             'empresa_id' => [Rule::requiredIf($esAlta), 'integer', 'exists:empresa,id'],
+            // Código Anita (mael_liquidacion). Vacío en alta => próximo automático.
+            'numero' => [
+                Rule::requiredIf(! $esAlta),
+                'nullable',
+                'integer',
+                'min:1',
+                Rule::unique('liquidacion_sueldos', 'numero')
+                    ->where(fn ($q) => $q->where('empresa_id', $empresaId))
+                    ->ignore($id),
+            ],
             'alcance' => ['nullable', 'string', Rule::in(LiquidacionAlcanceRecibo::permitidos())],
             'descripcion' => 'required|string|max:60',
             'tipo' => ['required', 'string', Rule::in(array_keys(Liquidacion_Sueldos::TIPOS))],
@@ -43,6 +58,7 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
     {
         return [
             'empresa_id' => 'empresa',
+            'numero' => 'código Anita',
             'descripcion' => 'descripción',
             'tipo' => 'tipo de liquidación',
             'periodo' => 'período',
@@ -52,8 +68,10 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $numero = $this->input('numero');
         $this->merge([
             'periodo' => preg_replace('/\D+/', '', (string) $this->input('periodo')),
+            'numero' => ($numero === null || $numero === '') ? null : (int) preg_replace('/\D+/', '', (string) $numero),
             'simulacion' => $this->boolean('simulacion'),
             'acumula_novedades' => $this->has('acumula_novedades') ? $this->boolean('acumula_novedades') : true,
             'alcance' => LiquidacionAlcanceRecibo::normalizar($this->input('alcance')),

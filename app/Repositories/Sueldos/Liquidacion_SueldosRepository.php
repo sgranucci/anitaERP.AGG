@@ -163,7 +163,8 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
     {
         return DB::transaction(function () use ($data) {
             $empresaId = (int) ($data['empresa_id'] ?? 0);
-            $data['numero'] = $this->proximoNumero($empresaId);
+            $numeroManual = (int) ($data['numero'] ?? 0);
+            $data['numero'] = $numeroManual > 0 ? $numeroManual : $this->proximoNumero($empresaId);
             $data['estado'] = 'borrador';
             $data['usuario_id'] = auth()->id();
 
@@ -175,8 +176,8 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
     {
         return DB::transaction(function () use ($data, $id) {
             $registro = $this->model->findOrFail($id);
-            // No se cambia empresa ni numero en edicion.
-            unset($data['empresa_id'], $data['numero'], $data['estado']);
+            // Empresa y estado no se cambian acá; el código Anita (numero) sí es editable.
+            unset($data['empresa_id'], $data['estado']);
             $registro->update($this->normalizar($data, $registro));
 
             return $registro->fresh();
@@ -241,6 +242,11 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
             $out['usuario_id'] = $data['usuario_id'] ?? auth()->id();
             if (! array_key_exists('alcance', $data)) {
                 $out['alcance'] = 'todos';
+            }
+        } elseif (array_key_exists('numero', $data)) {
+            $numero = (int) ($data['numero'] ?? 0);
+            if ($numero > 0) {
+                $out['numero'] = $numero;
             }
         }
 

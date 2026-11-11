@@ -12,6 +12,9 @@ use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Cabecera de la corrida de liquidacion (payroll run). Origen Anita: maeliq.
+ *
+ * - id: PK automática del ERP (FKs internas).
+ * - numero: código Anita editable (mael_liquidacion), único por empresa.
  */
 class Liquidacion_Sueldos extends Model implements Auditable
 {

@@ -5668,6 +5668,7 @@ Route::get('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@index')
 Route::get('sueldos/listaliquidacion/{formato?}/{busqueda?}', 'Sueldos\Liquidacion_SueldosController@listar')->name('lista_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/sincronizar-anita', 'Sueldos\Liquidacion_SueldosController@sincronizarAnita')->name('sincronizar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/crear', 'Sueldos\Liquidacion_SueldosController@crear')->name('crear_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/proximo-numero', 'Sueldos\Liquidacion_SueldosController@proximoNumero')->name('proximo_numero_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/consultaliquidacion', 'Sueldos\Liquidacion_SueldosController@consultaLiquidacion')->name('consulta_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/leerpornumero/{numero}', 'Sueldos\Liquidacion_SueldosController@leeUnLiquidacionPorNumero')->name('leer_liquidacion_sueldos_por_numero');
 Route::get('sueldos/liquidacion/leer/{id}', 'Sueldos\Liquidacion_SueldosController@leeLiquidacion')->name('leer_liquidacion_sueldos');

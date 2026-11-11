@@ -45,7 +45,7 @@
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => LiquidacionSueldosListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('consultar_liquidacion_sueldos'),
-                        'placeholder' => 'Búsqueda rápida (N°, descripción, período)…',
+                        'placeholder' => 'Búsqueda rápida (cód. Anita, descripción, período)…',
                         'toggleTarget' => '#panel-filtros-liquidacion-sueldos',
                         'toggleId' => 'btn-toggle-filtros-liquidacion-sueldos',
                         'inputId' => 'filtro_valor',
@@ -67,7 +67,7 @@
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th style="width:70px">N&deg;</th>
+                            <th style="width:90px" title="C&oacute;digo Anita (N&deg; de corrida)">C&oacute;d. Anita</th>
                             <th>Empresa</th>
                             <th>Descripci&oacute;n</th>
                             <th>Tipo</th>

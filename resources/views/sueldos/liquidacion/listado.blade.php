@@ -46,7 +46,7 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width: 6%;">N&deg;</th>
+				<th style="width: 8%;">C&oacute;d. Anita</th>
 				<th style="width: 18%;">Empresa</th>
 				<th style="width: 22%;">Descripci&oacute;n</th>
 				<th style="width: 12%;">Tipo</th>

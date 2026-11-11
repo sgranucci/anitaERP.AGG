@@ -7,6 +7,7 @@ namespace App\Support\Contable\IngresosBrutos;
 /**
  * Signo de retenciones IIBB en presentaciones (ARCIBA / archivos).
  * NC y AOP restan; las devoluciones parciales de retención (DEV RET) también.
+ * OPP/CHP de I/E con Debe en la cuenta de retención (texto DEVOLUCION IIBB) idem.
  */
 final class IngresosBrutosRetencionSignoSupport
 {
@@ -26,7 +27,10 @@ final class IngresosBrutosRetencionSignoSupport
      */
     public static function esDevolucionRetencionDetalle(string $detalle): bool
     {
-        return preg_match('/^DEV\s+RET\b/iu', trim($detalle)) === 1;
+        $detalle = trim($detalle);
+
+        return preg_match('/^DEV\s+RET\b/iu', $detalle) === 1
+            || preg_match('/\bDEVOLUC(?:I[OÓ]N)?(?:\s+DE)?\s+IIBB\b/iu', $detalle) === 1;
     }
 
     /**

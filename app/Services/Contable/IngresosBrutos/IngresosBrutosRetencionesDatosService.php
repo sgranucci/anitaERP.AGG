@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace App\Services\Contable\IngresosBrutos;
 
 use App\ApiAnita;
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Compras\Pagoproveedor_Retencion;
+use App\Models\Contable\Asiento;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Models\Configuracion\Provincia;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
@@ -14,6 +17,7 @@ use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosRetencionSignoSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreErpComplementoSupport;
+use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -56,20 +60,33 @@ final class IngresosBrutosRetencionesDatosService
 
         // Anita puede traer la OPP original y faltar la devolución solo-ERP (DEV RET).
         // Se mergea como en SICORE: Anita primero, ERP solo lo que no está.
-        if ($anita === [] && $erp === []) {
-            return [];
-        }
         if ($anita === []) {
-            return $erp;
-        }
-        if ($erp === []) {
-            return $anita;
+            $base = $erp;
+        } elseif ($erp === []) {
+            $base = $anita;
+        } else {
+            $base = array_merge(
+                $anita,
+                SicoreErpComplementoSupport::soloNuevos($erp, $anita),
+            );
         }
 
-        return array_merge(
-            $anita,
-            SicoreErpComplementoSupport::soloNuevos($erp, $anita),
+        // OPP/CHP de caja (I/E) con Debe en la cuenta IIBB y proveedor: devolución
+        // que no generó retibrmov ni pagoproveedor_retencion (ej. DEVOLUCION DE IIBB).
+        $devs = $this->desdeDevolucionesErpAsiento(
+            $empresaId,
+            $fechaDesde,
+            $fechaHasta,
+            $config,
+            $provincia,
+            $base,
         );
+
+        if ($devs === []) {
+            return $base;
+        }
+
+        return array_merge($base, SicoreErpComplementoSupport::soloNuevos($devs, $base));
     }
 
     /**
@@ -378,5 +395,230 @@ final class IngresosBrutosRetencionesDatosService
         }
 
         return $this->notasCreditoCompra;
+    }
+
+    /**
+     * Devoluciones de IIBB hechas por I/E (OPP/CHP) contra la cuenta configurada.
+     * Contablemente son Debe del pasivo (monto > 0); no generan retibrmov ni
+     * pagoproveedor_retencion. Se excluyen pagos de DDJJ ARBA.
+     *
+     * @param  list<array<string, mixed>>  $yaPresentes
+     * @return list<array<string, mixed>>
+     */
+    private function desdeDevolucionesErpAsiento(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        Iibb_Presentacion_Config $config,
+        Provincia $provincia,
+        array $yaPresentes,
+    ): array {
+        if (! Schema::hasTable('asiento') || ! Schema::hasTable('asiento_movimiento')) {
+            return [];
+        }
+
+        $cuentaIds = $config->cuentas
+            ->where('empresa_id', $empresaId)
+            ->pluck('cuentacontable_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($cuentaIds === []) {
+            return [];
+        }
+
+        $movimientos = Asiento_Movimiento::query()
+            ->whereIn('cuentacontable_id', $cuentaIds)
+            ->where('monto', '>', 0)
+            ->whereHas('asientos', function ($q) use ($empresaId, $fechaDesde, $fechaHasta) {
+                $q->where('empresa_id', $empresaId)
+                    ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
+                    ->where(function ($tipo) {
+                        $tipo->whereIn('anita_tipo', ['OPP', 'CHP'])
+                            ->orWhereNull('anita_tipo')
+                            ->orWhere('anita_tipo', '');
+                    });
+            })
+            ->with(['asientos'])
+            ->get();
+
+        if ($movimientos->isEmpty()) {
+            return [];
+        }
+
+        $cajaIds = $movimientos
+            ->map(static fn (Asiento_Movimiento $m) => (int) ($m->asientos?->caja_movimiento_id ?? 0))
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        $cajas = $cajaIds === []
+            ? collect()
+            : Caja_Movimiento::query()
+                ->whereIn('id', $cajaIds)
+                ->with('proveedores')
+                ->get()
+                ->keyBy('id');
+
+        $clavesYa = SicoreErpComplementoSupport::claves($yaPresentes);
+        $out = [];
+        $vistos = [];
+
+        foreach ($movimientos as $mov) {
+            $asiento = $mov->asientos;
+            if (! $asiento instanceof Asiento) {
+                continue;
+            }
+
+            $tipo = strtoupper(trim((string) ($asiento->anita_tipo ?? '')));
+            if ($tipo === '') {
+                $tipo = 'OPP';
+            }
+            if (! SicoreMayorComparableSupport::esTipoDevolucionRetencion($tipo)) {
+                continue;
+            }
+
+            $detalle = trim((string) ($mov->observacion ?? $asiento->observacion ?? ''));
+            $caja = $cajas->get((int) ($asiento->caja_movimiento_id ?? 0));
+            if ($caja instanceof Caja_Movimiento && trim((string) $caja->detalle) !== '') {
+                $detalle = trim((string) $caja->detalle);
+            }
+
+            // Pago de liquidación ARBA / DDJJ: no es devolución a proveedor.
+            if (SicoreMayorComparableSupport::motivoExclusion($detalle) !== null) {
+                continue;
+            }
+
+            $proveedor = $caja?->proveedores;
+            if ($proveedor === null) {
+                continue;
+            }
+
+            // Solo devoluciones explícitas (DEV RET / DEVOLUCION IIBB) o detalle vacío
+            // con proveedor (casos DEV RET sin texto). Evita ANULA u otros Debe sueltos.
+            if ($detalle !== '' && ! IngresosBrutosRetencionSignoSupport::esDevolucionRetencionDetalle($detalle)) {
+                continue;
+            }
+
+            $importeAbs = round(abs((float) $mov->monto), 2);
+            if ($importeAbs < 0.001) {
+                continue;
+            }
+
+            $nroComp = (int) ($asiento->anita_nro ?: $caja?->numerotransaccion ?: 0);
+            if ($nroComp <= 0) {
+                continue;
+            }
+
+            $claveVista = $tipo.'|'.$nroComp.'|'.$importeAbs;
+            if (isset($vistos[$claveVista])) {
+                continue;
+            }
+            $vistos[$claveVista] = true;
+
+            $probe = [
+                'nro_comp' => $nroComp,
+                'nro_cert' => 0,
+                'importe' => $importeAbs,
+            ];
+            if (SicoreErpComplementoSupport::estaEnClaves($probe, $clavesYa)
+                || SicoreErpComplementoSupport::estaEnClaves(
+                    ['nro_comp' => $nroComp, 'nro_cert' => 0, 'importe' => -$importeAbs],
+                    $clavesYa,
+                )) {
+                continue;
+            }
+
+            $fecha = $asiento->fecha
+                ? (is_string($asiento->fecha) ? substr($asiento->fecha, 0, 10) : $asiento->fecha->format('Y-m-d'))
+                : ($caja?->fecha ? substr((string) $caja->fecha, 0, 10) : '');
+            if ($fecha === '') {
+                continue;
+            }
+
+            $origen = $this->buscarRetencionIibbOrigen(
+                (int) $proveedor->id,
+                (int) $provincia->id,
+                $importeAbs,
+                $fecha,
+            );
+
+            $base = abs((float) ($origen['base_calculo'] ?? 0));
+            if ($base < 0.001) {
+                $ali = (float) ($origen['alicuota'] ?? 0);
+                $base = $ali > 0.0001 ? round($importeAbs * 100.0 / $ali, 2) : $importeAbs;
+            }
+            $alicuota = round((float) ($origen['alicuota'] ?? 0), 2);
+            $nroCert = (int) ($origen['nro_certificado'] ?? 0);
+
+            $out[] = [
+                'origen' => 'asiento_erp_devolucion',
+                'iibb_config_id' => (int) $config->id,
+                'tipo' => 'retenciones',
+                'fecha_retencion' => $fecha,
+                'fecha_comp' => $fecha,
+                'nro_comp' => $nroComp,
+                'nro_cert' => $nroCert,
+                'sucursal' => 1,
+                'base_calculo' => round(-$base, 2),
+                'importe' => round(-$importeAbs, 2),
+                'alicuota' => $alicuota,
+                'nro_documento' => IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($proveedor->nroinscripcion ?? '')),
+                'codigo_proveedor' => (string) ($proveedor->codigo ?? ''),
+                'razon_social' => substr((string) ($proveedor->nombre ?? ''), 0, 30),
+                'referencia' => sprintf(
+                    'Dev.IIBB %s #%d %s',
+                    $tipo,
+                    $nroComp,
+                    (string) ($proveedor->codigo ?? ''),
+                ),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Retención IIBB original (mismo proveedor e importe) para completar certificado / base.
+     *
+     * @return array{base_calculo: float, alicuota: float, nro_certificado: int}
+     */
+    private function buscarRetencionIibbOrigen(
+        int $proveedorId,
+        int $provinciaId,
+        float $importeAbs,
+        string $fechaIsoHasta,
+    ): array {
+        $vacio = ['base_calculo' => 0.0, 'alicuota' => 0.0, 'nro_certificado' => 0];
+        if ($proveedorId <= 0 || $importeAbs < 0.001 || $fechaIsoHasta === '') {
+            return $vacio;
+        }
+
+        $fila = Pagoproveedor_Retencion::query()
+            ->where('tiporetencion', Pagoproveedor_Retencion::TIPO_IIBB)
+            ->where('provincia_id', $provinciaId)
+            ->where('importe', '>', 0)
+            ->whereRaw('ABS(importe - ?) < 0.02', [$importeAbs])
+            ->whereHas('pagoproveedores', function ($q) use ($proveedorId, $fechaIsoHasta) {
+                $q->where('proveedor_id', $proveedorId)
+                    ->where('fecha', '<=', $fechaIsoHasta)
+                    ->where('estado', 'CONFIRMADA');
+            })
+            ->with(['pagoproveedores' => static fn ($q) => $q->orderByDesc('fecha')])
+            ->get()
+            ->sortByDesc(static fn (Pagoproveedor_Retencion $r) => (string) ($r->pagoproveedores?->fecha ?? ''))
+            ->first();
+
+        if ($fila === null) {
+            return $vacio;
+        }
+
+        return [
+            'base_calculo' => (float) $fila->base_calculo,
+            'alicuota' => (float) $fila->alicuota,
+            'nro_certificado' => (int) preg_replace('/\D+/', '', (string) ($fila->nro_certificado ?? '0')),
+        ];
     }
 }

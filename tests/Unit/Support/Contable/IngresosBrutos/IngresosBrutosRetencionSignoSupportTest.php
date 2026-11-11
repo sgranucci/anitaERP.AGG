@@ -22,8 +22,17 @@ class IngresosBrutosRetencionSignoSupportTest extends TestCase
         $this->assertTrue(IngresosBrutosRetencionSignoSupport::esDevolucionRetencionDetalle(
             'DEV RET OPP 125457: Orden de pago BANCO MACRO S.A.'
         ));
+        $this->assertTrue(IngresosBrutosRetencionSignoSupport::esDevolucionRetencionDetalle(
+            'DEVOLUCION IIBB'
+        ));
+        $this->assertTrue(IngresosBrutosRetencionSignoSupport::esDevolucionRetencionDetalle(
+            'DEVOLUCION DE IIBB'
+        ));
         $this->assertFalse(IngresosBrutosRetencionSignoSupport::esDevolucionRetencionDetalle(
             'Orden de pago Nro. 125457'
+        ));
+        $this->assertFalse(IngresosBrutosRetencionSignoSupport::esDevolucionRetencionDetalle(
+            'Retenciones ARBA 1Q 10.2026'
         ));
     }
 

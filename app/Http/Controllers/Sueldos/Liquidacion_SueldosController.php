@@ -140,9 +140,30 @@ class Liquidacion_SueldosController extends Controller
     {
         can('crear-liquidacion-sueldos');
 
+        $empresas = $this->empresas();
+        $empresaDefault = (int) (old('empresa_id') ?: optional($empresas->first())->id ?: 0);
+
         return view('sueldos.liquidacion.crear', [
-            'empresas' => $this->empresas(),
+            'empresas' => $empresas,
             'motivosegreso' => $this->motivosegreso(),
+            'numeroSugerido' => $empresaDefault > 0 ? $this->repository->proximoNumero($empresaDefault) : null,
+        ]);
+    }
+
+    /**
+     * Próximo código Anita sugerido para una empresa (alta de corrida).
+     */
+    public function proximoNumero(Request $request)
+    {
+        can('crear-liquidacion-sueldos');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId <= 0) {
+            return response()->json(['numero' => null], 422);
+        }
+
+        return response()->json([
+            'numero' => $this->repository->proximoNumero($empresaId),
         ]);
     }
 
@@ -152,7 +173,7 @@ class Liquidacion_SueldosController extends Controller
         $liq = $this->repository->create($request->validated());
 
         return redirect('sueldos/liquidacion')
-            ->with('mensaje', 'Corrida de liquidación N° '.$liq->numero.' creada con éxito');
+            ->with('mensaje', 'Corrida de liquidación creada (cód. Anita '.$liq->numero.')');
     }
 
     public function editar($id)
