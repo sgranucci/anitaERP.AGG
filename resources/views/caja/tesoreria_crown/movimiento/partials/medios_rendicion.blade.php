@@ -2,18 +2,24 @@
     $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->asignacion->tipo_tarea ?? '');
     $calculaRecargo = ! \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '');
     $divisorRecargo = \App\Support\Caja\TesoreriaCrownCierreCalculo::divisorRecargo($comprobante->jornada->fecha->format('Y-m-d'));
+    $esGastroHotel = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '');
 @endphp
 @if ($comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::RENDICION
-    && \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? ''))
+    && $esGastroHotel)
     @include('caja.tesoreria_crown.movimiento.partials.cierres_fiscales')
 @endif
 @foreach ($gruposMedio as $grupoMedio)
-    <div class="card card-outline card-info mt-3 mb-0">
-        <div class="card-header py-2">
-            <h3 class="card-title mb-0">{{ $grupoMedio['titulo'] }}</h3>
+    <div class="card card-outline card-info mt-2 mb-0">
+        <div class="card-header py-1 px-3 d-flex justify-content-between align-items-center">
+            <h3 class="card-title mb-0" style="font-size:.95rem;">{{ $grupoMedio['titulo'] }}</h3>
+            @if ($esGastroHotel)
+                <span class="text-muted small d-none d-md-inline">{{ $grupoMedio['ayuda'] }}</span>
+            @endif
         </div>
-        <div class="card-body pb-2">
-            <p class="text-muted small mb-3">{{ $grupoMedio['ayuda'] }}</p>
+        <div class="card-body py-2 px-3">
+            @if (! $esGastroHotel)
+                <p class="text-muted small mb-2">{{ $grupoMedio['ayuda'] }}</p>
+            @endif
             <div class="row">
                 @foreach ($grupoMedio['campos'] as $clave => $meta)
                     @php
@@ -25,17 +31,18 @@
                         $mostrado = $vacio
                             ? '—'
                             : ($esImporte ? number_format((float) $valorCampo, 2, ',', '.') : (string) $valorCampo);
+                        $col = $esGastroHotel ? 'col-6 col-md-4 col-lg-2' : 'col-sm-6 col-lg-3';
                     @endphp
-                    <div class="col-sm-6 col-lg-3 mb-3">
-                        <label class="small mb-1" for="medio-{{ $clave }}">{{ $meta['label'] }}</label>
+                    <div class="{{ $col }} mb-2">
+                        <label class="small mb-0" for="medio-{{ $clave }}">{{ $meta['label'] }}</label>
                         @if ($editable)
                             <input
                                 id="medio-{{ $clave }}"
-                                type="{{ $meta['tipo'] === 'texto' ? 'text' : 'number' }}"
+                                type="{{ $meta['tipo'] === 'texto' ? 'text' : ($esImporte ? 'text' : 'number') }}"
                                 name="medio[{{ $clave }}]"
-                                class="form-control form-control-sm text-right js-importe"
-                                @if ($meta['tipo'] !== 'texto') step="{{ $meta['tipo'] === 'entero' ? '1' : '0.01' }}" @endif
-                                @if ($meta['tipo'] !== 'texto' && ! $meta['negativo']) min="0" @endif
+                                class="form-control form-control-sm text-right js-importe{{ $esImporte ? ' js-miles' : '' }}"
+                                inputmode="{{ $esImporte ? 'decimal' : ($meta['tipo'] === 'entero' ? 'numeric' : 'text') }}"
+                                @if ($meta['tipo'] === 'entero') step="1" min="0" @endif
                                 @if ($meta['tipo'] === 'texto') maxlength="20" @endif
                                 @if (in_array($clave, ['tarjeta_credito', 'tarjeta_debito', 'total_qr'], true))
                                     data-total-final="1"
@@ -43,7 +50,7 @@
                                     data-total-final="-1"
                                     @if ($calculaRecargo) readonly data-recargo-divisor="{{ $divisorRecargo }}" title="Sale de la tarjeta de crédito" @endif
                                 @endif
-                                value="{{ $vacio ? '' : $valorCampo }}"
+                                value="{{ $vacio ? '' : ($esImporte ? number_format((float) $valorCampo, 2, ',', '.') : $valorCampo) }}"
                                 autocomplete="off">
                         @else
                             <div class="form-control form-control-sm text-right bg-light">{{ $mostrado !== '' ? $mostrado : '—' }}</div>

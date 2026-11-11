@@ -67,22 +67,23 @@ final class ClienteUifAnitaBulkCacheSupport
             ? $servidor
             : ClienteUifArchivoStorage::servidorDefault($origen);
 
-        $profesion = $this->listar($servidor, 'profesion', 'iprofesionid, nuevocodigo', ' WHERE 1=1 ');
+        $profesion = $this->listarProfesion($servidor, $origen);
         $mapaProfesion = [];
         foreach ($profesion as $row) {
             $pid = (int) ($row->iprofesionid ?? 0);
             if ($pid > 0) {
-                $mapaProfesion[$pid] = (string) ($row->nuevocodigo ?? '');
+                // AGG: nuevocodigo. Crown (base_admin viejo): solo cdesc → usar el id Anita.
+                $mapaProfesion[$pid] = (string) ($row->nuevocodigo ?? $row->iprofesionid ?? '');
             }
         }
 
-        $clientes = $this->listar($servidor, 'clientes_uif', self::CAMPOS_CLIENTE, ' WHERE 1=1 ');
+        $clientes = $this->listarCamposFlexibles($servidor, 'clientes_uif', self::CAMPOS_CLIENTE, $origen);
         foreach ($clientes as $cli) {
             $iprof = (int) ($cli->iprofesion ?? 0);
             $cli->codigoprofesion = $mapaProfesion[$iprof] ?? ($cli->iprofesion ?? 1);
         }
 
-        $premios = $this->listar($servidor, 'premios_uif', self::CAMPOS_PREMIO, ' WHERE 1=1 ');
+        $premios = $this->listarCamposFlexibles($servidor, 'premios_uif', self::CAMPOS_PREMIO, $origen);
 
         $this->guardarJson($dir.'/profesion.json', $profesion);
         $this->guardarJson($dir.'/clientes.json', $clientes);
@@ -154,7 +155,64 @@ final class ClienteUifAnitaBulkCacheSupport
     /**
      * @return list<object>
      */
-    private function listar(string $servidor, string $tabla, string $campos, string $whereArmado): array
+    /**
+     * AGG tiene profesion.nuevocodigo; Crown solo iprofesionid + cdesc.
+     *
+     * @return list<object>
+     */
+    private function listarProfesion(string $servidor, string $origen): array
+    {
+        try {
+            return $this->listar($servidor, 'profesion', 'iprofesionid, nuevocodigo', ' WHERE 1=1 ', $origen);
+        } catch (\RuntimeException $e) {
+            if (! str_contains($e->getMessage(), 'nuevocodigo') && ! str_contains($e->getMessage(), 'Column')) {
+                throw $e;
+            }
+        }
+
+        $rows = $this->listar($servidor, 'profesion', 'iprofesionid, cdesc', ' WHERE 1=1 ', $origen);
+        foreach ($rows as $row) {
+            // Compat con el resto del sync: codigoprofesion = id Anita si no hay nuevocodigo.
+            $row->nuevocodigo = (string) ($row->iprofesionid ?? '');
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Lista con el set AGG; si Informix SE viejo no tiene alguna columna, reintenta solo con las presentes.
+     *
+     * @return list<object>
+     */
+    private function listarCamposFlexibles(string $servidor, string $tabla, string $camposCsv, string $origen): array
+    {
+        try {
+            return $this->listar($servidor, $tabla, $camposCsv, ' WHERE 1=1 ', $origen);
+        } catch (\RuntimeException $e) {
+            if (! str_contains($e->getMessage(), 'Column') && ! str_contains($e->getMessage(), '217:')) {
+                throw $e;
+            }
+        }
+
+        $campos = preg_split('/\s*,\s*/', trim(preg_replace('/\s+/', ' ', $camposCsv) ?? '')) ?: [];
+        $campos = array_values(array_filter(array_map('trim', $campos)));
+        $presentes = [];
+        foreach ($campos as $campo) {
+            try {
+                $this->listar($servidor, $tabla, $campo, ' WHERE 1=1 ', $origen);
+                $presentes[] = $campo;
+            } catch (\RuntimeException) {
+                // columna ausente en este Informix
+            }
+        }
+        if ($presentes === []) {
+            throw new \RuntimeException("Ninguna columna UIF disponible en {$tabla} (servidor={$servidor}).");
+        }
+
+        return $this->listar($servidor, $tabla, implode(', ', $presentes), ' WHERE 1=1 ', $origen);
+    }
+
+    private function listar(string $servidor, string $tabla, string $campos, string $whereArmado, string $origen = 'biyemas'): array
     {
         $api = new ApiAnita;
         $payload = [
@@ -167,9 +225,20 @@ final class ClienteUifAnitaBulkCacheSupport
         if ($servidor !== '') {
             $payload['servidor'] = $servidor;
         }
-        $rows = json_decode($api->apiCall($payload));
+        $ifx = ClienteUifArchivoStorage::ifxServerDefault($origen);
+        if ($ifx !== '') {
+            $payload['ifx_server'] = $ifx;
+        }
+        $raw = $api->apiCall($payload);
+        $rows = json_decode($raw);
         if (! is_array($rows)) {
-            throw new \RuntimeException('Respuesta Anita inválida al listar '.$tabla.' (servidor='.$servidor.')');
+            $hint = (is_object($rows) && isset($rows->Error))
+                ? (string) $rows->Error
+                : substr((string) $raw, 0, 300);
+            throw new \RuntimeException(
+                'Respuesta Anita inválida al listar '.$tabla
+                .' (servidor='.$servidor.', ifx='.($ifx !== '' ? $ifx : 'default').'): '.$hint
+            );
         }
 
         return $rows;

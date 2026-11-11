@@ -373,9 +373,9 @@ class TesoreriaCrownComprobanteController extends Controller
                     if ($meta['tipo'] === 'texto') {
                         $comprobante->{$clave} = trim((string) $crudo) !== '' ? trim((string) $crudo) : null;
                     } elseif ($meta['tipo'] === 'entero') {
-                        $comprobante->{$clave} = ($crudo === null || $crudo === '') ? null : (int) $crudo;
+                        $comprobante->{$clave} = ($crudo === null || $crudo === '') ? null : (int) preg_replace('/[^\d-]/', '', (string) $crudo);
                     } else {
-                        $comprobante->{$clave} = round((float) $crudo, 2);
+                        $comprobante->{$clave} = self::parseImporteMiles($crudo);
                     }
                 }
                 if (! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
@@ -401,10 +401,13 @@ class TesoreriaCrownComprobanteController extends Controller
         }
 
         if ($pedirFirmas) {
-            if (! $comprobante->lineas()->exists()) {
+            $tipoTarea = $comprobante->asignacion->tipo_tarea ?? '';
+            $hayLineas = $comprobante->lineas()->exists();
+            $hayMedios = TesoreriaCrownRendicionCampos::tieneMediosCargados($comprobante, $tipoTarea);
+            if (! $hayLineas && ! $hayMedios) {
                 return redirect()
                     ->route('editar_tesoreria_crown_movimiento', $comprobante->id)
-                    ->with('mensaje-error', 'No hay ninguna cantidad cargada. Completá al menos una denominación: Pedir firmas guarda lo que está en pantalla.');
+                    ->with('mensaje-error', 'No hay nada cargado. Completá billetes, fichas o valores: Pedir firmas guarda lo que está en pantalla.');
             }
             TesoreriaCrownFirmaSupport::pasarAPendiente($comprobante);
 
@@ -426,8 +429,11 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($error = $this->errorBorradorAbierto($comprobante)) {
             return back()->with('mensaje-error', $error);
         }
-        if (! $comprobante->lineas()->exists()) {
-            return back()->with('mensaje-error', 'Cargá al menos un valor antes de pedir la firma.');
+        $tipoTarea = $comprobante->asignacion->tipo_tarea ?? '';
+        $hayLineas = $comprobante->lineas()->exists();
+        $hayMedios = TesoreriaCrownRendicionCampos::tieneMediosCargados($comprobante, $tipoTarea);
+        if (! $hayLineas && ! $hayMedios) {
+            return back()->with('mensaje-error', 'Cargá billetes, fichas o valores antes de pedir la firma.');
         }
         TesoreriaCrownFirmaSupport::pasarAPendiente($comprobante);
 
@@ -997,6 +1003,9 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($tipo !== TesoreriaCrownComprobanteSupport::RENDICION) {
             return null;
         }
+        if ($asignacion->permite_rendir_sin_habilitacion) {
+            return null;
+        }
         $hayConforme = TesoreriaCrownComprobante::query()
             ->where('asignacion_id', $asignacion->id)
             ->where('tipo', TesoreriaCrownComprobanteSupport::HABILITACION)
@@ -1058,5 +1067,24 @@ class TesoreriaCrownComprobanteController extends Controller
         }
 
         return null;
+    }
+
+    /** Parsea importes con separador de miles es-AR (1.234,56) o punto decimal. */
+    private static function parseImporteMiles(mixed $crudo): float
+    {
+        if ($crudo === null || $crudo === '') {
+            return 0.0;
+        }
+        if (is_numeric($crudo)) {
+            return round((float) $crudo, 2);
+        }
+        $texto = trim((string) $crudo);
+        $texto = str_replace([' ', "\u{00A0}"], '', $texto);
+        if (str_contains($texto, ',')) {
+            $texto = str_replace('.', '', $texto);
+            $texto = str_replace(',', '.', $texto);
+        }
+
+        return round((float) $texto, 2);
     }
 }

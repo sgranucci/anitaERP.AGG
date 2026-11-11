@@ -336,7 +336,7 @@ class GastronomiaCrownCierreXService
                 'creado_usuario_id' => (int) Auth::id(),
             ]);
 
-            TesoreriaCrownComprobanteSupport::sellarCotizacionVigente($comprobante);
+            TesoreriaCrownComprobanteSupport::sellarCotizacionVigenteYGuardar($comprobante);
 
             TesoreriaCrownCierreFiscal::query()->create([
                 'jornada_id' => (int) $jornadaTesoreria->id,

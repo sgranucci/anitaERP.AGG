@@ -14,6 +14,34 @@
     function texto(numero) {
         return numero.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
+    function parseMiles(valor) {
+        if (valor === null || valor === undefined) {
+            return NaN;
+        }
+        var s = String(valor).replace(/\s/g, '').replace(/\u00a0/g, '');
+        if (s === '') {
+            return NaN;
+        }
+        if (s.indexOf(',') >= 0) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        }
+        return parseFloat(s);
+    }
+    function formatearMilesInput(input) {
+        var n = parseMiles(input.value);
+        if (isNaN(n)) {
+            return;
+        }
+        input.value = texto(n);
+    }
+    function limpiarMilesAntesSubmit(form) {
+        form.querySelectorAll('input.js-miles').forEach(function (input) {
+            var n = parseMiles(input.value);
+            if (!isNaN(n)) {
+                input.value = n.toFixed(2);
+            }
+        });
+    }
     function importePanel(panel) {
         var inputs = panel.querySelectorAll('input[data-denom]');
         if (!inputs.length) {
@@ -21,7 +49,7 @@
         }
         var total = 0;
         inputs.forEach(function (input) {
-            var cantidad = parseFloat(String(input.value).replace(',', '.'));
+            var cantidad = parseMiles(input.value);
             var denominacion = parseFloat(input.getAttribute('data-denom'));
             if (!isNaN(cantidad) && !isNaN(denominacion)) {
                 total += cantidad * denominacion;
@@ -78,7 +106,7 @@
         document.querySelectorAll('input[data-total-final]').forEach(function (input) {
             hay = true;
             var signo = parseFloat(input.getAttribute('data-total-final'));
-            var valor = parseFloat(String(input.value).replace(',', '.'));
+            var valor = parseMiles(input.value);
             if (!isNaN(signo) && !isNaN(valor)) {
                 extra += valor * signo;
             }
@@ -113,17 +141,35 @@
     var recargo = document.getElementById('medio-recargo_fin');
     if (credito && recargo && recargo.hasAttribute('data-recargo-divisor')) {
         var ponerRecargo = function () {
-            var importe = parseFloat(String(credito.value).replace(',', '.'));
+            var importe = parseMiles(credito.value);
             var divisor = parseFloat(recargo.getAttribute('data-recargo-divisor'));
             if (isNaN(importe) || isNaN(divisor) || divisor === 0) {
                 recargo.value = '';
             } else {
-                recargo.value = (Math.round((importe - importe / divisor) * 100) / 100).toFixed(2);
+                recargo.value = texto(Math.round((importe - importe / divisor) * 100) / 100);
             }
             actualizarTotalPesos();
         };
         credito.addEventListener('input', ponerRecargo);
+        credito.addEventListener('blur', ponerRecargo);
         ponerRecargo();
+    }
+
+    document.querySelectorAll('input.js-miles').forEach(function (input) {
+        input.addEventListener('blur', function () { formatearMilesInput(input); actualizarTotalPesos(); });
+        input.addEventListener('focus', function () {
+            var n = parseMiles(input.value);
+            if (!isNaN(n)) {
+                input.value = String(n);
+            }
+        });
+    });
+
+    var formCantidades = document.getElementById('form-cantidades-crown');
+    if (formCantidades) {
+        formCantidades.addEventListener('submit', function () {
+            limpiarMilesAntesSubmit(formCantidades);
+        });
     }
 
     var primero = document.querySelector('#form-cantidades-crown input[data-denom], #form-cantidades-crown input.js-importe');
@@ -140,7 +186,7 @@
 @if (! empty($cajaCerrada))
     <div class="alert alert-info">Esta caja ya está cerrada. El comprobante queda en consulta.</div>
 @endif
-@if (($comprobante->asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::pinEsInicial($comprobante->asignacion->cajero) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta())
+@if (($comprobante->asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::debePedirPinNuevo($comprobante->asignacion->cajero) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta())
     <div class="alert alert-warning">
         <strong>PIN del cajero.</strong>
         {{ $comprobante->asignacion->cajero->nombre }} todavía no tiene un PIN propio (usa el inicial o está blanqueado).
@@ -262,7 +308,14 @@
                 @if ($esHabilitacion)
                     <p class="text-muted">Efectivo de la habilitación: pesos, dólares y euros, de mayor denominación a menor.</p>
                 @else
-                    <p class="text-muted">Efectivo, fichas y, al final, cashless y tarjetas.@if (\App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) Esta caja se abrió como {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea) }}, así que también pide el informe de gastronomía u hotel.@endif</p>
+                    <p class="text-muted mb-2">
+                        Efectivo y fichas
+                        @if (\App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? ''))
+                            · caja {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea) }}: cierres de ventas, gastronomía/hotel y valores (tarjetas)
+                        @else
+                            · al final, variables (cashless y tarjetas)
+                        @endif
+                    </p>
                 @endif
 
                 @php

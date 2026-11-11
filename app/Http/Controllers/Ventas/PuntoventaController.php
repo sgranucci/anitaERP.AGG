@@ -588,7 +588,9 @@ class PuntoventaController extends Controller
             || can('actualizar-local-venta', false)
             || can('usar-facturacion-local', false)
             || can('listar-iva-ventas', false)
-            || can('generar-nota-de-debito-cheque', false);
+            || can('generar-nota-de-debito-cheque', false)
+            || can('configurar-facturacion-juego', false)
+            || can('usar-facturacion-juego', false);
     }
 
     /**

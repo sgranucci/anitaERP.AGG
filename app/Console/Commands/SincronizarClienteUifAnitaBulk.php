@@ -13,7 +13,7 @@ use Throwable;
 class SincronizarClienteUifAnitaBulk extends Command
 {
     protected $signature = 'cliente-uif:sincronizar-anita-bulk
-                            {--origen=biyemas : Etiqueta de cache (biyemas|kandiko|rebisco)}
+                            {--origen=biyemas : Etiqueta de cache (biyemas|kandiko|rebisco|crown)}
                             {--servidor= : Host bridge Anita (default: ANITA_IP / config anita.ip)}
                             {--solo-descargar : Solo baja JSON a storage; no persiste}
                             {--solo-persistir : Usa cache existente; no vuelve a bajar}

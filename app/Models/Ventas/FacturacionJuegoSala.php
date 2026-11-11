@@ -25,6 +25,8 @@ class FacturacionJuegoSala extends Model implements Auditable
         'cuentacontable_mesa_id',
         'cuentacontable_slot_id',
         'cuentacontable_ruleta_el_id',
+        'cuentacontable_del_rio_id',
+        'cuentacontable_betsur_id',
         'centrocosto_id',
         'activo',
     ];
@@ -57,6 +59,16 @@ class FacturacionJuegoSala extends Model implements Auditable
     public function cuentacontableRuletaEl(): BelongsTo
     {
         return $this->belongsTo(Cuentacontable::class, 'cuentacontable_ruleta_el_id');
+    }
+
+    public function cuentacontableDelRio(): BelongsTo
+    {
+        return $this->belongsTo(Cuentacontable::class, 'cuentacontable_del_rio_id');
+    }
+
+    public function cuentacontableBetsur(): BelongsTo
+    {
+        return $this->belongsTo(Cuentacontable::class, 'cuentacontable_betsur_id');
     }
 
     public function centrocosto(): BelongsTo

@@ -14,6 +14,7 @@
             después efectivo (arqueo del día + slots + drops) + resumen final + propina + FX.
             Fuentes ERP: stock del día / arqueo conforme, bóveda, propina_dia / mesas F, monextr.
             <strong>Diferencia tesorería</strong> va dentro del resumen final (movimientos 35/36).
+            <strong>Dif. final de bóveda</strong> = total VIII − saldo final Anexo I (caja por variación).
         </p>
         @if ($anexo8 === null)
             <div class="alert alert-warning mb-0">No se pudo armar el anexo VIII. {{ $anexo8Error }}</div>
@@ -132,6 +133,14 @@
                             <tr style="font-weight:bold;background:#f5f5f5;">
                                 <td>Total Anexo VIII</td>
                                 <td class="text-right">{{ $pesos($anexo8['total']) }}</td>
+                            </tr>
+                            <tr>
+                                <td>Saldo final Anexo I (caja por variación)</td>
+                                <td class="text-right">{{ $pesos($c['saldo_final_anexo1'] ?? null) }}</td>
+                            </tr>
+                            <tr style="font-weight:bold;background:#EAF2F8;">
+                                <td>Dif. final de bóveda</td>
+                                <td class="text-right">{{ $pesos($c['dif_final_boveda'] ?? null) }}</td>
                             </tr>
                         </tbody>
                     </table>

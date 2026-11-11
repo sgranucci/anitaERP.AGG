@@ -7,7 +7,7 @@ namespace App\Support\Ventas;
 use App\Models\Caja\Flash\FlashCrown;
 
 /**
- * Totales por rubro desde flash_crown (paridad genera_datos en p-resultado.c).
+ * Totales por rubro desde flash_crown (paridad genera_datos en p-resultado.c + online/Betsur).
  */
 final class FacturacionJuegoTotalesSupport
 {
@@ -41,12 +41,24 @@ final class FacturacionJuegoTotalesSupport
         return round((float) $flash->ruleta_el_r, 2);
     }
 
+    public static function resultadoDelRio(FlashCrown $flash): float
+    {
+        return round((float) $flash->ol_win, 2);
+    }
+
+    public static function resultadoBetsur(FlashCrown $flash): float
+    {
+        return round((float) $flash->bs_win, 2);
+    }
+
     public static function resultadoRubro(FlashCrown $flash, string $rubro): float
     {
         return match ($rubro) {
             FacturacionJuegoTipoSupport::RUBRO_MESA => self::resultadoMesa($flash),
             FacturacionJuegoTipoSupport::RUBRO_SLOT => self::resultadoSlot($flash),
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => self::resultadoRuletaEl($flash),
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => self::resultadoDelRio($flash),
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => self::resultadoBetsur($flash),
             default => 0.0,
         };
     }
@@ -62,6 +74,8 @@ final class FacturacionJuegoTotalesSupport
             FacturacionJuegoTipoSupport::RUBRO_MESA => (string) ($flash->proc_mesa ?? ' '),
             FacturacionJuegoTipoSupport::RUBRO_SLOT => (string) ($flash->proc_slot ?? ' '),
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => (string) ($flash->proc_ruleta_el ?? ' '),
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => (string) ($flash->proc_del_rio ?? ' '),
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => (string) ($flash->proc_betsur ?? ' '),
             default => '*',
         };
 

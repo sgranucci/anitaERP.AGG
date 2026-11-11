@@ -368,6 +368,10 @@ class TesoreriaCrownAnexoController extends Controller
                 }
                 $filas[] = ['', 'Otras monedas segun cotiz.', '', (float) ($c['moneda_extranjera'] ?? 0)];
                 $filas[] = ['', 'Total Anexo VIII', '', (float) $armado['total']];
+                if (($c['saldo_final_anexo1'] ?? null) !== null) {
+                    $filas[] = ['', 'Saldo final Anexo I (caja por variación)', '', (float) $c['saldo_final_anexo1']];
+                    $filas[] = ['', 'Dif. final de bóveda', '', (float) ($c['dif_final_boveda'] ?? 0)];
+                }
                 $filas[] = ['', '', '', ''];
             }
             foreach ($armado['lugares'] as $lugar) {

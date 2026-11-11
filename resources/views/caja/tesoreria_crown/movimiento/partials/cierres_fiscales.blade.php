@@ -4,9 +4,9 @@
     $marcados = old('cierre_fiscal');
     $cargaManual = $editable;
 @endphp
-<div class="card card-outline card-info mt-3 mb-0">
-    <div class="card-header py-2 d-flex justify-content-between align-items-center">
-        <h3 class="card-title mb-0">Cierres de ventas</h3>
+<div class="card card-outline card-info mt-2 mb-0">
+    <div class="card-header py-1 px-3 d-flex justify-content-between align-items-center">
+        <h3 class="card-title mb-0" style="font-size:.95rem;">Cierres de ventas</h3>
         <span>
             @if ($editable && ($pxsolCodigos ?? []) !== [])
                 <button type="button" class="btn btn-outline-primary btn-sm" id="btn-traer-pxsol">Traer de PXSol</button>
@@ -16,11 +16,9 @@
             @endif
         </span>
     </div>
-    <div class="card-body pb-2">
-        <p class="text-muted small mb-3">
-            Pendientes de {{ $comprobante->jornada->fecha->format('d/m/Y') }}:
-            primero los del ERP; si falta alguno, se completa con Anita (sin repetir el mismo X/Z).
-            Los elegidos quedan grabados en el ERP al guardar. El Z es el cierre fiscal; el X, el informe de hotel. No se modifica Anita.
+        <div class="card-body py-2 px-3">
+        <p class="text-muted small mb-2">
+            Pendientes {{ $comprobante->jornada->fecha->format('d/m/Y') }}: ERP primero, Anita completa. Tildá y «Aplicar a la rendición».
         </p>
         @if ($editable && ($pxsolCodigos ?? []) !== [])
             <input type="hidden" name="pxsol_aplicado" id="pxsol_aplicado" value="{{ old('pxsol_aplicado') }}">
@@ -247,8 +245,11 @@
         poner('medio-total_x', totalX.toFixed(2));
         poner('medio-total_z', totalZ.toFixed(2));
         poner('medio-total_nc', (hayZ ? creditoZ : creditoX).toFixed(2));
-        poner('medio-nro_z', numeros.slice(0, 20));
         poner('medio-ult_ticket', ticket > 0 ? ticket : '');
+        // nro_z ya no se carga en pantalla; si el campo histórico existe, se completa.
+        if (document.getElementById('medio-nro_z')) {
+            poner('medio-nro_z', numeros.slice(0, 20));
+        }
     });
 })();
 </script>

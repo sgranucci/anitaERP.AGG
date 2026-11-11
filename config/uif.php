@@ -81,29 +81,44 @@ return [
 		'biyemas' => [
 			'servidor' => env('ANITA_IP', '10.20.30.200:8080'),
 			'empresa_id' => (int) env('UIF_EMPRESA_ID_BIYEMAS', 1),
-			'sala_id' => 1,
-			'archivos_clientes' => '/scan/uif/archivos/clientes',
-			'archivos_premios' => '/scan/uif/archivos/premios',
-			'fotos_premios' => '/scan/tesoreria/fotos_clientes',
+			'sala_id' => (int) env('UIF_SALA_ID_BIYEMAS', 1),
+			'archivos_clientes' => env('UIF_ARCHIVOS_CLIENTES_PATH_BIYEMAS', '/scan/uif/archivos/clientes'),
+			'archivos_premios' => env('UIF_ARCHIVOS_PREMIOS_PATH_BIYEMAS', '/scan/uif/archivos/premios'),
+			'fotos_premios' => env('UIF_FOTOS_PREMIOS_PATH_BIYEMAS', '/scan/tesoreria/fotos_clientes'),
 			'dni_http' => env('ANITA_UIF_DNI_HTTP_BIYEMAS', 'http://10.20.30.200:8080/dni_uif'),
 		],
 		'kandiko' => [
 			'servidor' => env('ANITA_IP_KANDIKO', '192.168.20.100:8080'),
 			'empresa_id' => (int) env('UIF_EMPRESA_ID_KANDIKO', 2),
-			'sala_id' => 2,
-			'archivos_clientes' => '/scan/uif/archivos/clientes_KSA',
-			'archivos_premios' => '/scan/uif/archivos/premios_KSA',
-			'fotos_premios' => '/scan/tesoreria/fotos_clientes_KSA',
+			'sala_id' => (int) env('UIF_SALA_ID_KANDIKO', 2),
+			'archivos_clientes' => env('UIF_ARCHIVOS_CLIENTES_PATH_KANDIKO', '/scan/uif/archivos/clientes_KSA'),
+			'archivos_premios' => env('UIF_ARCHIVOS_PREMIOS_PATH_KANDIKO', '/scan/uif/archivos/premios_KSA'),
+			'fotos_premios' => env('UIF_FOTOS_PREMIOS_PATH_KANDIKO', '/scan/tesoreria/fotos_clientes_KSA'),
 			'dni_http' => env('ANITA_UIF_DNI_HTTP_KANDIKO', 'http://192.168.20.100:8080/dni_uif'),
 		],
 		'rebisco' => [
 			'servidor' => env('ANITA_IP_REBISCO', '192.168.40.100:8080'),
 			'empresa_id' => (int) env('UIF_EMPRESA_ID_REBISCO', 3),
-			'sala_id' => 3,
-			'archivos_clientes' => '/scan/uif/archivos/clientes_RSA',
-			'archivos_premios' => '/scan/uif/archivos/premios_RSA',
-			'fotos_premios' => '/scan/tesoreria/fotos_clientes_RSA',
+			'sala_id' => (int) env('UIF_SALA_ID_REBISCO', 3),
+			'archivos_clientes' => env('UIF_ARCHIVOS_CLIENTES_PATH_REBISCO', '/scan/uif/archivos/clientes_RSA'),
+			'archivos_premios' => env('UIF_ARCHIVOS_PREMIOS_PATH_REBISCO', '/scan/uif/archivos/premios_RSA'),
+			'fotos_premios' => env('UIF_FOTOS_PREMIOS_PATH_REBISCO', '/scan/tesoreria/fotos_clientes_RSA'),
 			'dni_http' => env('ANITA_UIF_DNI_HTTP_REBISCO', 'http://192.168.40.100:8080/dni_uif'),
+		],
+		/*
+		 * Crown: UIF Informix en ac-serverweb (192.168.1.4:8080), base /usr2/casino/base_admin.
+		 * empresa_id=0 desactiva el mapeo PC/empresa (usar en AGG). En Crown .env: UIF_EMPRESA_ID_CROWN=1
+		 * y UIF_EMPRESA_ID_BIYEMAS/KANDIKO/REBISCO=0 para no chocar con empresa 1 local.
+		 */
+		'crown' => [
+			'servidor' => env('ANITA_IP_UIF_CROWN', env('ANITA_IP_UIF', '192.168.1.4:8080')),
+			'ifx_server' => env('IFX_SERVER_UIF_CROWN', 'acncadmin2'),
+			'empresa_id' => (int) env('UIF_EMPRESA_ID_CROWN', 0),
+			'sala_id' => (int) env('UIF_SALA_ID_CROWN', 1),
+			'archivos_clientes' => env('UIF_ARCHIVOS_CLIENTES_PATH_CROWN', '/srv/scan/uif/archivos/clientes'),
+			'archivos_premios' => env('UIF_ARCHIVOS_PREMIOS_PATH_CROWN', '/srv/scan/uif/archivos/premios'),
+			'fotos_premios' => env('UIF_FOTOS_PREMIOS_PATH_CROWN', '/srv/scan/tesoreria/fotos_clientes'),
+			'dni_http' => env('ANITA_UIF_DNI_HTTP_CROWN', 'http://192.168.1.4:8080/dni_uif'),
 		],
 	],
 ];

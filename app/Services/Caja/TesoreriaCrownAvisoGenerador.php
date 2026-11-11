@@ -120,7 +120,8 @@ class TesoreriaCrownAvisoGenerador
                 $this->reglasCierre($out, $deCaja, $caja, $cierre, $tolerancia, $cajeroUsuarioId);
             }
             $this->reglasComprobantes($out, $deCaja, $caja, $asignacion, $cajeroUsuarioId);
-            if (TesoreriaCrownCierreCalculo::formula((string) $asignacion->tipo_tarea) !== 'empleados') {
+            if (! $asignacion->permite_rendir_sin_habilitacion
+                && TesoreriaCrownCierreCalculo::formula((string) $asignacion->tipo_tarea) !== 'empleados') {
                 $this->reglaSinHabilitacion($out, $deCaja, $caja, $asignacion->comprobantes);
             }
             $this->reglaEdicionPostCierre($out, $deCaja, $caja, $asignacion);

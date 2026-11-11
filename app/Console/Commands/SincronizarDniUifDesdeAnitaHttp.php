@@ -10,7 +10,7 @@ use Throwable;
 class SincronizarDniUifDesdeAnitaHttp extends Command
 {
     protected $signature = 'uif:sincronizar-dni-anita-http
-                            {--origen= : biyemas|kandiko|rebisco (default: los tres)}
+                            {--origen= : biyemas|kandiko|rebisco|crown (default: orígenes con empresa_id>0)}
                             {--dry-run : Solo cuenta, no baja ni asocia}';
 
     protected $description = 'Copia DNI {nro}.pdf desde el Anita viejo (/dni_uif) a /scan/tesoreria/dni_uif y los asocia a las fichas.';
@@ -18,9 +18,19 @@ class SincronizarDniUifDesdeAnitaHttp extends Command
     public function handle(ClienteUifDniAnitaHttpSyncService $service): int
     {
         $origenOpt = strtolower(trim((string) $this->option('origen')));
-        $origenes = $origenOpt !== ''
-            ? [$origenOpt]
-            : ['rebisco', 'kandiko', 'biyemas'];
+        if ($origenOpt !== '') {
+            $origenes = [$origenOpt];
+        } else {
+            $origenes = [];
+            foreach (config('uif.anita_origenes', []) as $origen => $cfg) {
+                if ((int) ($cfg['empresa_id'] ?? 0) > 0) {
+                    $origenes[] = (string) $origen;
+                }
+            }
+            if ($origenes === []) {
+                $origenes = ['biyemas', 'kandiko', 'rebisco'];
+            }
+        }
         $dry = (bool) $this->option('dry-run');
 
         foreach ($origenes as $origen) {

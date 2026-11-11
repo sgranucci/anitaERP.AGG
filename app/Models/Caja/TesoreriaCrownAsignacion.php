@@ -22,6 +22,11 @@ class TesoreriaCrownAsignacion extends Model implements Auditable
         'cajero_crown_id',
         'tipo_tarea',
         'turno',
+        'permite_rendir_sin_habilitacion',
+    ];
+
+    protected $casts = [
+        'permite_rendir_sin_habilitacion' => 'boolean',
     ];
 
     public function sala(): BelongsTo

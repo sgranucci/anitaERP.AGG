@@ -39,7 +39,8 @@
                 @include('includes.mensaje')
 
                 <p class="text-muted mb-3">
-                    Genera comprobantes internos (letra B) de mesas, tragamonedas y ruleta electr&oacute;nica
+                    Genera comprobantes internos (letra B) de mesas, tragamonedas, ruleta electr&oacute;nica,
+                    Del R&iacute;o online (FOL/COL, PV 67) y Betsur (FOL/COL, PV 68)
                     a partir del Flash Crown, con asiento contable. Paridad Anita <code>p-resultado</code>.
                 </p>
 

@@ -44,6 +44,8 @@ final class TesoreriaCrownFirmaSupport
 
     public static function pasarAPendiente(TesoreriaCrownComprobante $comprobante): void
     {
+        // Fija dólar/euro al pedir firmas: si reabren la caja y tocan la cotización del día, el comprobante no cambia.
+        TesoreriaCrownComprobanteSupport::sellarCotizacionVigente($comprobante);
         $comprobante->qr_token = null;
         $comprobante->estado = TesoreriaCrownComprobanteSupport::PENDIENTE;
         $comprobante->entrega_usuario_id = null;
@@ -55,6 +57,7 @@ final class TesoreriaCrownFirmaSupport
 
     public static function volverABorrador(TesoreriaCrownComprobante $comprobante): void
     {
+        // Conserva cotiz_dolar/euro: el sello no se limpia al corregir cantidades.
         $comprobante->estado = TesoreriaCrownComprobanteSupport::BORRADOR;
         $comprobante->qr_token = null;
         $comprobante->entrega_usuario_id = null;
@@ -104,7 +107,16 @@ final class TesoreriaCrownFirmaSupport
     }
 
     /**
-     * Sin PIN, o con el PIN inicial de la migración (código o legajo): no sirve para firmar.
+     * Producción: el PIN inicial (código/legajo) no alcanza para firmar.
+     * Laboratorio: TESORERIA_CROWN_EXIGIR_PIN_PROPIO=false.
+     */
+    public static function exigePinPropio(): bool
+    {
+        return (bool) config('tesoreria_crown.exigir_pin_propio', true);
+    }
+
+    /**
+     * Sin PIN, o con el PIN inicial de la migración (código o legajo).
      */
     public static function pinEsInicial(CajeroCrown $cajero): bool
     {
@@ -121,9 +133,17 @@ final class TesoreriaCrownFirmaSupport
         return false;
     }
 
+    /** Banner / flujo de “elegí PIN nuevo”: solo si producción exige PIN propio. */
+    public static function debePedirPinNuevo(CajeroCrown $cajero): bool
+    {
+        return self::exigePinPropio() && self::pinEsInicial($cajero);
+    }
+
     /**
-     * Valida el PIN del cajero para una firma. Si el PIN es el inicial (o el cajero no tiene),
-     * exige elegir uno nuevo en la misma firma y lo graba para todos los cajeros del legajo.
+     * Valida el PIN del cajero para una firma. En producción, si el PIN es el inicial
+     * (o el cajero no tiene), exige elegir uno nuevo en la misma firma y lo graba
+     * para todos los cajeros del legajo. En laboratorio (exigir_pin_propio=false)
+     * alcanza el PIN cargado (p. ej. = código).
      *
      * @return array{ok: bool, error: ?string, pedir_nuevo: bool}
      */
@@ -134,14 +154,30 @@ final class TesoreriaCrownFirmaSupport
             return self::resultadoPin(false, 'Demasiados intentos con este cajero. Esperá '
                 .max(1, (int) ceil(RateLimiter::availableIn($llave) / 60)).' minuto(s).');
         }
+        $pin = trim($pin);
         $sinPin = trim((string) ($cajero->clave ?? '')) === '';
-        if (! $sinPin && ! self::aceptaClaveCajero($cajero, $pin)) {
+        if ($sinPin) {
+            if (! self::exigePinPropio()) {
+                if (! in_array($pin, self::pinesProhibidos($cajero), true)) {
+                    RateLimiter::hit($llave, 300);
+
+                    return self::resultadoPin(false, 'PIN incorrecto.');
+                }
+                foreach (self::cajerosDelMismoLegajo($cajero) as $fila) {
+                    $fila->clave = $pin;
+                    $fila->save();
+                }
+                $cajero->refresh();
+                $sinPin = false;
+            }
+            // Producción sin PIN: no valida el actual; abajo exige elegir uno nuevo.
+        } elseif (! self::aceptaClaveCajero($cajero, $pin)) {
             RateLimiter::hit($llave, 300);
 
             return self::resultadoPin(false, 'PIN incorrecto.');
         }
         $nuevo = trim((string) $nuevo);
-        if (! self::pinEsInicial($cajero) && $nuevo === '') {
+        if (! self::debePedirPinNuevo($cajero) && $nuevo === '') {
             RateLimiter::clear($llave);
 
             return self::resultadoPin(true);

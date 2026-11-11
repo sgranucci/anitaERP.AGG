@@ -5,6 +5,9 @@
     $helpBtnClass = $helpBtnClass ?? 'btn btn-outline-secondary btn-sm';
     $soloBoton = ! empty($soloBoton);
     $soloModal = ! empty($soloModal);
+    $helpPrimera = collect($helpSalas)->first() ?? [];
+    $helpPvDelRio = (int) (($helpPrimera['sucursal_del_rio'] ?? 67) ?: 67);
+    $helpPvBetsur = (int) (($helpPrimera['sucursal_betsur'] ?? 68) ?: 68);
 @endphp
 @if (! $soloModal)
 <button type="button" class="{{ $helpBtnClass }}" data-toggle="modal" data-target="#{{ $helpModalId }}"
@@ -47,6 +50,8 @@
                                     <th>Mesas</th>
                                     <th>Slot</th>
                                     <th>Ruleta el.</th>
+                                    <th>Del R&iacute;o (PV {{ $helpPvDelRio }})</th>
+                                    <th>Betsur (PV {{ $helpPvBetsur }})</th>
                                     <th>Centro de costo</th>
                                 </tr>
                             </thead>
@@ -89,6 +94,20 @@
                                         <td>
                                             @if (($h['cuenta_ruleta_codigo'] ?? '') !== '')
                                                 {{ $h['cuenta_ruleta_codigo'] }} — {{ $h['cuenta_ruleta_nombre'] }}
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if (($h['cuenta_del_rio_codigo'] ?? '') !== '')
+                                                {{ $h['cuenta_del_rio_codigo'] }} — {{ $h['cuenta_del_rio_nombre'] }}
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if (($h['cuenta_betsur_codigo'] ?? '') !== '')
+                                                {{ $h['cuenta_betsur_codigo'] }} — {{ $h['cuenta_betsur_nombre'] }}
                                             @else
                                                 —
                                             @endif

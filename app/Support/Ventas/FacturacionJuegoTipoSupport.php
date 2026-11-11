@@ -8,7 +8,7 @@ use App\Models\Ventas\Tipotransaccion;
 use InvalidArgumentException;
 
 /**
- * Tipos de comprobante de facturación juego (p-resultado.c dft_tipo_*).
+ * Tipos de comprobante de facturación juego (p-resultado.c dft_tipo_* + FOL/COL online).
  */
 final class FacturacionJuegoTipoSupport
 {
@@ -17,6 +17,29 @@ final class FacturacionJuegoTipoSupport
     public const RUBRO_SLOT = 'slot';
 
     public const RUBRO_RULETA_EL = 'ruleta_el';
+
+    public const RUBRO_DEL_RIO = 'del_rio';
+
+    public const RUBRO_BETSUR = 'betsur';
+
+    /**
+     * @return list<string>
+     */
+    public static function rubros(): array
+    {
+        return [
+            self::RUBRO_MESA,
+            self::RUBRO_SLOT,
+            self::RUBRO_RULETA_EL,
+            self::RUBRO_DEL_RIO,
+            self::RUBRO_BETSUR,
+        ];
+    }
+
+    public static function esOnline(string $rubro): bool
+    {
+        return in_array($rubro, [self::RUBRO_DEL_RIO, self::RUBRO_BETSUR], true);
+    }
 
     public static function letra(): string
     {
@@ -33,6 +56,8 @@ final class FacturacionJuegoTipoSupport
             self::RUBRO_MESA => 'Mesas de juego',
             self::RUBRO_SLOT => 'Tragamonedas',
             self::RUBRO_RULETA_EL => 'Ruleta El.',
+            self::RUBRO_DEL_RIO => 'Del Río online',
+            self::RUBRO_BETSUR => 'Betsur',
             default => 'Juego',
         });
     }
@@ -48,7 +73,26 @@ final class FacturacionJuegoTipoSupport
             self::RUBRO_RULETA_EL => $ganancia
                 ? (string) $p->tipo_gan_ruleta_el
                 : (string) $p->tipo_per_ruleta_el,
+            self::RUBRO_DEL_RIO, self::RUBRO_BETSUR => $ganancia
+                ? (string) ($p->tipo_gan_online ?: 'FOL')
+                : (string) ($p->tipo_per_online ?: 'COL'),
             default => throw new InvalidArgumentException('Rubro de juego inválido: '.$rubro),
+        };
+    }
+
+    /**
+     * PV Anita del comprobante: sala física o sucursal on-line / Betsur.
+     */
+    public static function sucursalAnitaParaRubro(string $rubro, int $sucursalSala): int
+    {
+        $p = FacturacionJuegoConfigSupport::parametro();
+
+        return match ($rubro) {
+            self::RUBRO_DEL_RIO => (int) ($p->sucursal_del_rio
+                ?: config('caja_anita.sucursal_del_rio_online', 67)),
+            self::RUBRO_BETSUR => (int) ($p->sucursal_betsur
+                ?: config('caja_anita.sucursal_betsur_online', 68)),
+            default => $sucursalSala,
         };
     }
 
@@ -73,7 +117,7 @@ final class FacturacionJuegoTipoSupport
      * p-resultado checksigno == SUMA → asiento H en cuenta de ventas.
      *
      * Tipotransaccion expone signo vía accessor como S/R (BD: 1/-1).
-     * Cast a int de "R"/"S" da 0 y trataba créditos (CME/CSL/CRE) como ganancia.
+     * Cast a int de "R"/"S" da 0 y trataba créditos (CME/CSL/CRE/COL) como ganancia.
      */
     public static function esGanancia(Tipotransaccion $tipo): bool
     {

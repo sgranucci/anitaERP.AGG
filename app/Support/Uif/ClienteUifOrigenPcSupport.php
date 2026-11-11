@@ -255,7 +255,9 @@ final class ClienteUifOrigenPcSupport
             return null;
         }
         foreach (config('uif.anita_origenes', []) as $origen => $cfg) {
-            if ((int) ($cfg['empresa_id'] ?? 0) === $empresaId) {
+            $mapped = (int) ($cfg['empresa_id'] ?? 0);
+            // empresa_id=0 = origen desactivado en este entorno (ej. biyemas en Crown).
+            if ($mapped > 0 && $mapped === $empresaId) {
                 return strtolower((string) $origen);
             }
         }
@@ -282,11 +284,12 @@ final class ClienteUifOrigenPcSupport
             'biyemas' => 'BSA (Biyemas)',
             'kandiko' => 'KSA (Kandiko)',
             'rebisco' => 'RSA (Rebisco)',
+            'crown' => 'CIP (Crown)',
             default => strtoupper($origen),
         };
     }
 
-    /** Abreviatura corta para grillas (BSA / KSA / RSA). */
+    /** Abreviatura corta para grillas (BSA / KSA / RSA / CIP). */
     public static function codigoOrigen(string $origen): string
     {
         $origen = strtolower(trim($origen));
@@ -295,6 +298,7 @@ final class ClienteUifOrigenPcSupport
             'biyemas' => 'BSA',
             'kandiko' => 'KSA',
             'rebisco' => 'RSA',
+            'crown' => 'CIP',
             '' => '—',
             default => strtoupper(substr($origen, 0, 3)),
         };
@@ -304,9 +308,13 @@ final class ClienteUifOrigenPcSupport
     public static function opcionesOrigen(?array $soloOrigenes = null): array
     {
         $out = [];
-        foreach (array_keys(config('uif.anita_origenes', [])) as $origen) {
+        foreach (config('uif.anita_origenes', []) as $origen => $cfg) {
             $origen = (string) $origen;
             if ($soloOrigenes !== null && ! in_array($origen, $soloOrigenes, true)) {
+                continue;
+            }
+            // Ocultar orígenes sin empresa mapeada en este entorno.
+            if ((int) ($cfg['empresa_id'] ?? 0) <= 0 && $soloOrigenes === null) {
                 continue;
             }
             $out[$origen] = self::labelOrigen($origen);

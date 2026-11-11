@@ -309,7 +309,8 @@ final class TesoreriaCrownCierreCalculo
     }
 
     /**
-     * Cotización del comprobante (efe_cotiz_*) si está grabada; si no, la vigente del día.
+     * Cotización del comprobante (efe_cotiz_* / sello al rendir) si está grabada; si no, la vigente del día.
+     * Tras reabrir la caja, los conforme/pendientes con sello siguen con esa tasa.
      */
     public static function tasaDocumento(
         TesoreriaCrownComprobante $doc,

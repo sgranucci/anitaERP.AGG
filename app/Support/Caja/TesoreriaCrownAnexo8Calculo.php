@@ -51,11 +51,13 @@ final class TesoreriaCrownAnexo8Calculo
         21 => '0', 22 => '1', // Pre depósito
         25 => '0', 30 => '1', // Fondo
         31 => '0', 32 => '1', // Caja chica hotel
-        33 => '0', 34 => '1', // Diferencia a verificar
         35 => '0', 36 => '1', // Diferencia tesorería
         6 => '0', 40 => '1',  // Caja chica adm.
         99 => '0', 98 => '1', // Cancela dif. final bóveda
     ];
+
+    /** Grupos del snapshot que ya no entran al VIII (legado Anita). */
+    private const GRUPOS_RESUMEN_EXCLUIDOS = [5]; // Diferencia a verificar (tipos 33/34)
 
     /**
      * @return array{
@@ -298,11 +300,17 @@ final class TesoreriaCrownAnexo8Calculo
         $fichas = self::stockFichas($fecha, $avisos);
 
         self::persistirTotal($jornada, $total);
+        $difBoveda = self::difFinalBoveda($jornada, $total);
+        if ($difBoveda['saldo_final_anexo1'] === null) {
+            $avisos[] = 'Dif. final de bóveda: falta el saldo final del Anexo I (abrí el Anexo I para calcularlo).';
+        }
 
         return [
             'lugares' => $out,
             'total' => $total,
             'fichas' => $fichas,
+            'saldo_final_anexo1' => $difBoveda['saldo_final_anexo1'],
+            'dif_final_boveda' => $difBoveda['dif_final_boveda'],
             'componentes' => [
                 'pesos' => $pesosVault,
                 'slots' => $slotsMonto,
@@ -317,6 +325,8 @@ final class TesoreriaCrownAnexo8Calculo
                 'eur_pesos' => round($fx['eur_pesos'], 2),
                 'cotiz_usd' => $fx['usd_face'] > 0.001 ? round($fx['usd_pesos'] / $fx['usd_face'], 4) : 0.0,
                 'cotiz_eur' => $fx['eur_face'] > 0.001 ? round($fx['eur_pesos'] / $fx['eur_face'], 4) : 0.0,
+                'saldo_final_anexo1' => $difBoveda['saldo_final_anexo1'],
+                'dif_final_boveda' => $difBoveda['dif_final_boveda'],
             ],
             'avisos' => array_values(array_unique($avisos)),
         ];
@@ -550,7 +560,6 @@ final class TesoreriaCrownAnexo8Calculo
             21 => 1, 22 => 1,
             25 => 3, 30 => 3,
             31 => 4, 32 => 4,
-            33 => 5, 34 => 5,
             35 => 6, 36 => 6,
             6 => 7, 40 => 7,
             99 => 99, 98 => 99,
@@ -559,6 +568,9 @@ final class TesoreriaCrownAnexo8Calculo
         $porGrupo = self::resumenFinalSnapshot($fechaYmd);
         if ($porGrupo === []) {
             $porGrupo = self::resumenFinalErp($fechaYmd, $codigos, $grupoDeTipo);
+        }
+        foreach (self::GRUPOS_RESUMEN_EXCLUIDOS as $excluido) {
+            unset($porGrupo[$excluido]);
         }
 
         $descripciones = self::descripcionesResumen();
@@ -654,10 +666,29 @@ final class TesoreriaCrownAnexo8Calculo
             1 => 'Pre deposito',
             3 => 'FONDO',
             4 => 'Caja chica hotel',
-            5 => 'Diferencia a verificar',
             6 => 'Diferencia tesoreria',
             7 => 'Caja chica adm.',
             99 => 'Cancela dif. final boveda',
+        ];
+    }
+
+    /**
+     * Dif. final de bóveda = total VIII − saldo final Anexo I (caja por variación).
+     * Usa `caja_final_dia` ya persistido por el Anexo I; si falta, null.
+     *
+     * @return array{saldo_final_anexo1: ?float, dif_final_boveda: ?float}
+     */
+    private static function difFinalBoveda(TesoreriaCrownJornada $jornada, float $totalViii): array
+    {
+        if (! Schema::hasColumn('tesoreria_crown_jornada', 'caja_final_dia')
+            || $jornada->caja_final_dia === null) {
+            return ['saldo_final_anexo1' => null, 'dif_final_boveda' => null];
+        }
+        $saldo = round((float) $jornada->caja_final_dia, 2);
+
+        return [
+            'saldo_final_anexo1' => $saldo,
+            'dif_final_boveda' => round($totalViii - $saldo, 2),
         ];
     }
 

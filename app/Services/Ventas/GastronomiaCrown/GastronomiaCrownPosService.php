@@ -28,6 +28,7 @@ use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\FormulaArticuloSubformulaPosSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
+use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownCajaAbiertaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownKdsPreparaSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPosModos;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownPrintSupport;
@@ -1104,6 +1105,20 @@ final class GastronomiaCrownPosService
         if ($mensajeInactivos !== null) {
             throw new InvalidArgumentException($mensajeInactivos);
         }
+
+        // Anita COMAND_verifica_caja_abierta: gastronomía exige HAB conforme.
+        // Hotel (F2 cargo habitación): no — el control era de gastronomía.
+        $salaId = $cfg->sala_id !== null ? (int) $cfg->sala_id : null;
+        $fechaJornada = $this->jornadaService->fechaVigenciaListaPrecio(
+            (int) $cfg->empresa_id,
+            $salaId > 0 ? $salaId : null,
+        );
+        GastronomiaCrownCajaAbiertaSupport::exigirParaCobro(
+            $mozo,
+            $tipoCobro,
+            $fechaJornada,
+            $salaId > 0 ? $salaId : null,
+        );
 
         if ($tipoCobro === GastroCrownCuenta::COBRO_INTERNA) {
             $this->prepararInterna($cuenta, $cfg, $extra);

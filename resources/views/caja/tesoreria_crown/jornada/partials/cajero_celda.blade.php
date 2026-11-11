@@ -10,6 +10,9 @@
         @break
     @case('tarea')
         {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($fila->tipo_tarea) }}
+        @if ($fila->permite_rendir_sin_habilitacion)
+            <span class="badge badge-secondary ml-1" title="Permite rendir sin habilitación">sin HAB</span>
+        @endif
         @break
     @case('estado')
         @if ($cajaCerrada)
@@ -36,7 +39,7 @@
         @foreach ($rendiciones as $doc)
             @include('caja.tesoreria_crown.jornada.partials.papel_grilla', ['doc' => $doc, 'idsRevertidos' => $idsRevertidos])
         @endforeach
-        @if ($jornada->estaAbierta() && ! $cajaCerrada && $hayHabilitacionConforme && can('crear-tesoreria-crown-movimiento', false))
+        @if ($jornada->estaAbierta() && ! $cajaCerrada && ($hayHabilitacionConforme || $fila->permite_rendir_sin_habilitacion) && can('crear-tesoreria-crown-movimiento', false))
             <form method="POST" action="{{ route('crear_tesoreria_crown_movimiento') }}" class="d-inline">
                 @csrf
                 <input type="hidden" name="asignacion_id" value="{{ $fila->id }}">

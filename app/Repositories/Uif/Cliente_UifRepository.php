@@ -592,7 +592,8 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                     break;
             }
 
-            switch ($data->ipep) {
+            // Campos PEP/SO/riesgo: opcionales (Crown base_admin viejo no los trae).
+            switch ((int) ($data->ipep ?? 0)) {
                 case 1:
                     $pep_id = 2;
                     break;
@@ -601,7 +602,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                     break;
             }
 
-            switch ($data->iparaiso) {
+            switch ((int) ($data->iparaiso ?? 0)) {
                 case 1:
                     $resideParaisoFiscal = 'S';
                     break;
@@ -610,7 +611,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                     break;
             }
 
-            switch ($data->iexterior) {
+            switch ((int) ($data->iexterior ?? 0)) {
                 case 1:
                     $resideExterior = 'S';
                     break;
@@ -619,7 +620,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                     break;
             }
 
-            switch ($data->cdecljur) {
+            switch ((string) ($data->cdecljur ?? '')) {
                 case '1':
                     $firmoDeclaracionJurada = 'S';
                     break;
@@ -628,7 +629,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             }
 
             // Lee SO
-            switch ($data->cso) {
+            switch ((string) ($data->cso ?? '')) {
                 case '1':
                     $so_id = 2;
                     break;
@@ -638,7 +639,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             }
 
             // Cumple normativa de sujeto obligado
-            switch ($data->ccumplenormativaso) {
+            switch ((string) ($data->ccumplenormativaso ?? '')) {
                 case '1':
                     $cumpleNormativaSo = 'S';
                     break;
@@ -648,7 +649,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             }
 
             $riesgoPep = 'BAJO';
-            switch ($data->criesgo) {
+            switch ((string) ($data->criesgo ?? '')) {
                 case 'B':
                     $riesgoPep = 'BAJO';
                     break;
@@ -663,7 +664,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             // Lee nivel socioeconomico
             $nivelsocioeconomico_id = 8;
 
-            switch ($data->inivelsocecon) {
+            switch ((int) ($data->inivelsocecon ?? 0)) {
                 case 1:
                     $nivelsocioeconomico_id = 1;
                     break;
@@ -741,13 +742,13 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 );
             } else {
                 if (! $localidadResuelta) {
-                    $localidad_id = 337;
+                    $localidad_id = $this->idLocalidadUifFallback();
                 }
                 if (! $provinciaResuelta) {
-                    $provincia_id = 26;
+                    $provincia_id = $this->idProvinciaUifFallback();
                 }
                 if (! $paisResuelto) {
-                    $pais_id = 257;
+                    $pais_id = $this->idPaisUifFallback();
                 }
             }
 
@@ -778,12 +779,12 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 'pep_uif_id' => $pep_id,
                 'resideparaisofiscal' => $resideParaisoFiscal,
                 'resideexterior' => $resideExterior,
-                'fechafirmapep' => $data->ifechafirmapep,
-                'fechaconfirmapep' => $data->ifeconfirmapep,
-                'fechainformepep' => $data->ifeinformepep,
-                'fechainformenosis' => $data->ifeinformenosis,
-                'fechavencimientodni' => $data->ifevtodni,
-                'fechavencimientoactividad' => $data->ifevtoactividad,
+                'fechafirmapep' => $data->ifechafirmapep ?? null,
+                'fechaconfirmapep' => $data->ifeconfirmapep ?? null,
+                'fechainformepep' => $data->ifeinformepep ?? null,
+                'fechainformenosis' => $data->ifeinformenosis ?? null,
+                'fechavencimientodni' => $data->ifevtodni ?? null,
+                'fechavencimientoactividad' => $data->ifevtoactividad ?? null,
                 'firmodeclaracionjurada' => $firmoDeclaracionJurada,
                 'so_uif_id' => $so_id,
                 'cumplenormativaso' => $cumpleNormativaSo,
@@ -882,7 +883,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                         'posicion' => $posicionAnita,
                         'numerotito' => $premioAnita->cnroticket,
                         'fechatito' => $this->fechaSqlOpcionalDesdeAnitaYyyymmdd($premioAnita->ifechatito ?? null),
-                        'piderecibopago' => $premioAnita->crecibo_pago,
+                        'piderecibopago' => $premioAnita->crecibo_pago ?? null,
                         'creousuario_id' => Auth::user()->id,
                     ];
                     // Re-sync: no pisar juego_uif_id (histórico / reclasificación manual).
@@ -1714,5 +1715,43 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 'juego' => (string) (optional($ultimo->juegos_uif)->nombre ?? ''),
             ] : null,
         ];
+    }
+
+    /** Fallback geo cuando Anita no matchea (no usar ids hardcodeados de AGG). */
+    private function idLocalidadUifFallback(): int
+    {
+        try {
+            return (int) $this->localidad_uifRepository->findPorCodigo('SIN_DATOS')->id;
+        } catch (Exception) {
+            $id = (int) (\App\Models\Uif\Localidad_Uif::query()->orderBy('id')->value('id') ?? 0);
+
+            return $id > 0 ? $id : 1;
+        }
+    }
+
+    private function idProvinciaUifFallback(): int
+    {
+        try {
+            return (int) $this->provincia_uifRepository->findPorCodigo('0')->id;
+        } catch (Exception) {
+            try {
+                return (int) $this->provincia_uifRepository->findPorCodigo('22')->id; // Río Negro (Crown)
+            } catch (Exception) {
+                $id = (int) (\App\Models\Uif\Provincia_Uif::query()->orderBy('id')->value('id') ?? 0);
+
+                return $id > 0 ? $id : 1;
+            }
+        }
+    }
+
+    private function idPaisUifFallback(): int
+    {
+        try {
+            return (int) $this->pais_uifRepository->findPorCodigo('1')->id; // Argentina Anita
+        } catch (Exception) {
+            $id = (int) (\App\Models\Uif\Pais_Uif::query()->orderBy('id')->value('id') ?? 0);
+
+            return $id > 0 ? $id : 1;
+        }
     }
 }

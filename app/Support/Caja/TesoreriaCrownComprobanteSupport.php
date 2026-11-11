@@ -69,6 +69,7 @@ class TesoreriaCrownComprobanteSupport
     /**
      * Congela dólar/euro vigentes de la jornada en el comprobante.
      * No pisa una cotización ya grabada (import Anita o sello previo).
+     * Reabrir la caja no toca estos campos: el cierre y anexos usan tasaDocumento.
      */
     public static function sellarCotizacionVigente(TesoreriaCrownComprobante $comprobante): void
     {
@@ -96,6 +97,21 @@ class TesoreriaCrownComprobanteSupport
                 $comprobante->cotiz_euro = round($tasa, 4);
             }
         }
+    }
+
+    /**
+     * Sella y persiste solo si faltaba cotización (idempotente).
+     */
+    public static function sellarCotizacionVigenteYGuardar(TesoreriaCrownComprobante $comprobante): void
+    {
+        $antesDolar = (float) ($comprobante->cotiz_dolar ?? 0);
+        $antesEuro = (float) ($comprobante->cotiz_euro ?? 0);
+        self::sellarCotizacionVigente($comprobante);
+        if ((float) ($comprobante->cotiz_dolar ?? 0) === $antesDolar
+            && (float) ($comprobante->cotiz_euro ?? 0) === $antesEuro) {
+            return;
+        }
+        $comprobante->save();
     }
 
     /**

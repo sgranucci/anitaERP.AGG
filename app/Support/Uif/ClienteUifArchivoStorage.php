@@ -50,6 +50,12 @@ final class ClienteUifArchivoStorage
         return (string) (self::configOrigen($origen)['servidor'] ?? config('anita.ip', ''));
     }
 
+    /** INFORMIXSERVER del bridge para este origen (vacío = default del .env IFX_SERVER). */
+    public static function ifxServerDefault(string $origen): string
+    {
+        return trim((string) (self::configOrigen($origen)['ifx_server'] ?? ''));
+    }
+
     public static function salaId(string $origen): int
     {
         return (int) (self::configOrigen($origen)['sala_id'] ?? 1);

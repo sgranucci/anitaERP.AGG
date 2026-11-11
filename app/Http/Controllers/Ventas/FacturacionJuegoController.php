@@ -11,6 +11,7 @@ use App\Models\Configuracion\Sala;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\FacturacionJuegoSala;
+use App\Models\Ventas\Puntoventa;
 use App\Services\Ventas\FacturacionJuegoService;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Ventas\FacturacionJuegoConciliacionSupport;
@@ -216,13 +217,33 @@ class FacturacionJuegoController extends Controller
 
         $parametro = FacturacionJuegoConfigSupport::parametro();
         $salasCfg = FacturacionJuegoSala::query()
-            ->with(['sala', 'cuentacaja', 'cuentacontableMesa', 'cuentacontableSlot', 'cuentacontableRuletaEl', 'centrocosto'])
+            ->with([
+                'sala',
+                'cuentacaja',
+                'cuentacontableMesa',
+                'cuentacontableSlot',
+                'cuentacontableRuletaEl',
+                'cuentacontableDelRio',
+                'cuentacontableBetsur',
+                'centrocosto',
+            ])
             ->orderBy('sala_id')
             ->get();
+
+        $sucDelRio = (int) old('sucursal_del_rio', $parametro->sucursal_del_rio ?? 67);
+        $sucBetsur = (int) old('sucursal_betsur', $parametro->sucursal_betsur ?? 68);
+        $pvDelRioIdOld = (int) old('puntoventa_del_rio_id', 0);
+        $pvBetsurIdOld = (int) old('puntoventa_betsur_id', 0);
 
         return view('ventas.facturacion_juego.configuracion', [
             'parametro' => $parametro,
             'salasCfg' => $salasCfg,
+            'pvDelRio' => $pvDelRioIdOld > 0
+                ? $this->puntoventaParaFormularioPorId($pvDelRioIdOld)
+                : $this->puntoventaParaFormularioPorSucursal($sucDelRio),
+            'pvBetsur' => $pvBetsurIdOld > 0
+                ? $this->puntoventaParaFormularioPorId($pvBetsurIdOld)
+                : $this->puntoventaParaFormularioPorSucursal($sucBetsur),
         ]);
     }
 
@@ -231,6 +252,15 @@ class FacturacionJuegoController extends Controller
         can('configurar-facturacion-juego');
 
         $parametro = FacturacionJuegoConfigSupport::parametro();
+        $sucDelRio = $this->sucursalDesdePuntoventaId((int) $request->input('puntoventa_del_rio_id', 0));
+        $sucBetsur = $this->sucursalDesdePuntoventaId((int) $request->input('puntoventa_betsur_id', 0));
+        if ($sucDelRio <= 0 || $sucBetsur <= 0) {
+            return redirect()
+                ->route('facturacion_juego_configuracion')
+                ->withInput()
+                ->with('mensaje_error', 'Indique los puntos de venta Del Río online y Betsur.');
+        }
+
         $parametro->fill([
             'tipo_gan_mesa' => strtoupper(trim((string) $request->input('tipo_gan_mesa', 'FME'))),
             'tipo_per_mesa' => strtoupper(trim((string) $request->input('tipo_per_mesa', 'CME'))),
@@ -238,6 +268,10 @@ class FacturacionJuegoController extends Controller
             'tipo_per_slot' => strtoupper(trim((string) $request->input('tipo_per_slot', 'CSL'))),
             'tipo_gan_ruleta_el' => strtoupper(trim((string) $request->input('tipo_gan_ruleta_el', 'FRE'))),
             'tipo_per_ruleta_el' => strtoupper(trim((string) $request->input('tipo_per_ruleta_el', 'CRE'))),
+            'tipo_gan_online' => strtoupper(trim((string) $request->input('tipo_gan_online', 'FOL'))),
+            'tipo_per_online' => strtoupper(trim((string) $request->input('tipo_per_online', 'COL'))),
+            'sucursal_del_rio' => $sucDelRio,
+            'sucursal_betsur' => $sucBetsur,
             'letra' => strtoupper(substr(trim((string) $request->input('letra', 'B')), 0, 1)) ?: 'B',
             'tipoasiento_abreviatura' => strtoupper(trim((string) $request->input('tipoasiento_abreviatura', 'VTA'))),
         ]);
@@ -256,6 +290,8 @@ class FacturacionJuegoController extends Controller
                 'cuentacontable_mesa_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_mesa_codigo'] ?? '')),
                 'cuentacontable_slot_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_slot_codigo'] ?? '')),
                 'cuentacontable_ruleta_el_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_ruleta_el_codigo'] ?? '')),
+                'cuentacontable_del_rio_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_del_rio_codigo'] ?? '')),
+                'cuentacontable_betsur_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_betsur_codigo'] ?? '')),
                 'centrocosto_id' => $this->resolverIdPorCodigo(Centrocosto::class, (string) ($datos['centrocosto_codigo'] ?? '')),
                 'activo' => ! empty($datos['activo']),
             ]);
@@ -342,5 +378,66 @@ class FacturacionJuegoController extends Controller
         }
 
         return $id > 0 ? $id : null;
+    }
+
+    /**
+     * @return array{id:int|string, codigo:string, nombre:string}
+     */
+    private function puntoventaParaFormularioPorSucursal(int $sucursal): array
+    {
+        if ($sucursal <= 0) {
+            return ['id' => '', 'codigo' => '', 'nombre' => ''];
+        }
+
+        $codigoPad = Puntoventa::normalizarCodigoArca((string) $sucursal) ?? (string) $sucursal;
+        $pv = Puntoventa::query()
+            ->whereNull('deleted_at')
+            ->where(function ($q) use ($codigoPad, $sucursal) {
+                $q->where('codigo', $codigoPad)
+                    ->orWhere('codigo', (string) $sucursal)
+                    ->orWhere('codigo', str_pad((string) $sucursal, 5, '0', STR_PAD_LEFT));
+            })
+            ->orderBy('id')
+            ->first(['id', 'codigo', 'nombre']);
+
+        if ($pv === null) {
+            return ['id' => '', 'codigo' => $codigoPad, 'nombre' => ''];
+        }
+
+        return [
+            'id' => (int) $pv->id,
+            'codigo' => (string) $pv->codigo,
+            'nombre' => (string) $pv->nombre,
+        ];
+    }
+
+    /**
+     * @return array{id:int|string, codigo:string, nombre:string}
+     */
+    private function puntoventaParaFormularioPorId(int $id): array
+    {
+        if ($id <= 0) {
+            return ['id' => '', 'codigo' => '', 'nombre' => ''];
+        }
+        $pv = Puntoventa::query()->whereKey($id)->first(['id', 'codigo', 'nombre']);
+        if ($pv === null) {
+            return ['id' => '', 'codigo' => '', 'nombre' => ''];
+        }
+
+        return [
+            'id' => (int) $pv->id,
+            'codigo' => (string) $pv->codigo,
+            'nombre' => (string) $pv->nombre,
+        ];
+    }
+
+    private function sucursalDesdePuntoventaId(int $puntoventaId): int
+    {
+        if ($puntoventaId <= 0) {
+            return 0;
+        }
+        $codigo = (string) (Puntoventa::query()->whereKey($puntoventaId)->value('codigo') ?? '');
+
+        return max(0, (int) preg_replace('/\D+/', '', $codigo));
     }
 }

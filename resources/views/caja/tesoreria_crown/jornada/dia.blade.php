@@ -211,8 +211,32 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="form-group mb-2">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="permite_rendir_sin_habilitacion" name="permite_rendir_sin_habilitacion" value="1" @checked(old('permite_rendir_sin_habilitacion'))>
+                                <label class="custom-control-label" for="permite_rendir_sin_habilitacion">
+                                    Permite rendir sin habilitación
+                                    <span class="text-muted small">(empleados, QR dinámico, kiosco)</span>
+                                </label>
+                            </div>
+                        </div>
                         <button type="submit" class="btn btn-primary" id="btn-asignar-jornada">Asignar</button>
                     </form>
+                    <script>
+                    (function () {
+                        var tarea = document.getElementById('tipo_tarea');
+                        var flag = document.getElementById('permite_rendir_sin_habilitacion');
+                        if (!tarea || !flag) {
+                            return;
+                        }
+                        var sugeridos = { E: true, K: true };
+                        tarea.addEventListener('change', function () {
+                            if (sugeridos[tarea.value]) {
+                                flag.checked = true;
+                            }
+                        });
+                    })();
+                    </script>
                     </div>
                 @endif
 

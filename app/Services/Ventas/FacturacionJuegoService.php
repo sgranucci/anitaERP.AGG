@@ -137,11 +137,7 @@ class FacturacionJuegoService
      */
     private function rubros(): array
     {
-        return [
-            FacturacionJuegoTipoSupport::RUBRO_MESA,
-            FacturacionJuegoTipoSupport::RUBRO_SLOT,
-            FacturacionJuegoTipoSupport::RUBRO_RULETA_EL,
-        ];
+        return FacturacionJuegoTipoSupport::rubros();
     }
 
     /**
@@ -173,7 +169,10 @@ class FacturacionJuegoService
             'monto' => abs($resultado),
             'tipo' => $abrev,
             'letra' => FacturacionJuegoTipoSupport::letra(),
-            'sucursal_anita' => (int) ($cfg->sucursal_anita ?? 0),
+            'sucursal_anita' => FacturacionJuegoTipoSupport::sucursalAnitaParaRubro(
+                $rubro,
+                (int) ($cfg->sucursal_anita ?? 0),
+            ),
             'faltantes' => $faltantes,
             'listo' => $faltantes === [],
         ];
@@ -210,7 +209,12 @@ class FacturacionJuegoService
         $monto = abs($resultado);
         $fechaDia = Carbon::parse((string) $flash->fecha)->toDateString();
         $nombreCliente = FacturacionJuegoTipoSupport::nombreCliente($rubro);
-        $leyenda = $nombreCliente.' '.$fechaDia.' — sala '.(string) ($flash->sala->codigo ?? $flash->sala_id);
+        $sucursalAnita = FacturacionJuegoTipoSupport::sucursalAnitaParaRubro(
+            $rubro,
+            (int) $cfg->sucursal_anita,
+        );
+        $leyenda = $nombreCliente.' '.$fechaDia.' — sala '.(string) ($flash->sala->codigo ?? $flash->sala_id)
+            .' PV '.$sucursalAnita;
 
         $venta = $this->exentaEmisionService->emitir(
             $tipo,
@@ -219,7 +223,7 @@ class FacturacionJuegoService
             (int) $flash->empresa_id,
             $fechaDia,
             $monto,
-            (int) $cfg->sucursal_anita,
+            $sucursalAnita,
             $leyenda,
         );
 
@@ -306,6 +310,16 @@ class FacturacionJuegoService
                 'proc_ruleta_el' => '*',
                 'venta_ruleta_el_id' => $ventaId,
                 'asiento_ruleta_el_id' => $asientoId,
+            ],
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => [
+                'proc_del_rio' => '*',
+                'venta_del_rio_id' => $ventaId,
+                'asiento_del_rio_id' => $asientoId,
+            ],
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => [
+                'proc_betsur' => '*',
+                'venta_betsur_id' => $ventaId,
+                'asiento_betsur_id' => $asientoId,
             ],
             default => throw new InvalidArgumentException('Rubro inválido'),
         };

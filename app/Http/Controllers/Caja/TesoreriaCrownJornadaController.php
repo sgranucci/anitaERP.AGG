@@ -1145,6 +1145,7 @@ class TesoreriaCrownJornadaController extends Controller
             'cajero_crown_id' => ['required', 'integer'],
             'tipo_tarea' => ['required', Rule::in(array_keys(TesoreriaCrownAsignacionCatalogo::TAREAS))],
             'turno' => ['required', Rule::in(array_keys(TesoreriaCrownAsignacionCatalogo::TURNOS))],
+            'permite_rendir_sin_habilitacion' => ['sometimes', 'boolean'],
         ]);
 
         $deposito = $this->cajaDeSala((int) $datos['deposito_id'], (int) $jornada->sala_id);
@@ -1175,6 +1176,7 @@ class TesoreriaCrownJornadaController extends Controller
             'cajero_crown_id' => $cajero->id,
             'tipo_tarea' => $datos['tipo_tarea'],
             'turno' => $datos['turno'],
+            'permite_rendir_sin_habilitacion' => $request->boolean('permite_rendir_sin_habilitacion'),
         ]);
 
         return redirect()->route('ver_tesoreria_crown_jornada', $jornada->id)->with('mensaje', 'Cajero asignado.');

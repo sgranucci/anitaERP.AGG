@@ -366,7 +366,7 @@ return [
                 ],
             ],
             'parrafos2' => [
-                'Diferencia tesorería en VIII: ítem del resumen final (tipos 35 entra / 36 sale, grupo 6); es el saldo acumulado de esos movimientos, no un porcentaje aparte. Signos de resumen: 21/22 pre-depósito, 25/30 fondo, 31/32 caja chica hotel, 33/34 diferencia a verificar, 35/36 diferencia tesorería, 6/40 caja chica adm., 99/98 cancela dif. final.',
+                'Diferencia tesorería en VIII: ítem del resumen final (tipos 35 entra / 36 sale, grupo 6); es el saldo acumulado de esos movimientos, no un porcentaje aparte. Signos de resumen: 21/22 pre-depósito, 25/30 fondo, 31/32 caja chica hotel, 35/36 diferencia tesorería, 6/40 caja chica adm., 99/98 cancela dif. final. Dif. final de bóveda = total VIII − saldo final Anexo I (caja por variación). El concepto «diferencia a verificar» (33/34) ya no entra al VIII.',
                 'Anexo II selector Mesas/Máquinas/Gastronomía/Todo: cada botón pide su permiso listar-tesoreria-crown-anexo2-*; Sistemas los asigna en Permiso-Rol. El MTD usa solo días con jornada ERP (sin Anita en huecos).',
                 'Anexo VII — anticipos: fuera de alcance operativo. No hay maestro/proceso de anticipos de sueldo en Tesorería Crown; la columna se deja en cero a propósito hasta que exista fuente ERP propia.',
             ],

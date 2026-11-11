@@ -10,7 +10,7 @@
 
 @section('contenido')
 @include('includes.mensaje')
-@if (($asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::pinEsInicial($asignacion->cajero) && $asignacion->cierre === null && $asignacion->jornada->estaAbierta())
+@if (($asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::debePedirPinNuevo($asignacion->cajero) && $asignacion->cierre === null && $asignacion->jornada->estaAbierta())
     <div class="alert alert-warning">
         <strong>PIN del cajero.</strong>
         {{ $asignacion->cajero->nombre }} todavía no tiene un PIN propio.

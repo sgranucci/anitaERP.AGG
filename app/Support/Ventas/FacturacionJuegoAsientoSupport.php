@@ -11,8 +11,8 @@ use InvalidArgumentException;
 /**
  * Piernas del asiento de facturación juego (paridad asiento_contable en p-resultado.c).
  *
- * Ganancia (checksigno SUMA / FME·FSL·FRE): H en ventas / D en caja.
- * Pérdida (checksigno RESTA / CME·CSL·CRE): D en ventas / H en caja.
+ * Ganancia (checksigno SUMA / FME·FSL·FRE·FOL): H en ventas / D en caja.
+ * Pérdida (checksigno RESTA / CME·CSL·CRE·COL): D en ventas / H en caja.
  */
 final class FacturacionJuegoAsientoSupport
 {
@@ -39,6 +39,8 @@ final class FacturacionJuegoAsientoSupport
             FacturacionJuegoTipoSupport::RUBRO_MESA => (int) ($cfg->cuentacontable_mesa_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_SLOT => (int) ($cfg->cuentacontable_slot_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => (int) ($cfg->cuentacontable_ruleta_el_id ?? 0),
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => (int) ($cfg->cuentacontable_del_rio_id ?? 0),
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => (int) ($cfg->cuentacontable_betsur_id ?? 0),
             default => 0,
         };
         if ($cuentaVentaId <= 0) {

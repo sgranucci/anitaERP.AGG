@@ -33,6 +33,10 @@ final class FacturacionJuegoConfigSupport
                 'tipo_per_slot' => (string) config('facturacion_juego.tipos.per_slot', 'CSL'),
                 'tipo_gan_ruleta_el' => (string) config('facturacion_juego.tipos.gan_ruleta_el', 'FRE'),
                 'tipo_per_ruleta_el' => (string) config('facturacion_juego.tipos.per_ruleta_el', 'CRE'),
+                'tipo_gan_online' => (string) config('facturacion_juego.tipos.gan_online', 'FOL'),
+                'tipo_per_online' => (string) config('facturacion_juego.tipos.per_online', 'COL'),
+                'sucursal_del_rio' => (int) config('caja_anita.sucursal_del_rio_online', 67),
+                'sucursal_betsur' => (int) config('caja_anita.sucursal_betsur_online', 68),
                 'letra' => (string) config('facturacion_juego.letra', 'B'),
                 'tipoasiento_abreviatura' => (string) config('facturacion_juego.tipoasiento_abreviatura', 'VTA'),
             ]);
@@ -53,7 +57,16 @@ final class FacturacionJuegoConfigSupport
         }
 
         return FacturacionJuegoSala::query()
-            ->with(['sala', 'cuentacaja', 'cuentacontableMesa', 'cuentacontableSlot', 'cuentacontableRuletaEl', 'centrocosto'])
+            ->with([
+                'sala',
+                'cuentacaja',
+                'cuentacontableMesa',
+                'cuentacontableSlot',
+                'cuentacontableRuletaEl',
+                'cuentacontableDelRio',
+                'cuentacontableBetsur',
+                'centrocosto',
+            ])
             ->where('sala_id', $salaId)
             ->first();
     }
@@ -68,7 +81,16 @@ final class FacturacionJuegoConfigSupport
         }
 
         return FacturacionJuegoSala::query()
-            ->with(['sala', 'cuentacaja', 'cuentacontableMesa', 'cuentacontableSlot', 'cuentacontableRuletaEl', 'centrocosto'])
+            ->with([
+                'sala',
+                'cuentacaja',
+                'cuentacontableMesa',
+                'cuentacontableSlot',
+                'cuentacontableRuletaEl',
+                'cuentacontableDelRio',
+                'cuentacontableBetsur',
+                'centrocosto',
+            ])
             ->where('activo', true)
             ->orderBy('sala_id')
             ->get();
@@ -80,8 +102,14 @@ final class FacturacionJuegoConfigSupport
     public static function faltantesSala(FacturacionJuegoSala $cfg, string $rubro): array
     {
         $faltan = [];
-        if ((int) $cfg->sucursal_anita <= 0) {
-            $faltan[] = 'Sucursal / PV Anita';
+        $sucursal = FacturacionJuegoTipoSupport::sucursalAnitaParaRubro(
+            $rubro,
+            (int) $cfg->sucursal_anita,
+        );
+        if ($sucursal <= 0) {
+            $faltan[] = FacturacionJuegoTipoSupport::esOnline($rubro)
+                ? 'Sucursal Anita on-line / Betsur'
+                : 'Sucursal / PV Anita';
         }
         if ((int) ($cfg->cuentacaja_id ?? 0) <= 0) {
             $faltan[] = 'Cuenta de caja (tesorería)';
@@ -90,10 +118,12 @@ final class FacturacionJuegoConfigSupport
             FacturacionJuegoTipoSupport::RUBRO_MESA => (int) ($cfg->cuentacontable_mesa_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_SLOT => (int) ($cfg->cuentacontable_slot_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => (int) ($cfg->cuentacontable_ruleta_el_id ?? 0),
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => (int) ($cfg->cuentacontable_del_rio_id ?? 0),
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => (int) ($cfg->cuentacontable_betsur_id ?? 0),
             default => 0,
         };
         if ($cuentaId <= 0) {
-            $faltan[] = 'Cuenta contable de '.$rubro;
+            $faltan[] = 'Cuenta contable de '.FacturacionJuegoTipoSupport::nombreCliente($rubro);
         }
 
         return $faltan;

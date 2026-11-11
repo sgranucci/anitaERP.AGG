@@ -29,4 +29,11 @@ return [
     'pxsol_remote_dir' => env('TESORERIA_CROWN_PXSOL_REMOTE_DIR', 'pxsol'),
 
     'pxsol_remote_php' => env('TESORERIA_CROWN_PXSOL_REMOTE_PHP', 'trae_comprob.php'),
+
+    /**
+     * true = al firmar, el PIN inicial (código/legajo) no alcanza: el cajero elige uno propio.
+     * false = laboratorio: firma con el PIN cargado (p. ej. = código) sin forzar cambio.
+     * Al arrancar producción: TESORERIA_CROWN_EXIGIR_PIN_PROPIO=true
+     */
+    'exigir_pin_propio' => filter_var(env('TESORERIA_CROWN_EXIGIR_PIN_PROPIO', true), FILTER_VALIDATE_BOOLEAN),
 ];

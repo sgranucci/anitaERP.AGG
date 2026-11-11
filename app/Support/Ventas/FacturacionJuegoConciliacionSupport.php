@@ -241,16 +241,21 @@ final class FacturacionJuegoConciliacionSupport
                 'cuentacontableMesa',
                 'cuentacontableSlot',
                 'cuentacontableRuletaEl',
+                'cuentacontableDelRio',
+                'cuentacontableBetsur',
                 'centrocosto',
             ]);
             $caja = $cfg->cuentacaja;
             $cuentaCajaContable = $caja?->cuentacontables;
+            $param = FacturacionJuegoConfigSupport::parametro();
 
             $out[] = [
                 'sala_id' => (int) $cfg->sala_id,
                 'sala_codigo' => (string) ($cfg->sala->codigo ?? ''),
                 'sala_nombre' => (string) ($cfg->sala->nombre ?? ''),
                 'sucursal_anita' => (int) $cfg->sucursal_anita,
+                'sucursal_del_rio' => (int) ($param->sucursal_del_rio ?? 67),
+                'sucursal_betsur' => (int) ($param->sucursal_betsur ?? 68),
                 'cuentacaja_codigo' => (string) ($caja->codigo ?? ''),
                 'cuentacaja_nombre' => (string) ($caja->nombre ?? ''),
                 'cuenta_caja_contable_codigo' => (string) ($cuentaCajaContable->codigo ?? ''),
@@ -261,6 +266,10 @@ final class FacturacionJuegoConciliacionSupport
                 'cuenta_slot_nombre' => (string) ($cfg->cuentacontableSlot->nombre ?? ''),
                 'cuenta_ruleta_codigo' => (string) ($cfg->cuentacontableRuletaEl->codigo ?? ''),
                 'cuenta_ruleta_nombre' => (string) ($cfg->cuentacontableRuletaEl->nombre ?? ''),
+                'cuenta_del_rio_codigo' => (string) ($cfg->cuentacontableDelRio->codigo ?? ''),
+                'cuenta_del_rio_nombre' => (string) ($cfg->cuentacontableDelRio->nombre ?? ''),
+                'cuenta_betsur_codigo' => (string) ($cfg->cuentacontableBetsur->codigo ?? ''),
+                'cuenta_betsur_nombre' => (string) ($cfg->cuentacontableBetsur->nombre ?? ''),
                 'centrocosto_codigo' => (string) ($cfg->centrocosto->codigo ?? ''),
                 'centrocosto_nombre' => (string) ($cfg->centrocosto->nombre ?? ''),
             ];
@@ -272,11 +281,7 @@ final class FacturacionJuegoConciliacionSupport
     /** @return list<string> */
     private function rubros(): array
     {
-        return [
-            FacturacionJuegoTipoSupport::RUBRO_MESA,
-            FacturacionJuegoTipoSupport::RUBRO_SLOT,
-            FacturacionJuegoTipoSupport::RUBRO_RULETA_EL,
-        ];
+        return FacturacionJuegoTipoSupport::rubros();
     }
 
     /**
@@ -306,7 +311,13 @@ final class FacturacionJuegoConciliacionSupport
     {
         $out = [];
         foreach ($configs as $cfg) {
-            $cfg->loadMissing(['cuentacontableMesa', 'cuentacontableSlot', 'cuentacontableRuletaEl']);
+            $cfg->loadMissing([
+                'cuentacontableMesa',
+                'cuentacontableSlot',
+                'cuentacontableRuletaEl',
+                'cuentacontableDelRio',
+                'cuentacontableBetsur',
+            ]);
             $out[(int) $cfg->sala_id] = [
                 FacturacionJuegoTipoSupport::RUBRO_MESA => [
                     'id' => (int) ($cfg->cuentacontable_mesa_id ?? 0),
@@ -319,6 +330,14 @@ final class FacturacionJuegoConciliacionSupport
                 FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => [
                     'id' => (int) ($cfg->cuentacontable_ruleta_el_id ?? 0),
                     'codigo' => (string) ($cfg->cuentacontableRuletaEl->codigo ?? ''),
+                ],
+                FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => [
+                    'id' => (int) ($cfg->cuentacontable_del_rio_id ?? 0),
+                    'codigo' => (string) ($cfg->cuentacontableDelRio->codigo ?? ''),
+                ],
+                FacturacionJuegoTipoSupport::RUBRO_BETSUR => [
+                    'id' => (int) ($cfg->cuentacontable_betsur_id ?? 0),
+                    'codigo' => (string) ($cfg->cuentacontableBetsur->codigo ?? ''),
                 ],
             ];
         }
@@ -334,11 +353,20 @@ final class FacturacionJuegoConciliacionSupport
     {
         $out = [];
         foreach ($configs as $cfg) {
-            $cfg->loadMissing(['sala', 'cuentacontableMesa', 'cuentacontableSlot', 'cuentacontableRuletaEl']);
+            $cfg->loadMissing([
+                'sala',
+                'cuentacontableMesa',
+                'cuentacontableSlot',
+                'cuentacontableRuletaEl',
+                'cuentacontableDelRio',
+                'cuentacontableBetsur',
+            ]);
             $pares = [
                 FacturacionJuegoTipoSupport::RUBRO_MESA => $cfg->cuentacontableMesa,
                 FacturacionJuegoTipoSupport::RUBRO_SLOT => $cfg->cuentacontableSlot,
                 FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => $cfg->cuentacontableRuletaEl,
+                FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => $cfg->cuentacontableDelRio,
+                FacturacionJuegoTipoSupport::RUBRO_BETSUR => $cfg->cuentacontableBetsur,
             ];
             foreach ($pares as $rubro => $cuenta) {
                 $codigoStr = (string) ($cuenta->codigo ?? '');
@@ -489,6 +517,8 @@ final class FacturacionJuegoConciliacionSupport
             FacturacionJuegoTipoSupport::RUBRO_MESA => $flash->venta_mesa_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_SLOT => $flash->venta_slot_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => $flash->venta_ruleta_el_id ?? 0,
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => $flash->venta_del_rio_id ?? 0,
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => $flash->venta_betsur_id ?? 0,
             default => 0,
         };
     }
@@ -499,6 +529,8 @@ final class FacturacionJuegoConciliacionSupport
             FacturacionJuegoTipoSupport::RUBRO_MESA => $flash->asiento_mesa_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_SLOT => $flash->asiento_slot_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => $flash->asiento_ruleta_el_id ?? 0,
+            FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => $flash->asiento_del_rio_id ?? 0,
+            FacturacionJuegoTipoSupport::RUBRO_BETSUR => $flash->asiento_betsur_id ?? 0,
             default => 0,
         };
     }

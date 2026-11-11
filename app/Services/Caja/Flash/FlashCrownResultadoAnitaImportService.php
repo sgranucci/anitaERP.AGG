@@ -528,12 +528,15 @@ final class FlashCrownResultadoAnitaImportService
 
     private function yaFacturado(FlashCrown $flash): bool
     {
-        foreach (['proc_mesa', 'proc_slot', 'proc_ruleta_el'] as $flag) {
+        foreach (['proc_mesa', 'proc_slot', 'proc_ruleta_el', 'proc_del_rio', 'proc_betsur'] as $flag) {
             if (trim((string) ($flash->{$flag} ?? '')) === '*') {
                 return true;
             }
         }
-        foreach (['venta_mesa_id', 'venta_slot_id', 'venta_ruleta_el_id'] as $campo) {
+        foreach ([
+            'venta_mesa_id', 'venta_slot_id', 'venta_ruleta_el_id',
+            'venta_del_rio_id', 'venta_betsur_id',
+        ] as $campo) {
             if ((int) ($flash->{$campo} ?? 0) > 0) {
                 return true;
             }
