@@ -18,6 +18,7 @@ use App\Support\Compras\AnitaSync\TipotransaccionCompra\TipotransaccionCompraAni
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ConceptoIvacompraRetieneIibbSupport;
+use App\Support\Compras\TipotransaccionCompraGeneraAsiAnitaSupport;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -506,8 +507,9 @@ final class ComprasIvaMaestrosAnitaImportService
         $subdiar = strtoupper(trim((string) ($fila->tcomp_subdiar ?? '')));
         $subdiario = $subdiar === 'N' ? 'N' : 'C';
 
-        $generaAsi = strtoupper(trim((string) ($fila->tcomp_genera_asi ?? 'N')));
-        $asiento = $generaAsi === 'S' ? 'S' : 'N';
+        $flagsGenera = TipotransaccionCompraGeneraAsiAnitaSupport::desdeAnita(
+            $fila->tcomp_genera_asi ?? 'N'
+        );
 
         $estadoAnita = strtoupper(trim((string) ($fila->tcomp_estado ?? 'A')));
         $estado = $estadoAnita === 'A' ? 'A' : 'S';
@@ -522,7 +524,8 @@ final class ComprasIvaMaestrosAnitaImportService
             'codigoafip' => $codigoAfip,
             'signo' => $signoAnita,
             'subdiario' => $subdiario,
-            'asientocontable' => $asiento,
+            'asientocontable' => $flagsGenera['asientocontable'],
+            'genera_bien_de_uso' => $flagsGenera['genera_bien_de_uso'],
             'retieneiva' => $retieneIva,
             'retieneganancia' => $retieneGanancia,
             'retieneIIBB' => $retieneIibb,
@@ -545,6 +548,7 @@ final class ComprasIvaMaestrosAnitaImportService
                 'signo',
                 'subdiario',
                 'asientocontable',
+                'genera_bien_de_uso',
                 'retieneiva',
                 'retieneganancia',
                 'retieneIIBB',

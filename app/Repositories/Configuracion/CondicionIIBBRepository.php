@@ -21,7 +21,12 @@ class CondicionIIBBRepository implements CondicionIIBBRepositoryInterface
 
     public function all()
     {
-        return $this->model->all();
+        return $this->model->newQuery()
+            ->where(function ($q) {
+                $q->whereNull('estado')->orWhere('estado', 'A');
+            })
+            ->orderBy('id')
+            ->get();
     }
 
     public function create(array $data)

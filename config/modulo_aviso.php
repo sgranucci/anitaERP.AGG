@@ -5,6 +5,11 @@ return [
     // Validez por defecto de tokens visualizar en mails (horas). Módulos pueden sobreescribir.
     'publico_horas_validez_token' => (int) env('MODULO_AVISO_PUBLICO_HORAS_TOKEN', 168),
 
+    // Cron: restaura reemplazos de destinatario con vence_el vencido (día siguiente al último día inclusive).
+    'reemplazo_destinatario_vencidos' => [
+        'hora' => env('MODULO_AVISO_REEMPLAZO_VENCIDOS_HORA', '00:05'),
+    ],
+
     /**
      * Avisos cuya frecuencia se edita en Configuración → Avisos por módulo.
      * El cron avisos:despachar-programados ejecuta el comando cuando corresponde.
@@ -61,6 +66,7 @@ return [
         'contable.apertura_periodo_solicitud_pendiente' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'contable.apertura_periodo_recordatorio' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'contable.apertura_periodo_cerrada' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
+        'contable.bien_uso_provisorio' => App\Services\Configuracion\Handlers\ContableBienUsoProvisorioAvisoHandler::class,
         'uif.cliente_alta' => App\Services\Configuracion\Handlers\UifClienteAltaAvisoHandler::class,
         'sueldos.empleado_alta_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoAltaProvisoriaAvisoHandler::class,
         'sueldos.libreta_sanitaria_pendiente' => App\Services\Configuracion\Handlers\SueldosLibretaSanitariaAvisoHandler::class,

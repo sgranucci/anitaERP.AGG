@@ -38,9 +38,14 @@
 		if (!$('#factura-totales-cantidad').length) {
 			return;
 		}
-		$('#totalcajasfactura').val(sumaCampoCantidadFactura('.caja').toFixed(2));
-		$('#totalunidadesfactura').val(sumaCampoCantidadFactura('.pieza').toFixed(2));
-		$('#totalkilosfactura').val(sumaCampoCantidadFactura('.kilo').toFixed(2));
+		var fmt = typeof window.facturaFmtImporteTotal === 'function'
+			? window.facturaFmtImporteTotal
+			: function (n) {
+				return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+			};
+		$('#totalcajasfactura').val(fmt(sumaCampoCantidadFactura('.caja')));
+		$('#totalunidadesfactura').val(fmt(sumaCampoCantidadFactura('.pieza')));
+		$('#totalkilosfactura').val(fmt(sumaCampoCantidadFactura('.kilo')));
 	}
 
 	window.sumarCantidadesFacturaBierzo = sumarCantidadesFacturaBierzo;

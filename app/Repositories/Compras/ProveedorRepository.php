@@ -10,8 +10,6 @@ use App\Models\Configuracion\Sala;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Impuesto;
-use App\Models\Configuracion\Localidad;
-use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Pais;
 use App\Repositories\Compras\Proveedor_ExclusionRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface;
@@ -30,7 +28,6 @@ use App\Support\Compras\ProveedorAnitaEsquemaSupport;
 use App\Support\Compras\ProveedorAnitaGeoSupport;
 use App\Support\Compras\ProveedorPropagoAnitaSupport;
 use App\Support\Compras\ProveedorSalaAnitaSupport;
-use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Compras\ProveedorRetencionIibbAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
@@ -612,22 +609,12 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             }
             $resultado = null;
 
-			$localidad_id = null;
-			$provincia_id = null;
-			if (EntornoEmpresaSupport::esFerli()) {
-				$geoAnita = ProveedorAnitaGeoSupport::resolverDesdeFilaAnita($data);
-				$localidad_id = $geoAnita['localidad_id'];
-				$provincia_id = $geoAnita['provincia_id'];
-			} else {
-				$localidad = Localidad::select('id', 'nombre', 'provincia_id')
-					->where('nombre', $data->prom_localidad)
-					->orWhere('codigo', $data->prom_cod_localidad)
-					->first();
-				if ($localidad) {
-					$localidad_id = $localidad->id;
-					$provincia_id = $localidad->provincia_id;
-				}
-			}
+			// Siempre resolver por prom_provincia (texto) + localidad; no solo Ferli.
+			// Fuera de Ferli el lookup por nombre/código ignoraba la provincia Anita
+			// (ej. 7146: prom_provincia=BUENOS AIRES, localidad vacía → provincia_id null).
+			$geoAnita = ProveedorAnitaGeoSupport::resolverDesdeFilaAnita($data);
+			$localidad_id = $geoAnita['localidad_id'];
+			$provincia_id = $geoAnita['provincia_id'];
 	
         	$pais = Pais::select('id', 'nombre')->where('id' , $data->prom_pais)->first();
 			if ($pais)

@@ -9,6 +9,7 @@ use App\Models\Contable\Tipoasiento;
 use App\Models\Ventas\FacturacionJuegoSala;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionJuegoAsientoSupport;
 use App\Support\Ventas\FacturacionJuegoConfigSupport;
 use App\Support\Ventas\FacturacionJuegoTipoSupport;
@@ -222,7 +223,20 @@ class FacturacionJuegoService
             $leyenda,
         );
 
-        $asientoId = $this->grabarAsiento($flash, $cfg, $rubro, $tipo, $monto, $fechaDia, $leyenda);
+        $conceptoMayor = FacturacionJuegoTipoSupport::conceptoMayor(
+            (string) $venta['codigo'],
+            $nombreCliente,
+        );
+        $asientoId = $this->grabarAsiento(
+            $flash,
+            $cfg,
+            $rubro,
+            $tipo,
+            $monto,
+            $fechaDia,
+            $conceptoMayor,
+            (int) $venta['venta_id'],
+        );
 
         $this->marcarProcesado($flash, $rubro, (int) $venta['venta_id'], $asientoId);
 
@@ -247,17 +261,24 @@ class FacturacionJuegoService
         $tipo,
         float $monto,
         string $fechaDia,
-        string $leyenda,
+        string $conceptoMayor,
+        int $ventaId,
     ): int {
-        $armado = FacturacionJuegoAsientoSupport::armarLineas($cfg, $rubro, $tipo, $monto, $leyenda);
+        $armado = FacturacionJuegoAsientoSupport::armarLineas($cfg, $rubro, $tipo, $monto, $conceptoMayor);
         $tipoAsientoId = $this->resolverTipoAsientoId();
         $payload = FacturacionJuegoAsientoSupport::armarPayloadAsiento(
             $armado['lineas'],
             (int) $flash->empresa_id,
             $fechaDia,
-            mb_substr($leyenda, 0, 30),
+            $conceptoMayor,
             $tipoAsientoId,
         );
+        $payload['venta_id'] = $ventaId;
+
+        // Crown: asiento solo en ERP (venta ya no va a Anita; no duplicar en ctamov).
+        if (EntornoEmpresaSupport::esCrown()) {
+            $payload['omitir_anita'] = true;
+        }
 
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || $asiento === null) {

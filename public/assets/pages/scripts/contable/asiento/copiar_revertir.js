@@ -17,6 +17,38 @@ $(function () {
 		return $('#id').val() || '';
 	}
 
+	function numeroAsientoDesdeRespuesta(data) {
+		if (!data || typeof data !== 'object') {
+			return '';
+		}
+		var nro = data.numeroasiento;
+		if (nro === undefined || nro === null) {
+			nro = data.numero_asiento;
+		}
+		nro = String(nro === undefined || nro === null ? '' : nro).trim();
+		return nro;
+	}
+
+	function avisoResultado(titulo, texto, alCerrar) {
+		if (typeof swal === 'function') {
+			swal({
+				title: titulo,
+				text: texto,
+				icon: 'success',
+				button: 'Aceptar',
+			}).then(function () {
+				if (typeof alCerrar === 'function') {
+					alCerrar();
+				}
+			});
+			return;
+		}
+		alert(titulo + '. ' + texto);
+		if (typeof alCerrar === 'function') {
+			alCerrar();
+		}
+	}
+
 	function postCopiarRevertir(revierte) {
 		var id = asientoIdActivo || $('#id').val();
 		if (!id) {
@@ -39,7 +71,12 @@ $(function () {
 			payload.revierte = 1;
 		}
 
-		$.post(url, payload)
+		$.ajax({
+			type: 'POST',
+			url: url,
+			data: payload,
+			dataType: 'json'
+		})
 			.done(function (data) {
 				if (data && data.errores) {
 					alert(data.errores);
@@ -49,11 +86,22 @@ $(function () {
 					alert(revierte ? 'No se pudo revertir el asiento.' : 'No se pudo copiar el asiento.');
 					return;
 				}
-				var accion = revierte ? 'REVERTIDO' : 'COPIADO';
-				alert('ASIENTO ' + accion + ' CORRECTAMENTE. GENERÓ EL ASIENTO CON ID: ' + data.asiento_id + ' NÚMERO: ' + data.numeroasiento);
-				if ($('#tabla-paginada').length) {
-					window.location.reload();
-				}
+				var accion = revierte ? 'Asiento revertido' : 'Asiento copiado';
+				var nro = numeroAsientoDesdeRespuesta(data);
+				var texto = nro !== ''
+					? ('Se generó el asiento N° ' + nro + '.')
+					: ('Se generó el asiento (id interno ' + data.asiento_id + ').');
+
+				avisoResultado(accion + ' correctamente', texto, function () {
+					if ($('#tabla-paginada').length) {
+						window.location.reload();
+						return;
+					}
+					var base = (window.carpetaBase || '').replace(/\/$/, '');
+					if (base && data.asiento_id) {
+						window.location.href = base + '/contable/asiento/' + data.asiento_id + '/editar';
+					}
+				});
 			})
 			.fail(function (xhr) {
 				var msg = (xhr.responseJSON && (xhr.responseJSON.errores || xhr.responseJSON.mensaje))

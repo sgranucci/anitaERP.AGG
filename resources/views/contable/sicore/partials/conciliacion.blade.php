@@ -1,22 +1,41 @@
 @if (! empty($conciliacion['habilitada']))
+    @php
+        $mostrarControlPeriodo = ! empty($conciliacion['control_periodo']);
+        $fmtDesde = ! empty($conciliacion['periodo_desde'])
+            ? date('d/m/Y', strtotime((string) $conciliacion['periodo_desde']))
+            : '';
+        $fmtHasta = ! empty($conciliacion['periodo_hasta'])
+            ? date('d/m/Y', strtotime((string) $conciliacion['periodo_hasta']))
+            : '';
+    @endphp
     <div class="card card-outline card-warning mt-3" id="sicore-conciliacion-panel">
-        <div class="card-header d-flex align-items-center">
+        <div class="card-header d-flex align-items-center flex-wrap">
             <h3 class="card-title mb-0">Conciliación SICORE vs mayor contable</h3>
             @if ($periodo_texto ?? '')
                 <span class="text-muted small ml-2">{{ $periodo_texto }}</span>
             @endif
-            <button type="button"
-                class="btn btn-sm btn-outline-secondary ml-auto"
-                data-toggle="collapse"
-                data-target="#sicore-conciliacion-movs"
-                aria-expanded="false"
-                aria-controls="sicore-conciliacion-movs">
-                Movimiento por movimiento
-            </button>
+            <div class="ml-auto d-flex align-items-center flex-wrap">
+                <button type="button"
+                    class="btn btn-sm {{ $mostrarControlPeriodo ? 'btn-warning' : 'btn-outline-warning' }} mr-2"
+                    id="sicore-btn-control-periodo"
+                    aria-pressed="{{ $mostrarControlPeriodo ? 'true' : 'false' }}"
+                    title="Muestra un renglón extra por concepto: retenciones emitidas del rango vs movimientos del mayor (sin saldo de ejercicio)">
+                    <i class="fa fa-calendar-check"></i>
+                    Control del período
+                </button>
+                <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-toggle="collapse"
+                    data-target="#sicore-conciliacion-movs"
+                    aria-expanded="false"
+                    aria-controls="sicore-conciliacion-movs">
+                    Movimiento por movimiento
+                </button>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm mb-0">
+                <table class="table table-sm mb-0" id="sicore-tabla-conciliacion">
                     <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
                             <th>Cód.</th>
@@ -35,7 +54,10 @@
                                 'table-danger' => empty($item['cuadra']),
                             ])>
                                 <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
-                                <td>{{ $item['nombre'] ?? '' }}</td>
+                                <td>
+                                    {{ $item['nombre'] ?? '' }}
+                                    <div class="small text-muted">Saldo de ejercicio (col. P)</div>
+                                </td>
                                 <td class="small">
                                     @forelse ($item['cuentas'] ?? [] as $cuenta)
                                         <div>{{ $cuenta['codigo'] ?? '' }} — {{ $cuenta['nombre'] ?? '' }}</div>
@@ -60,6 +82,42 @@
                                     @endif
                                 </td>
                             </tr>
+                            <tr class="sicore-fila-control-periodo @if (! $mostrarControlPeriodo) d-none @endif @if (! empty($item['cuadra_periodo'])) table-success @else table-warning @endif">
+                                <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
+                                <td>
+                                    <span class="badge badge-warning mr-1">Período</span>
+                                    Control retenciones emitidas
+                                    <div class="small text-muted">
+                                        Solo movimientos del mayor
+                                        @if ($fmtDesde !== '' && $fmtHasta !== '')
+                                            ({{ $fmtDesde }} — {{ $fmtHasta }})
+                                        @endif
+                                        · sin saldo de ejercicio
+                                    </div>
+                                </td>
+                                <td class="small text-muted">
+                                    Retenciones emitidas / anuladas del rango
+                                    @if ((int) ($item['mayor_excluidos'] ?? 0) > 0)
+                                        <div>{{ (int) $item['mayor_excluidos'] }} mov. del mayor excluidos (pagos DDJJ, etc.)</div>
+                                    @endif
+                                </td>
+                                <td class="text-right">
+                                    {{ number_format((float) ($item['total_sicore'] ?? 0), 2, ',', '.') }}
+                                </td>
+                                <td class="text-right @if (($item['total_mayor_periodo'] ?? 0) < 0) text-danger @endif">
+                                    {{ number_format((float) ($item['total_mayor_periodo'] ?? 0), 2, ',', '.') }}
+                                </td>
+                                <td class="text-right">{{ number_format((float) ($item['diferencia_periodo'] ?? 0), 2, ',', '.') }}</td>
+                                <td class="text-center">
+                                    @if (! empty($item['cuadra_periodo']))
+                                        <span class="badge badge-success">OK</span>
+                                    @elseif (($item['registros'] ?? 0) === 0 && ($item['total_mayor_periodo'] ?? 0) == 0)
+                                        <span class="badge badge-secondary">Sin mov.</span>
+                                    @else
+                                        <span class="badge badge-danger">Diferencia</span>
+                                    @endif
+                                </td>
+                            </tr>
                         @endforeach
                     </tbody>
                 </table>
@@ -67,7 +125,10 @@
 
             <p class="small text-muted px-3 py-2 mb-0 border-top">
                 Total SICORE: suma de movimientos del período consultado (1ra quincena, 2da o mes).
-                Total mayor: saldo acumulado (columna P del mayor) al último movimiento de la quincena/mes, con el haber en positivo.
+                Total mayor (renglón principal): saldo acumulado (columna P del mayor) al último movimiento de la quincena/mes, con el haber en positivo.
+                <span class="sicore-ayuda-control-periodo @if (! $mostrarControlPeriodo) d-none @endif">
+                    Control del período: misma suma SICORE vs solo movimientos del mayor en el rango (retenciones emitidas), sin arrastrar el saldo desde principio de ejercicio.
+                </span>
                 Diferencia: SICORE − mayor. Si |diferencia| ≤ $ {{ number_format((float) ($conciliacion['tolerancia'] ?? 100), 2, ',', '.') }} → OK.
             </p>
 

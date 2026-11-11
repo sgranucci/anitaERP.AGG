@@ -2,12 +2,16 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+
 /**
  * prom_ret_ibr (promae) ↔ condicionIIBB.
  *
- * Crown (a-promae.c, help_7): el carácter I se muestra como «No inscripto»
- * (en el .def genérico es exento). N es «No retener». E es exterior.
- * Los ids 1–4 son el catálogo que ya usan los importadores.
+ * Crown: catálogo operativo Convenio / Local / No alcanzado. La letra Anita I
+ * («No inscripto» en help) se mapea a Convenio; la tasa 5% fuera de RN sale de
+ * retencionIIBB.porcentajeretencion_fuera, no de una condición aparte.
+ *
+ * Resto de clientes: I → id 3 No inscripto (legado).
  */
 final class ProveedorRetencionIibbAnitaSupport
 {
@@ -15,7 +19,7 @@ final class ProveedorRetencionIibbAnitaSupport
 
     public const LOCAL = 'L';
 
-    /** Crown: «No inscripto». .def genérico: exento. */
+    /** Crown help: «No inscripto». .def genérico: exento. */
     public const NO_INSCRIPTO = 'I';
 
     public const CONVENIO_SIN_BSAS = 'C';
@@ -30,6 +34,7 @@ final class ProveedorRetencionIibbAnitaSupport
 
     public const CONDICION_LOCAL = 2;
 
+    /** Legado / no Crown. En Crown queda inactiva tras remapeo. */
     public const CONDICION_NO_INSCRIPTO = 3;
 
     /** formacalculo N: no retiene. */
@@ -42,7 +47,9 @@ final class ProveedorRetencionIibbAnitaSupport
         return match ($codigo) {
             self::CONVENIO, self::CONVENIO_SIN_BSAS => self::CONDICION_CONVENIO,
             self::LOCAL, self::CABA => self::CONDICION_LOCAL,
-            self::NO_INSCRIPTO => self::CONDICION_NO_INSCRIPTO,
+            self::NO_INSCRIPTO => EntornoEmpresaSupport::esCrown()
+                ? self::CONDICION_CONVENIO
+                : self::CONDICION_NO_INSCRIPTO,
             self::EXTERIOR, self::NO_RETIENE, '' => self::CONDICION_NO_RETIENE,
             default => self::CONDICION_CONVENIO,
         };
@@ -51,10 +58,16 @@ final class ProveedorRetencionIibbAnitaSupport
     /**
      * Carácter a grabar en Anita. C y B se leen como convenio y local;
      * al volver se graban S y L. Exterior vuelve como N (no retiene).
+     * Crown ya no escribe I (No inscripto).
      */
     public static function promRetIbrDesdeCondicionIibbId(int|string|null $condicionId): string
     {
-        return match ((int) $condicionId) {
+        $id = (int) $condicionId;
+        if (EntornoEmpresaSupport::esCrown() && $id === self::CONDICION_NO_INSCRIPTO) {
+            return self::CONVENIO;
+        }
+
+        return match ($id) {
             self::CONDICION_CONVENIO => self::CONVENIO,
             self::CONDICION_LOCAL => self::LOCAL,
             self::CONDICION_NO_INSCRIPTO => self::NO_INSCRIPTO,

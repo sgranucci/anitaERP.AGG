@@ -99,6 +99,27 @@ class BienUsoController extends Controller
                 $filtros['agrupar'] ?? []
             );
         }
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = BienUsoListadoFiltros::paraQueryString($filtros);
+            $params = array_merge($params, ListadoVisualSupport::paraQueryString($filtros));
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('bien_uso', $params)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
 
         $catalogo = BienUsoListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(

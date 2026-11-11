@@ -341,17 +341,19 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
     }
 
     /**
-     * Lista cabeceras Anita `venta` por rango de ven_fecha (YYYYMMDD).
+     * Lista cabeceras Anita `venta` por rango de fecha (YYYYMMDD).
+     * Default: ven_fecha_vto (jornada). Opcional: ven_fecha (física).
      * Trocea por mes: rangos largos (p.ej. año) el bridge puede devolver vacío.
      *
      * @return list<array<string, mixed>>
      */
-    public function listarVentaPorRangoFecha(int $desdeYmd, int $hastaYmd): array
+    public function listarVentaPorRangoFecha(int $desdeYmd, int $hastaYmd, string $campoFecha = 'ven_fecha_vto'): array
     {
         if ($desdeYmd <= 0 || $hastaYmd <= 0 || $desdeYmd > $hastaYmd) {
             return [];
         }
 
+        $campoFecha = $this->normalizarCampoFechaRango($campoFecha);
         $desde = \Carbon\Carbon::createFromFormat('Ymd', sprintf('%08d', $desdeYmd))->startOfDay();
         $hasta = \Carbon\Carbon::createFromFormat('Ymd', sprintf('%08d', $hastaYmd))->startOfDay();
         if (! $desde || ! $hasta) {
@@ -360,7 +362,7 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
 
         // Mismo mes: una sola lectura.
         if ($desde->format('Ym') === $hasta->format('Ym')) {
-            return $this->listarVentaPorRangoFechaUnaPasada($desdeYmd, $hastaYmd);
+            return $this->listarVentaPorRangoFechaUnaPasada($desdeYmd, $hastaYmd, $campoFecha);
         }
 
         $out = [];
@@ -368,7 +370,7 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
         while ($cursor->lte($hasta)) {
             $mesDesde = max((int) $cursor->format('Ymd'), $desdeYmd);
             $mesHasta = min((int) $cursor->copy()->endOfMonth()->format('Ymd'), $hastaYmd);
-            foreach ($this->listarVentaPorRangoFechaUnaPasada($mesDesde, $mesHasta) as $fila) {
+            foreach ($this->listarVentaPorRangoFechaUnaPasada($mesDesde, $mesHasta, $campoFecha) as $fila) {
                 $out[] = $fila;
             }
             $cursor->addMonthNoOverflow()->startOfMonth();
@@ -380,8 +382,9 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
     /**
      * @return list<array<string, mixed>>
      */
-    private function listarVentaPorRangoFechaUnaPasada(int $desdeYmd, int $hastaYmd): array
+    private function listarVentaPorRangoFechaUnaPasada(int $desdeYmd, int $hastaYmd, string $campoFecha = 'ven_fecha_vto'): array
     {
+        $campoFecha = $this->normalizarCampoFechaRango($campoFecha);
         $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
         $campos = implode(',', [
             'ven_cliente',
@@ -414,10 +417,17 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
         return $this->listar(
             'venta',
             $campos,
-            ' WHERE ven_fecha >= '.(int) $desdeYmd.' AND ven_fecha <= '.(int) $hastaYmd,
-            'ven_fecha, ven_tipo, ven_sucursal, ven_nro',
+            ' WHERE '.$campoFecha.' >= '.(int) $desdeYmd.' AND '.$campoFecha.' <= '.(int) $hastaYmd,
+            $campoFecha.', ven_tipo, ven_sucursal, ven_nro',
             $perfil
         );
+    }
+
+    private function normalizarCampoFechaRango(string $campoFecha): string
+    {
+        $campo = strtolower(trim($campoFecha));
+
+        return $campo === 'ven_fecha' ? 'ven_fecha' : 'ven_fecha_vto';
     }
 
     /**

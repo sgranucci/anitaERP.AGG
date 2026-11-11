@@ -49,12 +49,19 @@
                    class="btn {{ $estadoActual === 'A' ? 'btn-success' : 'btn-outline-success' }}">
                     Activos
                 </a>
-                @foreach (($estado_enum ?? []) as $est)
+                    @foreach (($estado_enum ?? []) as $est)
                     @if (($est['valor'] ?? '') === 'A')
                         @continue
                     @endif
+                    @php
+                        $esProv = ($est['valor'] ?? '') === 'P';
+                        $activoEst = $estadoActual === ($est['valor'] ?? '');
+                        $clsEst = $esProv
+                            ? ($activoEst ? 'btn-warning' : 'btn-outline-warning')
+                            : ($activoEst ? 'btn-secondary' : 'btn-outline-secondary');
+                    @endphp
                     <a href="{{ $urlEstado($est['valor']) }}"
-                       class="btn {{ $estadoActual === ($est['valor'] ?? '') ? 'btn-secondary' : 'btn-outline-secondary' }}">
+                       class="btn {{ $clsEst }}">
                         {{ $est['nombre'] ?? $est['valor'] }}
                     </a>
                 @endforeach

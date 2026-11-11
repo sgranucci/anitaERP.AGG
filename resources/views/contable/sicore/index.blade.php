@@ -81,14 +81,24 @@
 
                     <div class="form-group row mb-0">
                         <div class="{{ $colLabel }}"></div>
-                        <div class="{{ $colInput }}">
-                            <div class="custom-control custom-checkbox">
+                        <div class="col-lg-10">
+                            <div class="custom-control custom-checkbox d-inline-block mr-4">
                                 <input type="checkbox" class="custom-control-input" name="conciliar_contable" id="conciliar_contable" value="1"
                                     @checked(($filtros['conciliar_contable'] ?? true))>
                                 <label class="custom-control-label" for="conciliar_contable">
-                                    Conciliar contra mayor contable (cuentas configuradas)
+                                    Conciliar contra mayor contable (saldo de ejercicio)
                                 </label>
                             </div>
+                            <div class="custom-control custom-checkbox d-inline-block">
+                                <input type="checkbox" class="custom-control-input" name="control_periodo" id="control_periodo" value="1"
+                                    @checked(! empty($filtros['control_periodo']))>
+                                <label class="custom-control-label" for="control_periodo">
+                                    + Control del período (retenciones emitidas vs mayor del mes)
+                                </label>
+                            </div>
+                            <p class="small text-muted mb-0 mt-1">
+                                El control del período suma solo movimientos del rango consultado (sin arrastrar el saldo desde principio de ejercicio).
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -168,6 +178,9 @@
                         <input type="hidden" name="fecha_hasta" value="{{ $hastaPantalla }}">
                         @if (! empty($filtros['conciliar_contable']))
                             <input type="hidden" name="conciliar_contable" value="1">
+                        @endif
+                        @if (! empty($filtros['control_periodo']))
+                            <input type="hidden" name="control_periodo" value="1">
                         @endif
 
                         <div class="card card-outline card-secondary mb-3">

@@ -51,8 +51,75 @@
         $hasta.val(formatIsoDate(finDeMes(desde)));
     }
 
+    function syncExportControlPeriodo(activo) {
+        document.querySelectorAll('a[href*="listar_sicore"], a[href*="exportar_sicore"]').forEach(function (link) {
+            try {
+                var url = new URL(link.href, window.location.origin);
+                if (activo) {
+                    url.searchParams.set('control_periodo', '1');
+                } else {
+                    url.searchParams.delete('control_periodo');
+                }
+                link.href = url.pathname + url.search + url.hash;
+            } catch (e) {
+                // ignore malformed href
+            }
+        });
+    }
+
+    function setControlPeriodoVisible(activo) {
+        document.querySelectorAll('.sicore-fila-control-periodo').forEach(function (tr) {
+            tr.classList.toggle('d-none', !activo);
+        });
+        document.querySelectorAll('.sicore-ayuda-control-periodo').forEach(function (el) {
+            el.classList.toggle('d-none', !activo);
+        });
+
+        var btn = document.getElementById('sicore-btn-control-periodo');
+        if (btn) {
+            btn.classList.toggle('btn-warning', activo);
+            btn.classList.toggle('btn-outline-warning', !activo);
+            btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
+        }
+
+        var chk = document.getElementById('control_periodo');
+        if (chk) {
+            chk.checked = !!activo;
+        }
+
+        syncExportControlPeriodo(activo);
+    }
+
     $(function () {
         $('#fecha_desde').on('change', ajustarHastaPorDesde);
+
+        function syncCheckboxControlPeriodoConConciliar() {
+            var conciliar = document.getElementById('conciliar_contable');
+            var control = document.getElementById('control_periodo');
+            if (!conciliar || !control) {
+                return;
+            }
+            control.disabled = !conciliar.checked;
+            if (!conciliar.checked) {
+                control.checked = false;
+            }
+        }
+
+        syncCheckboxControlPeriodoConConciliar();
+        $('#conciliar_contable').on('change', syncCheckboxControlPeriodoConConciliar);
+
+        $(document).on('click', '#sicore-btn-control-periodo', function (e) {
+            e.preventDefault();
+            var pressed = this.getAttribute('aria-pressed') === 'true';
+            setControlPeriodoVisible(!pressed);
+        });
+
+        // Si el checkbox del filtro cambia y ya hay grilla, muestra/oculta el renglón.
+        $('#control_periodo').on('change', function () {
+            if (document.querySelector('.sicore-fila-control-periodo')) {
+                setControlPeriodoVisible(this.checked);
+            }
+        });
 
         var overlay = document.getElementById('sicore-liquidacion-overlay');
         var hideTimer = null;

@@ -725,8 +725,45 @@ $(document)
         return false;
     });
 
+/**
+ * Al tipear en el código abre el modal de consulta (sin F1), igual que el ABM de asiento.
+ * Cubre facturas de proveedor, preview IE IVA y cualquier .codigocuentacontable.
+ */
+function abrirConsultaCuentaContableAlTipear($input) {
+    if (!$input || !$input.length) {
+        return;
+    }
+    var el = $input.get(0);
+    if (!el || el.readOnly || el.disabled) {
+        return;
+    }
+    var texto = $.trim(el.value || '');
+    if (texto === '' || $input.data('cta-pegado-codigo') === 1) {
+        return;
+    }
+    var $ctx = contextoDesdeInputCodigoCuentaContable($input);
+    if (!(empresaIdParaConsultaCuentaContable($ctx) > 0)) {
+        return;
+    }
+    $('#consultacuentacontable').val(texto);
+    if (modalCuentaContableAbierto()) {
+        if (typeof buscar_datos === 'function') {
+            buscar_datos(texto);
+        }
+        return;
+    }
+    $(document).trigger('cuentacontable:antes-abrir-consulta', [$ctx, $input]);
+    abrirModalConsultaCuentaContableDesdeContexto($ctx, { caretAlFinal: true });
+}
+
 function activa_eventos_consulta_cuentacontable()
 {
+    $(document)
+        .off('input.consultactaAbre', '.codigocuentacontable, #codigocuentacontable')
+        .on('input.consultactaAbre', '.codigocuentacontable, #codigocuentacontable', function () {
+            abrirConsultaCuentaContableAlTipear($(this));
+        });
+
     $(document)
         .off('change.consultacta blur.consultacta', '.codigocuentacontable')
         .on('change.consultacta blur.consultacta', '.codigocuentacontable', function (event) {
@@ -941,6 +978,10 @@ document.addEventListener('paste', function (e) {
     target.dispatchEvent(new Event('input', { bubbles: true }));
     $(target).trigger('change');
 }, true);
+
+// Alias legacy (sin guión bajo) usado por CP / configs.
+window.activa_eventos_consulta_cuentacontable = activa_eventos_consulta_cuentacontable;
+window.activa_eventos_consultacuentacontable = activa_eventos_consulta_cuentacontable;
 
 $(function () {
     if (typeof activa_eventos_consulta_cuentacontable === 'function') {

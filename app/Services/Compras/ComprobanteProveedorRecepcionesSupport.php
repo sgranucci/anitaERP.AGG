@@ -27,7 +27,10 @@ class ComprobanteProveedorRecepcionesSupport
     ) {}
 
     /**
-     * Recepciones CONFIRMADAS de la OC con provisión contable y sin factura contabilizada previa.
+     * Recepciones CONFIRMADAS de la OC asignables a factura y sin factura contabilizada previa.
+     *
+     * Con GR valuado: exige asiento de provisión (o COM importada de Anita).
+     * Sin provisión (Crown / GR no valuado): alcanza la COM confirmada para el match.
      *
      * Por defecto NO sincroniza Anita: las COM deben estar ya en ERP (importación / job / alta local).
      * Pasar $sincronizarAnita = true solo en flujos explícitos de resync.
@@ -447,13 +450,30 @@ class ComprobanteProveedorRecepcionesSupport
     }
 
     /**
-     * COM nativas con asiento, o históricas importadas de Anita (provisión ya en Anita).
+     * Criterio de COM asignable a factura.
+     *
+     * - Instalación / empresa sin GR valuado: toda COM confirmada (solo logística; la factura imputa).
+     * - Con provisión FAR: COM con asiento, o histórica Anita (provisión ya en Anita).
      */
     public static function aplicarCriterioAsignable(Builder $query): Builder
     {
-        return $query->where(function (Builder $q) {
-            $q->whereNotNull('asiento_id')
-                ->orWhere('origen_carga', 'ANITA_IMPORT');
+        // Crown y similares: RECEPCION_PROVEEDOR_CONTABILIDAD_ACTIVA=false → no filtrar por asiento.
+        if (! filter_var(config('recepcion_proveedor.contabilidad_activa'), FILTER_VALIDATE_BOOLEAN)) {
+            return $query;
+        }
+
+        $tabla = $query->getModel()->getTable();
+
+        return $query->where(function (Builder $q) use ($tabla) {
+            $q->whereNotNull($tabla.'.asiento_id')
+                ->orWhere($tabla.'.origen_carga', 'ANITA_IMPORT')
+                // Empresa con GR no valuado dentro de una instalación que sí provisiona por default.
+                ->orWhereExists(function ($sub) use ($tabla) {
+                    $sub->selectRaw('1')
+                        ->from('configuracion_recepcion_proveedor as crp')
+                        ->whereColumn('crp.empresa_id', $tabla.'.empresa_id')
+                        ->where('crp.activa_contabilidad', false);
+                });
         });
     }
 

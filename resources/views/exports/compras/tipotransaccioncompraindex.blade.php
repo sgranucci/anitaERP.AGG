@@ -1,14 +1,14 @@
 <table>
     @if (!empty($reservarFilaLogoExcel))
         <tr>
-            <td colspan="12" style="height: 52px;">&#160;</td>
+            <td colspan="13" style="height: 52px;">&#160;</td>
         </tr>
     @endif
     <tr>
-        <td colspan="12"><strong>Tipos de comprobante de compras</strong></td>
+        <td colspan="13"><strong>Tipos de comprobante de compras</strong></td>
     </tr>
     <tr>
-        <td colspan="12">Generado {{ date('d/m/Y H:i') }}</td>
+        <td colspan="13">Generado {{ date('d/m/Y H:i') }}</td>
     </tr>
     <thead>
         <tr>
@@ -20,6 +20,7 @@
             <th>Signo</th>
             <th>Subdiario IVA</th>
             <th>Asiento</th>
+            <th>Bien de uso</th>
             <th>Estado</th>
             <th>Retiene IVA</th>
             <th>Retiene ganancias</th>
@@ -37,6 +38,7 @@
                 <td>{{ $data->desc_signo }}</td>
                 <td>{{ $data->desc_subdiario }}</td>
                 <td>{{ $data->desc_asientocontable }}</td>
+                <td>{{ $data->desc_genera_bien_de_uso }}</td>
                 <td>{{ $data->desc_estado }}</td>
                 <td>{{ $data->desc_retieneiva }}</td>
                 <td>{{ $data->desc_retieneganancia }}</td>

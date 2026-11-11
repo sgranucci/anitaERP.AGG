@@ -280,6 +280,7 @@
 
                 <div class="mt-3 p-2 border rounded bg-light small" id="cp-com-asiento-hint">
                     <strong><i class="fa fa-calculator"></i> Impacto en asiento (modo COM):</strong>
+                    @if (! empty($com_genera_contabilidad))
                     <ul class="mb-0 pl-3 mt-1">
                         <li>Debe: reversión de provisión (facturas a recibir) por neto COM + impuesto interno ya provisionado</li>
                         <li>Debe: IVA y percepciones de la factura (el impuesto interno no se duplica)</li>
@@ -287,6 +288,13 @@
                         <li>Haber: cuenta del proveedor (según moneda MN/ME)</li>
                         <li>El asiento de la recepción permanece intacto</li>
                     </ul>
+                    @else
+                    <ul class="mb-0 pl-3 mt-1">
+                        <li>La COM es solo logística / match (cantidades e importes); no genera ni revierte facturas a recibir</li>
+                        <li>Debe: neto, IVA y percepciones de la factura (cuentas de conceptos / artículos de la OC)</li>
+                        <li>Haber: cuenta del proveedor (según moneda MN/ME)</li>
+                    </ul>
+                    @endif
                 </div>
             @endif
         </div>
@@ -296,8 +304,14 @@
 <div class="alert alert-warning mt-3" id="cp-bloque-com-vacio">
     <i class="fa fa-exclamation-triangle"></i>
     <strong>Sin recepciones COM para elegir.</strong>
-    No hay COM confirmadas con asiento de provisión disponibles en la OC/legajo
-    (o ya están facturadas en otro comprobante). Confirme una recepción en Stock o revise el legajo.
+    @if (! empty($com_genera_contabilidad))
+        No hay COM confirmadas con asiento de provisión disponibles en la OC/legajo
+        (o ya están facturadas en otro comprobante). Confirme una recepción en Stock o revise el legajo.
+    @else
+        No hay COM confirmadas disponibles en la OC/legajo
+        (o ya están facturadas en otro comprobante). Confirme una recepción en Stock o revise el legajo.
+        En esta empresa la COM no provisiona facturas a recibir: alcanza con asociarla para el match.
+    @endif
 </div>
 @elseif (($com_politica['permite_factura_anticipada'] ?? false))
 <div class="alert alert-info mt-3" id="cp-bloque-factura-anticipada">
@@ -307,7 +321,7 @@
         debe cargarse como anticipo (sin recepción). El neto irá a la cuenta de anticipo.
         Después de contabilizarla podrá asignar la COM a una factura posterior.
     @else
-        <strong>Factura anticipada:</strong> la OC es anticipada y todavía no hay COM con provisión.
+        <strong>Factura anticipada:</strong> la OC es anticipada y todavía no hay COM.
         El neto irá a la cuenta de anticipo. Puede cargar más de una factura anticipada en este legajo.
         Cuando exista recepción, podrá aplicar a la COM o seguir anticipada; contra COM se descuenta lo ya facturado.
     @endif
@@ -321,7 +335,7 @@
 @elseif (($com_politica['bloquea_sin_com'] ?? false))
 <div class="alert alert-danger mt-3">
     <i class="fa fa-exclamation-triangle"></i>
-    El flujo OC/COM/factura exige asignación de recepción COM, pero no hay COM confirmadas con provisión disponibles
+    El flujo OC/COM/factura exige asignación de recepción COM, pero no hay COM confirmadas disponibles
     y la OC no es anticipada. Confirme una recepción en Stock antes de continuar.
 </div>
 @endif

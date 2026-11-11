@@ -120,6 +120,18 @@
                     <a href="{{ route('comprobante_proveedor', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @if ($esEdicion && ! empty($puede_cargar_bienes_uso))
+                    <button type="button" class="btn btn-outline-warning btn-sm" id="btn-abrir-modal-bienes-uso">
+                        <i class="fa fa-cubes"></i> Cargar bienes de uso
+                    </button>
+                    @elseif ($esEdicion && (int) (($bien_uso_modal['bienes_existentes'] ?? 0)) > 0)
+                    <a href="{{ route('bien_uso', ['comprobante_proveedor_id' => $data->id, 'filtro_estado' => 'P']) }}"
+                       class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener"
+                       title="Bienes vinculados (estado Provisorio)">
+                        <i class="fa fa-cubes"></i>
+                        Ver bienes de uso ({{ (int) $bien_uso_modal['bienes_existentes'] }})
+                    </a>
+                    @endif
                     @if ($esEdicion && empty($origen_ingreso_egreso) && can('editar-plan-cuotas-comprobante-proveedor', false))
                     <a href="{{ route('editar_plan_cuotas_comprobante_proveedor', $data->id) }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-calendar"></i> Plan de cuotas
@@ -536,12 +548,21 @@
 @include('compras.comprobante_proveedor.partials.template_cp_archivos')
 <script type="application/json" id="cp-conceptos-cuenta-meta">@json($conceptos_cuenta_meta ?? [])</script>
 <script type="application/json" id="cp-tipos-asiento-contable">@json($tipos_asiento_contable ?? [])</script>
+<script type="application/json" id="cp-tipos-genera-bien-de-uso">@json($tipos_genera_bien_de_uso ?? [])</script>
 <script>
 window.cpAbrirSolapaComAlInicio = false;
 window.cpCentrocostoOcId = {{ (int) \App\Support\Compras\ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($data->ordencompras ?? null) }};
 window.cpTiposAsientoContable = (function () {
     try {
         var el = document.getElementById('cp-tipos-asiento-contable');
+        return el ? JSON.parse(el.textContent || '{}') : {};
+    } catch (e) {
+        return {};
+    }
+})();
+window.cpTiposGeneraBienDeUso = (function () {
+    try {
+        var el = document.getElementById('cp-tipos-genera-bien-de-uso');
         return el ? JSON.parse(el.textContent || '{}') : {};
     } catch (e) {
         return {};
@@ -558,6 +579,15 @@ window.cpTipoGeneraAsiento = function (tipoId) {
     }
     var mapa = window.cpTiposAsientoContable || {};
     var flag = String(mapa[id] || mapa[String(id)] || 'S').toUpperCase();
+    return flag === 'S';
+};
+window.cpTipoGeneraBienDeUso = function (tipoId) {
+    var id = parseInt(String(tipoId || '0'), 10) || 0;
+    if (id <= 0) {
+        return false;
+    }
+    var mapa = window.cpTiposGeneraBienDeUso || {};
+    var flag = String(mapa[id] || mapa[String(id)] || 'N').toUpperCase();
     return flag === 'S';
 };
 window.cpConfirmContabilizar = function () {

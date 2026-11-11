@@ -115,11 +115,13 @@ class BienUsoListadoFiltros
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
         [$estado, $empresaId, $empresaScope, $centrocostoId] = self::resolverExterno($request, $empresaDefault);
+        $cpId = filter_var($request->input('comprobante_proveedor_id'), FILTER_VALIDATE_INT);
         $externos = [
             'estado' => $estado,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
             'centrocosto_id' => $centrocostoId,
+            'comprobante_proveedor_id' => ($cpId !== false && $cpId > 0) ? (int) $cpId : null,
         ];
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
@@ -187,7 +189,7 @@ class BienUsoListadoFiltros
         $estadoInput = $request->input('filtro_estado', null);
         if ($estadoInput === 'TODOS' || $request->boolean('estado_todos')) {
             $estado = '';
-        } elseif (in_array($estadoInput, ['A', 'I', 'B'], true)) {
+        } elseif (in_array($estadoInput, ['A', 'I', 'B', 'P'], true)) {
             $estado = (string) $estadoInput;
         } else {
             $estado = 'A';
@@ -247,6 +249,9 @@ class BienUsoListadoFiltros
         if (! empty($filtros['centrocosto_id'])) {
             return true;
         }
+        if (! empty($filtros['comprobante_proveedor_id'])) {
+            return true;
+        }
 
         return false;
     }
@@ -265,6 +270,7 @@ class BienUsoListadoFiltros
             'empresa_scope' => 'una',
             'estado' => 'A',
             'centrocosto_id' => null,
+            'comprobante_proveedor_id' => null,
             'qbe' => ListadoQbeSupport::vacio(),
             'sort' => [],
             'agrupar' => [],
@@ -317,6 +323,9 @@ class BienUsoListadoFiltros
         }
         if (! empty($filtros['centrocosto_id'])) {
             $params['filtro_centrocosto_id'] = (int) $filtros['centrocosto_id'];
+        }
+        if (! empty($filtros['comprobante_proveedor_id'])) {
+            $params['comprobante_proveedor_id'] = (int) $filtros['comprobante_proveedor_id'];
         }
 
         return array_merge(
@@ -415,16 +424,17 @@ class BienUsoListadoFiltros
         if ($agrupar !== []) {
             ListadoAgrupacionSupport::aplicarOrdenPrefijo($query, $agrupar, $campos);
         }
-        if ($sort !== []) {
-            ListadoOrdenamientoSupport::aplicar($query, $sort, $campos, [
-                'campo' => isset($campos['codigo_bien']) ? 'codigo_bien' : (isset($campos['uid']) ? 'uid' : 'id'),
-                'dir' => ListadoOrdenamientoSupport::DIR_ASC,
-            ]);
-
-            return;
+        // Default numérico: codigo_bien / id. No usar COALESCE(uid, hostname, id):
+        // MySQL tipa el COALESCE como varchar y el id queda orden alfanumérico (100, 1000, 1001…).
+        ListadoOrdenamientoSupport::aplicar($query, $sort, $campos, [
+            'campo' => isset($campos['codigo_bien'])
+                ? 'codigo_bien'
+                : (isset($campos['id']) ? 'id' : (isset($campos['uid']) ? 'uid' : 'id')),
+            'dir' => ListadoOrdenamientoSupport::DIR_ASC,
+        ]);
+        if ($sort === [] && isset($campos['codigo_bien']) && isset($campos['id'])) {
+            $query->orderBy('bien_uso.id', ListadoOrdenamientoSupport::DIR_ASC);
         }
-
-        $query->orderByRaw('COALESCE(bien_uso.uid, bien_uso.hostname, bien_uso.id)');
     }
 
     /**
@@ -437,6 +447,11 @@ class BienUsoListadoFiltros
         }
         if (($filtros['estado'] ?? '') !== '') {
             $query->where('bien_uso.estado', $filtros['estado']);
+        }
+        if (! empty($filtros['comprobante_proveedor_id'])
+            && \Illuminate\Support\Facades\Schema::hasColumn('bien_uso', 'comprobante_proveedor_id')
+        ) {
+            $query->where('bien_uso.comprobante_proveedor_id', (int) $filtros['comprobante_proveedor_id']);
         }
 
         if (! self::tieneCriteriosTexto($filtros)) {

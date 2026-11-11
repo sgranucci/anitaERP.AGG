@@ -9,10 +9,12 @@ use App\Models\Configuracion\Provincia;
 use App\Services\Configuracion\IIBBService;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\Retencion\RetencionIibbCalculoSupport;
+use App\Support\Compras\Retencion\RetencionIibbCrownMatrizSupport;
 use App\Support\Compras\Retencion\RetencionIibbElegibilidadSupport;
 use App\Support\Compras\Retencion\RetencionIibbInput;
 use App\Support\Compras\Retencion\RetencionIibbResultado;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Fachada de retención IIBB.
@@ -20,6 +22,9 @@ use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
  * Quién retiene: matriz empresa × jurisdicción (es_agente_retencion).
  * Catálogo de alícuotas/mínimos: retencionIIBB (legado Anita).
  * Tasa: override del pago → padrón (tasaretencion) → fallback retencionIIBB_condicion.
+ *
+ * Crown: sin padrón CM05; matriz condición × provincia del proveedor
+ * ({@see RetencionIibbCrownMatrizSupport}) + % fuera en retencionIIBB.
  */
 class RetencionIibbCalculator
 {
@@ -52,6 +57,18 @@ class RetencionIibbCalculator
             return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_SIN_BASE_FACTURA, [
                 'importe_neto_pago' => $importeNetoPago,
             ]);
+        }
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            return $this->calcularCrown(
+                $proveedor,
+                $importeNetoPago,
+                $tasaOverride,
+                $provinciaIdOverride,
+                $condicionIibbIdOverride,
+                $retieneOverride,
+                $empresaId,
+            );
         }
 
         $condicionId = $condicionIibbIdOverride ?? ($proveedor->condicionIIBB_id
@@ -145,6 +162,99 @@ class RetencionIibbCalculator
     public function calcular(RetencionIibbInput $input): RetencionIibbResultado
     {
         return $this->calculoSupport->calcular($input);
+    }
+
+    private function calcularCrown(
+        Proveedor $proveedor,
+        float $importeNetoPago,
+        ?float $tasaOverride,
+        ?int $provinciaIdOverride,
+        ?int $condicionIibbIdOverride,
+        ?bool $retieneOverride,
+        ?int $empresaId,
+    ): RetencionIibbResultado {
+        $provinciaId = $provinciaIdOverride ?? RetencionIibbCrownMatrizSupport::PROVINCIA_LOCAL_ID;
+
+        if (! EmpresaJurisdiccionIibbSupport::esAgenteRetencion($empresaId, $provinciaId)) {
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_NO_AGENTE, [
+                'empresa_id' => $empresaId,
+                'provincia_id' => $provinciaId,
+                'motor' => 'crown',
+            ]);
+        }
+
+        if ($retieneOverride === false) {
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_NO_RETIENE, [
+                'motor' => 'crown',
+            ]);
+        }
+
+        $parametrica = RetencionIIBB::query()
+            ->with(['retencionIIBB_condiciones', 'provincias'])
+            ->where('provincia_id', $provinciaId)
+            ->first();
+
+        if ($parametrica === null) {
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_SIN_TASA, [
+                'provincia_id' => $provinciaId,
+                'motor' => 'crown',
+            ]);
+        }
+
+        $matriz = RetencionIibbCrownMatrizSupport::resolver(
+            $proveedor,
+            $parametrica,
+            $condicionIibbIdOverride,
+        );
+
+        if (! $matriz['aplica'] && $tasaOverride === null) {
+            return RetencionIibbResultado::noAplica(
+                (string) ($matriz['motivo'] ?? RetencionIibbResultado::MOTIVO_NO_RETIENE),
+                array_merge($matriz, [
+                    'motor' => 'crown',
+                    'regla_crown' => $matriz['regla'],
+                ]),
+            );
+        }
+
+        $origen = 'crown_matriz';
+        $tasa = (float) $matriz['tasa'];
+        if ($tasaOverride !== null) {
+            $tasa = (float) $tasaOverride;
+            $origen = 'override';
+        }
+
+        $provincia = $parametrica->provincias
+            ?? Provincia::query()->find($provinciaId);
+
+        $resultado = $this->calculoSupport->calcular(new RetencionIibbInput(
+            $importeNetoPago,
+            $tasa,
+            true,
+            (float) $matriz['minimo_imponible'],
+            (float) $matriz['minimo_retencion'],
+            $origen,
+            $provincia?->jurisdiccion !== null ? (string) $provincia->jurisdiccion : RetencionIibbCrownMatrizSupport::JURISDICCION_AFIP_RN,
+            $provinciaId,
+            $matriz['condicion_iibb_id'],
+            $provincia?->nombre !== null ? (string) $provincia->nombre : 'Rio Negro',
+        ));
+
+        return new RetencionIibbResultado(
+            $resultado->aplica,
+            $resultado->importeRetencion,
+            $resultado->baseCalculo,
+            $resultado->alicuotaAplicada,
+            $resultado->motivo,
+            array_merge($resultado->detalle, [
+                'motor' => 'crown',
+                'regla_crown' => $matriz['regla'],
+                'proveedor_provincia_id' => $matriz['proveedor_provincia_id'],
+                'en_jurisdiccion_local' => $matriz['en_jurisdiccion_local'],
+                'es_monotributo' => $matriz['es_monotributo'],
+                'tasa_fuera_catalogo' => RetencionIibbCrownMatrizSupport::tasaFuera($parametrica),
+            ]),
+        );
     }
 
     /**

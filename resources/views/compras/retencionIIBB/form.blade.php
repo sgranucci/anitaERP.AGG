@@ -31,6 +31,26 @@
 		@endforeach
 	</select>
 </div>
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown())
+<div class="form-group row">
+    <label for="porcentajeretencion_fuera" class="col-lg-3 control-label text-right pr-2">
+        % fuera de jurisdicci&oacute;n
+    </label>
+    <div class="col-lg-3">
+        <input type="number"
+               step="0.01"
+               min="0"
+               name="porcentajeretencion_fuera"
+               id="porcentajeretencion_fuera"
+               class="form-control"
+               value="{{ old('porcentajeretencion_fuera', $retencionIIBB->porcentajeretencion_fuera ?? '5') }}"
+               title="Convenio/Local/Monotributo con provincia distinta a la de esta cabecera (Crown)" />
+        <small class="form-text text-muted">
+            Crown: tasa cuando el proveedor no est&aacute; en la provincia de esta tabla (ej. 5%).
+        </small>
+    </div>
+</div>
+@endif
 <div class="card">
     <div class="card-header">
     	Condiciones de IIBB

@@ -9,6 +9,7 @@ use App\Models\Configuracion\ModuloAvisoTipo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Configuracion\ModuloAvisoProgramacionSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 
 class ModuloAvisoController extends Controller
@@ -122,9 +123,10 @@ class ModuloAvisoController extends Controller
             $idsConservados[] = $nuevo->id;
         }
 
-        ModuloAvisoDestinatario::where('modulo_aviso_tipo_id', $tipo->id)
-            ->whereNotIn('id', $idsConservados)
-            ->delete();
+        EloquentAuditDeleteSupport::exceptIds(
+            ModuloAvisoDestinatario::query()->where('modulo_aviso_tipo_id', $tipo->id),
+            $idsConservados
+        );
     }
 
     /**

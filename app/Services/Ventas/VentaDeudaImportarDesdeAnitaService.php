@@ -265,11 +265,13 @@ class VentaDeudaImportarDesdeAnitaService
     }
 
     /**
-     * Importa comprobantes Anita del rango (ven_fecha) que falten en ERP.
+     * Importa comprobantes Anita del rango que falten en ERP.
+     * Default: fecha de jornada (ven_fecha_vto). Opcional: fecha física (ven_fecha).
      *
      * @param  list<string>|null  $tipos  null = TIPOS_IVA_VENTAS
      * @param  bool  $vencaeBulk  true = una sola lectura de vencae (recomendado en rangos grandes / Crown)
      * @param  bool  $commitPorFila  true = sin transacción global (Crown: un unique no revierte el mes)
+     * @param  string  $criterioFecha  jornada|fisica
      * @return array<string, mixed>
      */
     public function importarPorRangoFecha(
@@ -281,6 +283,7 @@ class VentaDeudaImportarDesdeAnitaService
         string $leyenda = self::LEYENDA_IVA,
         bool $vencaeBulk = false,
         bool $commitPorFila = false,
+        string $criterioFecha = 'jornada',
     ): array {
         $desdeYmd = ClienteCuentacorrienteAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso);
         $hastaYmd = ClienteCuentacorrienteAnitaImportClaveSupport::fechaAnitaDesdeIso($hastaIso);
@@ -291,7 +294,8 @@ class VentaDeudaImportarDesdeAnitaService
         $tiposOk = array_map('strtoupper', $tipos ?? self::TIPOS_IVA_VENTAS);
         $tiposFlip = array_fill_keys($tiposOk, true);
 
-        $filas = $this->reader->listarVentaPorRangoFecha($desdeYmd, $hastaYmd);
+        $campoFecha = strtolower(trim($criterioFecha)) === 'fisica' ? 'ven_fecha' : 'ven_fecha_vto';
+        $filas = $this->reader->listarVentaPorRangoFecha($desdeYmd, $hastaYmd, $campoFecha);
         $stats = $this->statsVacios($dryRun);
         $stats['anita_rango'] = count($filas);
 
@@ -533,8 +537,15 @@ class VentaDeudaImportarDesdeAnitaService
         );
         $monto = round(abs((float) ($fila['ven_monto'] ?? 0)), 4);
         $fecha = ClienteCuentacorrienteAnitaImportClaveSupport::fechaIsoDesdeAnita($fila['ven_fecha'] ?? '');
-        if ($fecha === '') {
+        $fechaJornada = ClienteCuentacorrienteAnitaImportClaveSupport::fechaIsoDesdeAnita($fila['ven_fecha_vto'] ?? '');
+        if ($fecha === '' && $fechaJornada === '') {
             return ['estado' => 'sin_fecha', 'error' => 'Fecha inválida en '.$etiqueta];
+        }
+        if ($fecha === '') {
+            $fecha = $fechaJornada;
+        }
+        if ($fechaJornada === '') {
+            $fechaJornada = $fecha;
         }
 
         $nombre = trim((string) ($fila['ven_nombre_cliente'] ?? ''));
@@ -572,7 +583,7 @@ class VentaDeudaImportarDesdeAnitaService
             'fila_anita' => $fila,
             'data' => [
                 'fecha' => $fecha,
-                'fechajornada' => $fecha,
+                'fechajornada' => $fechaJornada,
                 'tipotransaccion_id' => $tipoId,
                 'puntoventa_id' => $pvId,
                 'numerocomprobante' => $nro,
@@ -604,6 +615,7 @@ class VentaDeudaImportarDesdeAnitaService
             'resumen' => [
                 'etiqueta' => $etiqueta,
                 'fecha' => $fecha,
+                'fechajornada' => $fechaJornada,
                 'total' => round($monto * $signo, 4),
                 'cliente_id' => $clienteId,
                 'cae' => $caeNro !== '' ? $caeNro : '—',

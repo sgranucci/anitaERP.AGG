@@ -31,6 +31,9 @@ final class SicoreListadoFiltros
             'fecha_hasta' => (string) $request->input('fecha_hasta', date('Y-m-d')),
             'criterio' => $criterio,
             'conciliar_contable' => $request->boolean('conciliar_contable', true),
+            // Control opcional: SICORE del rango vs movimientos del mayor del mismo rango
+            // (sin saldo de ejercicio desde principio de ejercicio).
+            'control_periodo' => $request->boolean('control_periodo', false),
             'quincena' => max(0, min(2, (int) $request->input('quincena', 0))),
         ];
     }
@@ -50,6 +53,9 @@ final class SicoreListadoFiltros
 
         if (! empty($filtros['conciliar_contable'])) {
             $out['conciliar_contable'] = 1;
+        }
+        if (! empty($filtros['control_periodo'])) {
+            $out['control_periodo'] = 1;
         }
         if ((int) ($filtros['quincena'] ?? 0) > 0) {
             $out['quincena'] = (int) $filtros['quincena'];

@@ -525,9 +525,9 @@ class AsientoController extends Controller
         $data = $origen->toArray();
 
         if ($flRevierte && AsientoOrigenProcesoSupport::tieneOrigenProceso($origen)) {
-            return [
+            return response()->json([
                 'errores' => AsientoOrigenProcesoSupport::mensajeBloqueo($origen, 'revertir'),
-            ];
+            ]);
         }
 
         // Copia/reversión desde ABM no hereda FKs de proceso (evita vínculos fantasma).
@@ -609,7 +609,7 @@ class AsientoController extends Controller
             AsientoCentrocostoObligatorioSupport::assertDesdePayload($payloadBalance);
             CuentaCentrocostoHabilitadoSupport::assertPayload($payloadBalance, 'No se puede guardar el asiento.');
         } catch (\InvalidArgumentException $e) {
-            return ['errores' => $e->getMessage()];
+            return response()->json(['errores' => $e->getMessage()]);
         }
 
         // Graba el asiento
@@ -633,18 +633,29 @@ class AsientoController extends Controller
                 $fresh = $this->asientoRepository->find($asiento->id);
                 $payloadAnita = $this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh);
                 $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
+                // Anita puede renumerar tras colisión 239: el número definitivo está en BD.
+                $asiento->refresh();
             }
 
             DB::commit();
 
-            return ['asiento_id' => $asiento->id, 'numeroasiento' => $asiento->numeroasiento];
+            $numeroAsiento = trim((string) ($asiento->numeroasiento ?? ''));
+            if ($numeroAsiento === '') {
+                $numeroAsiento = trim((string) (Asiento::query()->whereKey($asiento->id)->value('numeroasiento') ?? ''));
+            }
+
+            return response()->json([
+                'asiento_id' => (int) $asiento->id,
+                'numeroasiento' => $numeroAsiento,
+                'mensaje' => 'ok',
+            ]);
 
         } catch (\Exception $e) {
             DB::rollback();
 
             // Borra el asiento creado
 
-            return ['errores' => $e->getMessage()];
+            return response()->json(['errores' => $e->getMessage()]);
         }
     }
 

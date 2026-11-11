@@ -44,6 +44,7 @@ final class VentaAnitaCrownImportService
     ) {}
 
     /**
+     * @param  string  $criterioFecha  jornada (default, ven_fecha_vto) | fisica (ven_fecha)
      * @return array<string, mixed>
      */
     public function importar(
@@ -52,6 +53,7 @@ final class VentaAnitaCrownImportService
         bool $dryRun = true,
         int $usuarioId = 1,
         ?array $tipos = null,
+        string $criterioFecha = 'jornada',
     ): array {
         $tiposOk = array_values(array_unique(array_map(
             static fn (string $t): string => ClienteCuentacorrienteAnitaImportClaveSupport::tipo($t),
@@ -67,6 +69,7 @@ final class VentaAnitaCrownImportService
             self::LEYENDA,
             vencaeBulk: true,
             commitPorFila: true,
+            criterioFecha: $criterioFecha,
         );
 
         $detalle = $this->inspeccionarDetalleAnita($desdeIso, $hastaIso, $tiposOk);
@@ -295,7 +298,13 @@ final class VentaAnitaCrownImportService
         ];
 
         $ventas = Venta::query()
-            ->whereBetween('fecha', [$desdeIso, $hastaIso])
+            ->where(function ($q) use ($desdeIso, $hastaIso): void {
+                $q->whereBetween('fechajornada', [$desdeIso, $hastaIso])
+                    ->orWhere(function ($q2) use ($desdeIso, $hastaIso): void {
+                        $q2->whereNull('fechajornada')
+                            ->whereBetween('fecha', [$desdeIso, $hastaIso]);
+                    });
+            })
             ->where('leyenda', self::LEYENDA)
             ->orderBy('id')
             ->get(['id', 'codigo', 'total', 'nombre']);
@@ -373,7 +382,13 @@ final class VentaAnitaCrownImportService
         }
 
         $ventas = Venta::query()
-            ->whereBetween('fecha', [$desdeIso, $hastaIso])
+            ->where(function ($q) use ($desdeIso, $hastaIso): void {
+                $q->whereBetween('fechajornada', [$desdeIso, $hastaIso])
+                    ->orWhere(function ($q2) use ($desdeIso, $hastaIso): void {
+                        $q2->whereNull('fechajornada')
+                            ->whereBetween('fecha', [$desdeIso, $hastaIso]);
+                    });
+            })
             ->where('leyenda', self::LEYENDA)
             ->orderBy('id')
             ->get(['id', 'codigo', 'total']);

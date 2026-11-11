@@ -27,8 +27,8 @@ final class IvaVentasListadoFiltros
     public const SUBDIARIO_VENTAS_A_B = 'VENTAS_A_B';
 
     public const SUBDIARIOS = [
-        self::SUBDIARIO_VENTAS_A_B => 'Ventas A y B (recomendado)',
-        self::SUBDIARIO_VENTAS_A => 'Ventas A (letra A y C)',
+        self::SUBDIARIO_VENTAS_A_B => 'Ventas A, B, T y E (recomendado)',
+        self::SUBDIARIO_VENTAS_A => 'Ventas A (letra A, C, T, E y M)',
         self::SUBDIARIO_VENTAS_B => 'Ventas B (consumidor final)',
     ];
 
@@ -84,6 +84,7 @@ final class IvaVentasListadoFiltros
             'solo_moneda_origen' => $consultando
                 ? $request->boolean('solo_moneda_origen')
                 : true,
+            'exportar_totales_sucursal' => $request->boolean('exportar_totales_sucursal'),
             'moneda_id' => $monedaId > 0 ? $monedaId : 1,
         ];
     }
@@ -152,6 +153,7 @@ final class IvaVentasListadoFiltros
         $out['conciliar_contable'] = empty($filtros['conciliar_contable']) ? 0 : 1;
         $out['conciliar_por_unidad'] = empty($filtros['conciliar_por_unidad']) ? 0 : 1;
         $out['solo_moneda_origen'] = empty($filtros['solo_moneda_origen']) ? 0 : 1;
+        $out['exportar_totales_sucursal'] = empty($filtros['exportar_totales_sucursal']) ? 0 : 1;
 
         return $out;
     }
@@ -213,6 +215,10 @@ final class IvaVentasListadoFiltros
             $partes[] = 'Listado separado por sucursal y tipo';
         }
 
+        if (! empty($filtros['exportar_totales_sucursal'])) {
+            $partes[] = 'Export con totales por sucursal';
+        }
+
         return implode(' · ', $partes);
     }
 
@@ -262,10 +268,11 @@ final class IvaVentasListadoFiltros
         $l = strtoupper(trim($letra));
 
         return match ($subdiario) {
-            self::SUBDIARIO_VENTAS_A => $l === 'A' || $l === 'C',
+            // T = Factura T turismo (AFIP 195); E = exportación; M = Factura M.
+            self::SUBDIARIO_VENTAS_A => in_array($l, ['A', 'C', 'T', 'E', 'M'], true),
             // Z = RMV interno vending (p-vtagastro); entra al libro IVA ventas ERP.
             self::SUBDIARIO_VENTAS_B => $l === 'B' || $l === 'Z',
-            self::SUBDIARIO_VENTAS_A_B => in_array($l, ['A', 'B', 'C', 'Z'], true),
+            self::SUBDIARIO_VENTAS_A_B => in_array($l, ['A', 'B', 'C', 'Z', 'T', 'E', 'M'], true),
             default => true,
         };
     }

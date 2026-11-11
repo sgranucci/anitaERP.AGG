@@ -2,6 +2,7 @@
 
 namespace App\Models\Contable;
 
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
@@ -38,6 +39,7 @@ class BienUso extends Model implements Auditable
         'fl_amort_unid',
         'marca',
         'proveedor_id',
+        'comprobante_proveedor_id',
         'tipo_factura',
         'letra_factura',
         'sucursal_factura',
@@ -119,6 +121,16 @@ class BienUso extends Model implements Auditable
     public function proveedor(): BelongsTo
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function comprobanteProveedor(): BelongsTo
+    {
+        return $this->belongsTo(Comprobante_Proveedor::class, 'comprobante_proveedor_id');
+    }
+
+    public function esProvisorio(): bool
+    {
+        return strtoupper(trim((string) ($this->estado ?? ''))) === 'P';
     }
 
     public function bienReemplazo(): BelongsTo

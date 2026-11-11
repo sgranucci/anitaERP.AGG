@@ -228,10 +228,18 @@
                                     @checked(! empty($filtros['cortar_por_sucursal_tipo']))>
                                 <label class="form-check-label" for="cortar_por_sucursal_tipo">Separar el listado por sucursal y tipo de comprobante</label>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check mb-1">
                                 <input class="form-check-input js-auto-consultar" type="checkbox" name="agrupar_b_por_dia" id="agrupar_b_por_dia" value="1"
                                     @checked(! empty($filtros['agrupar_b_por_dia']))>
                                 <label class="form-check-label" for="agrupar_b_por_dia">Unificar Facturas B por día (rango de comprobantes)</label>
+                            </div>
+                            <div class="form-check">
+                                <input type="hidden" name="exportar_totales_sucursal" value="0">
+                                <input class="form-check-input" type="checkbox" name="exportar_totales_sucursal" id="exportar_totales_sucursal" value="1"
+                                    @checked(! empty($filtros['exportar_totales_sucursal']))>
+                                <label class="form-check-label" for="exportar_totales_sucursal">
+                                    Incluir totales por sucursal en PDF / Excel (todas las columnas)
+                                </label>
                             </div>
                         </div>
                         <div class="{{ $colLabel }} d-none d-lg-block"></div>

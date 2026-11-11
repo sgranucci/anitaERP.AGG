@@ -22,7 +22,7 @@ class TipotransaccionCompraListadoExport implements FromView, WithColumnFormatti
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
+    private const COL_ULTIMA = 'M';
 
     private Tipotransaccion_CompraRepositoryInterface $repository;
 
@@ -99,12 +99,13 @@ class TipotransaccionCompraListadoExport implements FromView, WithColumnFormatti
             'D' => 12,
             'E' => 12,
             'F' => 12,
-            'G' => 22,
-            'H' => 28,
+            'G' => 18,
+            'H' => 22,
             'I' => 14,
-            'J' => 16,
-            'K' => 18,
+            'J' => 14,
+            'K' => 14,
             'L' => 16,
+            'M' => 14,
         ];
     }
 

@@ -14,6 +14,9 @@
 @endphp
 
 @if ($mostrarConciliacion)
+    @php
+        $mostrarControlPeriodo = ! empty($conciliacion['control_periodo']);
+    @endphp
     @if ($esExcel)
         <tr>
             <td colspan="6"><strong>Conciliaci&oacute;n SICORE vs mayor contable</strong></td>
@@ -29,12 +32,22 @@
         @foreach ($conciliacion['items'] as $item)
             <tr>
                 <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
-                <td>{{ $item['nombre'] ?? '' }}</td>
+                <td>{{ $item['nombre'] ?? '' }} (saldo ejerc.)</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['total_sicore'] ?? 0) }}</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['total_mayor'] ?? 0) }}</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['diferencia'] ?? 0) }}</td>
                 <td>{{ ! empty($item['cuadra']) ? 'OK' : 'Diferencia' }}</td>
             </tr>
+            @if ($mostrarControlPeriodo)
+                <tr>
+                    <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
+                    <td>{{ $item['nombre'] ?? '' }} (control per&iacute;odo / ret. emitidas)</td>
+                    <td style="text-align:right;">{{ $fmtMontoExcel($item['total_sicore'] ?? 0) }}</td>
+                    <td style="text-align:right;">{{ $fmtMontoExcel($item['total_mayor_periodo'] ?? 0) }}</td>
+                    <td style="text-align:right;">{{ $fmtMontoExcel($item['diferencia_periodo'] ?? 0) }}</td>
+                    <td>{{ ! empty($item['cuadra_periodo']) ? 'OK' : 'Diferencia' }}</td>
+                </tr>
+            @endif
         @endforeach
         <tr>
             <td colspan="6"><strong>SICORE a presentar — detalle</strong></td>
@@ -64,7 +77,7 @@
                 @foreach ($conciliacion['items'] as $item)
                     <tr>
                         <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
-                        <td>{{ $item['nombre'] ?? '' }}</td>
+                        <td>{{ $item['nombre'] ?? '' }} (saldo ejerc.)</td>
                         <td class="num">{{ number_format((float) ($item['total_sicore'] ?? 0), 2, ',', '.') }}</td>
                         <td class="num">{{ number_format((float) ($item['total_mayor'] ?? 0), 2, ',', '.') }}</td>
                         <td class="num">{{ number_format((float) ($item['diferencia'] ?? 0), 2, ',', '.') }}</td>
@@ -76,6 +89,22 @@
                             @endif
                         </td>
                     </tr>
+                    @if ($mostrarControlPeriodo)
+                        <tr>
+                            <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
+                            <td>{{ $item['nombre'] ?? '' }} (control per&iacute;odo / ret. emitidas)</td>
+                            <td class="num">{{ number_format((float) ($item['total_sicore'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="num">{{ number_format((float) ($item['total_mayor_periodo'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="num">{{ number_format((float) ($item['diferencia_periodo'] ?? 0), 2, ',', '.') }}</td>
+                            <td>
+                                @if (! empty($item['cuadra_periodo']))
+                                    OK
+                                @else
+                                    Dif.
+                                @endif
+                            </td>
+                        </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

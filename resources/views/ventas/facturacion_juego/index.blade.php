@@ -15,8 +15,21 @@
             <div class="card-header">
                 <h3 class="card-title">Facturaci&oacute;n juego</h3>
                 <div class="card-tools">
+                    @include('ventas.facturacion_juego.partials.help_cuentas', [
+                        'helpSalas' => $helpSalas ?? [],
+                        'helpModalId' => 'modal-help-facturacion-juego-index',
+                        'helpBtnClass' => 'btn btn-outline-light btn-sm',
+                        'soloBoton' => true,
+                    ])
+                    <a href="#"
+                        id="btn-ir-conciliacion-juego"
+                        class="btn btn-outline-light btn-sm ml-1"
+                        data-base="{{ route('facturacion_juego_conciliacion') }}"
+                        title="Conciliar Flash, Ventas, Contab. ERP y Anita">
+                        <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n
+                    </a>
                     @if ($puedeConfigurarJuego)
-                        <a href="{{ route('facturacion_juego_configuracion') }}" class="btn btn-outline-light btn-sm">
+                        <a href="{{ route('facturacion_juego_configuracion') }}" class="btn btn-outline-light btn-sm ml-1">
                             <i class="fa fa-cogs"></i> Configuraci&oacute;n
                         </a>
                     @endif
@@ -58,6 +71,11 @@
                         <div class="form-group col-md-3">
                             <button type="submit" class="btn btn-info btn-sm">
                                 <i class="fa fa-search"></i> Consultar
+                            </button>
+                            <button type="button" id="btn-ir-conciliacion-juego-form" class="btn btn-outline-info btn-sm"
+                                data-base="{{ route('facturacion_juego_conciliacion') }}"
+                                title="Usa las fechas y sala del formulario">
+                                <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n
                             </button>
                             @if ($puedeEjecutarJuego && $consultar && $listos > 0)
                                 <button type="submit" form="form-ejecutar-juego" class="btn btn-primary btn-sm"
@@ -139,15 +157,53 @@
         </div>
     </div>
 </div>
+
+@include('ventas.facturacion_juego.partials.help_cuentas', [
+    'helpSalas' => $helpSalas ?? [],
+    'helpModalId' => 'modal-help-facturacion-juego-index',
+    'soloModal' => true,
+])
 @endsection
 
 @section('scripts')
 <script>
-document.querySelectorAll('.js-sala-chip').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-        document.getElementById('sala_id').value = btn.getAttribute('data-sala') || '0';
-        document.getElementById('form-facturacion-juego').submit();
+(function () {
+    function irConciliacion(base) {
+        var desde = document.getElementById('fecha_desde');
+        var hasta = document.getElementById('fecha_hasta');
+        var sala = document.getElementById('sala_id');
+        if (!desde || !hasta || !desde.value || !hasta.value) {
+            alert('Indique fecha desde y hasta.');
+            return;
+        }
+        var url = new URL(base, window.location.origin);
+        url.searchParams.set('fecha_desde', desde.value);
+        url.searchParams.set('fecha_hasta', hasta.value);
+        url.searchParams.set('consultar', '1');
+        var salaId = sala ? (sala.value || '0') : '0';
+        if (parseInt(salaId, 10) > 0) {
+            url.searchParams.set('sala_id', salaId);
+        } else {
+            url.searchParams.delete('sala_id');
+        }
+        window.location.href = url.toString();
+    }
+
+    document.querySelectorAll('.js-sala-chip').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('sala_id').value = btn.getAttribute('data-sala') || '0';
+            document.getElementById('form-facturacion-juego').submit();
+        });
     });
-});
+
+    ['btn-ir-conciliacion-juego', 'btn-ir-conciliacion-juego-form'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', function (e) {
+            e.preventDefault();
+            irConciliacion(el.getAttribute('data-base') || el.href);
+        });
+    });
+})();
 </script>
 @endsection

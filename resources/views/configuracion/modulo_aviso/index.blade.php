@@ -10,6 +10,11 @@ Avisos por módulo
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-envelope-o"></i> Tipos de aviso configurables</h3>
+                <div class="card-tools">
+                    <a href="{{ route('consultar_reemplazo_destinatario_aviso') }}" class="btn btn-outline-light btn-sm">
+                        <i class="fa fa-user-clock"></i> Reemplazo por vacaciones
+                    </a>
+                </div>
             </div>
             <div class="card-body p-0">
                 <p class="px-3 pt-3 mb-2 text-muted small">

@@ -491,6 +491,10 @@ class ArcaCaeaController extends Controller
      */
     private function incluirAnitaEnPantalla(ArcaCaea $registro): bool
     {
+        if (! (bool) config('arca.caea.informe_fallback_anita', true)) {
+            return false;
+        }
+
         return ArcaCaeaInformeUiSupport::incluirAnitaEnPantalla(
             $registro->fecha_vigencia_hasta,
             $registro->fecha_tope_informe,

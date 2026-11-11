@@ -15,7 +15,7 @@ class ModuloAvisoDestinatario extends Model implements Auditable
     protected $table = 'modulo_aviso_destinatario';
 
     protected $fillable = [
-        'modulo_aviso_tipo_id', 'email', 'usuario_id',
+        'modulo_aviso_tipo_id', 'email', 'usuario_id', 'usuario_orig_id',
         'empresa_id', 'centrocosto_id', 'activo',
     ];
 
@@ -31,6 +31,11 @@ class ModuloAvisoDestinatario extends Model implements Auditable
     public function usuarios(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function usuarioOriginal(): BelongsTo
+    {
+        return $this->belongsTo(Usuario::class, 'usuario_orig_id');
     }
 
     public function empresas(): BelongsTo

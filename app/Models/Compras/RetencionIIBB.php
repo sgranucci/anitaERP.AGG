@@ -13,9 +13,17 @@ class RetencionIIBB extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
     protected $fillable = [
-						'nombre', 'provincia_id', 'cuentacontable_id'
-						];
+        'nombre',
+        'provincia_id',
+        'cuentacontable_id',
+        'porcentajeretencion_fuera',
+    ];
+
     protected $table = 'retencionIIBB';
+
+    protected $casts = [
+        'porcentajeretencion_fuera' => 'float',
+    ];
 	
 	public function retencionIIBB_condiciones()
 	{

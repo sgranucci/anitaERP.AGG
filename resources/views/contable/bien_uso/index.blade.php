@@ -30,6 +30,15 @@
 
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $columnasVisibles = $columnasVisibles ?? [];
+    $camposOrdenablesThead = BienUsoListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesThead
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('bien_uso', $qsQuitarOrden);
     $estadoActual = $filtros['estado'] ?? 'A';
     $limpiarQ = [];
     if ($estadoActual === '') {
@@ -135,6 +144,11 @@
                         @if (BienUsoListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
                                 <i class="fa fa-eraser"></i> Limpiar
+                            </a>
+                        @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por código de bien / ID">
+                                <i class="fa fa-sort"></i> Quitar orden
                             </a>
                         @endif
                     </div>

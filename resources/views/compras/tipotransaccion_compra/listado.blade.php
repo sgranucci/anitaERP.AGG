@@ -23,7 +23,7 @@
             @include('includes.reportes.pdf_thead_cabecera', [
                 'titulo' => 'Tipos de comprobante de compras',
                 'subtitulo' => $subtitulo ?? '',
-                'colspan' => 12,
+                'colspan' => 13,
                 'logosCabecera' => $logosCabecera,
                 'totalFilas' => $totalFilas,
             ])
@@ -36,6 +36,7 @@
                 <th>Signo</th>
                 <th>Subdiario</th>
                 <th>Asiento</th>
+                <th>Bien de uso</th>
                 <th>Estado</th>
                 <th>IVA</th>
                 <th>Ganancias</th>
@@ -53,6 +54,7 @@
                     <td>{{ $data->desc_signo }}</td>
                     <td>{{ $data->desc_subdiario }}</td>
                     <td>{{ $data->desc_asientocontable }}</td>
+                    <td>{{ $data->desc_genera_bien_de_uso }}</td>
                     <td>{{ $data->desc_estado }}</td>
                     <td>{{ $data->desc_retieneiva }}</td>
                     <td>{{ $data->desc_retieneganancia }}</td>

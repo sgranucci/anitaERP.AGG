@@ -42,6 +42,19 @@
                     <input type="hidden" name="origen" value="modal_consulta">
                 @endif
                 <div class="card-body">
+                    @if ((string) ($data->estado ?? '') === 'P')
+                        <div class="alert alert-warning py-2">
+                            Bien en estado <strong>Provisorio</strong>. Complete rubro, cuentas y dem&aacute;s datos,
+                            y cambie el estado a <strong>Activo</strong> cuando corresponda.
+                            @if ((int) ($data->comprobante_proveedor_id ?? 0) > 0)
+                                Origen:
+                                <a href="{{ route('editar_comprobante_proveedor', ['id' => (int) $data->comprobante_proveedor_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                   class="text-primary" target="_blank" rel="noopener">
+                                    factura #{{ (int) $data->comprobante_proveedor_id }}
+                                </a>.
+                            @endif
+                        </div>
+                    @endif
                     <div class="tabs-activas">
                         <ul class="nav nav-tabs" id="tabs-bien-uso" role="tablist">
                             <li class="nav-item">

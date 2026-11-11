@@ -2513,7 +2513,7 @@ class OrdencompraLegajoBandejaPaqueteService
         try {
             $precarga = Precarga_Comprobante_Proveedor::query()->create([
                 'empresa_id' => $empresaId,
-                'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
+                'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::defaultProvinciaId(),
                 'proveedor_id' => $proveedorId,
                 'identificacion_proveedor_cuit' => $cuit !== '' ? $cuit : null,
                 'tipotransaccion_compra_id' => $tipoId,

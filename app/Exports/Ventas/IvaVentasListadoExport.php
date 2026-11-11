@@ -115,6 +115,7 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
             'clasificar_por_host' => $clasificarHost,
             'cortar_por_jurisdiccion' => ! empty($this->filtros['cortar_por_jurisdiccion']),
             'cortar_por_sucursal_tipo' => ! empty($this->filtros['cortar_por_sucursal_tipo']),
+            'exportar_totales_sucursal' => ! empty($this->filtros['exportar_totales_sucursal']),
             'para_pdf' => true,
             'esExcel' => true,
             'formatoNumero' => $this->formatoNumeroEfectivo(),

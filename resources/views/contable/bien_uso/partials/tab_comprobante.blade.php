@@ -1,11 +1,32 @@
 @php
     $tieneContable = \Illuminate\Support\Facades\Schema::hasColumn('bien_uso', 'proveedor_id');
     $prov = optional($data->proveedor ?? null);
+    $cpId = (int) old('comprobante_proveedor_id', $data->comprobante_proveedor_id ?? 0);
+    $puedeVerCp = $cpId > 0 && (
+        can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false)
+    );
 @endphp
 
 @if (! $tieneContable)
     <p class="text-muted mb-0">Pendiente migraci&oacute;n de campos contables (comprobante de compra).</p>
 @else
+@if ($cpId > 0)
+<input type="hidden" name="comprobante_proveedor_id" value="{{ $cpId }}">
+<div class="form-group row">
+    <label class="col-lg-4 control-label text-right pr-2">Factura origen</label>
+    <div class="col-lg-7">
+        @if ($puedeVerCp)
+            <a href="{{ route('editar_comprobante_proveedor', ['id' => $cpId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+               class="text-primary" target="_blank" rel="noopener">
+                Comprobante proveedor #{{ $cpId }}
+            </a>
+        @else
+            <span>Comprobante proveedor #{{ $cpId }}</span>
+        @endif
+        <small class="text-muted d-block">Alta provisoria vinculada a esta factura.</small>
+    </div>
+</div>
+@endif
 @include('compras.partials.campo_consulta_proveedor', [
     'prefix' => 'bien',
     'proveedorId' => old('proveedor_id', $data->proveedor_id ?? ''),

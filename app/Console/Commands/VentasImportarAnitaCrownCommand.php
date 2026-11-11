@@ -19,12 +19,13 @@ class VentasImportarAnitaCrownCommand extends Command
     protected $signature = 'ventas:importar-anita-crown
                             {--desde=2026-01-01 : Fecha inicial Y-m-d}
                             {--hasta= : Fecha final Y-m-d (default: hoy)}
+                            {--criterio-fecha=jornada : jornada (ven_fecha_vto, default) o fisica (ven_fecha)}
                             {--usuario= : usuario_id de auditoría}
                             {--tipos= : Abreviaturas separadas por coma (default: set Crown)}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
-    protected $description = 'CROWN: importa ventas Anita (venta/vengrav/venibr/vencae/comprob/compaux) para reimprimir. Dry-run por defecto.';
+    protected $description = 'CROWN: importa ventas Anita (venta/vengrav/venibr/vencae/comprob/compaux) para reimprimir. Dry-run por defecto. Filtra por fecha de jornada salvo --criterio-fecha=fisica.';
 
     public function handle(VentaAnitaCrownImportService $service): int
     {
@@ -49,6 +50,9 @@ class VentasImportarAnitaCrownCommand extends Command
 
         $desde = trim((string) $this->option('desde'));
         $hasta = trim((string) ($this->option('hasta') ?: date('Y-m-d')));
+        $criterioFecha = strtolower(trim((string) $this->option('criterio-fecha'))) === 'fisica'
+            ? 'fisica'
+            : 'jornada';
         $tiposRaw = trim((string) $this->option('tipos'));
         $tipos = $tiposRaw === ''
             ? null
@@ -56,15 +60,16 @@ class VentasImportarAnitaCrownCommand extends Command
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Ventas Crown %s → %s | %s | usuario_id=%d',
+            'Ventas Crown %s → %s | criterio %s | %s | usuario_id=%d',
             $desde,
             $hasta,
+            $criterioFecha === 'fisica' ? 'fecha física (ven_fecha)' : 'fecha jornada (ven_fecha_vto)',
             $ejecutar ? 'EJECUTAR' : 'DRY-RUN',
             $usuarioId
         ));
 
         try {
-            $stats = $service->importar($desde, $hasta, ! $ejecutar, $usuarioId, $tipos);
+            $stats = $service->importar($desde, $hasta, ! $ejecutar, $usuarioId, $tipos, $criterioFecha);
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
 
