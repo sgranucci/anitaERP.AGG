@@ -445,7 +445,7 @@ class GastronomiaCrownPosController extends Controller
         }
 
         try {
-            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id);
+            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id, $config);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }
@@ -480,7 +480,7 @@ class GastronomiaCrownPosController extends Controller
         );
 
         try {
-            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id);
+            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id, $config);
             $articulo = $this->posService->resolverArticuloPorSku($config, (string) $request->input('sku'));
             if (! $articulo) {
                 throw new \InvalidArgumentException('Artículo no encontrado: '.$request->input('sku'));
@@ -509,7 +509,7 @@ class GastronomiaCrownPosController extends Controller
                 $request->has('prepara') ? $request->boolean('prepara') : null,
                 $opcionales,
             );
-            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id);
+            $cuenta = $this->posService->cuentaAbierta($id, (int) $config->empresa_id, $config);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }
@@ -945,14 +945,35 @@ class GastronomiaCrownPosController extends Controller
         $this->assertCrown();
         can('usar-pos-gastronomia-crown');
 
-        $request->validate(['sku' => 'required|string|max:30']);
+        $request->validate([
+            'sku' => 'required|string|max:30',
+            'cuenta_id' => 'nullable|integer|min:1',
+        ]);
 
         $config = $this->requireCfg($request);
         if ($config instanceof JsonResponse) {
             return $config;
         }
 
-        $art = $this->posService->buscarArticuloParaPos($config, (string) $request->input('sku'));
+        $listaId = null;
+        if ($request->filled('cuenta_id')) {
+            try {
+                $cuenta = $this->posService->cuentaAbierta(
+                    (int) $request->input('cuenta_id'),
+                    (int) $config->empresa_id,
+                    $config
+                );
+                $listaId = (int) ($cuenta->listaprecio_id ?: $config->listaprecio_id) ?: null;
+            } catch (\Throwable) {
+                $listaId = null;
+            }
+        }
+
+        $art = $this->posService->buscarArticuloParaPos(
+            $config,
+            (string) $request->input('sku'),
+            $listaId
+        );
         if (! $art) {
             return response()->json(['ok' => false, 'mensaje' => 'Artículo no encontrado'], 404);
         }

@@ -5,6 +5,7 @@ namespace App\Services\Ventas\GastronomiaCrown;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\CategoriaAreaComanda;
 use App\Models\Stock\Formula_Articulo;
+use App\Models\Stock\Listaprecio;
 use App\Models\Stock\SubcategoriaAreaComanda;
 use App\Models\Ventas\AreaComandaGastronomia;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -139,8 +140,11 @@ final class GastronomiaCrownPosService
         });
     }
 
-    public function cuentaAbierta(int $cuentaId, int $empresaId): GastroCrownCuenta
-    {
+    public function cuentaAbierta(
+        int $cuentaId,
+        int $empresaId,
+        ?ConfiguracionPuntoventaGastronomia $cfg = null,
+    ): GastroCrownCuenta {
         $cuenta = GastroCrownCuenta::query()
             ->with(['lineas.areaComanda', 'mesa', 'mozo', 'comandas'])
             ->where('id', $cuentaId)
@@ -153,7 +157,56 @@ final class GastronomiaCrownPosService
             throw new InvalidArgumentException('La cuenta no está abierta.');
         }
 
+        if ($cfg) {
+            $this->alinearListaPrecioConPuestoSiCorresponde($cuenta, $cfg);
+        }
+
         return $cuenta;
+    }
+
+    /**
+     * Si el puesto cambió de lista después de abrir la cuenta y el operador no eligió
+     * otra (herramienta Lista / hotel), alinea la cuenta a la lista vigente del PV.
+     * Evita tickear contra una lista vieja (ej. B-CARRO) tras corregir el puesto a A-PUBLICO.
+     */
+    public function alinearListaPrecioConPuestoSiCorresponde(
+        GastroCrownCuenta $cuenta,
+        ConfiguracionPuntoventaGastronomia $cfg,
+    ): void {
+        $listaPuesto = (int) ($cfg->listaprecio_id ?: 0);
+        if ($listaPuesto <= 0) {
+            return;
+        }
+        $listaCuenta = (int) ($cuenta->listaprecio_id ?: 0);
+        if ($listaCuenta === $listaPuesto) {
+            return;
+        }
+
+        $listaHotel = (int) ($cfg->listaprecio_hotel_id ?: 0);
+        if ($listaHotel > 0
+            && $listaCuenta === $listaHotel
+            && trim((string) ($cuenta->habitacion ?? '')) !== '') {
+            return;
+        }
+
+        $cambioManual = GastroCrownCuentaEvento::query()
+            ->where('gastro_crown_cuenta_id', $cuenta->id)
+            ->where('evento', 'lista_precio')
+            ->exists();
+        if ($cambioManual) {
+            return;
+        }
+
+        $anterior = $listaCuenta;
+        $cuenta->listaprecio_id = $listaPuesto;
+        $cuenta->save();
+        // Evento distinto a lista_precio (herramienta): no bloquea realineaciones futuras del puesto.
+        $this->eventoCuenta(
+            $cuenta,
+            'lista_precio_puesto',
+            'Alineada con puesto #'.$listaPuesto
+            .($anterior > 0 ? ' (antes #'.$anterior.')' : '')
+        );
     }
 
     /**
@@ -217,14 +270,20 @@ final class GastronomiaCrownPosService
             throw new InvalidArgumentException($noFacturable);
         }
 
+        $this->alinearListaPrecioConPuestoSiCorresponde($cuenta, $cfg);
         $listaId = (int) ($cuenta->listaprecio_id ?: $cfg->listaprecio_id);
         if ($listaId <= 0) {
             throw new InvalidArgumentException('El puesto no tiene lista de precios.');
         }
         // Sin fila de precio vigente = error. Precio 0 explícito = sin cargo (cortesía / invitado).
         if (! ViandaPrecioSupport::tienePrecioVigente((int) $articulo->id, $listaId, now()->toDateString())) {
+            $nombreLista = Listaprecio::query()->whereKey($listaId)->value('nombre');
+            $etiquetaLista = $nombreLista
+                ? trim((string) $nombreLista).' (#'.$listaId.')'
+                : '#'.$listaId;
             throw new InvalidArgumentException(
-                'El artículo no tiene precio vigente en la lista del puesto. Cargalo en Precios (0 = sin cargo).'
+                'El artículo no tiene precio vigente en la lista '.$etiquetaLista
+                .'. Cargalo en Precios (0 = sin cargo) o cambiá la lista de la cuenta.'
             );
         }
         $precio = ViandaPrecioSupport::precioDesdeLista((int) $articulo->id, $listaId, now()->toDateString());
@@ -649,8 +708,11 @@ final class GastronomiaCrownPosService
     /**
      * @return array<string, mixed>|null
      */
-    public function buscarArticuloParaPos(ConfiguracionPuntoventaGastronomia $cfg, string $sku): ?array
-    {
+    public function buscarArticuloParaPos(
+        ConfiguracionPuntoventaGastronomia $cfg,
+        string $sku,
+        ?int $listaprecioId = null,
+    ): ?array {
         $sku = $this->normalizarSkuCatalogo($sku);
         $articulo = $this->catalogoService->buscarArticuloCatalogoPorSku($cfg, $sku);
         if (! $articulo) {
@@ -662,7 +724,7 @@ final class GastronomiaCrownPosService
             return null;
         }
 
-        $listaId = (int) $cfg->listaprecio_id;
+        $listaId = (int) ($listaprecioId ?: $cfg->listaprecio_id);
         $fecha = now()->toDateString();
         $tienePrecio = $listaId > 0
             && ViandaPrecioSupport::tienePrecioVigente((int) $articulo->id, $listaId, $fecha);

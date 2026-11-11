@@ -71,18 +71,19 @@
         if ($ir.length) {
             $ir.attr('href', urlEditarFormula(fid)).removeClass('d-none');
         }
-        $('#modalFormulasUsoArticulo').one('hidden.bs.modal', function () {
-            $('#modalVerFormulaArticulo').one('hidden.bs.modal', function () {
-                $('#modalFormulasUsoArticulo').modal('show');
-            });
-            $('#modalVerFormulaArticulo').modal('show');
-            $.get(urlModalFormula(fid), function (html) {
-                $('#modalVerFormulaArticuloBody').html(html);
-            }).fail(function () {
-                $('#modalVerFormulaArticuloBody').html('<p class="text-danger">No se pudo cargar la f\u00f3rmula.</p>');
-            });
+        // Se apila sobre el listado: cerrar uno y abrir otro en hidden.bs.modal choca con
+        // liberarPantallaModalesBloqueados (funciones.js), que borra el backdrop nuevo.
+        var $ver = $('#modalVerFormulaArticulo');
+        $ver.css('z-index', 1060).one('hidden.bs.modal', function () {
+            $ver.css('z-index', '');
         });
-        $('#modalFormulasUsoArticulo').modal('hide');
+        $ver.modal('show');
+        $('.modal-backdrop').last().css('z-index', 1055);
+        $.get(urlModalFormula(fid), function (html) {
+            $('#modalVerFormulaArticuloBody').html(html);
+        }).fail(function () {
+            $('#modalVerFormulaArticuloBody').html('<p class="text-danger">No se pudo cargar la f\u00f3rmula.</p>');
+        });
     }
 
     $(document).on('click', '#btn-formulas-uso-articulo', function (e) {

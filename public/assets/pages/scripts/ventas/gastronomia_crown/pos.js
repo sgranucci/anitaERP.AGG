@@ -1899,6 +1899,25 @@
         if (key === 'F12') {
             e.preventDefault();
             $('#gc-btn-f12').trigger('click');
+            return;
+        }
+        // Esc en el código: suelta el foco para que + abra otra cuenta Barra.
+        if (key === 'Escape' && $(e.target).is('#gc-codigo-articulo')) {
+            e.preventDefault();
+            $(e.target).blur();
+            $('#gc-btn-nueva-cuenta').trigger('focus');
+            return;
+        }
+        // + fuera del código de artículo: siempre abre cuenta Barra (aunque ya haya una activa).
+        if (key === '+' || key === 'Add' || e.code === 'NumpadAdd') {
+            if ($(e.target).is('#gc-codigo-articulo')) {
+                return; // cantidad / barra lo maneja el keydown del campo
+            }
+            if ($(e.target).is('input, select, textarea')) {
+                return;
+            }
+            e.preventDefault();
+            abrirCuentaLibre();
         }
     }
 
@@ -2036,8 +2055,13 @@
         });
 
         $('#gc-codigo-articulo').on('keydown', function (e) {
-            if (e.key === '+' || e.key === 'Add') {
+            if (e.key === '+' || e.key === 'Add' || e.code === 'NumpadAdd') {
                 e.preventDefault();
+                // Sin cuenta: + abre barra. Con cuenta: + fija cantidad.
+                if (!estado.cuentaId) {
+                    abrirCuentaLibre();
+                    return;
+                }
                 var n = window.prompt('Cantidad a agregar:', $('#gc-cantidad').val() || '1');
                 if (n === null) {
                     return;
@@ -2048,12 +2072,17 @@
                     return;
                 }
                 $('#gc-cantidad').val(q);
-                agregarLinea();
+                // Si ya hay código, tickea ya. Si no, queda la cantidad para el próximo Enter.
+                if ($.trim($(this).val())) {
+                    agregarLinea();
+                } else {
+                    toast('Cantidad ' + textoCantidad(q) + ' — ingresá el código y Enter', 'info');
+                }
                 return;
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                $('#gc-cantidad').val(1);
+                // Respeta la cantidad fijada con + (no forzar 1).
                 agregarLinea();
             }
         });
@@ -2138,7 +2167,11 @@
             if (!sku || !cfg.urls.articulo) {
                 return;
             }
-            $.getJSON(cfg.urls.articulo, { sku: sku })
+            var params = { sku: sku };
+            if (estado.cuentaId) {
+                params.cuenta_id = estado.cuentaId;
+            }
+            $.getJSON(cfg.urls.articulo, params)
                 .done(function (resp) {
                     if (!resp.ok || !resp.articulo) {
                         setDescCarga('');

@@ -225,7 +225,7 @@
                         </h3>
                         <div class="card-tools ml-auto">
                             <button type="button" class="btn btn-sm btn-outline-primary py-0 px-1" id="gc-btn-nueva-cuenta"
-                                    title="Abrir cuenta de barra / sin mesa (cliente eventual)">
+                                    title="Abrir cuenta de barra / sin mesa (+ en teclado)">
                                 <i class="fa fa-plus"></i> Barra
                             </button>
                             <button type="button" class="btn btn-tool" id="gc-btn-refresh-mesas" title="Actualizar">
@@ -268,7 +268,7 @@
                 <div class="card-body gc-carga-body">
                     <div class="tm-articulo-campo" id="gc-campo-articulo" data-articulo-solo-facturable="1">
                         <div class="gc-carga-codigo-row">
-                            <label class="gc-carga-hint" for="gc-codigo-articulo">C&oacute;digo · Enter · +cant · F1</label>
+                            <label class="gc-carga-hint" for="gc-codigo-articulo">C&oacute;digo · Enter · +cant · Esc · F1</label>
                             <input type="hidden" class="articulo_id" value="">
                             <input type="hidden" class="codigoarticulo" value="">
                             <input type="hidden" id="gc-cantidad" value="1">
