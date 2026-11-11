@@ -20,11 +20,16 @@ document.addEventListener('DOMContentLoaded', function () {
 @endsection
 
 @php
+    use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
     use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
     use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
+    use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport;
     $estado = (string) $data->estado;
     $puedeActualizar = $editable && can('actualizar-cambio-devolucion-marketplace-facturacion-local', false);
     $ncDevolucionEmitida = (int) ($data->venta_nc_id ?? 0) > 0;
+    $esCambioConReemplazo = ! CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($data->lineas ?? [])
+        || (int) ($data->venta_reemplazo_id ?? 0) > 0;
+    $modoDefaultNcDevolucion = CambioDevolucionMarketplacePrecioSupport::modoDefaultNc($esCambioConReemplazo);
     $puedeElegirPrecioDevolucion = $data->exists
         && ! $ncDevolucionEmitida
         && ! in_array($estado, [
@@ -157,6 +162,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
                             'etiquetaPrecio' => 'Precio de la devolución',
                             'selectClass' => 'cdm-modo-precio-devolucion',
+                            'modoSeleccionado' => $modoDefaultNcDevolucion,
                         ])
                         @foreach ($lineasDevolverNc as $lineaNc)
                             <span class="cdm-nc-precio-box d-inline-flex align-items-center mr-1">
@@ -176,8 +182,15 @@ document.addEventListener('DOMContentLoaded', function () {
                             'etiquetaPrecio' => 'Precio de la devolución',
                             'selectName' => '',
                             'selectClass' => 'cdm-modo-precio-devolucion',
+                            'modoSeleccionado' => $modoDefaultNcDevolucion,
                         ])
-                        <span class="small text-muted">Se usa al emitir la nota de crédito de lo devuelto.</span>
+                        <span class="small text-muted">
+                            @if ($esCambioConReemplazo)
+                                En cambio se acredita el precio lleno (sin promo); default: lista del momento.
+                            @else
+                                Se usa al emitir la nota de crédito de lo devuelto.
+                            @endif
+                        </span>
                     </div>
                 @endif
 

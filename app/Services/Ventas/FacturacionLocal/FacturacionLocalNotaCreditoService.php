@@ -172,7 +172,8 @@ final class FacturacionLocalNotaCreditoService
         }
 
         $importeNuevo = self::importeDesdePayload($payload);
-        if (empty($opciones['omitir_tope_factura'])) {
+        $omitirTopeFactura = ! empty($opciones['omitir_tope_factura']);
+        if (! $omitirTopeFactura) {
             $mensajeTope = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
                 (float) $ventaOrigen->total,
                 FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
@@ -210,6 +211,7 @@ final class FacturacionLocalNotaCreditoService
                 $registrarHistorial,
                 $idsNc,
                 $importeNuevo,
+                $omitirTopeFactura,
             ) {
                 $emisionBloqueada = FacturacionLocalEmision::query()
                     ->whereKey($emision->id)
@@ -218,13 +220,15 @@ final class FacturacionLocalNotaCreditoService
                 if (! $emisionBloqueada) {
                     throw new InvalidArgumentException('No se encontró la emisión de la factura.');
                 }
-                $mensajeTopeTx = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
-                    (float) $ventaOrigen->total,
-                    FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
-                    $importeNuevo,
-                );
-                if ($mensajeTopeTx !== null) {
-                    throw new InvalidArgumentException($mensajeTopeTx);
+                if (! $omitirTopeFactura) {
+                    $mensajeTopeTx = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
+                        (float) $ventaOrigen->total,
+                        FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
+                        $importeNuevo,
+                    );
+                    if ($mensajeTopeTx !== null) {
+                        throw new InvalidArgumentException($mensajeTopeTx);
+                    }
                 }
 
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
@@ -236,13 +240,15 @@ final class FacturacionLocalNotaCreditoService
                 }
 
                 $ventaNc = $this->resolverVentaEmitida($ventaOrigen, $resultado);
-                $mensajeTopeReal = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
-                    (float) $ventaOrigen->total,
-                    FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
-                    abs((float) $ventaNc->total),
-                );
-                if ($mensajeTopeReal !== null) {
-                    throw new InvalidArgumentException($mensajeTopeReal);
+                if (! $omitirTopeFactura) {
+                    $mensajeTopeReal = FacturacionLocalNotasCreditoFacturaSupport::mensajeSiSupera(
+                        (float) $ventaOrigen->total,
+                        FacturacionLocalNotasCreditoFacturaSupport::totalAcreditado($ventaFacturaId),
+                        abs((float) $ventaNc->total),
+                    );
+                    if ($mensajeTopeReal !== null) {
+                        throw new InvalidArgumentException($mensajeTopeReal);
+                    }
                 }
 
                 $lineasStock = $this->lineasStockDesdeEmisiones($ventaOrigen, $idsNc);

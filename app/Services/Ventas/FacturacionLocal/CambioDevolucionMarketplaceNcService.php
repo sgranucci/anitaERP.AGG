@@ -139,6 +139,9 @@ final class CambioDevolucionMarketplaceNcService
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
+        $esCambio = ! CambioDevolucionMarketplaceCatalogoSupport::esSoloDevolucion($cambio->lineas)
+            || (int) ($cambio->venta_reemplazo_id ?? 0) > 0;
+
         $resultado = $this->notaCreditoService->generarDesdeFactura(
             $ventaOriginalId,
             null,
@@ -153,7 +156,9 @@ final class CambioDevolucionMarketplaceNcService
                 'cantidades_por_emision' => $aDevolver['cantidades'],
                 'precios_por_emision' => $aDevolver['precios'],
                 'precios_finales' => CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo),
-                'omitir_tope_factura' => CambioDevolucionMarketplacePrecioSupport::omiteTopeFactura($modo),
+                // Cambio: NCD a precio lleno / del momento, sin tope por el total cobrado
+                // (no es reembolso de dinero; el puente se cierra con la FAC de reemplazo).
+                'omitir_tope_factura' => CambioDevolucionMarketplacePrecioSupport::omiteTopeFactura($modo, $esCambio),
             ]
         );
 

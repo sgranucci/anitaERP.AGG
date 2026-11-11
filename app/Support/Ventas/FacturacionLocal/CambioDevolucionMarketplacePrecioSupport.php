@@ -26,8 +26,8 @@ final class CambioDevolucionMarketplacePrecioSupport
     public const MODOS = [
         self::MODO_GRILLA => 'Precio cargado en el legajo',
         self::MODO_NETO => 'Precio de la factura original menos el descuento',
-        self::MODO_LLENO_FACTURA => 'Precio lleno de esa factura',
-        self::MODO_LLENO_ACTUAL => 'Precio lleno actual',
+        self::MODO_LLENO_FACTURA => 'Precio lleno de esa factura (sin promo)',
+        self::MODO_LLENO_ACTUAL => 'Precio lleno actual (lista del momento del cambio)',
     ];
 
     public static function normalizar(?string $modo): string
@@ -43,12 +43,25 @@ final class CambioDevolucionMarketplacePrecioSupport
     }
 
     /**
-     * Solo los precios llenos pueden superar el total de la factura original.
-     * El precio cargado a mano respeta ese tope.
+     * En un cambio (hay reemplazo) la NCD va a precio lleno / del momento: no descuenta
+     * promociones ni topea al total de la factura (el puente NCD se equilibra con la FAC
+     * del par que se lleva). En solo reembolso, solo los modos «lleno» omiten el tope.
      */
-    public static function omiteTopeFactura(?string $modo): bool
+    public static function omiteTopeFactura(?string $modo, bool $esCambio = false): bool
     {
+        if ($esCambio) {
+            return true;
+        }
+
         return in_array(self::normalizar($modo), [self::MODO_LLENO_FACTURA, self::MODO_LLENO_ACTUAL], true);
+    }
+
+    /**
+     * Default al emitir la NC: en cambio, precio lleno actual (lista del momento).
+     */
+    public static function modoDefaultNc(bool $esCambio): string
+    {
+        return $esCambio ? self::MODO_LLENO_ACTUAL : self::MODO_GRILLA;
     }
 
     public static function etiqueta(?string $modo): string

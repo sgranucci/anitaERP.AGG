@@ -242,6 +242,7 @@
             Al elegir la factura se cargan las líneas a devolver con el artículo, el talle y el color o la combinación.
             El precio inicial de «A devolver» es el de la factura, ya con el descuento. El del reemplazo es el de la lista vigente.
             <strong>El precio de la grilla es el que se factura y se acredita</strong> (opción «Precio cargado en el legajo»): corregilo y guardá antes de facturar. El precio a acreditar se puede ajustar también al emitir la nota de crédito.
+            En un <strong>cambio</strong> la NCD va a precio lleno (sin promociones) y puede superar el total cobrado en la factura: no es reembolso de dinero; se equilibra con la FAC del par que se lleva. Con inflación, usá «Precio lleno actual (lista del momento del cambio)».
             Las otras opciones calculan el precio solas: el de la factura original menos el descuento, el precio lleno de esa factura o el precio lleno actual. Solo copian el precio del par devuelto si el reemplazo es el mismo artículo.
             «Traer de la factura» vuelve a leer todos los artículos de la factura original para devolver todos o sumar alguno más.
             Si ya facturaste un reemplazo y sumaste otro par a devolver, usá Agregar reemplazo, Guardar reemplazo y Facturar el reemplazo agregado. La factura anterior queda.
