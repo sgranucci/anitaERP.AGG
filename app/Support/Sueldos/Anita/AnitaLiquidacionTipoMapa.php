@@ -61,4 +61,21 @@ class AnitaLiquidacionTipoMapa
 
         return 'calculada';
     }
+
+    /**
+     * Anita LVAC a partir del detalle: 1 = plus, 2 = adelanto.
+     * Null si la corrida no es de vacaciones.
+     */
+    public static function mapearTipoVacaciones(string $tipoErp, ?string $detalle = null): ?int
+    {
+        if ($tipoErp !== 'vacaciones') {
+            return null;
+        }
+        $d = mb_strtoupper(trim((string) $detalle));
+        if ($d !== '' && (str_contains($d, 'ADELANT') || str_contains($d, 'ADEL.'))) {
+            return 2;
+        }
+
+        return 1;
+    }
 }

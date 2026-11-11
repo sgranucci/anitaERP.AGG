@@ -80,7 +80,26 @@
     </div>
 </div>
 
-<div class="form-group row" id="bloque-motivo-egreso" style="{{ old('tipo', $d->tipo ?? 'mensual') === 'final' ? '' : 'display:none' }}">
+@php
+    $tipoActual = old('tipo', $d->tipo ?? 'mensual');
+    $tipoVacActual = (int) old('tipo_vacaciones', $d->tipo_vacaciones ?? Liquidacion_Sueldos::TIPO_VACACIONES_PLUS);
+@endphp
+<div class="form-group row" id="bloque-tipo-vacaciones" style="{{ $tipoActual === 'vacaciones' ? '' : 'display:none' }}">
+    <label for="tipo_vacaciones" class="col-lg-3 col-form-label text-right">Vacaciones (LVAC) <span class="text-danger">*</span></label>
+    <div class="col-lg-6">
+        <select name="tipo_vacaciones" id="tipo_vacaciones" class="form-control">
+            @foreach (Liquidacion_Sueldos::TIPOS_VACACIONES as $cod => $label)
+                <option value="{{ $cod }}" {{ $tipoVacActual === (int) $cod ? 'selected' : '' }}>{{ $label }}</option>
+            @endforeach
+        </select>
+        <small class="form-text text-muted">
+            Anita <code>LVAC</code>: <em>Plus</em> liquida el 422; <em>Adelanto</em> liquida el 420.
+            El 430 (descuento) va en la corrida mensual.
+        </small>
+    </div>
+</div>
+
+<div class="form-group row" id="bloque-motivo-egreso" style="{{ $tipoActual === 'final' ? '' : 'display:none' }}">
     <label class="col-lg-3 col-form-label text-right">Motivo de egreso</label>
     <div class="col-lg-6">
         <select name="motivoegreso_id" class="form-control">
@@ -101,10 +120,17 @@
 <script>
 (function () {
     var sel = document.getElementById('tipo_liquidacion');
-    var bloque = document.getElementById('bloque-motivo-egreso');
-    if (!sel || !bloque) return;
-    function sync() { bloque.style.display = sel.value === 'final' ? '' : 'none'; }
+    var bloqueFinal = document.getElementById('bloque-motivo-egreso');
+    var bloqueVac = document.getElementById('bloque-tipo-vacaciones');
+    var selVac = document.getElementById('tipo_vacaciones');
+    if (!sel) return;
+    function sync() {
+        if (bloqueFinal) bloqueFinal.style.display = sel.value === 'final' ? '' : 'none';
+        if (bloqueVac) bloqueVac.style.display = sel.value === 'vacaciones' ? '' : 'none';
+        if (selVac) selVac.required = sel.value === 'vacaciones';
+    }
     sel.addEventListener('change', sync);
+    sync();
 })();
 </script>
 

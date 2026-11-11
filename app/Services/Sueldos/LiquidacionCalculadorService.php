@@ -19,8 +19,6 @@ use App\Support\Sueldos\Formula\EvaluadorFormula;
 use App\Support\Sueldos\Formula\FormulaException;
 use App\Support\Sueldos\Formula\ParametroSueldosResolver;
 use App\Support\Sueldos\Formula\RastreadorFormula;
-use App\Support\Sueldos\NovedadSueldosCatalogo;
-use App\Support\Sueldos\NovedadSueldosVigencia;
 use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -135,7 +133,6 @@ class LiquidacionCalculadorService
                 if ($conceptosEmp->isEmpty()) {
                     continue;
                 }
-                $numeroRecibo++;
                 $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
                 $lineas = $this->calcularEmpleado(
                     $ctx, $emp, $conceptosEmp, $overrides, $liquidacion, $planPendientes,
@@ -143,6 +140,12 @@ class LiquidacionCalculadorService
                     $erroresFormula
                 );
 
+                // Sin líneas (fórmulas en 0 / sin novedad ni saldo): no arma recibo vacío.
+                if ($lineas === []) {
+                    continue;
+                }
+
+                $numeroRecibo++;
                 $rec = $this->totalesRecibo($lineas);
                 $recibo = Liquidacion_Recibo_Sueldos::create([
                     'liquidacion_id' => $liquidacion->id,
@@ -1092,21 +1095,10 @@ class LiquidacionCalculadorService
             $query->where('estado', EmpleadoEstados::ACTIVO);
         }
 
-        // Vacaciones / SAC: si no hay filtro manual, solo legajos con novedad vigente
-        // de esta corrida (evita 287 recibos vacíos cuando no hay novedades cargadas).
+        // Modelo Anita: grupo O novedad. No se exige novedad para entrar a vacaciones/SAC;
+        // el set efectivo + la fórmula deciden si hay importe. Los recibos sin líneas
+        // se omiten más abajo (evita cientos de recibos vacíos).
         $filtros = $this->filtros($liq);
-        if (
-            empty($filtros['empleado_ids'])
-            && in_array((string) $liq->tipo, ['vacaciones', 'sac'], true)
-        ) {
-            $idsConNovedad = $this->empleadoIdsConNovedadVigente($liq);
-            if ($idsConNovedad !== []) {
-                $query->whereIn('id', $idsConNovedad);
-            } else {
-                // Sin novedades: no arma recibos (corrida quedó solo cabecera).
-                $query->whereRaw('1 = 0');
-            }
-        }
 
         if (! empty($filtros['empleado_ids']) && is_array($filtros['empleado_ids'])) {
             $query->whereIn('id', $filtros['empleado_ids']);
@@ -1139,39 +1131,4 @@ class LiquidacionCalculadorService
         return is_array($dec) ? $dec : [];
     }
 
-    /**
-     * Legajos con novedad no anulada vigente para esta corrida/período.
-     *
-     * @return list<int>
-     */
-    private function empleadoIdsConNovedadVigente(Liquidacion_Sueldos $liq): array
-    {
-        $liqId = (int) $liq->id;
-        $periodoYm = (int) ($liq->periodo ?? 0);
-        if ($periodoYm <= 0) {
-            $periodoYm = (int) (($liq->periodo_anio ?: 0) * 100 + ($liq->periodo_mes ?: 0));
-        }
-
-        try {
-            $rows = DB::table('novedad_sueldos')
-                ->where('empresa_id', $liq->empresa_id)
-                ->where('estado', '!=', NovedadSueldosCatalogo::ESTADO_ANULADA)
-                ->get(['empleado_id', 'liquidacion_id', 'periodo', 'fecha_desde', 'fecha_hasta']);
-        } catch (\Throwable $e) {
-            return [];
-        }
-
-        $ids = [];
-        foreach ($rows as $r) {
-            if (! NovedadSueldosVigencia::aplicaACorrida($r, $liqId, $periodoYm)) {
-                continue;
-            }
-            $eid = (int) ($r->empleado_id ?? 0);
-            if ($eid > 0) {
-                $ids[$eid] = true;
-            }
-        }
-
-        return array_keys($ids);
-    }
 }

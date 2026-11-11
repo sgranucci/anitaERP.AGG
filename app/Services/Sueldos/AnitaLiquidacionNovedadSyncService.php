@@ -109,6 +109,7 @@ class AnitaLiquidacionNovedadSyncService
                 $detalle = trim((string) ($f->mael_detalle ?? ''));
                 $tipo = AnitaLiquidacionTipoMapa::mapear($f->mael_tipo_liq ?? '', $detalle);
                 $estado = AnitaLiquidacionTipoMapa::mapearEstado($f->mael_estado ?? '');
+                $tipoVacaciones = AnitaLiquidacionTipoMapa::mapearTipoVacaciones($tipo, $detalle);
 
                 $periodoYm = $fechaLiq >= 19000101
                     ? (int) floor($fechaLiq / 100)
@@ -132,6 +133,7 @@ class AnitaLiquidacionNovedadSyncService
                     'numero' => $numero,
                     'descripcion' => $detalle !== '' ? $detalle : ('Liq. Anita '.$numero),
                     'tipo' => $tipo,
+                    'tipo_vacaciones' => $tipoVacaciones,
                     'periodo' => (string) $periodoYm,
                     'periodo_anio' => $anio,
                     'periodo_mes' => $mes,
@@ -156,6 +158,7 @@ class AnitaLiquidacionNovedadSyncService
                     $existente->update([
                         'descripcion' => $payload['descripcion'],
                         'tipo' => $payload['tipo'],
+                        'tipo_vacaciones' => $payload['tipo_vacaciones'],
                         'periodo' => $payload['periodo'],
                         'periodo_anio' => $payload['periodo_anio'],
                         'periodo_mes' => $payload['periodo_mes'],

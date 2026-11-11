@@ -265,6 +265,17 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
                 $out[$campo] = $data[$campo] !== '' ? $data[$campo] : ($campo === 'alcance' ? 'todos' : null);
             }
         }
+        if (array_key_exists('tipo', $data) || array_key_exists('tipo_vacaciones', $data)) {
+            $tipo = (string) ($out['tipo'] ?? $data['tipo'] ?? ($existente->tipo ?? ''));
+            if ($tipo === 'vacaciones') {
+                $tv = (int) ($data['tipo_vacaciones'] ?? $existente->tipo_vacaciones ?? Liquidacion_Sueldos::TIPO_VACACIONES_PLUS);
+                $out['tipo_vacaciones'] = array_key_exists($tv, Liquidacion_Sueldos::TIPOS_VACACIONES)
+                    ? $tv
+                    : Liquidacion_Sueldos::TIPO_VACACIONES_PLUS;
+            } else {
+                $out['tipo_vacaciones'] = null;
+            }
+        }
         if (array_key_exists('motivoegreso_id', $data)) {
             $out['motivoegreso_id'] = $data['motivoegreso_id'] !== '' && $data['motivoegreso_id'] !== null
                 ? (int) $data['motivoegreso_id']

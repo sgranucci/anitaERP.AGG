@@ -27,6 +27,7 @@ class Liquidacion_Sueldos extends Model implements Auditable
         'numero',
         'descripcion',
         'tipo',
+        'tipo_vacaciones',
         'motivoegreso_id',
         'periodo',
         'periodo_anio',
@@ -64,6 +65,7 @@ class Liquidacion_Sueldos extends Model implements Auditable
     protected $casts = [
         'empresa_id' => 'integer',
         'numero' => 'integer',
+        'tipo_vacaciones' => 'integer',
         'motivoegreso_id' => 'integer',
         'periodo_anio' => 'integer',
         'periodo_mes' => 'integer',
@@ -112,6 +114,16 @@ class Liquidacion_Sueldos extends Model implements Auditable
         'gratificacion' => 'Gratificacion',
         'no_remunerativo' => 'No remunerativo',
         'especial' => 'Especial',
+    ];
+
+    /** Anita LVAC: 1 = plus, 2 = adelanto. Solo para tipo=vacaciones. */
+    public const TIPO_VACACIONES_PLUS = 1;
+
+    public const TIPO_VACACIONES_ADELANTO = 2;
+
+    public const TIPOS_VACACIONES = [
+        self::TIPO_VACACIONES_PLUS => 'Plus vacacional',
+        self::TIPO_VACACIONES_ADELANTO => 'Adelanto de vacaciones',
     ];
 
     // Estados en los que la cabecera aun puede editarse / recalcularse.
@@ -172,7 +184,36 @@ class Liquidacion_Sueldos extends Model implements Auditable
 
     public function tipoLabel(): string
     {
-        return self::TIPOS[$this->tipo] ?? (string) $this->tipo;
+        $base = self::TIPOS[$this->tipo] ?? (string) $this->tipo;
+        if ((string) $this->tipo !== 'vacaciones') {
+            return $base;
+        }
+        $sub = $this->tipoVacacionesLabel();
+
+        return $sub !== '' ? $base.' · '.$sub : $base;
+    }
+
+    public function tipoVacacionesLabel(): string
+    {
+        $v = (int) ($this->tipo_vacaciones ?? 0);
+
+        return self::TIPOS_VACACIONES[$v] ?? '';
+    }
+
+    /**
+     * Valor Anita LVAC para fórmulas (periodo.tipo_vacaciones).
+     * 0 si la corrida no es de vacaciones.
+     */
+    public function lvac(): int
+    {
+        if ((string) $this->tipo !== 'vacaciones') {
+            return 0;
+        }
+        $v = (int) ($this->tipo_vacaciones ?? self::TIPO_VACACIONES_PLUS);
+
+        return in_array($v, [self::TIPO_VACACIONES_PLUS, self::TIPO_VACACIONES_ADELANTO], true)
+            ? $v
+            : self::TIPO_VACACIONES_PLUS;
     }
 
     public function alcanceLabel(): string

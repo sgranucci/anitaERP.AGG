@@ -57,6 +57,13 @@ class ContextoLiquidacion implements EntornoFormula
     private array $novedadesHist = [];
 
     /**
+     * Saldo de vacaciones por año (TVAC): anio => días (SUM dias del ledger).
+     *
+     * @var array<int, float>|null
+     */
+    private ?array $saldoVacacionesPorAnio = null;
+
+    /**
      * IL(concepto, liquidación): legajo => importe. Clave empresa|número|concepto.
      *
      * @var array<string, array<int, float>>
@@ -146,7 +153,8 @@ class ContextoLiquidacion implements EntornoFormula
         }
         $codigos = $this->codigosMaestrosEmpleado($emp);
         $vag = $this->variablesAgrupamiento($emp);
-        $tipoVac = $this->tipoCorrida === 'vacaciones' ? 1 : 0;
+        // Anita LVAC: 1 = plus (422), 2 = adelanto (420). Fuera de vacaciones = 0.
+        $tipoVac = method_exists($liq, 'lvac') ? (int) $liq->lvac() : ($this->tipoCorrida === 'vacaciones' ? 1 : 0);
 
         $this->vars = [
             'empleado.sueldo_basico' => (float) $emp->sueldo_basico,
@@ -855,7 +863,12 @@ class ContextoLiquidacion implements EntornoFormula
             case 'aguinaldo':
             case 'cantidad_vacaciones':
             case 'dias_vacaciones':
+                // Sin args: saldo total. Con año: saldo de ese período.
+                return $this->saldoVacaciones((int) ($args[0] ?? 0));
             case 'total_vacaciones':
+                // Anita TVAC(anio [, tipo]): saldo de días del año en el ledger ERP.
+                // El 2º arg (tipo Anita) se ignora: el ledger no discrimina tipo.
+                return $this->saldoVacaciones((int) ($args[0] ?? 0));
             case 'cantidad_asignacion':
             case 'importe_asignacion':
             case 'tabla_empleado':
@@ -902,6 +915,35 @@ class ContextoLiquidacion implements EntornoFormula
         }
 
         return 0.0;
+    }
+
+    /**
+     * Anita TVAC / CANTVAC / DVAC: saldo de días de vacaciones del ledger ERP
+     * (empleado_cuota_movimiento_sueldos). anio=0 → suma de todos los años.
+     */
+    private function saldoVacaciones(int $anio): float
+    {
+        if ($this->saldoVacacionesPorAnio === null) {
+            $this->saldoVacacionesPorAnio = [];
+            try {
+                $filas = DB::table('empleado_cuota_movimiento_sueldos')
+                    ->where('empleado_id', $this->empleadoId)
+                    ->selectRaw('anio_periodo, SUM(dias) as saldo')
+                    ->groupBy('anio_periodo')
+                    ->get();
+                foreach ($filas as $f) {
+                    $this->saldoVacacionesPorAnio[(int) $f->anio_periodo] = (float) $f->saldo;
+                }
+            } catch (\Throwable $e) {
+                $this->saldoVacacionesPorAnio = [];
+            }
+        }
+
+        if ($anio > 0) {
+            return (float) ($this->saldoVacacionesPorAnio[$anio] ?? 0.0);
+        }
+
+        return (float) array_sum($this->saldoVacacionesPorAnio);
     }
 
     /**
