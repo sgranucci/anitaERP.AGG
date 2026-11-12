@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Stock\LoteRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
 use App\Support\Stock\MovimientoStockAltaMasivaSupport;
 use App\Support\Stock\MovimientoStockPreferenciasUsuario;
@@ -19,6 +20,7 @@ class MovimientoStockAltaMasivaController extends Controller
     public function __construct(
         private MovimientoStockService $movimientoStockService,
         private EmpresaRepositoryInterface $empresaRepository,
+        private LoteRepositoryInterface $loteRepository,
     ) {
     }
 
@@ -49,6 +51,7 @@ class MovimientoStockAltaMasivaController extends Controller
             'tipoAbreviatura' => old('tipotransaccion_abreviatura', $tipo->abreviatura ?? ''),
             'tipoNombre' => old('tipotransaccion_nombre', $tipo->nombre ?? ''),
             'tipoPidePrecio' => (bool) ($tipo->pide_precio ?? false),
+            'lote_query' => $this->loteRepository->all(),
             'esFerli' => MovimientoStockAltaMasivaSupport::esParaLocales(),
             'canalEtiqueta' => MovimientoStockAltaMasivaSupport::etiquetaCanal(),
         ]);
@@ -126,6 +129,7 @@ class MovimientoStockAltaMasivaController extends Controller
             'tipotransaccion_stock_id' => 'required|integer|exists:tipotransaccion_stock,id',
             'leyenda' => 'nullable|string|max:200',
             'lote' => 'nullable|string|max:40',
+            'loteimportacion_id' => 'nullable|integer|exists:lote,id',
             'precio' => 'nullable|numeric|min:0',
         ]);
 
@@ -159,12 +163,14 @@ class MovimientoStockAltaMasivaController extends Controller
             return redirect()->back()->withInput()->with('mensaje-error', $msg);
         }
 
+        $loteImportacionId = (int) $request->input('loteimportacion_id', 0);
         $payload = MovimientoStockAltaMasivaSupport::payloadParaGrabar($preview, [
             'tipotransaccion_stock_id' => (int) $tipo->id,
             'fecha' => (string) $request->input('fecha'),
             'empresa_id' => $empresaId,
             'deposito_id' => $depositoId,
             'lote' => (string) $request->input('lote', ''),
+            'loteimportacion_id' => $loteImportacionId > 0 ? $loteImportacionId : null,
             'leyenda' => (string) $request->input('leyenda', ''),
             'precio' => (float) $request->input('precio', 0),
         ]);

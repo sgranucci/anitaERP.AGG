@@ -137,6 +137,7 @@ final class MovimientoStockAltaMasivaSupport
         $vacios = array_fill(0, $n, '');
 
         $lote = trim((string) ($cabecera['lote'] ?? ''));
+        $loteImportacionId = (int) ($cabecera['loteimportacion_id'] ?? 0);
 
         return [
             'tipotransaccion_stock_id' => (int) ($cabecera['tipotransaccion_stock_id'] ?? 0),
@@ -164,7 +165,7 @@ final class MovimientoStockAltaMasivaSupport
             'colores_id' => $nulos,
             'talles_id' => $nulos,
             'sentidos' => $vacios,
-            'loteimportacion_id' => null,
+            'loteimportacion_id' => $loteImportacionId > 0 ? $loteImportacionId : null,
         ];
     }
 

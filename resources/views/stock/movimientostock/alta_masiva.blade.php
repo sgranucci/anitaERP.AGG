@@ -35,7 +35,7 @@
                         Sirve una curva (SKU, combinación, color y una columna por talle)
                         o un pedido de fábrica de Brasil: artículo con código, combinación, curva por talle y módulos.
                         En ese pedido cada talle se multiplica por los módulos. Las hojas y las filas de total se leen solas.
-                        Empresa, tipo, depósito, fecha, lote y leyenda no vienen en el archivo.
+                        Empresa, tipo, depósito, fecha, lote, lote de importación y leyenda no vienen en el archivo.
                     </p>
                     @if ($esFerli)
                         <div class="alert alert-info py-2">
@@ -72,6 +72,23 @@
                                     <input type="text" name="lote" id="lote" class="form-control" maxlength="40"
                                         value="{{ old('lote', 'LOTE DE ALTA') }}">
                                     <small class="text-muted">Vacío o «LOTE DE ALTA» asigna un número nuevo.</small>
+                                </div>
+                            </div>
+                            <div class="form-group row mb-2">
+                                <label for="loteimportacion_id" class="col-lg-4 control-label text-right pr-2">Lote de importaci&oacute;n</label>
+                                <div class="col-lg-8">
+                                    <select name="loteimportacion_id" id="loteimportacion_id" class="form-control" data-placeholder="Lote de importaci&oacute;n">
+                                        <option value="">-- Sin lote de importaci&oacute;n --</option>
+                                        @foreach ($lote_query as $loteImp)
+                                            <option value="{{ $loteImp->id }}"
+                                                @if ((int) $loteImp->id === (int) old('loteimportacion_id'))
+                                                    selected
+                                                @endif
+                                            >
+                                                {{ $loteImp->id }}-{{ $loteImp->numerodespacho }}
+                                            </option>
+                                        @endforeach
+                                    </select>
                                 </div>
                             </div>
                             @include('includes.form-empresa-asignada', [
