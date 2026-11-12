@@ -702,6 +702,26 @@ class Comprobante_ProveedorController extends Controller
             $esFce,
         );
 
+        $intercompany = ComprobanteProveedorUnicidadSupport::consultarAvisoIntercompanyCabecera(
+            $empresaId,
+            $tipoId,
+            $letra,
+            $sucursal,
+            $numero,
+            $proveedorId,
+            $documentoEventual !== '' ? $documentoEventual : null,
+            $excluirComprobanteId,
+            $esFce,
+        );
+        $htmlIntercompany = '';
+        if ($intercompany['hay_aviso'] ?? false) {
+            $htmlIntercompany = view('compras.comprobante_proveedor.partials.aviso_intercompany_cabecera', [
+                'titulo' => $intercompany['titulo'] ?? null,
+                'mensaje' => $intercompany['mensaje'] ?? null,
+                'comprobantes' => $intercompany['comprobantes'] ?? [],
+            ])->render();
+        }
+
         if (! ($erp['listo'] ?? false)) {
             return response()->json([
                 'ok' => true,
@@ -711,6 +731,9 @@ class Comprobante_ProveedorController extends Controller
                 'mensaje' => null,
                 'html' => '',
                 'url_editar' => null,
+                'aviso_intercompany' => false,
+                'html_intercompany' => '',
+                'mensaje_intercompany' => null,
             ]);
         }
 
@@ -739,6 +762,9 @@ class Comprobante_ProveedorController extends Controller
                 'url_editar' => $urlEditar,
                 'html' => $html,
                 'bloquea_contabilizar' => true,
+                'aviso_intercompany' => (bool) ($intercompany['hay_aviso'] ?? false),
+                'html_intercompany' => $htmlIntercompany,
+                'mensaje_intercompany' => $intercompany['mensaje'] ?? null,
             ]);
         }
 
@@ -797,6 +823,9 @@ class Comprobante_ProveedorController extends Controller
                 'html' => $htmlAnita,
                 'bloquea_contabilizar' => true,
                 'aviso' => $avisoAnita,
+                'aviso_intercompany' => (bool) ($intercompany['hay_aviso'] ?? false),
+                'html_intercompany' => $htmlIntercompany,
+                'mensaje_intercompany' => $intercompany['mensaje'] ?? null,
             ]);
         }
 
@@ -809,6 +838,9 @@ class Comprobante_ProveedorController extends Controller
             'html' => '',
             'url_editar' => null,
             'bloquea_contabilizar' => false,
+            'aviso_intercompany' => (bool) ($intercompany['hay_aviso'] ?? false),
+            'html_intercompany' => $htmlIntercompany,
+            'mensaje_intercompany' => $intercompany['mensaje'] ?? null,
         ]);
     }
 

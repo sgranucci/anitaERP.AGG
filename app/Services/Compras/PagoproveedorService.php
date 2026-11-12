@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cheque;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Pagoproveedor_Retencion;
@@ -59,6 +60,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class PagoproveedorService
 {
@@ -1051,13 +1053,84 @@ class PagoproveedorService
     {
         $out = $this->aplicacionesFormularioDesdeData($data);
 
+        $ccIds = array_map(static fn (array $a) => (int) $a['proveedor_cuentacorriente_id'], $out);
+
         // La propuesta ya filtra las retenidas, pero acá también llega el armado manual de la OP
         // con ids de cuenta corriente elegidos a mano: el bloqueo tiene que valer igual.
-        app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada(
-            array_map(static fn (array $a) => (int) $a['proveedor_cuentacorriente_id'], $out)
-        );
+        app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($ccIds);
+        $this->assertWscdcAntesDePagar($ccIds);
 
         return $out;
+    }
+
+    /**
+     * Revalida WSCDC sobre las facturas aplicadas. Si ARCA rechaza o el total no cierra,
+     * marca bloqueado_pago y corta la OP. WS caído también corta (no emitir a ciegas).
+     *
+     * @param  list<int>  $cuentacorrienteIds
+     */
+    private function assertWscdcAntesDePagar(array $cuentacorrienteIds): void
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $cuentacorrienteIds),
+            static fn (int $id) => $id > 0
+        )));
+        if ($ids === []) {
+            return;
+        }
+
+        $filas = DB::table('proveedor_cuentacorriente as cc')
+            ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cc.comprobante_proveedor_id')
+            ->whereIn('cc.id', $ids)
+            ->whereNotNull('cc.comprobante_proveedor_id')
+            ->select('cp.id')
+            ->distinct()
+            ->get();
+
+        if ($filas->isEmpty()) {
+            return;
+        }
+
+        $compliance = app(ComprobanteProveedorComplianceValidacionService::class);
+        $bloqueo = app(ComprobanteProveedorBloqueoPagoService::class);
+        $detalle = [];
+
+        foreach ($filas as $fila) {
+            $cpId = (int) ($fila->id ?? 0);
+            if ($cpId <= 0) {
+                continue;
+            }
+            $comprobante = Comprobante_Proveedor::query()->find($cpId);
+            if (! $comprobante) {
+                continue;
+            }
+
+            $resultado = $compliance->validarWscdcDesdeComprobante($comprobante);
+            if (! ($resultado['aplica'] ?? false) || ($resultado['ok'] ?? true)) {
+                continue;
+            }
+
+            $motivo = trim((string) ($resultado['mensaje'] ?? 'Constatación ARCA (WSCDC) rechazada al pagar.'));
+            $bloqueo->bloquearPorControlAutomatico($comprobante, $motivo);
+
+            $nro = trim(implode('-', array_filter([
+                strtoupper((string) ($comprobante->letra ?? '')),
+                (string) ($comprobante->sucursal ?? ''),
+                (string) ($comprobante->numerocomprobante ?? ''),
+            ], static fn ($v) => (string) $v !== '')));
+
+            $detalle[] = ($nro !== '' ? $nro : '#'.$cpId).' ('.$motivo.')';
+        }
+
+        if ($detalle === []) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'idcuentacorrientes' => 'No se puede pagar: constatación ARCA (WSCDC) falló en '
+                .count($detalle).' comprobante(s): '.implode('; ', $detalle)
+                .'. Se marcó bloqueado_pago. Corrija los datos o libere el bloqueo con motivo.',
+        ]);
     }
 
     /**
@@ -1906,6 +1979,14 @@ class PagoproveedorService
                     $pago->fecha?->format('Y-m-d') ?? date('Y-m-d'),
                     PeriodoContableCierreSupport::ALCANCE_CAJA
                 );
+
+                $ccIdsConfirmacion = Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->where('pagoproveedor_id', (int) $pago->id)
+                    ->pluck('proveedor_cuentacorriente_id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->all();
+                app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($ccIdsConfirmacion);
+                $this->assertWscdcAntesDePagar($ccIdsConfirmacion);
 
                 $data = $this->armarDataDesdePagoPersistido($pago);
                 $tipoComprobante = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(

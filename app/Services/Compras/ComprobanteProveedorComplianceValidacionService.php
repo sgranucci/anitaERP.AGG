@@ -2,6 +2,7 @@
 
 namespace App\Services\Compras;
 
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
@@ -67,6 +68,132 @@ class ComprobanteProveedorComplianceValidacionService
         $resultado['ok'] = $resultado['errores'] === [];
 
         return $resultado;
+    }
+
+    /**
+     * Revalidación WSCDC al armar/confirmar OP. Si no aplica (sin CAE / CAEA / deshabilitado), ok.
+     * Al pagar, WS caído también se considera no OK (no emitir a ciegas).
+     *
+     * @return array{
+     *   aplica: bool,
+     *   ok: bool,
+     *   ws_caido: bool,
+     *   errores: list<string>,
+     *   avisos: list<string>,
+     *   mensaje: string|null,
+     *   wscdc: array<string, mixed>|null
+     * }
+     */
+    public function validarWscdcDesdeComprobante(Comprobante_Proveedor $comprobante): array
+    {
+        $base = [
+            'aplica' => false,
+            'ok' => true,
+            'ws_caido' => false,
+            'errores' => [],
+            'avisos' => [],
+            'mensaje' => null,
+            'wscdc' => null,
+        ];
+
+        if (! $this->wscdcHabilitadoParaComprobante()) {
+            return $base;
+        }
+
+        $payload = $this->payloadDesdeComprobante($comprobante);
+        $tipoAut = strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? '')));
+        $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
+
+        if ($cae === '' && $tipoAut === '') {
+            return $base;
+        }
+
+        if ($tipoAut === ComprobanteProveedorTipoAutorizacion::CAEA) {
+            return array_merge($base, [
+                'aplica' => false,
+                'avisos' => ['CAEA: no se revalida WSCDC al pagar.'],
+            ]);
+        }
+
+        $base['aplica'] = true;
+
+        if (strlen($cae) !== 14) {
+            $msg = 'El CAE debe tener 14 dígitos para constatar el comprobante recibido en ARCA (WSCDC) antes de pagar.';
+
+            return array_merge($base, [
+                'ok' => false,
+                'errores' => [$msg],
+                'mensaje' => $msg,
+            ]);
+        }
+
+        $cmpReq = $this->armarCmpReqDesdePayload($payload, $cae);
+        if ($cmpReq === null) {
+            $msg = 'Faltan datos fiscales para constatar el comprobante en ARCA (WSCDC) antes de pagar.';
+
+            return array_merge($base, [
+                'ok' => false,
+                'errores' => [$msg],
+                'mensaje' => $msg,
+            ]);
+        }
+
+        try {
+            $respuesta = $this->wscdcService->comprobanteConstatar($cmpReq);
+        } catch (Throwable $e) {
+            Log::warning('WSCDC pago proveedor: fallo de constatación', [
+                'comprobante_proveedor_id' => (int) $comprobante->id,
+                'error' => $e->getMessage(),
+                'cmp_req' => $cmpReq,
+            ]);
+            $msg = 'No se pudo constatar en ARCA (WSCDC) antes de pagar. Reintente. Detalle: '.$e->getMessage();
+
+            return array_merge($base, [
+                'ok' => false,
+                'ws_caido' => true,
+                'errores' => [$msg],
+                'mensaje' => $msg,
+                'wscdc' => ['ejecutada' => true, 'ok' => false, 'error' => $e->getMessage()],
+            ]);
+        }
+
+        $resultadoWscdc = $this->interpretarRespuestaWscdc($payload, $respuesta, $cmpReq);
+        $errores = array_values(array_map('strval', $resultadoWscdc['errores'] ?? []));
+        $avisos = array_values(array_map('strval', $resultadoWscdc['avisos'] ?? []));
+        $ok = ($resultadoWscdc['ok'] ?? false) === true && $errores === [];
+
+        return [
+            'aplica' => true,
+            'ok' => $ok,
+            'ws_caido' => false,
+            'errores' => $errores,
+            'avisos' => $avisos,
+            'mensaje' => $ok ? null : implode(' ', $errores !== [] ? $errores : ['Constatación ARCA (WSCDC) rechazada.']),
+            'wscdc' => $resultadoWscdc,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function payloadDesdeComprobante(Comprobante_Proveedor $comprobante): array
+    {
+        $fecha = $comprobante->fechacomprobante;
+        $fechaStr = is_object($fecha) && method_exists($fecha, 'format')
+            ? $fecha->format('Y-m-d')
+            : (string) $fecha;
+
+        return [
+            'empresa_id' => (int) $comprobante->empresa_id,
+            'proveedor_id' => (int) $comprobante->proveedor_id,
+            'tipotransaccion_compra_id' => (int) $comprobante->tipotransaccion_compra_id,
+            'letra' => (string) $comprobante->letra,
+            'sucursal' => (int) $comprobante->sucursal,
+            'numerocomprobante' => (int) $comprobante->numerocomprobante,
+            'fechacomprobante' => $fechaStr,
+            'total' => (float) ($comprobante->total ?? 0),
+            'numerocae' => (string) ($comprobante->numerocae ?? ''),
+            'tipo_autorizacion' => (string) ($comprobante->tipo_autorizacion ?? ''),
+            'proveedor_documento_eventual' => $comprobante->proveedor_documento_eventual ?? null,
+        ];
     }
 
     /** @param ResultadoCompliance $resultado */

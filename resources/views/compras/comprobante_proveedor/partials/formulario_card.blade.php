@@ -65,6 +65,7 @@
         </div>
         @endif
         <div id="cp-aviso-duplicado-cabecera-slot"></div>
+        <div id="cp-aviso-intercompany-cabecera-slot"></div>
         <div id="cp-aviso-anita-async-slot"></div>
         <div id="cp-sync-oc-com-banner" class="alert alert-info py-2 d-none" role="status">
             <i class="fa fa-spinner fa-spin"></i>

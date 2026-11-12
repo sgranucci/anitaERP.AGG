@@ -4833,18 +4833,51 @@ $(function () {
 
         function limpiarAvisoDup() {
             $('#cp-aviso-duplicado-cabecera-slot').empty();
+            $('#cp-aviso-intercompany-cabecera-slot').empty();
             if (!$('#cp-aviso-anita-async-slot').children().length) {
                 $('.js-cp-contabilizar').prop('disabled', false).removeAttr('title');
             }
             ultimoAvisoKey = '';
             $('#numerocomprobante').removeAttr('data-cp-duplicado-key');
+            $('#numerocomprobante').removeAttr('data-cp-intercompany-key');
+        }
+
+        function aplicarAvisoIntercompany(res, opts) {
+            opts = opts || {};
+            var key = opts.key || '';
+            var slot = $('#cp-aviso-intercompany-cabecera-slot');
+            if (!res || !res.aviso_intercompany) {
+                slot.empty();
+                $('#numerocomprobante').removeAttr('data-cp-intercompany-key');
+                return false;
+            }
+            if (res.html_intercompany) {
+                slot.html(res.html_intercompany);
+            }
+            if (opts.alertar !== false && key && key !== String($('#numerocomprobante').attr('data-cp-intercompany-key') || '')) {
+                $('#numerocomprobante').attr('data-cp-intercompany-key', key);
+                if (!res.duplicado) {
+                    setTimeout(function () {
+                        alert(res.mensaje_intercompany || 'Misma factura cargada en otra empresa.');
+                    }, 0);
+                }
+            }
+            return true;
         }
 
         function aplicarDuplicado(res, opts) {
             opts = opts || {};
             var key = opts.key || '';
+            aplicarAvisoIntercompany(res, opts);
             if (!res || !res.duplicado) {
-                limpiarAvisoDup();
+                $('#cp-aviso-duplicado-cabecera-slot').empty();
+                if (!$('#cp-aviso-anita-async-slot').children().length) {
+                    $('.js-cp-contabilizar').prop('disabled', false).removeAttr('title');
+                }
+                if (!(res && res.aviso_intercompany)) {
+                    ultimoAvisoKey = '';
+                    $('#numerocomprobante').removeAttr('data-cp-duplicado-key');
+                }
                 return false;
             }
             if (res.html) {
