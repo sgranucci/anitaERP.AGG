@@ -712,13 +712,14 @@
         });
 
         $('#pp-op-todos').on('change', function () {
-            $('.pp-op-check').prop('checked', $(this).is(':checked'));
+            // Solo las filas sin OP emitida (los disabled no llevan name=linea_ids[]).
+            $('.pp-op-check:not(:disabled)').prop('checked', $(this).is(':checked'));
         });
         $('#form-generar-op-pp').on('submit', function (e) {
-            var n = $('.pp-op-check:checked').length;
+            var n = $('.pp-op-check:not(:disabled):checked').length;
             if (n < 1) {
                 e.preventDefault();
-                alert('Tildá al menos un proveedor.');
+                alert('Tildá al menos un proveedor sin orden de pago emitida.');
                 return;
             }
             if (!window.confirm('Se van a preparar las órdenes de pago de ' + n + ' proveedor(es).')) {

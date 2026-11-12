@@ -99,6 +99,8 @@
     .pp-cheques-celda .pp-ch-dif-sobra { color: #b9770e; font-weight: 600; }
     .pp-cheques-celda .pp-ch-dif-ok { color: #1e8449; font-weight: 600; }
     #pp-cheques-asignados tr.pp-cheque-foco > td { background: #D6EAF8; }
+    tr.pp-fila-op-emitida > td { background: #eafaf1; }
+    tr.pp-fila-op-emitida.pp-fila-activa > td { background: #d5f5e3; }
 </style>
 @endsection
 
@@ -336,11 +338,20 @@ window.programaPagoCfg = {
                             </thead>
                             <tbody id="tbody-programa-pago">
                                 @foreach($filas as $idx => $fila)
-                                    <tr data-linea-id="{{ $fila['id'] }}">
+                                    @php
+                                        $opEmitidaId = (int) ($fila['pagoproveedor_id'] ?? 0);
+                                        $opEmitida = $opEmitidaId > 0;
+                                    @endphp
+                                    <tr data-linea-id="{{ $fila['id'] }}"
+                                        @if ($opEmitida) data-op-emitida="1" class="pp-fila-op-emitida" @endif>
                                         @if ($puedeGenerarOp)
                                             <td class="text-center">
-                                                <input type="checkbox" name="linea_ids[]" value="{{ $fila['id'] }}"
-                                                       form="form-generar-op-pp" class="pp-op-check">
+                                                @if ($opEmitida)
+                                                    <input type="checkbox" class="pp-op-check" disabled title="Ya tiene orden de pago">
+                                                @else
+                                                    <input type="checkbox" name="linea_ids[]" value="{{ $fila['id'] }}"
+                                                           form="form-generar-op-pp" class="pp-op-check">
+                                                @endif
                                             </td>
                                         @endif
                                         <td class="pp-col-proveedor">
@@ -349,6 +360,17 @@ window.programaPagoCfg = {
                                             <input type="hidden" name="lineas[{{ $idx }}][saldo_adeudado]" value="{{ $fila['saldo_adeudado'] }}">
                                             <span class="badge badge-secondary pp-badge-estado">Pendiente</span>
                                             <span class="pp-nombre-proveedor"><strong>{{ $fila['codigo'] }}</strong> {{ $fila['nombre'] }}</span>
+                                            @if ($opEmitida)
+                                                <div class="mt-1">
+                                                    <a class="badge badge-success"
+                                                       href="{{ route('editar_pagoproveedor', ['id' => $opEmitidaId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                                       target="_blank" rel="noopener"
+                                                       title="Abrir orden de pago emitida">
+                                                        <i class="fa fa-check"></i>
+                                                        {{ $fila['op_etiqueta'] ?: ('OP #'.$fila['op_numero']) }}
+                                                    </a>
+                                                </div>
+                                            @endif
                                             @if (($chequesPorLinea[$fila['id']] ?? 0) > 0)
                                                 <div>
                                                     <a href="#pp-cheques-asignados" class="badge badge-info">

@@ -452,6 +452,10 @@ class ProgramaPagoService
             $saldo = round((float) $linea->saldo_adeudado, 2);
             $totalSaldo += $saldo;
             $totalPrograma += $sumaFila;
+            $op = $linea->ops
+                ->sortByDesc('id')
+                ->first(static fn ($o) => (int) ($o->pagoproveedor_id ?? 0) > 0);
+            $pago = $op?->pagoproveedor;
             $filas[] = [
                 'id' => (int) $linea->id,
                 'proveedor_id' => (int) $linea->proveedor_id,
@@ -461,6 +465,10 @@ class ProgramaPagoService
                 'observacion' => (string) ($linea->observacion ?? ''),
                 'asignaciones' => $asignaciones,
                 'total_fila' => round($sumaFila, 2),
+                'pagoproveedor_id' => $pago ? (int) $pago->id : null,
+                'op_numero' => $pago ? (string) $pago->numerotransaccion : null,
+                'op_etiqueta' => $pago ? $pago->etiquetaComprobante() : null,
+                'op_estado' => $pago ? (string) $pago->estado : null,
             ];
         }
 

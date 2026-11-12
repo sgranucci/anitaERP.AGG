@@ -44,4 +44,10 @@ class ProgramaPagoLinea extends Model implements Auditable
     {
         return $this->hasMany(ProgramaPagoCheque::class, 'programa_pago_linea_id');
     }
+
+    /** OP generadas desde esta línea (hoy una por proveedor, clave=proveedor). */
+    public function ops(): HasMany
+    {
+        return $this->hasMany(ProgramaPagoOp::class, 'programa_pago_linea_id');
+    }
 }

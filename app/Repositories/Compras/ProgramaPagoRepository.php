@@ -38,6 +38,7 @@ class ProgramaPagoRepository implements ProgramaPagoRepositoryInterface
             'usuarios',
             'lineas.proveedores',
             'lineas.asignaciones',
+            'lineas.ops.pagoproveedor:id,numerotransaccion,sucursal,tipocomprobante,estado,fecha,monto',
         ])->find($id);
 
         if ($row === null) {
