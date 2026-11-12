@@ -560,6 +560,12 @@
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-proveedor', borraTarjetaArchivoProveedor);
 
+        $('#agrega_renglon_proveedor_cm05').on('click', agregaRenglonProveedorCm05);
+        $(document).on('click', '.eliminar_proveedor_cm05', borraRenglonProveedorCm05);
+        if (typeof activa_eventos_consultaprovincia === 'function') {
+            activa_eventos_consultaprovincia();
+        }
+
     });
 
     function colorSemaforo()
@@ -603,6 +609,25 @@
         {
             $('#nombretiposuspension').text('');
         }
+    }
+
+    function agregaRenglonProveedorCm05(event) {
+        if (event) {
+            event.preventDefault();
+        }
+        var tpl = document.getElementById('proveedor-template-renglon-cm05');
+        if (!tpl) {
+            return;
+        }
+        $('#tbody-proveedor-cm05').append(tpl.content.cloneNode(true));
+        $('#tbody-proveedor-cm05').find('tr').last().find('.codigoprovincia').trigger('focus');
+    }
+
+    function borraRenglonProveedorCm05(event) {
+        if (event) {
+            event.preventDefault();
+        }
+        $(this).closest('tr').remove();
     }
 
     function agregaRenglonExclusion(){

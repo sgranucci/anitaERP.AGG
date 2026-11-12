@@ -3,16 +3,17 @@
 namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
-use App\Services\Caja\TesoreriaCrownAvisoGenerador;
+use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAjuste;
-use App\Models\Caja\TesoreriaCrownAsignacion;
 use App\Models\Caja\TesoreriaCrownCierre;
 use App\Models\Caja\TesoreriaCrownCierreEvento;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Seguridad\Usuario;
+use App\Services\Caja\TesoreriaCrownAvisoGenerador;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
+use App\Support\Caja\TesoreriaCrownDiaCajeroSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownJornadaCierreBloqueoSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
@@ -23,41 +24,41 @@ use Illuminate\Validation\Rule;
 
 class TesoreriaCrownCierreController extends Controller
 {
-    public function ver(int $asignacion)
+    public function ver(int $jornada, int $cajero)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('listar-tesoreria-crown-jornada');
-        $fila = $this->asignacion($asignacion);
-        $ajustes = $fila->cierre
-            ? $fila->cierre->ajustes()->with(['auditor', 'tesoreria'])->get()
+        $ctx = $this->contexto($jornada, $cajero);
+        $cierre = $ctx->cierre;
+        $ajustes = $cierre
+            ? $cierre->ajustes()->with(['auditor', 'tesoreria'])->get()
             : collect();
 
         return view('caja.tesoreria_crown.jornada.cierre', [
-            'asignacion' => $fila,
-            'cierre' => $fila->cierre,
+            'asignacion' => $ctx,
+            'cierre' => $cierre,
             'ajustes' => $ajustes,
-            'vigente' => $fila->cierre ? TesoreriaCrownCierreSupport::vigente($fila->cierre, $ajustes) : null,
-            'anteriores' => $fila->cierres()
-                ->whereNotNull('reabierta_at')
-                ->with(['reabiertaUsuario', 'eventos.usuario'])
-                ->orderBy('id')
-                ->get(),
-            'calculo' => TesoreriaCrownCierreCalculo::de($fila),
+            'vigente' => $cierre ? TesoreriaCrownCierreSupport::vigente($cierre, $ajustes) : null,
+            'anteriores' => $ctx->cierres
+                ->filter(fn ($c) => $c->reabierta_at !== null)
+                ->sortBy('id')
+                ->values(),
+            'calculo' => TesoreriaCrownCierreCalculo::deCajero($ctx->cajero, $ctx->jornada),
         ]);
     }
 
-    public function cerrar(Request $request, int $asignacion)
+    public function cerrar(Request $request, int $jornada, int $cajero)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('editar-tesoreria-crown-movimiento');
-        $fila = $this->asignacion($asignacion);
-        if ($fila->cierre !== null) {
-            return back()->with('mensaje-error', 'Esta caja ya tiene cierre.');
+        $ctx = $this->contexto($jornada, $cajero);
+        if ($ctx->cierre !== null) {
+            return back()->with('mensaje-error', 'Este cajero ya tiene cierre.');
         }
-        if (! $fila->jornada->estaAbierta()) {
+        if (! $ctx->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'La jornada ya está cerrada.');
         }
-        $calculo = TesoreriaCrownCierreCalculo::de($fila);
+        $calculo = TesoreriaCrownCierreCalculo::deCajero($ctx->cajero, $ctx->jornada);
         if (! $calculo['puede']) {
             return back()->with('mensaje-error', $calculo['motivo']);
         }
@@ -80,12 +81,8 @@ class TesoreriaCrownCierreController extends Controller
         if ($usuario instanceof \Illuminate\Http\RedirectResponse) {
             return $usuario;
         }
-        $cajero = $fila->cajero;
-        if ($cajero === null) {
-            return back()->with('mensaje-error', 'Esta caja no tiene cajero.')->withInput();
-        }
         $pin = TesoreriaCrownFirmaSupport::autenticarCajero(
-            $cajero,
+            $ctx->cajero,
             (string) ($datos['clave_cajero'] ?? ''),
             $datos['clave_cajero_nueva'] ?? null,
             $datos['clave_cajero_repetir'] ?? null
@@ -96,7 +93,7 @@ class TesoreriaCrownCierreController extends Controller
                 ->with('tc_pin_nuevo', $pin['pedir_nuevo'])
                 ->withInput($request->except(['firma_password', 'clave_cajero', 'clave_cajero_nueva', 'clave_cajero_repetir']));
         }
-        if ((int) ($cajero->usuario_id ?? 0) === (int) $usuario->id) {
+        if ((int) ($ctx->cajero->usuario_id ?? 0) === (int) $usuario->id) {
             return back()->with('mensaje-error', 'Tesorería y el cajero tienen que ser dos personas.')->withInput();
         }
 
@@ -108,17 +105,17 @@ class TesoreriaCrownCierreController extends Controller
             $detalle = trim($detalle.' La diferencia supera la tolerancia y el cierre pasa a auditoría.');
         }
 
-        $creado = DB::transaction(function () use ($fila, $calculo, $estado, $usuario, $detalle) {
-            TesoreriaCrownAsignacion::query()->whereKey($fila->id)->lockForUpdate()->first();
-            if ($fila->cierre()->exists()) {
+        $creado = DB::transaction(function () use ($ctx, $calculo, $estado, $usuario, $detalle) {
+            if (TesoreriaCrownDiaCajeroSupport::cierreAbierto((int) $ctx->jornada_id, (int) $ctx->cajero_crown_id)) {
                 return false;
             }
             $cierre = TesoreriaCrownCierre::query()->create([
-                'sala_id' => $fila->sala_id,
-                'empresa_id' => $fila->jornada->empresa_id,
-                'jornada_id' => $fila->jornada_id,
-                'asignacion_id' => $fila->id,
-                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $fila->sala_id, 'C'),
+                'sala_id' => $ctx->sala_id,
+                'empresa_id' => $ctx->jornada->empresa_id,
+                'jornada_id' => $ctx->jornada_id,
+                'cajero_crown_id' => $ctx->cajero_crown_id,
+                'asignacion_id' => null,
+                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $ctx->sala_id, 'C'),
                 'efectivo_habilitado' => $calculo['habilitado'],
                 'valores_rendidos' => $calculo['rendido'],
                 'resultado' => $calculo['resultado'],
@@ -135,42 +132,44 @@ class TesoreriaCrownCierreController extends Controller
             return true;
         });
         if (! $creado) {
-            return back()->with('mensaje-error', 'Esta caja ya tiene cierre.');
+            return back()->with('mensaje-error', 'Este cajero ya tiene cierre.');
         }
 
         $mensaje = $estado === TesoreriaCrownCierreSupport::AUDITORIA
-            ? 'Caja cerrada. La diferencia supera la tolerancia: quedó en auditoría.'
-            : 'Caja cerrada. Quedó '.TesoreriaCrownCierreSupport::estado($estado).'.';
+            ? 'Cajero cerrado. La diferencia supera la tolerancia: quedó en auditoría.'
+            : 'Cajero cerrado. Quedó '.TesoreriaCrownCierreSupport::estado($estado).'.';
 
-        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+        TesoreriaCrownAvisoGenerador::alEvento((int) $ctx->jornada_id);
 
-        return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', $mensaje);
+        return redirect()
+            ->route('ver_tesoreria_crown_cierre', ['jornada' => $ctx->jornada_id, 'cajero' => $ctx->cajero_crown_id])
+            ->with('mensaje', $mensaje);
     }
 
-    public function revisar(Request $request, int $asignacion)
+    public function revisar(Request $request, int $jornada, int $cajero)
     {
-        return $this->mover($request, $asignacion, TesoreriaCrownCierreSupport::REVISADA, [
+        return $this->mover($request, $jornada, $cajero, TesoreriaCrownCierreSupport::REVISADA, [
             TesoreriaCrownCierreSupport::CONFORME,
             TesoreriaCrownCierreSupport::NO_CONFORME,
             TesoreriaCrownCierreSupport::REVISION,
         ], 'El caso quedó revisado.');
     }
 
-    public function auditar(Request $request, int $asignacion)
+    public function auditar(Request $request, int $jornada, int $cajero)
     {
-        return $this->mover($request, $asignacion, TesoreriaCrownCierreSupport::AUDITORIA, [
+        return $this->mover($request, $jornada, $cajero, TesoreriaCrownCierreSupport::AUDITORIA, [
             TesoreriaCrownCierreSupport::CONFORME,
             TesoreriaCrownCierreSupport::NO_CONFORME,
             TesoreriaCrownCierreSupport::REVISION,
         ], 'El cierre pasó a auditoría.');
     }
 
-    public function firmarAuditoria(Request $request, int $asignacion)
+    public function firmarAuditoria(Request $request, int $jornada, int $cajero)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('editar-tesoreria-crown-movimiento');
-        $fila = $this->asignacion($asignacion);
-        $cierre = $fila->cierre;
+        $ctx = $this->contexto($jornada, $cajero);
+        $cierre = $ctx->cierre;
         if ($cierre === null || $cierre->estado !== TesoreriaCrownCierreSupport::AUDITORIA) {
             return back()->with('mensaje-error', 'Solo se cierra un caso que está en auditoría.');
         }
@@ -197,19 +196,19 @@ class TesoreriaCrownCierreController extends Controller
             return back()->with('mensaje-error', $e->getMessage())->withInput($request->except('firma_password'));
         }
 
-        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+        TesoreriaCrownAvisoGenerador::alEvento((int) $ctx->jornada_id);
 
         return back()->with('mensaje', 'Auditoría cerrada.');
     }
 
-    public function reabrir(Request $request, int $asignacion)
+    public function reabrir(Request $request, int $jornada, int $cajero)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can(TesoreriaCrownCierreSupport::PERMISO_REABRIR);
-        $fila = $this->asignacion($asignacion);
-        $cierre = $fila->cierre;
+        $ctx = $this->contexto($jornada, $cajero);
+        $cierre = $ctx->cierre;
         if ($cierre === null) {
-            return back()->with('mensaje-error', 'Esta caja no tiene un cierre vigente.');
+            return back()->with('mensaje-error', 'Este cajero no tiene un cierre vigente.');
         }
         $datos = $request->validate([
             'motivo' => ['required', 'string', 'max:500'],
@@ -227,13 +226,13 @@ class TesoreriaCrownCierreController extends Controller
             return back()->with('mensaje-error', $usuario)->withInput($request->except('firma_password'));
         }
 
-        $jornada = $fila->jornada;
-        $reabreJornada = ! $jornada->estaAbierta();
+        $jornadaModel = $ctx->jornada;
+        $reabreJornada = ! $jornadaModel->estaAbierta();
         if ($reabreJornada) {
             $otraAbierta = TesoreriaCrownJornada::query()
-                ->where('sala_id', $fila->sala_id)
+                ->where('sala_id', $ctx->sala_id)
                 ->where('estado', TesoreriaCrownJornada::ABIERTA)
-                ->where('id', '!=', $jornada->id)
+                ->where('id', '!=', $jornadaModel->id)
                 ->exists();
             if ($otraAbierta) {
                 return back()->with('mensaje-error', 'Esta sala ya tiene otra jornada abierta. Cerrala antes de reabrir este día.')->withInput();
@@ -241,35 +240,37 @@ class TesoreriaCrownCierreController extends Controller
         }
 
         $motivo = trim($datos['motivo']);
-        DB::transaction(function () use ($cierre, $usuario, $motivo, $jornada, $reabreJornada) {
+        DB::transaction(function () use ($cierre, $usuario, $motivo, $jornadaModel, $reabreJornada) {
             $cierre->reabierta_at = now();
             $cierre->reabierta_usuario_id = $usuario->id;
             $cierre->reabierta_motivo = $motivo;
             $cierre->save();
             $this->evento($cierre, TesoreriaCrownCierreSupport::REABIERTA, $usuario, $motivo);
             if ($reabreJornada) {
-                $jornada->estado = TesoreriaCrownJornada::ABIERTA;
-                $jornada->save();
+                $jornadaModel->estado = TesoreriaCrownJornada::ABIERTA;
+                $jornadaModel->save();
             }
         });
 
         $mensaje = $reabreJornada
-            ? 'Caja reabierta. La jornada volvió a abierta. El cierre anterior queda en la historia.'
-            : 'Caja reabierta. El cierre anterior queda en la historia.';
+            ? 'Cajero reabierto. La jornada volvió a abierta. El cierre anterior queda en la historia.'
+            : 'Cajero reabierto. El cierre anterior queda en la historia.';
 
-        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+        TesoreriaCrownAvisoGenerador::alEvento((int) $ctx->jornada_id);
 
-        return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', $mensaje);
+        return redirect()
+            ->route('ver_tesoreria_crown_cierre', ['jornada' => $ctx->jornada_id, 'cajero' => $ctx->cajero_crown_id])
+            ->with('mensaje', $mensaje);
     }
 
-    public function ajustar(Request $request, int $asignacion)
+    public function ajustar(Request $request, int $jornada, int $cajero)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can(TesoreriaCrownCierreSupport::PERMISO_AJUSTAR);
-        $fila = $this->asignacion($asignacion);
-        $cierre = $fila->cierre;
+        $ctx = $this->contexto($jornada, $cajero);
+        $cierre = $ctx->cierre;
         if ($cierre === null) {
-            return back()->with('mensaje-error', 'El ajuste se carga sobre una caja cerrada.');
+            return back()->with('mensaje-error', 'El ajuste se carga sobre un cajero cerrado.');
         }
         $datos = $request->validate([
             'corrige' => ['required', Rule::in(array_keys(TesoreriaCrownAjuste::CORRIGE))],
@@ -303,14 +304,15 @@ class TesoreriaCrownCierreController extends Controller
 
         $importe = round((float) $datos['importe'], 2);
         $motivo = trim($datos['motivo']);
-        DB::transaction(function () use ($fila, $cierre, $datos, $auditor, $tesoreria, $importe, $motivo) {
+        DB::transaction(function () use ($ctx, $cierre, $datos, $auditor, $tesoreria, $importe, $motivo) {
             $ajuste = TesoreriaCrownAjuste::query()->create([
-                'sala_id' => $fila->sala_id,
-                'empresa_id' => $fila->jornada->empresa_id,
-                'jornada_id' => $fila->jornada_id,
-                'asignacion_id' => $fila->id,
+                'sala_id' => $ctx->sala_id,
+                'empresa_id' => $ctx->jornada->empresa_id,
+                'jornada_id' => $ctx->jornada_id,
+                'cajero_crown_id' => $ctx->cajero_crown_id,
+                'asignacion_id' => null,
                 'cierre_id' => $cierre->id,
-                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $fila->sala_id, 'J'),
+                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $ctx->sala_id, 'J'),
                 'corrige' => $datos['corrige'],
                 'importe' => $importe,
                 'motivo' => $motivo,
@@ -339,20 +341,22 @@ class TesoreriaCrownCierreController extends Controller
             }
         });
 
-        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+        TesoreriaCrownAvisoGenerador::alEvento((int) $ctx->jornada_id);
 
-        return redirect()->route('ver_tesoreria_crown_cierre', $fila->id)->with('mensaje', 'Ajuste de caja grabado. El cierre original no se modificó.');
+        return redirect()
+            ->route('ver_tesoreria_crown_cierre', ['jornada' => $ctx->jornada_id, 'cajero' => $ctx->cajero_crown_id])
+            ->with('mensaje', 'Ajuste de cajero grabado. El cierre original no se modificó.');
     }
 
     /**
      * @param  list<string>  $desde
      */
-    private function mover(Request $request, int $asignacion, string $estado, array $desde, string $mensaje)
+    private function mover(Request $request, int $jornada, int $cajero, string $estado, array $desde, string $mensaje)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('editar-tesoreria-crown-movimiento');
-        $fila = $this->asignacion($asignacion);
-        $cierre = $fila->cierre;
+        $ctx = $this->contexto($jornada, $cajero);
+        $cierre = $ctx->cierre;
         if ($cierre === null || ! in_array($cierre->estado, $desde, true)) {
             return back()->with('mensaje-error', 'Este cierre no admite ese paso.');
         }
@@ -373,7 +377,7 @@ class TesoreriaCrownCierreController extends Controller
         $cierre->save();
         $this->evento($cierre, $estado, $usuario, $detalle);
 
-        TesoreriaCrownAvisoGenerador::alEvento((int) $fila->jornada_id);
+        TesoreriaCrownAvisoGenerador::alEvento((int) $ctx->jornada_id);
 
         return back()->with('mensaje', $mensaje);
     }
@@ -403,13 +407,36 @@ class TesoreriaCrownCierreController extends Controller
         return $usuario;
     }
 
-    private function asignacion(int $id): TesoreriaCrownAsignacion
+    private function contexto(int $jornadaId, int $cajeroId): object
     {
-        $fila = TesoreriaCrownAsignacion::query()
-            ->with(['jornada', 'deposito', 'cajero', 'cierre.tesoreriaUsuario', 'cierre.auditorUsuario', 'cierre.eventos.usuario'])
-            ->findOrFail($id);
-        TesoreriaCrownSalaSupport::exigida((int) $fila->sala_id);
+        $jornada = TesoreriaCrownJornada::query()->findOrFail($jornadaId);
+        TesoreriaCrownSalaSupport::exigida((int) $jornada->sala_id);
+        $cajero = CajeroCrown::query()
+            ->where('sala_id', $jornada->sala_id)
+            ->findOrFail($cajeroId);
+        $docs = TesoreriaCrownDiaCajeroSupport::comprobantes($jornadaId, $cajeroId);
+        $cierres = TesoreriaCrownCierre::query()
+            ->where('jornada_id', $jornadaId)
+            ->where('cajero_crown_id', $cajeroId)
+            ->with(['tesoreriaUsuario', 'auditorUsuario', 'eventos.usuario', 'reabiertaUsuario'])
+            ->orderBy('id')
+            ->get();
+        $cierre = $cierres->firstWhere('reabierta_at', null);
 
-        return $fila;
+        return (object) [
+            'id' => $cajero->id,
+            'jornada_id' => $jornada->id,
+            'sala_id' => $jornada->sala_id,
+            'cajero_crown_id' => $cajero->id,
+            'cajero' => $cajero,
+            'jornada' => $jornada,
+            'tipo_tarea' => (string) ($cajero->tipo_tarea ?? ''),
+            'permite_rendir_sin_habilitacion' => (bool) $cajero->permite_rendir_sin_habilitacion,
+            'comprobantes' => $docs,
+            'cierres' => $cierres,
+            'cierre' => $cierre,
+            'turno' => '',
+            'deposito' => null,
+        ];
     }
 }

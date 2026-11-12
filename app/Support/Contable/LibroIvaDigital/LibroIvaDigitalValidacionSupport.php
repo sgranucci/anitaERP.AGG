@@ -262,7 +262,10 @@ final class LibroIvaDigitalValidacionSupport
             if (strlen($linea) < 84) {
                 continue;
             }
-            $clave = substr($linea, 0, 3).'|'.substr($linea, 3, 5).'|'.substr($linea, 8, 20);
+            // Tipo+PV+nro no alcanza: dos proveedores pueden repetir el mismo número.
+            // El diseño ARCA incluye doc/CUIT del vendedor en COMPRAS_ALICUOTAS.
+            $clave = substr($linea, 0, 3).'|'.substr($linea, 3, 5).'|'.substr($linea, 8, 20)
+                .'|'.substr($linea, 28, 2).'|'.substr($linea, 30, 20);
             $alicuotasPorClave[$clave][] = [
                 'linea' => $i + 1,
                 'neto' => LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 50, 15)),
@@ -316,7 +319,8 @@ final class LibroIvaDigitalValidacionSupport
                 self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": tipo {$tipo} debe informar alícuotas IVA (tiene {$cantAlic}).");
             }
 
-            $clave = $tipo.'|'.substr($linea, 11, 5).'|'.substr($linea, 16, 20);
+            $clave = $tipo.'|'.substr($linea, 11, 5).'|'.substr($linea, 16, 20)
+                .'|'.substr($linea, 52, 2).'|'.substr($linea, 54, 20);
             $filasAlic = $alicuotasPorClave[$clave] ?? [];
             $neto = 0.0;
             $iva = 0.0;
@@ -405,7 +409,13 @@ final class LibroIvaDigitalValidacionSupport
     private static function validarTotalesIvaSimple(array $resultado, array &$avisos): void
     {
         $totalIvaVentas = (float) ($resultado['ventas']['resumen']['total_iva'] ?? 0);
-        $totalIvaSimple = (float) ($resultado['iva_simple']['resumen']['total_iva_debito'] ?? 0);
+        // El Libro suma FA+NC en valor absoluto; IVA Simple parte NC a restitución.
+        $totalIvaSimple = (float) ($resultado['iva_simple']['resumen']['total_iva_debito'] ?? 0)
+            + (float) ($resultado['iva_simple']['resumen']['total_iva_restitucion_debito'] ?? 0);
+        if ($totalIvaSimple <= 0) {
+            $totalIvaSimple = (float) ($resultado['iva_simple']['resumen']['total_iva_debito'] ?? 0)
+                + (float) collect($resultado['iva_simple']['detalle_restitucion_debito'] ?? [])->sum('iva');
+        }
 
         if ($totalIvaVentas > 0 && $totalIvaSimple > 0) {
             $diff = abs($totalIvaVentas - $totalIvaSimple);

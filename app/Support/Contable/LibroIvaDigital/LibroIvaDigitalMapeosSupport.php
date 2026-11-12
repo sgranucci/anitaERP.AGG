@@ -46,6 +46,14 @@ final class LibroIvaDigitalMapeosSupport
         'T' => 194,
     ];
 
+    /**
+     * Factura / ND / NC T (TurIVA). Van a LIBRO_IVA_DIGITAL_VENTAS_TurIVA_*,
+     * no al archivo de ventas ordinario. AGG aún no genera esa sección.
+     *
+     * @var list<string>
+     */
+    public const TIPOS_TURIVA = ['195', '196', '197'];
+
     public static function codigoAlicuotaLid(float $tasa): string
     {
         $key = (string) round($tasa, 1);
@@ -172,6 +180,24 @@ final class LibroIvaDigitalMapeosSupport
         }
 
         return 'B';
+    }
+
+    public static function esLetraTuriva(string $letra): bool
+    {
+        return strtoupper(trim($letra)) === 'T';
+    }
+
+    public static function esTipoTuriva(string $tipoComprobante): bool
+    {
+        $tipo = str_pad(preg_replace('/\D+/', '', $tipoComprobante) ?: '0', 3, '0', STR_PAD_LEFT);
+
+        return in_array($tipo, self::TIPOS_TURIVA, true);
+    }
+
+    /** Código de venta ERP (ej. «FAC T 00128-00000155»). */
+    public static function esCodigoVentaTuriva(string $codigoVenta): bool
+    {
+        return self::esLetraTuriva(self::letraDesdeCodigoVenta($codigoVenta));
     }
 
     public static function codigoMonedaAfip(?string $codigoMonedaErp, ?string $nombreMoneda = null): string

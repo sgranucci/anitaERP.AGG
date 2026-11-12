@@ -186,10 +186,10 @@
 @if (! empty($cajaCerrada))
     <div class="alert alert-info">Esta caja ya está cerrada. El comprobante queda en consulta.</div>
 @endif
-@if (($comprobante->asignacion->cajero ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::debePedirPinNuevo($comprobante->asignacion->cajero) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta())
+@if (($comprobante->cajeroOperativo() ?? null) && \App\Support\Caja\TesoreriaCrownFirmaSupport::debePedirPinNuevo($comprobante->cajeroOperativo()) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta())
     <div class="alert alert-warning">
         <strong>PIN del cajero.</strong>
-        {{ $comprobante->asignacion->cajero->nombre }} todavía no tiene un PIN propio (usa el inicial o está blanqueado).
+        {{ $comprobante->cajeroOperativo()->nombre }} todavía no tiene un PIN propio (usa el inicial o está blanqueado).
         En la próxima firma el sistema le va a pedir que elija uno nuevo delante de tesorería.
         Si se olvidó el PIN, en Pendiente usá «El cajero se olvidó el PIN».
     </div>
@@ -200,7 +200,7 @@
     $etiquetaRecibe = \App\Support\Caja\TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, 'recibe');
     $ladoCajero = \App\Support\Caja\TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo);
     $ladoTesoreria = \App\Support\Caja\TesoreriaCrownFirmaSupport::ladoTesoreria($comprobante->tipo);
-    $cajeroFirma = $comprobante->asignacion->cajero;
+    $cajeroFirma = $comprobante->cajeroOperativo();
     $reversa = $comprobante->reversa;
     $yaRevertido = $reversa !== null;
     $fechaJornada = $comprobante->jornada->fecha->format('Y-m-d');
@@ -237,7 +237,7 @@
                     {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($comprobante->numero) }}
                     · {{ $comprobante->jornada->fecha->format('d/m/Y') }}
                     — {{ $comprobante->asignacion->deposito->nombre ?? '' }}
-                    — {{ $comprobante->asignacion->cajero->nombre ?? '' }}
+                    — {{ $comprobante->cajeroOperativo()->nombre ?? '' }}
                 </h3>
                 <div class="card-tools d-flex align-items-center" style="gap:.35rem;">
                     @if ($cambiosDia !== [])
@@ -310,8 +310,8 @@
                 @else
                     <p class="text-muted mb-2">
                         Efectivo y fichas
-                        @if (\App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? ''))
-                            · caja {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea) }}: cierres de ventas, gastronomía/hotel y valores (tarjetas)
+                        @if (\App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa()))
+                            · caja {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->tipoTareaOperativa()) }}: cierres de ventas, gastronomía/hotel y valores (tarjetas)
                         @else
                             · al final, variables (cashless y tarjetas)
                         @endif
@@ -320,7 +320,7 @@
 
                 @php
                     $mozoHabilitacion = $esHabilitacion
-                        ? ($comprobante->asignacion->cajero->mozoGastronomia ?? null)
+                        ? ($comprobante->cajeroOperativo()->mozoGastronomia ?? null)
                         : null;
                 @endphp
                 @if ($mozoHabilitacion)
@@ -332,7 +332,7 @@
                             <div class="col-lg-6">
                                 <p class="mb-1 small text-muted">
                                     {{ $mozoHabilitacion->codigo }} — {{ $mozoHabilitacion->nombre }}
-                                    (tarea caja: {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->asignacion->tipo_tarea ?? '') }})
+                                    (tarea caja: {{ \App\Support\Caja\TesoreriaCrownAsignacionCatalogo::tarea($comprobante->tipoTareaOperativa()) }})
                                 </p>
                                 @if ($editable)
                                     <select name="mozo_aplicacion" id="mozo_aplicacion" class="form-control form-control-sm" form="form-cantidades-crown">

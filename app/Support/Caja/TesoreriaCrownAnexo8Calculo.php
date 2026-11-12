@@ -7,7 +7,6 @@ use App\Models\Caja\TesoreriaCrownDeposito;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownMesa;
 use App\Models\Caja\TesoreriaCrownMonedaExtranjera;
-use App\Models\Caja\TesoreriaCrownPropinaDia;
 use App\Models\Caja\TesoreriaCrownResumenFinalDia;
 use App\Models\Caja\TesoreriaCrownSlot;
 use App\Models\Caja\TesoreriaCrownValor;
@@ -21,15 +20,19 @@ use Throwable;
  * Total (arch_tot_boveda, ítem 130 del anexo I) =
  *   stock pesos (arqueo A del día + slots recuento sin vínculo a bóveda + drops mesa)
  *   + ítems resumen final (pre-depósito, fondos, cajas chicas, diferencias, …)
- *   + propina acumulada
  *   + moneda extranjera convertida (l-monextr: partidas × cotización de ingreso)
  *
- * Fuentes ERP: stock_dia / arqueo conforme, bóveda resumen, propina_dia /
- * mesas F, monextr ERP. Sin Anita en el cálculo (importar con
- * tesoreria-crown:importar-anexo8-anita si falta snapshot).
+ * La propina acumulada ya no suma al VIII: se registra en bóveda PROP
+ * (Mesas/Pública con billetaje; Híbrida solo informativo RRHH) y en
+ * tesoreria_crown_propina_dia para liquidación de sueldos.
+ *
+ * Fuentes ERP: stock_dia / arqueo conforme, bóveda resumen, monextr ERP.
+ * Sin Anita en el cálculo (importar con tesoreria-crown:importar-anexo8-anita
+ * si falta snapshot).
  *
  * Las fichas / poder público se listan (como l-estboveda proc_fichas) y no entran
  * en arch_tot_boveda: salen de TesoreriaCrownPoderPublicoCalculo (l-stockfichm).
+ * Fichas de color y no negociable quedan unificadas como fichas de valor.
  */
 final class TesoreriaCrownAnexo8Calculo
 {
@@ -174,11 +177,11 @@ final class TesoreriaCrownAnexo8Calculo
 
         $fx = self::monedaExtranjera($fecha, $fechaInt);
         $fxPesos = $fx['pesos'];
-        $propina = self::propinaAcumulada($jornada);
         $resumen = self::resumenFinal($fecha);
 
         // En l-estboveda slots/drops ya van dentro de Ptot_boveda1 (= pesosStock acá).
-        $total = round($pesosStock + $resumen['total'] + $propina + $fxPesos, 2);
+        // Propina acumulada fuera del VIII (bóveda PROP + propina_dia RRHH).
+        $total = round($pesosStock + $resumen['total'] + $fxPesos, 2);
 
         $out = [];
         foreach ($lugares as $lugar) {
@@ -231,18 +234,6 @@ final class TesoreriaCrownAnexo8Calculo
                         ];
                         $totalLugar = round($totalLugar + $resumen['total'], 2);
                     }
-                }
-                if (abs($propina) > 0.001) {
-                    $grupos[] = [
-                        'titulo' => 'Propina',
-                        'filas' => [[
-                            'denominacion' => 'Propina acumulada',
-                            'cantidad' => 1.0,
-                            'monto' => $propina,
-                        ]],
-                        'monto' => $propina,
-                    ];
-                    $totalLugar = round($totalLugar + $propina, 2);
                 }
                 if (abs($fxPesos) > 0.001) {
                     $filasFx = [];
@@ -317,7 +308,7 @@ final class TesoreriaCrownAnexo8Calculo
                 'drops_mesa' => $dropsMonto,
                 'resumen' => $resumen['total'],
                 'resumen_detalle' => $resumen['detalle'],
-                'propina' => $propina,
+                'propina' => 0.0,
                 'moneda_extranjera' => $fxPesos,
                 'usd_face' => round($fx['usd_face'], 2),
                 'eur_face' => round($fx['eur_face'], 2),
@@ -361,36 +352,29 @@ final class TesoreriaCrownAnexo8Calculo
         $filas = [];
         $cantFichas = 0;
         $montoFichas = 0.0;
-        $cantPlacas = 0;
-        $montoPlacas = 0.0;
         foreach ($armado['filas'] ?? [] as $fila) {
             $cantidad = (int) ($fila['final'] ?? 0);
             $valor = (float) ($fila['valor'] ?? 0);
             $monto = round($cantidad * $valor, 2);
-            $canje = (bool) ($fila['canje'] ?? false);
             $filas[] = [
                 'serie' => (string) ($fila['serie'] ?? ''),
                 'descripcion' => (string) ($fila['descripcion'] ?? ''),
                 'valor' => $valor,
                 'cantidad' => $cantidad,
                 'monto' => $monto,
-                'canje' => $canje,
+                // Compat: ya no hay placas / no negociable; todo es ficha de valor.
+                'canje' => false,
             ];
-            if ($canje) {
-                $cantPlacas += $cantidad;
-                $montoPlacas += $monto;
-            } else {
-                $cantFichas += $cantidad;
-                $montoFichas += $monto;
-            }
+            $cantFichas += $cantidad;
+            $montoFichas += $monto;
         }
 
         return [
             'filas' => $filas,
             'cant_fichas' => $cantFichas,
             'monto_fichas' => round($montoFichas, 2),
-            'cant_placas' => $cantPlacas,
-            'monto_placas' => round($montoPlacas, 2),
+            'cant_placas' => 0,
+            'monto_placas' => 0.0,
             'conversion_valorizada' => round((float) ($armado['conversion_valorizada'] ?? 0), 2),
             'poder_valorizado' => round((float) ($armado['poder_valorizado'] ?? 0), 2),
             'diario_valorizado' => round((float) ($armado['diario_valorizado'] ?? 0), 2),
@@ -690,41 +674,6 @@ final class TesoreriaCrownAnexo8Calculo
             'saldo_final_anexo1' => $saldo,
             'dif_final_boveda' => round($totalViii - $saldo, 2),
         ];
-    }
-
-    /**
-     * Acumulado de propina hasta la fecha (l-estboveda procesa_propina).
-     * Orden: propina_dia ERP → Σ mesas F ERP.
-     */
-    private static function propinaAcumulada(TesoreriaCrownJornada $jornada): float
-    {
-        $fechaYmd = $jornada->fecha->format('Y-m-d');
-        $salaId = (int) $jornada->sala_id;
-
-        if (Schema::hasTable('tesoreria_crown_propina_dia')) {
-            $fila = TesoreriaCrownPropinaDia::query()
-                ->where('sala_id', $salaId)
-                ->whereDate('fecha', $fechaYmd)
-                ->first();
-            if ($fila !== null && abs((float) $fila->monto) > 0.001) {
-                return round((float) $fila->monto, 2);
-            }
-        }
-
-        $local = round((float) TesoreriaCrownMesa::query()
-            ->where('tipo', 'F')
-            ->where('estado', TesoreriaCrownMesa::CONFIRMADO)
-            ->whereNull('revierte_id')
-            ->whereDoesntHave('reversa')
-            ->whereHas('jornada', fn ($q) => $q
-                ->where('sala_id', $salaId)
-                ->whereDate('fecha', '<=', $fechaYmd))
-            ->sum('propina'), 2);
-        if (abs($local) > 0.001) {
-            return $local;
-        }
-
-        return 0.0;
     }
 
     /**

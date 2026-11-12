@@ -126,7 +126,17 @@
                     <td class="text-right">{{ number_format($signo * $iva, 2, ',', '.') }}</td>
                     <td class="text-right">{{ number_format($signo * (float) ($fila['total'] ?? 0), 2, ',', '.') }}</td>
                     <td>
-                        @if (($fila['asiento_origen'] ?? '') === 'subdiario')
+                        @if ($estado === 'existe')
+                            <span class="badge badge-secondary" title="Asiento ya grabado en el ERP">
+                                @if (! empty($fila['numeroasiento']))
+                                    {{ $fila['numeroasiento'] }}
+                                @else
+                                    Ya generado
+                                @endif
+                            </span>
+                        @elseif ($estado === 'enganchar')
+                            <span class="badge badge-primary">A enganchar</span>
+                        @elseif (($fila['asiento_origen'] ?? '') === 'subdiario')
                             <span class="badge badge-info">Subdiario</span>
                         @elseif (($fila['lineas_asiento'] ?? []) !== [])
                             <span class="badge badge-primary">A generar</span>

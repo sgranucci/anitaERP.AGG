@@ -54,6 +54,7 @@
             texto.value = '';
             texto.classList.add('d-none');
         }
+        actualizarAvisoSubtipo();
         if (!tipoId || !url) {
             wrap.classList.add('d-none');
             select.removeAttribute('required');
@@ -66,6 +67,7 @@
             if (!filas.length) {
                 wrap.classList.add('d-none');
                 select.removeAttribute('required');
+                actualizarAvisoSubtipo();
                 return;
             }
             filas.forEach(function (fila) {
@@ -73,13 +75,31 @@
                 opt.value = fila.id;
                 opt.textContent = fila.etiqueta;
                 opt.setAttribute('data-codigo', fila.codigo || '');
+                opt.setAttribute('data-mueve-billetaje', fila.mueve_billetaje === false || fila.mueve_billetaje === 0 ? '0' : '1');
                 select.appendChild(opt);
             });
             wrap.classList.remove('d-none');
             select.setAttribute('required', 'required');
+            actualizarAvisoSubtipo();
         }).catch(function () {
             wrap.classList.add('d-none');
+            actualizarAvisoSubtipo();
         });
+    }
+
+    function actualizarAvisoSubtipo() {
+        var select = document.getElementById('subtipo_id');
+        var aviso = document.getElementById('tc-boveda-subtipo-aviso');
+        if (!aviso) {
+            return;
+        }
+        if (!select || !select.value) {
+            aviso.classList.add('d-none');
+            return;
+        }
+        var opt = select.options[select.selectedIndex];
+        var mueve = opt ? (opt.getAttribute('data-mueve-billetaje') || '1') : '1';
+        aviso.classList.toggle('d-none', mueve !== '0');
     }
 
     function totalPanel(panel) {
@@ -159,16 +179,17 @@
     if (selectSubtipo) {
         selectSubtipo.addEventListener('change', function () {
             var texto = document.getElementById('subtipo_texto');
-            if (!texto) {
-                return;
-            }
             var opt = selectSubtipo.options[selectSubtipo.selectedIndex];
             var codigo = opt ? (opt.getAttribute('data-codigo') || '') : '';
-            texto.classList.toggle('d-none', String(codigo).toUpperCase() !== 'OTR');
-            if (String(codigo).toUpperCase() !== 'OTR') {
-                texto.value = '';
+            if (texto) {
+                texto.classList.toggle('d-none', String(codigo).toUpperCase() !== 'OTR');
+                if (String(codigo).toUpperCase() !== 'OTR') {
+                    texto.value = '';
+                }
             }
+            actualizarAvisoSubtipo();
         });
+        actualizarAvisoSubtipo();
     }
     aplicarTipo();
 

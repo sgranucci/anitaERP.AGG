@@ -1,8 +1,8 @@
 @php
-    $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->asignacion->tipo_tarea ?? '');
-    $calculaRecargo = ! \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '');
+    $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->tipoTareaOperativa());
+    $calculaRecargo = ! \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa());
     $divisorRecargo = \App\Support\Caja\TesoreriaCrownCierreCalculo::divisorRecargo($comprobante->jornada->fecha->format('Y-m-d'));
-    $esGastroHotel = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '');
+    $esGastroHotel = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa());
 @endphp
 @if ($comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::RENDICION
     && $esGastroHotel)

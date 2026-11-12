@@ -11,6 +11,7 @@ use App\Models\Caja\TesoreriaCrownMesaJuego;
 use App\Models\Caja\TesoreriaCrownMesaLinea;
 use App\Models\Caja\TesoreriaCrownNumerador;
 use App\Models\Caja\TesoreriaCrownValor;
+use App\Support\Caja\TesoreriaCrownMesaPropinaBovedaSupport;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\DB;
@@ -295,6 +296,12 @@ class TesoreriaCrownMesaAnitaImportService
                         'valor_id' => $linea['valor_id'],
                         'cantidad' => $linea['cantidad'],
                     ]);
+                }
+                if ($fila['tipo'] === 'F' && round((float) ($fila['propina'] ?? 0), 2) >= 0.001) {
+                    $errorPropina = TesoreriaCrownMesaPropinaBovedaSupport::asentarDesdeEstadoFinal($movimiento);
+                    if ($errorPropina !== null) {
+                        throw new RuntimeException($errorPropina);
+                    }
                 }
                 $maxNumero = max($maxNumero, (int) $fila['numero']);
                 $altas++;

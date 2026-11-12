@@ -19,6 +19,10 @@ use Illuminate\Support\Facades\Schema;
  * y recién después el código de Anita. Un código deducido de la descripción que no
  * corresponde a ningún proveedor se descarta: solía mostrar el número de comprobante
  * COM en la columna Emisor.
+ *
+ * Para cliente, si el asiento tiene venta_id y falta anita_emisor (facturas ERP /
+ * ARCA nativas), se toma el cliente de la venta: el mayor dejaba Emisor vacío aunque
+ * la factura tuviera cliente cargado.
  */
 class MayorPlanoCuentaEmisorEnricher
 {
@@ -46,6 +50,9 @@ class MayorPlanoCuentaEmisorEnricher
     /** @var array<int, int> asiento_id => proveedor_id */
     private array $cacheProveedorDeAplicacion = [];
 
+    /** @var array<int, array{id: int, empresa_id: int|null, codigo: string, nombre: string, cuit: string}|null> */
+    private array $cacheClientePorVentaId = [];
+
     /**
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
@@ -55,15 +62,26 @@ class MayorPlanoCuentaEmisorEnricher
         $codigosPorEntidad = [];
         $documentos = [];
         $asientoIds = [];
+        $ventaIds = [];
 
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 continue;
             }
 
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
+            if ($ventaId > 0) {
+                $ventaIds[$ventaId] = $ventaId;
+            }
+
+            $entidad = $this->entidadDeFila($fila);
+            if ($ventaId > 0) {
+                $entidad = MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE;
+            }
+
             $codigo = MayorPlanoCuentaEmisorSupport::normalizarCodigo((string) ($fila['emisor'] ?? ''));
             if ($codigo !== '') {
-                $codigosPorEntidad[$this->entidadDeFila($fila)][$codigo] = true;
+                $codigosPorEntidad[$entidad][$codigo] = true;
             }
 
             $tieneDocumento = false;
@@ -76,7 +94,7 @@ class MayorPlanoCuentaEmisorEnricher
             }
 
             $asientoId = (int) ($fila['asiento_id'] ?? 0);
-            if ($asientoId > 0 && $codigo === '' && ! $tieneDocumento) {
+            if ($asientoId > 0 && $codigo === '' && ! $tieneDocumento && $ventaId <= 0) {
                 $asientoIds[$asientoId] = $asientoId;
             }
         }
@@ -86,13 +104,18 @@ class MayorPlanoCuentaEmisorEnricher
         }
         $this->precargarProveedoresDeDocumentos($documentos);
         $this->precargarProveedoresDeAplicacionCc(array_values($asientoIds));
+        $this->precargarClientesDeVentas(array_values($ventaIds));
 
         foreach ($filas as $idx => $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 continue;
             }
 
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
             $entidad = $this->entidadDeFila($fila);
+            if ($ventaId > 0) {
+                $entidad = MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE;
+            }
             $empresaId = (int) ($fila['empresa_id'] ?? 0);
             $codigo = MayorPlanoCuentaEmisorSupport::normalizarCodigo((string) ($fila['emisor'] ?? ''));
 
@@ -101,6 +124,9 @@ class MayorPlanoCuentaEmisorEnricher
                 : null;
             if ($registro === null && $entidad === MayorPlanoCuentaEmisorSupport::ENTIDAD_PROVEEDOR) {
                 $registro = $this->proveedorPorAplicacionCc($fila);
+            }
+            if ($registro === null && $entidad === MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE) {
+                $registro = $this->clientePorVenta($fila);
             }
             if ($registro === null && $codigo !== '') {
                 $registro = $this->registroPorCodigo($entidad, $codigo, $empresaId);
@@ -666,6 +692,69 @@ class MayorPlanoCuentaEmisorEnricher
         $proveedorId = (int) ($this->cacheProveedorDeAplicacion[$asientoId] ?? 0);
 
         return $proveedorId > 0 ? ($this->cacheProveedorPorId[$proveedorId] ?? null) : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @return array{id: int, empresa_id: int|null, codigo: string, nombre: string, cuit: string}|null
+     */
+    private function clientePorVenta(array $fila): ?array
+    {
+        $ventaId = (int) ($fila['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return null;
+        }
+
+        return $this->cacheClientePorVentaId[$ventaId] ?? null;
+    }
+
+    /**
+     * @param  list<int>  $ventaIds
+     */
+    private function precargarClientesDeVentas(array $ventaIds): void
+    {
+        $faltantes = array_values(array_filter(
+            $ventaIds,
+            fn (int $id) => $id > 0 && ! array_key_exists($id, $this->cacheClientePorVentaId),
+        ));
+        if ($faltantes === [] || ! Schema::hasTable('venta') || ! Schema::hasTable('cliente')) {
+            return;
+        }
+
+        foreach ($faltantes as $id) {
+            $this->cacheClientePorVentaId[$id] = null;
+        }
+
+        $columnaCuit = $this->columnaCuit(MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE);
+        $select = [
+            'venta.id as venta_id',
+            'cliente.id as cliente_id',
+            'cliente.codigo',
+            'cliente.nombre',
+        ];
+        if (Schema::hasColumn('cliente', 'empresa_id')) {
+            $select[] = 'cliente.empresa_id';
+        }
+        if ($columnaCuit !== '' && Schema::hasColumn('cliente', $columnaCuit)) {
+            $select[] = 'cliente.'.$columnaCuit;
+        }
+
+        $rows = DB::table('venta')
+            ->join('cliente', 'cliente.id', '=', 'venta.cliente_id')
+            ->whereIn('venta.id', $faltantes)
+            ->get($select);
+
+        foreach ($rows as $row) {
+            $registro = [
+                'id' => (int) $row->cliente_id,
+                'empresa_id' => isset($row->empresa_id) ? (int) $row->empresa_id : null,
+                'codigo' => MayorPlanoCuentaEmisorSupport::normalizarCodigo((string) ($row->codigo ?? '')),
+                'nombre' => trim((string) ($row->nombre ?? '')),
+                'cuit' => $columnaCuit !== '' ? trim((string) ($row->{$columnaCuit} ?? '')) : '',
+            ];
+            $this->cacheClientePorVentaId[(int) $row->venta_id] = $registro;
+            $this->guardarEnCache(MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE, $registro);
+        }
     }
 
     /**

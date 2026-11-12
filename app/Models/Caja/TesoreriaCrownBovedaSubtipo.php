@@ -20,10 +20,12 @@ class TesoreriaCrownBovedaSubtipo extends Model implements Auditable
         'codigo',
         'nombre',
         'activo',
+        'mueve_billetaje',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
+        'mueve_billetaje' => 'boolean',
     ];
 
     public function sala(): BelongsTo

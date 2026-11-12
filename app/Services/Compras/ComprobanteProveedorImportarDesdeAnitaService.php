@@ -22,6 +22,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportSinCcSupport;
+use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportCcGuardSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -38,6 +39,9 @@ use RuntimeException;
 /**
  * Importa comprobantes, CC (promov) y aplicaciones (aplmovp) Anita → ERP.
  * No escribe Anita. Las facturas ya cargadas en ERP se omiten (salvo completar conceptos IVA).
+ *
+ * Deuda: solo crea CC por el pendiente Anita (monto − t_pagado aplicable). Factura
+ * saldada o sin promov → documento sin CC (no infla deuda del proveedor).
  *
  * Con $sinCuentaCorriente: solo documentos consultables (comprobante + conceptos +
  * cuotas; OPA como cabecera pagoproveedor). No crea proveedor_cuentacorriente ni
@@ -468,6 +472,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         $cuotas = [];
         if ($cuotasAnita === []) {
+            // Sin promov: documento sí, deuda no (no inventar CC/impago).
             $cuotas[] = [
                 'numero_cuota' => 1,
                 'fecha' => $fecha,
@@ -475,20 +480,28 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 'monto' => abs($total),
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotizacion,
+                'total_pagado' => 0.0,
+                'tiene_promov' => false,
             ];
         } else {
-                foreach ($cuotasAnita as $cuota) {
+            foreach ($cuotasAnita as $cuota) {
                 $fechaCc = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($cuota['prov_fecha'] ?? '') ?: $fecha;
                 $vto = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($cuota['prov_fecha_vto'] ?? '') ?: $fechaCc;
+                $montoCuota = abs((float) ($cuota['prov_monto'] ?? 0));
+                $pagadoCuota = ProveedorCuentacorrienteAnitaImportCcGuardSupport::pagadoAplicableACuota(
+                    $montoCuota,
+                    (float) ($cuota['prov_t_pagado'] ?? 0),
+                );
                 $cuotas[] = [
                     'numero_cuota' => (int) ($cuota['prov_nro_cuota'] ?? 1) ?: 1,
                     // CC usa prov_fecha (ficha Anita); com_fecha queda en el comprobante.
                     'fecha' => $fechaCc,
                     'fechavencimiento' => $vto,
-                    'monto' => abs((float) ($cuota['prov_monto'] ?? 0)),
+                    'monto' => $montoCuota,
                     'moneda_id' => RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($cuota['prov_cod_mon'] ?? $compra['com_cod_mon'] ?? 1),
                     'cotizacion' => (float) ($cuota['prov_cotizacion'] ?? $cotizacion) ?: $cotizacion,
-                    'total_pagado' => abs((float) ($cuota['prov_t_pagado'] ?? 0)),
+                    'total_pagado' => $pagadoCuota,
+                    'tiene_promov' => true,
                 ];
             }
         }
@@ -587,22 +600,33 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $ccPorClave = [];
         $ccIds = [];
         foreach ($item['cuotas'] as $cuotaData) {
+            $montoCuota = abs((float) ($cuotaData['monto'] ?? 0));
+            $pagadoCuota = ProveedorCuentacorrienteAnitaImportCcGuardSupport::pagadoAplicableACuota(
+                $montoCuota,
+                (float) ($cuotaData['total_pagado'] ?? 0),
+            );
+            $pendiente = round($montoCuota - $pagadoCuota, 4);
+
             $cuota = Comprobante_Proveedor_Cuota::query()->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'numero_cuota' => $cuotaData['numero_cuota'],
                 'fechavencimiento' => $cuotaData['fechavencimiento'],
-                'monto' => $cuotaData['monto'],
+                'monto' => $montoCuota,
                 'moneda_id' => $cuotaData['moneda_id'],
                 'cotizacion' => $cuotaData['cotizacion'],
                 'formapago_id' => $formapagoId,
-                'total_pagado' => $cuotaData['total_pagado'] ?? 0,
+                'total_pagado' => $pagadoCuota,
             ]);
 
             if ($sinCuentaCorriente) {
                 continue;
             }
+            // Sin promov o ya saldada en Anita: no tocar deuda del proveedor.
+            if (empty($cuotaData['tiene_promov']) || $pendiente <= 0.009) {
+                continue;
+            }
 
-            $montoCc = round((float) $cuotaData['monto'] * $signo, 4);
+            $montoCc = round($pendiente * $signo, 4);
             if (abs($montoCc) < 0.0001) {
                 continue;
             }
@@ -622,13 +646,17 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $cuota->save();
 
             $ccIds[] = (int) $cc->id;
-            $ccPorClave[$item['clave']][] = [
-                'id' => (int) $cc->id,
-                'saldo' => abs($montoCc),
-                'moneda_id' => (int) $cuotaData['moneda_id'],
-                'empresa_id' => (int) $item['empresa_id'],
-                'comprobante_id' => (int) $comprobante->id,
-            ];
+            // Solo exponer a aplmovp cuotas 100% abiertas; si ya hay t_pagado el
+            // pendiente ya descuenta lo cobrado y reaplicar aplmovp duplicaría.
+            if ($pagadoCuota <= 0.009) {
+                $ccPorClave[$item['clave']][] = [
+                    'id' => (int) $cc->id,
+                    'saldo' => abs($montoCc),
+                    'moneda_id' => (int) $cuotaData['moneda_id'],
+                    'empresa_id' => (int) $item['empresa_id'],
+                    'comprobante_id' => (int) $comprobante->id,
+                ];
+            }
         }
 
         Comprobante_Proveedor_Estado::query()->create([

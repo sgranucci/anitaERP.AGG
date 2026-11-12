@@ -158,8 +158,11 @@ final class TesoreriaCrownAvisoSupport
         if ($aviso->comprobante_id) {
             return route('editar_tesoreria_crown_movimiento', $aviso->comprobante_id).'?'.http_build_query($consulta);
         }
-        if ($aviso->asignacion_id) {
-            return route('ver_tesoreria_crown_cierre', $aviso->asignacion_id).'?'.http_build_query($consulta);
+        if ($aviso->jornada_id && $aviso->cajero_crown_id) {
+            return route('ver_tesoreria_crown_cierre', [
+                'jornada' => $aviso->jornada_id,
+                'cajero' => $aviso->cajero_crown_id,
+            ]).'?'.http_build_query($consulta);
         }
         if ($aviso->jornada_id) {
             return route('ver_tesoreria_crown_jornada', $aviso->jornada_id).'?'.http_build_query($consulta);

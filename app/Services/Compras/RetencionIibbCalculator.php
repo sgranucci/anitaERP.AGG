@@ -23,7 +23,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * Catálogo de alícuotas/mínimos: retencionIIBB (legado Anita).
  * Tasa: override del pago → padrón (tasaretencion) → fallback retencionIIBB_condicion.
  *
- * Crown: sin padrón CM05; matriz condición × provincia del proveedor
+ * Crown: matriz condición × inscripción RN (domicilio o CM05 del proveedor)
  * ({@see RetencionIibbCrownMatrizSupport}) + % fuera en retencionIIBB.
  */
 class RetencionIibbCalculator
@@ -251,6 +251,7 @@ class RetencionIibbCalculator
                 'regla_crown' => $matriz['regla'],
                 'proveedor_provincia_id' => $matriz['proveedor_provincia_id'],
                 'en_jurisdiccion_local' => $matriz['en_jurisdiccion_local'],
+                'inscrito_cm05_rn' => $matriz['inscrito_cm05_rn'] ?? false,
                 'es_monotributo' => $matriz['es_monotributo'],
                 'tasa_fuera_catalogo' => RetencionIibbCrownMatrizSupport::tasaFuera($parametrica),
             ]),

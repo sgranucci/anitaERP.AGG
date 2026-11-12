@@ -121,7 +121,7 @@ class TesoreriaCrownAvisoGenerador
             }
             $this->reglasComprobantes($out, $deCaja, $caja, $asignacion, $cajeroUsuarioId);
             if (! $asignacion->permite_rendir_sin_habilitacion
-                && TesoreriaCrownCierreCalculo::formula((string) $asignacion->tipo_tarea) !== 'empleados') {
+                && TesoreriaCrownCierreCalculo::formula((string) ($asignacion->cajero->tipo_tarea ?? $asignacion->tipo_tarea)) !== 'empleados') {
                 $this->reglaSinHabilitacion($out, $deCaja, $caja, $asignacion->comprobantes);
             }
             $this->reglaEdicionPostCierre($out, $deCaja, $caja, $asignacion);
@@ -318,7 +318,7 @@ class TesoreriaCrownAvisoGenerador
      */
     private function reglasComprobantes(array &$out, array $deCaja, string $caja, TesoreriaCrownAsignacion $asignacion, int $cajeroUsuarioId): void
     {
-        $gastroHotel = TesoreriaCrownRendicionCampos::esCajaGastroHotel($asignacion->tipo_tarea ?? '');
+        $gastroHotel = TesoreriaCrownRendicionCampos::esCajaGastroHotel(($asignacion->cajero->tipo_tarea ?? $asignacion->tipo_tarea ?? ''));
         foreach ($asignacion->comprobantes as $doc) {
             $deDoc = $deCaja + ['comprobante_id' => (int) $doc->id];
             $nombre = TesoreriaCrownComprobanteSupport::tipo($doc->tipo).' '.TesoreriaCrownNumeradorSupport::visible((int) $doc->numero);

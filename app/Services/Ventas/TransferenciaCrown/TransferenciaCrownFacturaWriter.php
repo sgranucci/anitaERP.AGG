@@ -79,12 +79,25 @@ final class TransferenciaCrownFacturaWriter
             }
         }
 
+        /** @var array<int, array{asiento_id: int, numeroasiento: string}> $conAsiento */
         $conAsiento = [];
         $ids = array_values(array_unique(array_filter($existentes)));
         if ($ids !== []) {
             foreach (array_chunk($ids, 2000) as $loteIds) {
-                foreach (DB::table('asiento')->whereIn('venta_id', $loteIds)->pluck('venta_id') as $ventaId) {
-                    $conAsiento[(int) $ventaId] = true;
+                $asientos = DB::table('asiento')
+                    ->whereIn('venta_id', $loteIds)
+                    ->orderBy('id')
+                    ->get(['id', 'venta_id', 'numeroasiento']);
+                foreach ($asientos as $asiento) {
+                    $ventaId = (int) $asiento->venta_id;
+                    // Si hay más de un asiento, nos quedamos con el primero (más viejo).
+                    if (isset($conAsiento[$ventaId])) {
+                        continue;
+                    }
+                    $conAsiento[$ventaId] = [
+                        'asiento_id' => (int) $asiento->id,
+                        'numeroasiento' => (string) $asiento->numeroasiento,
+                    ];
                 }
             }
         }
@@ -100,6 +113,8 @@ final class TransferenciaCrownFacturaWriter
             $fila['venta_id'] = $ventaId;
             if (isset($conAsiento[$ventaId])) {
                 $fila['estado'] = 'existe';
+                $fila['asiento_id'] = $conAsiento[$ventaId]['asiento_id'];
+                $fila['numeroasiento'] = $conAsiento[$ventaId]['numeroasiento'];
                 $fila['mensaje'] = 'Ya está en el ERP, con asiento.';
                 continue;
             }

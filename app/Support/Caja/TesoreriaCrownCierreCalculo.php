@@ -2,10 +2,14 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAsignacion;
+use App\Models\Caja\TesoreriaCrownCierre;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownCotizacion;
+use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownTipoValor;
+use Illuminate\Support\Collection;
 
 /**
  * Cierre de caja con la cuenta de p-cierrecajero.c (imprime_variables) y de
@@ -46,9 +50,61 @@ final class TesoreriaCrownCierreCalculo
      */
     public static function de(TesoreriaCrownAsignacion $asignacion, bool $conPiezas = true): array
     {
-        $tolerancia = TesoreriaCrownCierreSupport::tolerancia();
         self::cargarRelaciones($asignacion);
-        $docs = $asignacion->comprobantes;
+        $tarea = (string) ($asignacion->cajero->tipo_tarea ?? $asignacion->tipo_tarea);
+
+        return self::calcular(
+            $tarea,
+            $asignacion->comprobantes,
+            $asignacion->jornada,
+            $asignacion->cierre,
+            (int) $asignacion->sala_id,
+            $conPiezas
+        );
+    }
+
+    public static function deCajero(CajeroCrown $cajero, TesoreriaCrownJornada $jornada, bool $conPiezas = true): array
+    {
+        $docs = TesoreriaCrownDiaCajeroSupport::comprobantes((int) $jornada->id, (int) $cajero->id);
+        $docs->loadMissing(['lineas.valor.tipoValor', 'reversa']);
+        $cierre = TesoreriaCrownDiaCajeroSupport::cierreAbierto((int) $jornada->id, (int) $cajero->id);
+
+        return self::calcular(
+            (string) ($cajero->tipo_tarea ?? ''),
+            $docs,
+            $jornada,
+            $cierre,
+            (int) $jornada->sala_id,
+            $conPiezas
+        );
+    }
+
+    /**
+     * @param  Collection<int, TesoreriaCrownComprobante>|\Illuminate\Database\Eloquent\Collection<int, TesoreriaCrownComprobante>  $docs
+     * @return array{
+     *     habilitado: float,
+     *     rendido: float,
+     *     resultado: float,
+     *     diferencia: float,
+     *     signo: string,
+     *     tolerancia: float,
+     *     supera: bool,
+     *     puede: bool,
+     *     motivo: string,
+     *     formula: string,
+     *     componentes: array{formula: string, filas: list<array{concepto: string, importe: float, entra: bool}>},
+     *     piezas: list<mixed>
+     * }
+     */
+    public static function calcular(
+        string $tarea,
+        $docs,
+        TesoreriaCrownJornada $jornada,
+        ?TesoreriaCrownCierre $cierre,
+        int $salaId,
+        bool $conPiezas = true
+    ): array {
+        $tolerancia = TesoreriaCrownCierreSupport::tolerancia();
         $pendiente = $docs->first(fn (TesoreriaCrownComprobante $doc) => in_array($doc->estado, [
             TesoreriaCrownComprobanteSupport::BORRADOR,
             TesoreriaCrownComprobanteSupport::PENDIENTE,
@@ -57,10 +113,8 @@ final class TesoreriaCrownCierreCalculo
         $conforme = $docs->filter(fn (TesoreriaCrownComprobante $doc) => $doc->estado === TesoreriaCrownComprobanteSupport::CONFORME);
         $hayRendicion = $conforme->contains(fn (TesoreriaCrownComprobante $doc) => $doc->tipo === TesoreriaCrownComprobanteSupport::RENDICION);
 
-        $tarea = (string) $asignacion->tipo_tarea;
         $formula = self::formula($tarea);
-        $fecha = $asignacion->jornada->fecha->format('Y-m-d');
-        $salaId = (int) $asignacion->sala_id;
+        $fecha = $jornada->fecha->format('Y-m-d');
         $sinCotizacion = [];
         $hab = 0.0;
         $rendido = 0.0;
@@ -100,7 +154,7 @@ final class TesoreriaCrownCierreCalculo
             if (! $conPiezas) {
                 continue;
             }
-            $piezas[] = self::pieza($doc, $partes, $esRendicion, $formula, $salaId, $fecha, $asignacion->cierre === null && $asignacion->jornada->estaAbierta());
+            $piezas[] = self::pieza($doc, $partes, $esRendicion, $formula, $salaId, $fecha, $cierre === null && $jornada->estaAbierta());
         }
 
         $hab = round($hab, 2);

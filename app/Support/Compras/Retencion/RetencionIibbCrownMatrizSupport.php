@@ -3,6 +3,7 @@
 namespace App\Support\Compras\Retencion;
 
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Proveedor_Cm05;
 use App\Models\Compras\RetencionIIBB;
 use App\Models\Compras\RetencionIIBB_Condicion;
 use App\Models\Configuracion\Condicioniva;
@@ -10,12 +11,13 @@ use App\Support\Compras\ProveedorRetencionIibbAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 
 /**
- * Matriz Crown (sin CM05): condición IIBB × provincia del proveedor.
+ * Matriz Crown: condición IIBB × inscripción en RN.
  *
  * Destino mercadería ≠ RN (flete Crown) → base 0 en el armado de bases; acá no entra.
  * Destino RN → tasas de retencionIIBB (RN) + porcentajeretencion_fuera.
  *
- * Convenio/Local en RN → % de la fila; fuera de RN → % fuera.
+ * Inscripto en RN = domicilio RN o provincia RN en grilla CM05 del proveedor.
+ * Convenio/Local inscripto → % de la fila; sin inscripción RN → % fuera.
  * Monotributo en RN → 0%; mono fuera → % fuera.
  */
 final class RetencionIibbCrownMatrizSupport
@@ -32,6 +34,7 @@ final class RetencionIibbCrownMatrizSupport
      *   condicion_iibb_id: ?int,
      *   proveedor_provincia_id: ?int,
      *   en_jurisdiccion_local: bool,
+     *   inscrito_cm05_rn: bool,
      *   es_monotributo: bool,
      *   minimo_imponible: float,
      *   minimo_retencion: float,
@@ -48,7 +51,9 @@ final class RetencionIibbCrownMatrizSupport
             ?? ((int) ($proveedor->condicionIIBB_id ?? 0) ?: null);
 
         $provinciaId = (int) ($proveedor->provincia_id ?? 0) ?: null;
-        $enLocal = $provinciaId !== null && $provinciaId === self::PROVINCIA_LOCAL_ID;
+        $inscritoCm05Rn = self::tieneCm05EnProvincia($proveedor, self::PROVINCIA_LOCAL_ID);
+        $enLocal = ($provinciaId !== null && $provinciaId === self::PROVINCIA_LOCAL_ID)
+            || $inscritoCm05Rn;
         $esMono = self::esMonotributo($proveedor);
         $tasaFuera = self::tasaFuera($catalogo);
         $fila = self::filaCondicion($catalogo, $condicionId);
@@ -60,6 +65,7 @@ final class RetencionIibbCrownMatrizSupport
             'condicion_iibb_id' => $condicionId,
             'proveedor_provincia_id' => $provinciaId,
             'en_jurisdiccion_local' => $enLocal,
+            'inscrito_cm05_rn' => $inscritoCm05Rn,
             'es_monotributo' => $esMono,
             'minimo_imponible' => (float) ($fila->minimoimponible ?? 0),
             'minimo_retencion' => (float) ($fila->minimoretencion ?? 0),
@@ -173,6 +179,28 @@ final class RetencionIibbCrownMatrizSupport
         }
 
         return null;
+    }
+
+    public static function tieneCm05EnProvincia(Proveedor $proveedor, int $provinciaId): bool
+    {
+        if ($provinciaId <= 0) {
+            return false;
+        }
+
+        if ($proveedor->relationLoaded('proveedor_cm05s')) {
+            return $proveedor->proveedor_cm05s->contains(
+                static fn ($fila) => (int) ($fila->provincia_id ?? 0) === $provinciaId
+            );
+        }
+
+        if (! $proveedor->exists || ! (int) ($proveedor->id ?? 0)) {
+            return false;
+        }
+
+        return Proveedor_Cm05::query()
+            ->where('proveedor_id', (int) $proveedor->id)
+            ->where('provincia_id', $provinciaId)
+            ->exists();
     }
 
     private static function esMonotributo(Proveedor $proveedor): bool

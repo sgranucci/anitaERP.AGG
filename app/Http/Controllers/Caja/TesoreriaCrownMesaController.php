@@ -15,6 +15,7 @@ use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
 use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
+use App\Support\Caja\TesoreriaCrownMesaPropinaBovedaSupport;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use App\Support\Caja\TesoreriaCrownPropinaDiaSupport;
@@ -23,6 +24,7 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 
 class TesoreriaCrownMesaController extends Controller
 {
@@ -112,8 +114,14 @@ class TesoreriaCrownMesaController extends Controller
             return back()->withInput()->with('mensaje-error', $cajero);
         }
 
-        $movimiento = DB::transaction(function () use ($jornada, $mesa, $tipo, $cajero, $request) {
-            return TesoreriaCrownMesa::query()->create([
+        $fecha = $jornada->fecha->format('Y-m-d');
+        $juego = TesoreriaCrownMesaJuego::query()->where('deposito_id', $mesa->id)->first();
+        $banca = $juego
+            ? TesoreriaCrownMesaSupport::bancaVigente((int) $jornada->sala_id, (int) $juego->banca_codigo, $fecha)
+            : null;
+
+        $movimiento = DB::transaction(function () use ($jornada, $mesa, $tipo, $cajero, $request, $banca) {
+            $movimiento = TesoreriaCrownMesa::query()->create([
                 'sala_id' => $jornada->sala_id,
                 'empresa_id' => $jornada->empresa_id,
                 'jornada_id' => $jornada->id,
@@ -124,6 +132,21 @@ class TesoreriaCrownMesaController extends Controller
                 'estado' => TesoreriaCrownMesa::BORRADOR,
                 'comentario' => $this->comentario($request->input('comentario')),
             ]);
+            if ($tipo === 'A' && $banca !== null) {
+                foreach (TesoreriaCrownMesaSupport::cantidadesDeBanca((int) $banca->id) as $valorId => $cantidad) {
+                    $cantidad = (int) round((float) $cantidad);
+                    if ($cantidad <= 0) {
+                        continue;
+                    }
+                    TesoreriaCrownMesaLinea::query()->create([
+                        'mesa_id' => $movimiento->id,
+                        'valor_id' => (int) $valorId,
+                        'cantidad' => $cantidad,
+                    ]);
+                }
+            }
+
+            return $movimiento;
         });
 
         return redirect()->route('editar_tesoreria_crown_mesa', $movimiento->id);
@@ -135,12 +158,32 @@ class TesoreriaCrownMesaController extends Controller
         can('listar-tesoreria-crown-mesa');
 
         $movimiento = $this->movimientoEnAlcance($id);
+        $editable = $movimiento->esBorrador() && $movimiento->jornada->estaAbierta();
+        $cantidades = $movimiento->lineas->pluck('cantidad', 'valor_id');
+        if ($editable && $movimiento->tipo === 'A' && $cantidades->filter(fn ($c) => abs((float) $c) >= 0.0001)->isEmpty()) {
+            $juego = TesoreriaCrownMesaJuego::query()->where('deposito_id', $movimiento->deposito_id)->first();
+            $banca = $juego
+                ? TesoreriaCrownMesaSupport::bancaVigente(
+                    (int) $movimiento->sala_id,
+                    (int) $juego->banca_codigo,
+                    $movimiento->jornada->fecha->format('Y-m-d')
+                )
+                : null;
+            if ($banca !== null) {
+                $cantidades = collect(TesoreriaCrownMesaSupport::cantidadesDeBanca((int) $banca->id));
+            }
+        }
+        $propinaCantidades = $this->propinaCantidadesParaVista($movimiento);
 
         return view('caja.tesoreria_crown.mesa.editar', [
             'movimiento' => $movimiento,
             'grupos' => TesoreriaCrownMesaSupport::grupos((int) $movimiento->sala_id, $movimiento->tipo),
-            'cantidades' => $movimiento->lineas->pluck('cantidad', 'valor_id'),
-            'editable' => $movimiento->esBorrador() && $movimiento->jornada->estaAbierta(),
+            'gruposPropina' => $movimiento->tipo === 'F'
+                ? TesoreriaCrownMesaSupport::gruposPropinaBilletaje((int) $movimiento->sala_id)
+                : [],
+            'cantidades' => $cantidades,
+            'propinaCantidades' => $propinaCantidades,
+            'editable' => $editable,
             'escritorio' => $movimiento->jornada
                 ? TesoreriaCrownEscritorioNav::armar($movimiento->jornada)
                 : null,
@@ -176,12 +219,13 @@ class TesoreriaCrownMesaController extends Controller
         if (! $movimiento->esBorrador()) {
             return back()->with('mensaje-error', 'Este movimiento ya no está en borrador.');
         }
-        if ($request->exists('cantidad')) {
+        if ($request->exists('cantidad') || $request->exists('propina_cantidad')) {
             $datos = $this->datosBorrador($request);
             if ($error = $this->persistirBorrador($movimiento, $datos)) {
                 return back()->withInput()->with('mensaje-error', $error);
             }
             $movimiento->unsetRelation('lineas');
+            $movimiento->refresh();
         }
         if ($movimiento->lineas()->doesntExist()) {
             return back()->withInput()->with('mensaje-error', 'Cargá al menos una cantidad antes de confirmar.');
@@ -207,11 +251,24 @@ class TesoreriaCrownMesaController extends Controller
         $banca = $juego
             ? TesoreriaCrownMesaSupport::bancaVigente((int) $movimiento->sala_id, (int) $juego->banca_codigo, $movimiento->jornada->fecha->format('Y-m-d'))
             : null;
-        $movimiento->banca_id = $banca?->id;
-        $movimiento->estado = TesoreriaCrownMesa::CONFIRMADO;
-        $movimiento->usuario_id = $usuario->id;
-        $movimiento->confirmado_at = now();
-        $movimiento->save();
+        try {
+            DB::transaction(function () use ($movimiento, $banca, $usuario) {
+                $movimiento->banca_id = $banca?->id;
+                $movimiento->estado = TesoreriaCrownMesa::CONFIRMADO;
+                $movimiento->usuario_id = $usuario->id;
+                $movimiento->confirmado_at = now();
+                $movimiento->save();
+                if ($movimiento->tipo === 'F') {
+                    $errorPropina = TesoreriaCrownMesaPropinaBovedaSupport::asentarDesdeEstadoFinal($movimiento, $usuario);
+                    if ($errorPropina !== null) {
+                        throw new \RuntimeException($errorPropina);
+                    }
+                }
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withInput()->with('mensaje-error', $e->getMessage());
+        }
+        $movimiento->refresh();
         if ($movimiento->jornada) {
             TesoreriaCrownAnexo8Calculo::invalidarCache($movimiento->jornada);
             if ($movimiento->tipo === 'F') {
@@ -219,7 +276,12 @@ class TesoreriaCrownMesaController extends Controller
             }
         }
 
-        return back()->with('mensaje', 'Movimiento confirmado. Quedó con la banca del '.$movimiento->jornada->fecha->format('d/m/Y').'.');
+        $mensaje = 'Movimiento confirmado. Quedó con la banca del '.$movimiento->jornada->fecha->format('d/m/Y').'.';
+        if ($movimiento->tipo === 'F' && (int) ($movimiento->boveda_id ?? 0) > 0) {
+            $mensaje .= ' Se generó el movimiento de bóveda PROPINA / Mesas.';
+        }
+
+        return back()->with('mensaje', $mensaje);
     }
 
     public function anular(Request $request, int $id)
@@ -248,8 +310,17 @@ class TesoreriaCrownMesaController extends Controller
             return back()->with('mensaje-error', 'Usuario o clave de tesorería incorrectos.');
         }
         RateLimiter::clear($limite);
-        $movimiento->estado = TesoreriaCrownMesa::ANULADO;
-        $movimiento->save();
+        DB::transaction(function () use ($movimiento) {
+            if ($movimiento->tipo === 'F') {
+                TesoreriaCrownMesaPropinaBovedaSupport::anularVinculada($movimiento);
+            }
+            $movimiento->estado = TesoreriaCrownMesa::ANULADO;
+            $movimiento->save();
+        });
+        if ($movimiento->jornada && $movimiento->tipo === 'F') {
+            TesoreriaCrownPropinaDiaSupport::sincronizarDesdeMesas($movimiento->jornada);
+            TesoreriaCrownAnexo8Calculo::invalidarCache($movimiento->jornada);
+        }
 
         return back()->with('mensaje', 'Movimiento anulado. Dejó de entrar en el stock.');
     }
@@ -321,11 +392,25 @@ class TesoreriaCrownMesaController extends Controller
                         'cantidad' => (int) round((float) $linea->cantidad * -1),
                     ]);
                 }
+                if ($original->tipo === 'F') {
+                    $errorPropina = TesoreriaCrownMesaPropinaBovedaSupport::compensarAlRevertir(
+                        $original,
+                        $nuevo,
+                        $usuario,
+                        $motivo
+                    );
+                    if ($errorPropina !== null) {
+                        throw new \RuntimeException($errorPropina);
+                    }
+                }
 
                 return $nuevo;
             });
         } catch (\RuntimeException $e) {
             return back()->with('mensaje-error', $e->getMessage());
+        }
+        if ($movimiento->jornada && $movimiento->tipo === 'F') {
+            TesoreriaCrownPropinaDiaSupport::sincronizarDesdeMesas($movimiento->jornada);
         }
 
         return back()->with(
@@ -446,7 +531,7 @@ class TesoreriaCrownMesaController extends Controller
     }
 
     /**
-     * @return array{comentario: ?string, cajero_numero: ?string, cantidad: array<int|string, mixed>}
+     * @return array{comentario: ?string, cajero_numero: ?string, cantidad: array<int|string, mixed>, propina?: mixed, propina_cantidad?: array<int|string, mixed>}
      */
     private function datosBorrador(Request $request): array
     {
@@ -456,11 +541,13 @@ class TesoreriaCrownMesaController extends Controller
             'cantidad' => ['nullable', 'array'],
             'cantidad.*' => ['nullable', 'integer', 'min:0'],
             'propina' => ['nullable', 'numeric', 'min:0'],
+            'propina_cantidad' => ['nullable', 'array'],
+            'propina_cantidad.*' => ['nullable', 'integer', 'min:0'],
         ]);
     }
 
     /**
-     * @param  array{comentario?: ?string, cajero_numero?: ?string, cantidad?: array<int|string, mixed>}  $datos
+     * @param  array{comentario?: ?string, cajero_numero?: ?string, cantidad?: array<int|string, mixed>, propina?: mixed, propina_cantidad?: array<int|string, mixed>}  $datos
      */
     private function persistirBorrador(TesoreriaCrownMesa $movimiento, array $datos): ?string
     {
@@ -469,13 +556,29 @@ class TesoreriaCrownMesaController extends Controller
             return $cajero;
         }
         $valoresSala = TesoreriaCrownValor::query()->where('sala_id', $movimiento->sala_id)->where('activo', true)->pluck('id')->all();
+        $propinaBilletes = null;
+        $propina = 0.0;
+        if ($movimiento->tipo === 'F') {
+            [$propinaBilletes, $totalBilletes] = TesoreriaCrownMesaSupport::normalizarPropinaBilletaje(
+                (int) $movimiento->sala_id,
+                (array) ($datos['propina_cantidad'] ?? [])
+            );
+            if ($propinaBilletes !== []) {
+                $propina = $totalBilletes;
+            } else {
+                $propina = round((float) ($datos['propina'] ?? 0), 2);
+            }
+        }
 
-        DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala) {
+        DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala, $propina, $propinaBilletes) {
             $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
             $movimiento->cajero_crown_id = $cajero?->id;
-            $movimiento->propina = $movimiento->tipo === 'F'
-                ? round((float) ($datos['propina'] ?? 0), 2)
-                : 0;
+            $movimiento->propina = $propina;
+            if (Schema::hasColumn('tesoreria_crown_mesa', 'propina_billetes')) {
+                $movimiento->propina_billetes = $movimiento->tipo === 'F' && $propinaBilletes !== []
+                    ? $propinaBilletes
+                    : null;
+            }
             $movimiento->save();
             EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
             foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
@@ -492,6 +595,41 @@ class TesoreriaCrownMesaController extends Controller
         });
 
         return null;
+    }
+
+    /**
+     * @return array<int, int|float>
+     */
+    private function propinaCantidadesParaVista(TesoreriaCrownMesa $movimiento): array
+    {
+        if ($movimiento->tipo !== 'F') {
+            return [];
+        }
+        $guardado = Schema::hasColumn('tesoreria_crown_mesa', 'propina_billetes')
+            ? $movimiento->propina_billetes
+            : null;
+        if (is_array($guardado) && $guardado !== []) {
+            $out = [];
+            foreach ($guardado as $valorId => $cantidad) {
+                $out[(int) $valorId] = (int) $cantidad;
+            }
+
+            return $out;
+        }
+        if ((int) ($movimiento->boveda_id ?? 0) > 0) {
+            $movimiento->loadMissing('boveda.lineas');
+            $out = [];
+            foreach ($movimiento->boveda?->lineas ?? [] as $linea) {
+                $cant = (int) round(abs((float) $linea->cantidad));
+                if ($cant > 0) {
+                    $out[(int) $linea->valor_id] = $cant;
+                }
+            }
+
+            return $out;
+        }
+
+        return [];
     }
 
     private function comentario(mixed $texto): ?string

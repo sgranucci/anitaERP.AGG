@@ -41,11 +41,11 @@ final class TesoreriaCrownAnexo2GastroErp
             ->where('jornada_id', $jornada->id)
             ->where('tipo', TesoreriaCrownComprobanteSupport::RENDICION)
             ->where('estado', TesoreriaCrownComprobanteSupport::CONFORME)
-            ->whereHas('asignacion', fn ($q) => $q->whereIn('tipo_tarea', ['G', 'H']))
+            ->whereHas('cajero', fn ($q) => $q->whereIn('tipo_tarea', ['G', 'H']))
             ->get();
 
         foreach ($comps as $comp) {
-            $origen = strtoupper((string) ($comp->asignacion->tipo_tarea ?? 'G'));
+            $origen = strtoupper((string) ($comp->cajero->tipo_tarea ?? $comp->asignacion->tipo_tarea ?? 'G'));
             $sucursal = self::sucursalDeComprobante($comp, $origen);
             $clave = $sucursal.'|'.$origen;
             $bucket = self::bucket($buckets, $clave, $sucursal, $origen);

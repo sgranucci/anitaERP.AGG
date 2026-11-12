@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
 use App\Services\Caja\TesoreriaCrownAvisoGenerador;
+use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAsignacion;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownComprobanteLinea;
@@ -18,6 +19,7 @@ use App\Models\Ventas\MozoGastronomia;
 use App\Support\Caja\TesoreriaCrownCierreFiscalSync;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
+use App\Support\Caja\TesoreriaCrownDiaCajeroSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Seguridad\UsuarioOperativoSupport;
 use Illuminate\Support\Facades\Log;
@@ -182,7 +184,7 @@ class TesoreriaCrownComprobanteController extends Controller
                 $fila->jornada?->fecha?->format('d/m/Y') ?? '',
                 TesoreriaCrownComprobanteSupport::tipo($fila->tipo).($fila->revierte_id ? ' (reversa)' : ''),
                 trim(($fila->asignacion->deposito->codigo ?? '').' '.($fila->asignacion->deposito->nombre ?? '')),
-                $fila->asignacion->cajero->nombre ?? '',
+                $fila->cajeroOperativo()?->nombre ?? '',
                 TesoreriaCrownComprobanteSupport::estado($fila->estado),
                 $fila->entrega_at?->format('d/m/Y H:i') ?? '',
                 $fila->recibe_at?->format('d/m/Y H:i') ?? '',
@@ -222,23 +224,44 @@ class TesoreriaCrownComprobanteController extends Controller
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('crear-tesoreria-crown-movimiento');
 
-        $asignacion = $this->asignacionEnAlcance((int) $request->input('asignacion_id'));
         $tipo = (string) $request->input('tipo');
         if (! isset(TesoreriaCrownComprobanteSupport::TIPOS[$tipo])) {
             abort(404);
         }
-        if ($error = $this->errorJornada($asignacion->jornada) ?? $this->errorCaja($asignacion) ?? $this->errorAlta($asignacion, $tipo)) {
-            return redirect()->route('ver_tesoreria_crown_jornada', $asignacion->jornada_id)->with('mensaje-error', $error);
+
+        $jornadaId = (int) $request->input('jornada_id');
+        $cajeroId = (int) $request->input('cajero_crown_id');
+        // Compat: formularios viejos todavía mandan asignacion_id.
+        if ($cajeroId <= 0 && (int) $request->input('asignacion_id') > 0) {
+            $asignacion = $this->asignacionEnAlcance((int) $request->input('asignacion_id'));
+            $jornadaId = (int) $asignacion->jornada_id;
+            $cajeroId = (int) $asignacion->cajero_crown_id;
+        }
+        $jornada = TesoreriaCrownJornada::query()->findOrFail($jornadaId);
+        TesoreriaCrownSalaSupport::exigida((int) $jornada->sala_id);
+        $cajero = CajeroCrown::query()
+            ->where('sala_id', $jornada->sala_id)
+            ->where('activo', true)
+            ->find($cajeroId);
+        if (! $cajero) {
+            return redirect()->route('ver_tesoreria_crown_jornada', $jornada->id)
+                ->with('mensaje-error', 'El cajero no es de esta sala o está inactivo.');
+        }
+        if ($error = $this->errorJornada($jornada)
+            ?? $this->errorCajeroCerrado($jornada, $cajero)
+            ?? $this->errorAltaCajero($jornada, $cajero, $tipo)) {
+            return redirect()->route('ver_tesoreria_crown_jornada', $jornada->id)->with('mensaje-error', $error);
         }
 
-        $comprobante = DB::transaction(function () use ($asignacion, $tipo) {
+        $comprobante = DB::transaction(function () use ($jornada, $cajero, $tipo) {
             return TesoreriaCrownComprobante::query()->create([
-                'sala_id' => $asignacion->sala_id,
-                'empresa_id' => $asignacion->jornada->empresa_id,
-                'jornada_id' => $asignacion->jornada_id,
-                'asignacion_id' => $asignacion->id,
+                'sala_id' => $jornada->sala_id,
+                'empresa_id' => $jornada->empresa_id,
+                'jornada_id' => $jornada->id,
+                'cajero_crown_id' => $cajero->id,
+                'asignacion_id' => null,
                 'tipo' => $tipo,
-                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $asignacion->sala_id, $tipo),
+                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $jornada->sala_id, $tipo),
                 'estado' => TesoreriaCrownComprobanteSupport::BORRADOR,
             ]);
         });
@@ -258,10 +281,10 @@ class TesoreriaCrownComprobanteController extends Controller
             'comprobante' => $comprobante,
             'grupos' => TesoreriaCrownComprobanteSupport::gruposEdicion($comprobante->sala_id, $comprobante->tipo),
             'cantidades' => $cantidades,
-            'cajaCerrada' => $comprobante->asignacion->cierre !== null,
+            'cajaCerrada' => $comprobante->cierreOperativo() !== null,
             'editable' => $comprobante->esBorrador()
                 && $comprobante->jornada->estaAbierta()
-                && $comprobante->asignacion->cierre === null,
+                && $comprobante->cierreOperativo() === null,
             'cierresFiscales' => $this->cierresFiscalesDe($comprobante),
             'pxsolCodigos' => TesoreriaCrownPxsolSupport::codigos($comprobante),
         ]);
@@ -298,11 +321,11 @@ class TesoreriaCrownComprobanteController extends Controller
             'cantidad.*' => ['nullable', 'integer', 'min:0'],
         ];
         if ($comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION
-            && (int) ($comprobante->asignacion->cajero->mozo_gastronomia_id ?? 0) > 0) {
+            && (int) ($comprobante->cajeroOperativo()->mozo_gastronomia_id ?? 0) > 0) {
             $reglas['mozo_aplicacion'] = ['nullable', Rule::in(array_keys(MozoGastronomiaAplicacionSupport::LABELS))];
         }
         $camposMedio = $comprobante->tipo === TesoreriaCrownComprobanteSupport::RENDICION
-            ? TesoreriaCrownRendicionCampos::camposDe($comprobante->asignacion->tipo_tarea ?? '')
+            ? TesoreriaCrownRendicionCampos::camposDe($comprobante->tipoTareaOperativa())
             : [];
         if ($camposMedio !== []) {
             foreach ($camposMedio as $clave => $meta) {
@@ -315,7 +338,7 @@ class TesoreriaCrownComprobanteController extends Controller
                 $reglas['medio.'.$clave] = $regla;
             }
         }
-        if ($camposMedio !== [] && TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+        if ($camposMedio !== [] && TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
             $reglas['cierre_fiscal'] = ['array'];
             $reglas['cierre_fiscal.*'] = ['string', 'max:40'];
             $reglas['pxsol_aplicado'] = ['nullable', 'in:1'];
@@ -346,7 +369,7 @@ class TesoreriaCrownComprobanteController extends Controller
             DB::transaction(function () use ($comprobante, $datos, $idsSala, $camposMedio, $cierresElegidos) {
             if (array_key_exists('mozo_aplicacion', $datos)
                 && $comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION) {
-                $mozoId = (int) ($comprobante->asignacion->cajero->mozo_gastronomia_id ?? 0);
+                $mozoId = (int) ($comprobante->cajeroOperativo()->mozo_gastronomia_id ?? 0);
                 if ($mozoId > 0 && $datos['mozo_aplicacion'] !== null && $datos['mozo_aplicacion'] !== '') {
                     $aplicacion = MozoGastronomiaAplicacionSupport::normalizar((string) $datos['mozo_aplicacion']);
                     MozoGastronomia::query()->whereKey($mozoId)->update(['aplicacion' => $aplicacion]);
@@ -378,7 +401,7 @@ class TesoreriaCrownComprobanteController extends Controller
                         $comprobante->{$clave} = self::parseImporteMiles($crudo);
                     }
                 }
-                if (! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+                if (! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
                     $comprobante->recargo_fin = TesoreriaCrownCierreCalculo::recargoFinanciacion(
                         (float) $comprobante->tarjeta_credito,
                         $comprobante->jornada->fecha->format('Y-m-d'),
@@ -401,7 +424,7 @@ class TesoreriaCrownComprobanteController extends Controller
         }
 
         if ($pedirFirmas) {
-            $tipoTarea = $comprobante->asignacion->tipo_tarea ?? '';
+            $tipoTarea = $comprobante->tipoTareaOperativa();
             $hayLineas = $comprobante->lineas()->exists();
             $hayMedios = TesoreriaCrownRendicionCampos::tieneMediosCargados($comprobante, $tipoTarea);
             if (! $hayLineas && ! $hayMedios) {
@@ -429,7 +452,7 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($error = $this->errorBorradorAbierto($comprobante)) {
             return back()->with('mensaje-error', $error);
         }
-        $tipoTarea = $comprobante->asignacion->tipo_tarea ?? '';
+        $tipoTarea = $comprobante->tipoTareaOperativa();
         $hayLineas = $comprobante->lineas()->exists();
         $hayMedios = TesoreriaCrownRendicionCampos::tieneMediosCargados($comprobante, $tipoTarea);
         if (! $hayLineas && ! $hayMedios) {
@@ -477,7 +500,7 @@ class TesoreriaCrownComprobanteController extends Controller
         can('editar-tesoreria-crown-movimiento');
 
         $comprobante = $this->comprobanteEnAlcance($id);
-        $cajero = $comprobante->asignacion->cajero;
+        $cajero = $comprobante->cajeroOperativo();
         if ($cajero === null) {
             return back()->with('mensaje-error', 'Esta caja no tiene cajero.');
         }
@@ -513,7 +536,7 @@ class TesoreriaCrownComprobanteController extends Controller
 
         $comprobante = $this->comprobanteEnAlcance($id);
         if ($comprobante->tipo !== TesoreriaCrownComprobanteSupport::RENDICION
-            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
             return back()->with('mensaje-error', 'Solo una rendición de gastronomía o hotel carga cierres de ventas.');
         }
         if ($error = $this->errorBorradorAbierto($comprobante)) {
@@ -580,7 +603,7 @@ class TesoreriaCrownComprobanteController extends Controller
         if (RateLimiter::tooManyAttempts($limite, 8)) {
             return back()->with('mensaje-error', 'Demasiados intentos. Esperá un minuto y volvé a probar.');
         }
-        $asignado = $comprobante->asignacion->cajero;
+        $asignado = $comprobante->cajeroOperativo();
         if ($asignado === null) {
             return back()->with('mensaje-error', 'Esta caja no tiene cajero.');
         }
@@ -619,7 +642,7 @@ class TesoreriaCrownComprobanteController extends Controller
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('crear-tesoreria-crown-movimiento');
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? ($comprobante->cierreOperativo() ? 'Este cajero ya está cerrado.' : null)) {
             return back()->with('mensaje-error', $error);
         }
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::PENDIENTE) {
@@ -646,7 +669,7 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($usuario === null) {
             return back()->with('mensaje-error', 'Elegí un usuario activo del sistema.');
         }
-        $cajero = $comprobante->asignacion->cajero;
+        $cajero = $comprobante->cajeroOperativo();
         if ($cajero === null) {
             return back()->with('mensaje-error', 'Esta caja no tiene cajero.');
         }
@@ -680,7 +703,7 @@ class TesoreriaCrownComprobanteController extends Controller
         can('editar-tesoreria-crown-movimiento');
 
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? ($comprobante->cierreOperativo() ? 'Este cajero ya está cerrado.' : null)) {
             return back()->with('mensaje-error', $error);
         }
         if (! in_array($comprobante->estado, [TesoreriaCrownComprobanteSupport::BORRADOR, TesoreriaCrownComprobanteSupport::PENDIENTE], true)) {
@@ -713,7 +736,7 @@ class TesoreriaCrownComprobanteController extends Controller
         can('editar-tesoreria-crown-movimiento');
 
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? ($comprobante->cierreOperativo() ? 'Este cajero ya está cerrado.' : null)) {
             return back()->with('mensaje-error', $error);
         }
         $datos = $request->validate([
@@ -783,7 +806,7 @@ class TesoreriaCrownComprobanteController extends Controller
         can('editar-tesoreria-crown-movimiento');
 
         $comprobante = $this->comprobanteEnAlcance($id);
-        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
+        if ($error = $this->errorJornada($comprobante->jornada) ?? ($comprobante->cierreOperativo() ? 'Este cajero ya está cerrado.' : null)) {
             return back()->with('mensaje-error', $error);
         }
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::CONFORME || $comprobante->revierte_id !== null) {
@@ -834,6 +857,7 @@ class TesoreriaCrownComprobanteController extends Controller
             'sala_id' => $comprobante->sala_id,
             'empresa_id' => $comprobante->empresa_id,
             'jornada_id' => $comprobante->jornada_id,
+            'cajero_crown_id' => $comprobante->cajero_crown_id,
             'asignacion_id' => $comprobante->asignacion_id,
             'tipo' => $comprobante->tipo,
             'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $comprobante->sala_id, $comprobante->tipo),
@@ -873,7 +897,7 @@ class TesoreriaCrownComprobanteController extends Controller
     private function cierresFiscalesDe(TesoreriaCrownComprobante $comprobante): array
     {
         if ($comprobante->tipo !== TesoreriaCrownComprobanteSupport::RENDICION
-            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
             return ['error' => null, 'filas' => []];
         }
 
@@ -964,6 +988,8 @@ class TesoreriaCrownComprobanteController extends Controller
                 'jornada',
                 'sala',
                 'empresa',
+                'cajero.usuario',
+                'cajero.mozoGastronomia',
                 'asignacion.deposito',
                 'asignacion.cajero.usuario',
                 'asignacion.cajero.mozoGastronomia',
@@ -988,26 +1014,42 @@ class TesoreriaCrownComprobanteController extends Controller
 
     private function errorCaja(TesoreriaCrownAsignacion $asignacion): ?string
     {
-        return $asignacion->cierre ? 'Esta caja ya está cerrada.' : null;
+        return $asignacion->cierre ? 'Este cajero ya está cerrado.' : null;
+    }
+
+    private function errorCajeroCerrado(TesoreriaCrownJornada $jornada, CajeroCrown $cajero): ?string
+    {
+        return TesoreriaCrownDiaCajeroSupport::cierreAbierto((int) $jornada->id, (int) $cajero->id)
+            ? 'Este cajero ya está cerrado.'
+            : null;
     }
 
     private function errorBorradorAbierto(TesoreriaCrownComprobante $comprobante): ?string
     {
         return $this->errorJornada($comprobante->jornada)
-            ?? $this->errorCaja($comprobante->asignacion)
+            ?? ($comprobante->cierreOperativo() ? 'Este cajero ya está cerrado.' : null)
             ?? ($comprobante->esBorrador() ? null : 'Las cantidades solo se editan en borrador.');
     }
 
     private function errorAlta(TesoreriaCrownAsignacion $asignacion, string $tipo): ?string
     {
+        return $this->errorAltaCajero($asignacion->jornada, $asignacion->cajero, $tipo, (int) $asignacion->id);
+    }
+
+    private function errorAltaCajero(
+        TesoreriaCrownJornada $jornada,
+        ?CajeroCrown $cajero,
+        string $tipo,
+        ?int $asignacionId = null
+    ): ?string {
         if ($tipo !== TesoreriaCrownComprobanteSupport::RENDICION) {
             return null;
         }
-        if ($asignacion->permite_rendir_sin_habilitacion) {
+        if ($cajero && $cajero->permite_rendir_sin_habilitacion) {
             return null;
         }
-        $hayConforme = TesoreriaCrownComprobante::query()
-            ->where('asignacion_id', $asignacion->id)
+        $query = TesoreriaCrownComprobante::query()
+            ->where('jornada_id', $jornada->id)
             ->where('tipo', TesoreriaCrownComprobanteSupport::HABILITACION)
             ->where('estado', TesoreriaCrownComprobanteSupport::CONFORME)
             ->whereNull('revierte_id')
@@ -1015,9 +1057,13 @@ class TesoreriaCrownComprobanteController extends Controller
                 $q->selectRaw('1')
                     ->from('tesoreria_crown_comprobante as rev')
                     ->whereColumn('rev.revierte_id', 'tesoreria_crown_comprobante.id');
-            })
-            ->exists();
-        if (! $hayConforme) {
+            });
+        if ($cajero) {
+            $query->where('cajero_crown_id', $cajero->id);
+        } elseif ($asignacionId) {
+            $query->where('asignacion_id', $asignacionId);
+        }
+        if (! $query->exists()) {
             return 'La rendición necesita una habilitación conforme.';
         }
 
@@ -1026,7 +1072,8 @@ class TesoreriaCrownComprobanteController extends Controller
 
     private function errorFirmaPendiente(TesoreriaCrownComprobante $comprobante): ?string
     {
-        if ($error = $this->errorJornada($comprobante->jornada) ?? $this->errorCaja($comprobante->asignacion)) {
+        if ($error = $this->errorJornada($comprobante->jornada)
+            ?? ($comprobante->cierreOperativo() ? 'Este cajero ya está cerrado.' : null)) {
             return $error;
         }
         if ($comprobante->estado !== TesoreriaCrownComprobanteSupport::PENDIENTE) {
@@ -1047,7 +1094,7 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($otroId > 0 && $otroId === (int) $usuario->id) {
             return 'Quien entrega y quien recibe tienen que ser dos personas distintas.';
         }
-        $cajero = $comprobante->asignacion->cajero;
+        $cajero = $comprobante->cajeroOperativo();
         $cajeroUsuarioId = (int) ($cajero->usuario_id ?? 0);
         if ($tesoreria) {
             if (! TesoreriaCrownFirmaSupport::puedeFirmarTesoreria($usuario)) {

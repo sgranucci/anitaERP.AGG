@@ -67,6 +67,7 @@ final class TesoreriaCrownKardexValoresSupport
             't.operacion',
             'st.codigo as subtipo_codigo',
             'st.nombre as subtipo_nombre',
+            'st.mueve_billetaje',
             'd.id as deposito_id',
             'd.codigo as deposito_codigo',
             'd.nombre as deposito_nombre',
@@ -103,7 +104,10 @@ final class TesoreriaCrownKardexValoresSupport
         $out = [];
         $saldos = [];
         foreach ($filas as $fila) {
-            $efecto = TesoreriaCrownBovedaSupport::efecto((string) $fila->signo);
+            $efecto = TesoreriaCrownBovedaSupport::efectoConSubtipo(
+                (string) $fila->signo,
+                $fila->mueve_billetaje ?? null
+            );
             $cantidad = (float) $fila->cantidad;
             $entrada = $efecto > 0 ? $cantidad : ($efecto === 0 ? null : null);
             $salida = $efecto < 0 ? $cantidad : null;
@@ -115,7 +119,10 @@ final class TesoreriaCrownKardexValoresSupport
             $fila->entrada = $entrada;
             $fila->salida = $salida;
             $fila->monto = $efecto === 0 ? $monto : ($efecto * $monto);
-            $fila->efecto_texto = TesoreriaCrownBovedaSupport::efectoTexto((string) $fila->signo);
+            $fila->efecto_texto = TesoreriaCrownBovedaSupport::efectoTextoConSubtipo(
+                (string) $fila->signo,
+                $fila->mueve_billetaje ?? null
+            );
             $fila->numero_visible = TesoreriaCrownNumeradorSupport::visible((int) $fila->numero);
             $fila->subtipo_etiqueta = trim(
                 (($fila->subtipo_codigo ?? '') !== '' ? $fila->subtipo_codigo.' — ' : '')

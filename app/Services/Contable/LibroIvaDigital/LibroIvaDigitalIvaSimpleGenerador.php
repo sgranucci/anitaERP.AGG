@@ -163,6 +163,7 @@ class LibroIvaDigitalIvaSimpleGenerador
                 'renglones_restitucion_credito' => count($restitucionCredito['lineas']),
                 'total_iva_debito' => round($totalIvaDebito, 2),
                 'total_iva_credito' => round(array_sum(array_column($credito['detalle'], 'iva')), 2),
+                'total_iva_restitucion_debito' => round(array_sum(array_column($detalleRestitucionDebito, 'iva')), 2),
                 'total_iva_restitucion_credito' => round(array_sum(array_column($restitucionCredito['detalle'], 'iva')), 2),
                 'total_exento_compras' => round((float) ($compras['total_exento'] ?? 0), 2),
                 'total_no_integra_compras' => round((float) ($compras['total_no_integra'] ?? 0), 2),
@@ -191,7 +192,11 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->join('venta_impuesto as vi_neto', function ($join): void {
                 $join->on('vi_neto.venta_id', '=', 'venta.id')
-                    ->where('vi_neto.concepto', 'like', 'Gravado al%');
+                    ->where(function ($q): void {
+                        // «Gravado al 21%» / «Gravado al 21.000%» y el rótulo corto «Gravado».
+                        $q->where('vi_neto.concepto', 'like', 'Gravado al%')
+                            ->orWhere('vi_neto.concepto', '=', 'Gravado');
+                    });
             })
             ->join('venta_impuesto as vi_iva', function ($join): void {
                 $join->on('vi_iva.venta_id', '=', 'venta.id')
@@ -209,6 +214,7 @@ class LibroIvaDigitalIvaSimpleGenerador
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
+        LibroIvaDigitalVentasPeriodoSupport::aplicarExcluirTuriva($query);
 
         if ($soloNotasCredito) {
             $query->where('tt.signo', '<', 0);
@@ -297,6 +303,7 @@ class LibroIvaDigitalIvaSimpleGenerador
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
+        LibroIvaDigitalVentasPeriodoSupport::aplicarExcluirTuriva($query);
 
         $exentos = $query
             ->selectRaw("

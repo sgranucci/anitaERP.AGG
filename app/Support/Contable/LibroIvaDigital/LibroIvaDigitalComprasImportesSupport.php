@@ -70,6 +70,7 @@ final class LibroIvaDigitalComprasImportesSupport
     public static function cerrarRegistro(array $registro): array
     {
         $registro = self::reubicarAlicuotasHuerfanas($registro);
+        $registro = self::absorberAlicuotasSinNeto($registro);
         $registro = self::reconciliarAlicuotasRedondeo($registro);
 
         return self::equilibrarResidual($registro);
@@ -338,14 +339,77 @@ final class LibroIvaDigitalComprasImportesSupport
         }
 
         if (abs($ajusteNeto) > 0.001) {
-            $campo = self::campoAjusteCabecera($registro);
-            $registro['cabecera'][$campo] = round(
-                (float) ($registro['cabecera'][$campo] ?? 0) + $ajusteNeto,
-                2,
-            );
+            self::aplicarAjusteCabeceraSinNegativo($registro, $ajusteNeto);
         }
 
         return $registro;
+    }
+
+    /**
+     * IVA sin neto y sin pareja para reubicar (ej. concepto I 10.5% sin G):
+     * se mueve a Otros tributos para no fallar el control de alícuota ARCA.
+     *
+     * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
+     * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}
+     */
+    public static function absorberAlicuotasSinNeto(array $registro): array
+    {
+        $alicuotas = $registro['alicuotas'] ?? [];
+        if ($alicuotas === []) {
+            return $registro;
+        }
+
+        $conservar = [];
+        $ivaHuerfano = 0.0;
+        foreach ($alicuotas as $fila) {
+            $codigo = str_pad((string) ($fila['alicuota_iva'] ?? $fila['codigo_lid'] ?? ''), 4, '0', STR_PAD_LEFT);
+            $tasa = self::TASA_POR_LID[$codigo] ?? 0.0;
+            $neto = (float) ($fila['neto_gravado'] ?? $fila['neto'] ?? 0);
+            $iva = (float) ($fila['impuesto_liquidado'] ?? $fila['iva'] ?? 0);
+            if ($tasa > 0 && abs($neto) < 0.0001 && abs($iva) > 0.0001) {
+                $ivaHuerfano += $iva;
+                continue;
+            }
+            $conservar[] = $fila;
+        }
+
+        if (abs($ivaHuerfano) < 0.0001) {
+            return $registro;
+        }
+
+        $registro['alicuotas'] = array_values($conservar);
+        $registro['cabecera']['cantidad_alicuotas'] = count($registro['alicuotas']);
+        $registro['cabecera']['otros_tributos'] = round(
+            (float) ($registro['cabecera']['otros_tributos'] ?? 0) + $ivaHuerfano,
+            2,
+        );
+
+        return $registro;
+    }
+
+    /**
+     * @param  array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}  $registro
+     */
+    public static function aplicarAjusteCabeceraSinNegativo(array &$registro, float $ajuste): void
+    {
+        $preferido = self::campoAjusteCabecera($registro);
+        $candidatos = array_values(array_unique([
+            $preferido,
+            'impuestos_internos',
+            'no_integra_neto',
+            'operaciones_exentas',
+            'otros_tributos',
+        ]));
+
+        foreach ($candidatos as $campo) {
+            $nuevo = round((float) ($registro['cabecera'][$campo] ?? 0) + $ajuste, 2);
+            if ($nuevo < -0.001) {
+                continue;
+            }
+            $registro['cabecera'][$campo] = $nuevo;
+
+            return;
+        }
     }
 
     /**

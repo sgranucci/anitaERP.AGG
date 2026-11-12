@@ -50,7 +50,7 @@ return [
         [
             'herramienta' => 'Asignar caja',
             'ubicacion' => $escritorio,
-            'accion' => 'Elige depósito, cajero, turno y tarea (T/G/H/K/E/L).',
+            'accion' => 'Elige cajero (la tarea sale del maestro) y crea habilitación o rendición.',
             'permiso' => 'crear-tesoreria-crown-jornada',
         ],
         [

@@ -174,6 +174,24 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame('Venta expendedoras', $comprador['nombre']);
     }
 
+    public function test_factura_t_turiva_se_detecta_y_mapea_a_195(): void
+    {
+        $this->assertSame('T', LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta('FAC T 00128-00000155'));
+        $this->assertSame('195', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('001', 'T', 'FAC'));
+        $this->assertSame('196', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('002', 'T', 'NDB'));
+        $this->assertSame('197', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('003', 'T', 'NCD'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esLetraTuriva('T'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esTipoTuriva('195'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esTipoTuriva('196'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esTipoTuriva('197'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esCodigoVentaTuriva('FAC T 00128-00000155'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esCodigoVentaTuriva('NCD T 00128-00000001'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esCodigoVentaTuriva('FAC A 00001-00000001'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esCodigoVentaTuriva('FAC B 00001-00000001'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esTipoTuriva('001'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esLetraTuriva('B'));
+    }
+
     public function test_fbi_fsl_mapean_factura_b_sin_cae_informables(): void
     {
         $this->assertSame('006', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('FBI', 'B', 'FBI'));
@@ -767,6 +785,100 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
             LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),
             0.001,
         );
+    }
+
+    public function test_iva_huerfano_sin_neto_pasa_a_otros_tributos(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '001',
+                'punto_venta' => 3,
+                'numero_comprobante' => 1136,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '27149564409',
+                'importe_total' => 139099.23,
+                'cantidad_alicuotas' => 2,
+                'otros_tributos' => 0.0,
+            ],
+            'alicuotas' => [
+                [
+                    'tipo_comprobante' => '001',
+                    'punto_venta' => 3,
+                    'numero_comprobante' => 1136,
+                    'neto_gravado' => 112176.8,
+                    'alicuota_iva' => '0005',
+                    'impuesto_liquidado' => 23557.13,
+                ],
+                [
+                    'tipo_comprobante' => '001',
+                    'punto_venta' => 3,
+                    'numero_comprobante' => 1136,
+                    'neto_gravado' => 0.0,
+                    'alicuota_iva' => '0004',
+                    'impuesto_liquidado' => 3365.3,
+                ],
+            ],
+        ]);
+
+        $this->assertCount(1, $registro['alicuotas']);
+        $this->assertSame('0005', $registro['alicuotas'][0]['alicuota_iva']);
+        $this->assertEqualsWithDelta(3365.3, $registro['cabecera']['otros_tributos'], 0.02);
+        $this->assertEqualsWithDelta(
+            0.0,
+            LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),
+            0.02,
+        );
+    }
+
+    public function test_ajuste_redondeo_no_deja_otros_tributos_negativos(): void
+    {
+        $registro = LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo([
+            'cabecera' => [
+                'tipo_comprobante' => '001',
+                'importe_total' => 3843077.45,
+                'impuestos_internos' => 194552.14,
+                'otros_tributos' => 0.0,
+            ],
+            'alicuotas' => [[
+                'neto_gravado' => 2892566.86,
+                'alicuota_iva' => '0005',
+                'impuesto_liquidado' => 607439.06,
+            ]],
+        ]);
+
+        $this->assertEqualsWithDelta(2892566.95, $registro['alicuotas'][0]['neto_gravado'], 0.02);
+        $this->assertGreaterThanOrEqual(-0.001, (float) ($registro['cabecera']['otros_tributos'] ?? 0));
+        $this->assertEqualsWithDelta(
+            194552.05,
+            (float) $registro['cabecera']['impuestos_internos'],
+            0.02,
+        );
+    }
+
+    public function test_validacion_iva_simple_suma_restitucion_debito_de_nc(): void
+    {
+        $avisos = LibroIvaDigitalValidacionSupport::validar([
+            'ventas' => [
+                'ventas_cbte' => '',
+                'ventas_alicuotas' => '',
+                'resumen' => ['comprobantes' => 1, 'alicuotas' => 0, 'total_iva' => 103473256.49, 'total_exento' => 0],
+            ],
+            'compras' => ['compras_cbte' => '', 'resumen' => ['comprobantes' => 0, 'total_iva' => 0]],
+            'iva_simple' => [
+                'resumen' => [
+                    'total_iva_debito' => 101233170.77,
+                    'total_iva_restitucion_debito' => 2240085.72,
+                    'sin_actividad_arca' => 0,
+                    'total_iva_credito' => 0,
+                    'renglones_credito' => 0,
+                ],
+                'resumen_por_actividad' => [],
+            ],
+        ]);
+
+        foreach ($avisos as $aviso) {
+            $this->assertStringNotContainsString('difiere del CSV IVA Simple', $aviso);
+        }
     }
 
     public function test_clave_natural_compras_anita_es_estable(): void

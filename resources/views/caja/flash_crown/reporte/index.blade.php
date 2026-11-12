@@ -73,10 +73,8 @@
                 </form>
 
                 <p class="text-muted small mt-3 mb-0">
-                    Gaming revenues: la primera columna es el día pedido.
-                    La segunda es el mismo día de la semana del año anterior, el más cercano, sin salir de ese año.
-                    Las otras dos son el acumulado del mes y el acumulado del mismo mes del año anterior.
-                    El total de cada casino es mesas + slots + A&amp;B.
+                    Gaming revenues: día pedido, mismo día de la semana del año anterior, acumulado del mes y del mismo mes del año anterior (mesas + slots + A&amp;B).
+                    Daily Flash: MTD del 1 al día pedido (Resumen + cada sala), estilo Excel Crown / l-flashcasino, con Combined año anterior y variación.
                 </p>
 
                 @if ($informe)
@@ -88,6 +86,11 @@
                                 comparativo {{ $informe['fecha_comparable']->format('d/m/Y') }}
                                 ({{ $informe['columnas'][1]['titulo'] }})
                             </small>
+                        @elseif ($formato === 'daily')
+                            Daily Flash Report {{ \Carbon\Carbon::parse($fecha)->format('d/m/Y') }}
+                            <small class="text-muted">
+                                MTD {{ $informe['mtd_desde']->format('d/m/Y') }} → {{ \Carbon\Carbon::parse($fecha)->format('d/m/Y') }}
+                            </small>
                         @else
                             Flash completo {{ \Carbon\Carbon::parse($fecha)->format('d/m/Y') }}
                         @endif
@@ -95,6 +98,8 @@
                     <div class="table-responsive">
                         @if ($formato === 'gaming')
                             @include('caja.flash_crown.reporte.partials.tabla_gaming', ['informe' => $informe])
+                        @elseif ($formato === 'daily')
+                            @include('caja.flash_crown.reporte.partials.tabla_daily', ['informe' => $informe])
                         @else
                             @include('caja.flash_crown.reporte.partials.tabla_completo', ['informe' => $informe])
                         @endif

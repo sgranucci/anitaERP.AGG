@@ -63,7 +63,7 @@
                         <div class="col-lg-8">
                             <input type="hidden" name="controla_stock" value="0">
                             <input type="checkbox" name="controla_stock" value="1" @checked($controla)>
-                            <small class="form-text text-muted">Las fichas de color no se controlan. Las de valor y las monedas sí.</small>
+                            <small class="form-text text-muted">Las fichas de valor y las monedas controlan stock.</small>
                         </div>
                     </div>
                     <div class="form-group row">

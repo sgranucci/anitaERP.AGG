@@ -27,6 +27,8 @@ class CajeroCrown extends Model implements Auditable
         'legajo',
         'caja_id',
         'mozo_gastronomia_id',
+        'tipo_tarea',
+        'permite_rendir_sin_habilitacion',
         'activo',
     ];
 
@@ -43,6 +45,7 @@ class CajeroCrown extends Model implements Auditable
         'legajo' => 'integer',
         'caja_id' => 'integer',
         'mozo_gastronomia_id' => 'integer',
+        'permite_rendir_sin_habilitacion' => 'boolean',
         'activo' => 'boolean',
     ];
 

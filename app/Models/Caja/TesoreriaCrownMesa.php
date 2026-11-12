@@ -36,7 +36,9 @@ class TesoreriaCrownMesa extends Model implements Auditable
         'estado',
         'comentario',
         'propina',
+        'propina_billetes',
         'voucher',
+        'boveda_id',
         'motivo',
         'usuario_id',
         'confirmado_at',
@@ -45,6 +47,7 @@ class TesoreriaCrownMesa extends Model implements Auditable
     protected $casts = [
         'numero' => 'integer',
         'propina' => 'decimal:2',
+        'propina_billetes' => 'array',
         'voucher' => 'decimal:2',
         'confirmado_at' => 'datetime',
     ];
@@ -109,6 +112,11 @@ class TesoreriaCrownMesa extends Model implements Auditable
     public function lineas(): HasMany
     {
         return $this->hasMany(TesoreriaCrownMesaLinea::class, 'mesa_id');
+    }
+
+    public function boveda(): BelongsTo
+    {
+        return $this->belongsTo(TesoreriaCrownBoveda::class, 'boveda_id');
     }
 
     public function esBorrador(): bool

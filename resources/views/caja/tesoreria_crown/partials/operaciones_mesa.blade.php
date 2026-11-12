@@ -4,7 +4,8 @@
             $claseOperacion = match ($codigoTipo) {
                 'A' => 'btn-primary',
                 'C' => 'btn-outline-warning',
-                'F' => 'btn-outline-success',
+                'F' => 'btn-success',
+                'P' => 'btn-outline-secondary',
                 default => 'btn-outline-secondary',
             };
             $ayudaOperacion = \App\Support\Caja\TesoreriaCrownMesaSupport::ayuda($codigoTipo);

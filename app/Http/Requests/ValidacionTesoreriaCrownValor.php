@@ -35,7 +35,14 @@ class ValidacionTesoreriaCrownValor extends FormRequest
                     ->ignore($id),
             ],
             'descripcion' => ['required', 'string', 'max:120'],
-            'denominacion' => ['required', 'numeric', 'min:0'],
+            'denominacion' => [
+                'required',
+                'numeric',
+                'min:0',
+                Rule::unique('tesoreria_crown_valor', 'denominacion')
+                    ->where(fn ($q) => $q->where('tipo_valor_id', $tipoId)->where('sala_id', $salaId))
+                    ->ignore($id),
+            ],
             'orden' => ['nullable', 'integer', 'min:0', 'max:9999'],
             'activo' => ['required', 'in:0,1'],
         ];

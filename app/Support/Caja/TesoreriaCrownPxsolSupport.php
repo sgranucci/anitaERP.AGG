@@ -20,7 +20,7 @@ final class TesoreriaCrownPxsolSupport
      */
     public static function codigos(TesoreriaCrownComprobante $comprobante): array
     {
-        $cajeroId = (int) ($comprobante->asignacion->cajero_crown_id ?? 0);
+        $cajeroId = (int) ($comprobante->cajeroOperativo()_crown_id ?? 0);
         if ($cajeroId <= 0) {
             return [];
         }
@@ -42,7 +42,7 @@ final class TesoreriaCrownPxsolSupport
     public static function leer(TesoreriaCrownComprobante $comprobante): array
     {
         if ($comprobante->tipo !== TesoreriaCrownComprobanteSupport::RENDICION
-            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->asignacion->tipo_tarea ?? '')) {
+            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
             throw new RuntimeException('PXSol se consulta en la rendición de gastronomía u hotel.');
         }
         $codigos = self::codigos($comprobante);

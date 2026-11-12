@@ -76,6 +76,7 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
                 ['label' => 'Tipo', 'ancho' => 36, 'wrap' => true],
                 ['label' => 'Código', 'ancho' => 14, 'texto' => true],
                 ['label' => 'Nombre', 'ancho' => 36, 'wrap' => true],
+                ['label' => 'Billetaje', 'ancho' => 16],
                 ['label' => 'Activo', 'ancho' => 12],
             ],
             'filas' => $coleccion->map(function (TesoreriaCrownBovedaSubtipo $subtipo) {
@@ -83,6 +84,7 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
                     $subtipo->tipo?->etiqueta() ?? '',
                     $subtipo->codigo,
                     $subtipo->nombre,
+                    ($subtipo->mueve_billetaje ?? true) ? 'Sí' : 'No',
                     $subtipo->activo ? 'Sí' : 'No',
                 ];
             })->all(),
@@ -117,6 +119,7 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
                 'sala_id' => $sala->id,
                 'tipo_id' => $tipo?->id,
                 'activo' => true,
+                'mueve_billetaje' => true,
             ]),
             'sala' => $sala,
             'tipo' => $tipo,
@@ -279,6 +282,7 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             'codigo' => strtoupper(trim((string) $datos['codigo'])),
             'nombre' => trim((string) $datos['nombre']),
             'activo' => TesoreriaCrownAcceso::marcado($datos['activo']),
+            'mueve_billetaje' => TesoreriaCrownAcceso::marcado($datos['mueve_billetaje'] ?? 1),
         ];
     }
 }

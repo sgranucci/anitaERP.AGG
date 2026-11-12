@@ -58,9 +58,9 @@
             <div class="card-header">
                 <h3 class="card-title">Jornada {{ $jornada->fecha->format('d/m/Y') }}</h3>
                 <div class="card-tools">
-                    @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
+                    @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false) && ($panel ?? '') === 'cajeros')
                         <button type="button" class="btn btn-light btn-sm mr-1" data-toggle="collapse" data-target="#panel-abrir-caja" aria-expanded="{{ $abrirCaja ? 'true' : 'false' }}">
-                            <i class="fa fa-folder-open"></i> Abrir caja
+                            <i class="fa fa-plus"></i> Nuevo movimiento
                         </button>
                     @endif
                     <a href="{{ route('tesoreria_crown_jornada', ['sala_id' => $sala->id]) }}" class="btn btn-outline-light btn-sm">
@@ -167,23 +167,13 @@
                     </p>
                 @endif
 
-                @if ($jornada && $jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
+                @if ($jornada && $jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false) && $panel === 'cajeros')
                     <div class="collapse {{ $abrirCaja ? 'show' : '' }} mb-3" id="panel-abrir-caja">
-                    <form method="POST" action="{{ route('asignar_tesoreria_crown_jornada', $jornada->id) }}" class="border rounded p-3" id="form-asignar-jornada" data-sala-id="{{ $sala->id }}" data-enter-campos="1">
+                    <form method="POST" action="{{ route('crear_tesoreria_crown_movimiento') }}" class="border rounded p-3" id="form-nuevo-mov-cajero" data-enter-campos="1">
                         @csrf
-                        <div class="form-row">
-                            <div class="form-group col-md-4">
-                                <label>Caja</label>
-                                <div class="input-group">
-                                    <input type="hidden" name="deposito_id" id="deposito_id" value="{{ old('deposito_id') }}">
-                                    <input type="text" class="form-control" id="deposito_codigo" placeholder="Código" autocomplete="off" value="">
-                                    <input type="text" class="form-control" id="deposito_nombre" readonly placeholder="Nombre" tabindex="-1">
-                                    <div class="input-group-append">
-                                        <button type="button" class="btn-accion-tabla tooltipsC" id="btn-consulta-deposito" title="Buscar caja"><i class="fa fa-search"></i></button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-4">
+                        <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
+                        <div class="form-row align-items-end">
+                            <div class="form-group col-md-5 mb-2">
                                 <label>Cajero</label>
                                 <div class="input-group">
                                     <input type="hidden" name="cajero_crown_id" id="cajero_crown_id" value="{{ old('cajero_crown_id') }}">
@@ -193,59 +183,27 @@
                                         <button type="button" class="btn-accion-tabla tooltipsC" id="btn-consulta-cajero" title="Buscar cajero"><i class="fa fa-search"></i></button>
                                     </div>
                                 </div>
+                                <small class="text-muted">La tarea sale del maestro del cajero. El día arranca con el primer movimiento.</small>
                             </div>
-                            <div class="form-group col-md-2">
-                                <label for="turno">Turno</label>
-                                <select name="turno" id="turno" class="form-control" required>
-                                    @foreach ($turnos as $codigo => $nombre)
-                                        <option value="{{ $codigo }}" @selected(old('turno') === $codigo)>{{ $nombre }}</option>
-                                    @endforeach
+                            <div class="form-group col-md-3 mb-2">
+                                <label for="tipo_mov_nuevo">Movimiento</label>
+                                <select name="tipo" id="tipo_mov_nuevo" class="form-control" required>
+                                    <option value="H">Habilitación</option>
+                                    <option value="F">Rendición</option>
                                 </select>
                             </div>
-                            <div class="form-group col-md-2">
-                                <label for="tipo_tarea">Tarea</label>
-                                <select name="tipo_tarea" id="tipo_tarea" class="form-control" required>
-                                    @foreach ($tareas as $codigo => $nombre)
-                                        <option value="{{ $codigo }}" @selected(old('tipo_tarea', 'T') === $codigo)>{{ $nombre }}</option>
-                                    @endforeach
-                                </select>
+                            <div class="form-group col-md-2 mb-2">
+                                <button type="submit" class="btn btn-primary btn-block">Crear</button>
                             </div>
                         </div>
-                        <div class="form-group mb-2">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="permite_rendir_sin_habilitacion" name="permite_rendir_sin_habilitacion" value="1" @checked(old('permite_rendir_sin_habilitacion'))>
-                                <label class="custom-control-label" for="permite_rendir_sin_habilitacion">
-                                    Permite rendir sin habilitación
-                                    <span class="text-muted small">(empleados, QR dinámico, kiosco)</span>
-                                </label>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-primary" id="btn-asignar-jornada">Asignar</button>
                     </form>
-                    <script>
-                    (function () {
-                        var tarea = document.getElementById('tipo_tarea');
-                        var flag = document.getElementById('permite_rendir_sin_habilitacion');
-                        if (!tarea || !flag) {
-                            return;
-                        }
-                        var sugeridos = { E: true, K: true };
-                        tarea.addEventListener('change', function () {
-                            if (sugeridos[tarea.value]) {
-                                flag.checked = true;
-                            }
-                        });
-                    })();
-                    </script>
                     </div>
                 @endif
 
                 @if ($jornada)
                     @php
                         $pendientesFirma = $asignacionesTodas->flatMap(function ($fila) {
-                            return $fila->comprobantes
-                                ->filter(fn ($doc) => $doc->estado === 'P')
-                                ->each(fn ($doc) => $doc->setRelation('asignacion', $fila));
+                            return $fila->comprobantes->filter(fn ($doc) => $doc->estado === 'P');
                         });
                     @endphp
                     @if ($pendientesFirma->isNotEmpty())
@@ -255,7 +213,7 @@
                                 <a href="{{ route('editar_tesoreria_crown_movimiento', $doc->id) }}">
                                     {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::tipo($doc->tipo) }}
                                     {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($doc->numero) }}
-                                    · {{ $doc->asignacion->deposito->codigo ?? '' }}
+                                    · {{ $doc->cajeroOperativo()?->nombre ?? '' }}
                                 </a>
                             @endforeach
                         </div>
@@ -347,26 +305,13 @@
                                         @endforeach
                                         @if ($muestraAcciones)
                                             <td class="text-left text-nowrap">
-                                                @if ($jornada->estaAbierta() && ! $cajaCerrada && $fila->comprobantes->isEmpty() && $fila->cierres->isEmpty() && can('editar-tesoreria-crown-jornada', false))
-                                                    <form action="{{ route('quitar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Quitar esta asignación?');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Quitar"><i class="fa fa-times-circle text-danger"></i></button>
-                                                    </form>
-                                                @endif
-                                                @if (($esAdministrador ?? false) && ($fila->comprobantes->isNotEmpty() || $fila->cierres->isNotEmpty()))
-                                                    <form action="{{ route('vaciar_tesoreria_crown_asignacion', $fila->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Borrar todo de esta caja? Se eliminan habilitaciones, rendiciones, reversas y cierres. El cajero sigue asignado.');">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Borrar todo"><i class="fa fa-times-circle text-danger"></i></button>
-                                                    </form>
-                                                @endif
+                                                —
                                             </td>
                                         @endif
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="{{ count($columnasVisibles) + ($muestraAcciones ? 1 : 0) }}" class="text-center text-muted py-3">{{ $tieneCriterios ? 'No hay cajeros para esta búsqueda.' : 'No hay cajeros asignados.' }}</td>
+                                        <td colspan="{{ count($columnasVisibles) + ($muestraAcciones ? 1 : 0) }}" class="text-center text-muted py-3">{{ $tieneCriterios ? 'No hay cajeros para esta búsqueda.' : 'Todavía no hay movimientos de cajero en esta jornada.' }}</td>
                                     </tr>
                                 @endforelse
                             </tbody>

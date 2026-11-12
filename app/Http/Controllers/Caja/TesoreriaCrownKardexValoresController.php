@@ -274,7 +274,13 @@ class TesoreriaCrownKardexValoresController extends Controller
         }
         $tipoId = (int) $request->input('tipo_id');
         $filas = TesoreriaCrownKardexValoresSupport::subtiposDeTipo($tipoId)
-            ->map(fn ($s) => ['id' => $s->id, 'codigo' => $s->codigo, 'nombre' => $s->nombre, 'etiqueta' => $s->etiqueta()]);
+            ->map(fn ($s) => [
+                'id' => $s->id,
+                'codigo' => $s->codigo,
+                'nombre' => $s->nombre,
+                'etiqueta' => $s->etiqueta(),
+                'mueve_billetaje' => (bool) ($s->mueve_billetaje ?? true),
+            ]);
 
         return response()->json(['data' => $filas]);
     }

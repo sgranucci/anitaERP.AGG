@@ -230,6 +230,12 @@ class TesoreriaCrownCajaAnitaImportService
                         'turno' => $caja['turno'],
                     ]
                 );
+                if (! empty($caja['cajero_id']) && ! empty($caja['tarea'])) {
+                    CajeroCrown::query()->whereKey((int) $caja['cajero_id'])->whereNull('tipo_tarea')->update([
+                        'tipo_tarea' => $caja['tarea'],
+                        'permite_rendir_sin_habilitacion' => in_array($caja['tarea'], ['K', 'E'], true),
+                    ]);
+                }
                 foreach ($caja['documentos'] as $doc) {
                     if ($doc['ya']) {
                         continue;
@@ -239,6 +245,7 @@ class TesoreriaCrownCajaAnitaImportService
                         'sala_id' => $caja['sala_id'],
                         'empresa_id' => $caja['empresa_id'],
                         'jornada_id' => $caja['jornada_id'],
+                        'cajero_crown_id' => $caja['cajero_id'] ?: $asignacion->cajero_crown_id,
                         'asignacion_id' => $asignacion->id,
                         'tipo' => $doc['tipo'],
                         'numero' => $doc['numero'],
@@ -321,6 +328,7 @@ class TesoreriaCrownCajaAnitaImportService
             'sala_id' => $caja['sala_id'],
             'empresa_id' => $caja['empresa_id'],
             'jornada_id' => $caja['jornada_id'],
+            'cajero_crown_id' => $asignacion->cajero_crown_id,
             'asignacion_id' => $asignacion->id,
             'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $caja['sala_id'], 'C'),
             'efectivo_habilitado' => $calculo['habilitado'],

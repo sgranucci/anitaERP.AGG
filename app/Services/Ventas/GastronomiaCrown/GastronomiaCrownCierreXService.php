@@ -3,7 +3,6 @@
 namespace App\Services\Ventas\GastronomiaCrown;
 
 use App\Models\Caja\CajeroCrown;
-use App\Models\Caja\TesoreriaCrownAsignacion;
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownJornada;
@@ -11,6 +10,7 @@ use App\Models\Ventas\GastronomiaCrown\GastroCrownCuenta;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
+use App\Support\Caja\TesoreriaCrownDiaCajeroSupport;
 use App\Support\Caja\TesoreriaCrownNumeradorSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -269,64 +269,60 @@ class GastronomiaCrownCierreXService
             );
         }
 
-        $asignacion = TesoreriaCrownAsignacion::query()
-            ->where('jornada_id', $jornadaTesoreria->id)
-            ->where('cajero_crown_id', $cajero->id)
-            ->where('tipo_tarea', 'G')
-            ->orderBy('id')
-            ->first();
-        if ($asignacion === null) {
+        if ((string) ($cajero->tipo_tarea ?? '') !== 'G') {
             throw new InvalidArgumentException(
-                'No hay caja gastronomía (G) asignada a '.$mozo->nombre.' en la jornada de tesorería #'.$jornadaTesoreria->id.'.'
+                'El cajero de '.$mozo->nombre.' no tiene tarea gastronomía (G).'
             );
         }
-        if ($asignacion->cierre !== null) {
-            throw new InvalidArgumentException('La caja de '.$mozo->nombre.' ya está cerrada en tesorería.');
+        if (TesoreriaCrownDiaCajeroSupport::cierreAbierto((int) $jornadaTesoreria->id, (int) $cajero->id)) {
+            throw new InvalidArgumentException('El cajero de '.$mozo->nombre.' ya está cerrado en tesorería.');
         }
 
         $hayHabilitacion = TesoreriaCrownComprobante::query()
-            ->where('asignacion_id', $asignacion->id)
+            ->where('jornada_id', $jornadaTesoreria->id)
+            ->where('cajero_crown_id', $cajero->id)
             ->where('tipo', TesoreriaCrownComprobanteSupport::HABILITACION)
             ->where('estado', TesoreriaCrownComprobanteSupport::CONFORME)
             ->whereNull('revierte_id')
             ->exists();
         if (! $hayHabilitacion) {
             throw new InvalidArgumentException(
-                'La caja de '.$mozo->nombre.' necesita una habilitación conforme antes de rendir.'
+                'El cajero de '.$mozo->nombre.' necesita una habilitación conforme antes de rendir.'
             );
         }
 
         $yaHayRendicion = TesoreriaCrownComprobante::query()
-            ->where('asignacion_id', $asignacion->id)
+            ->where('jornada_id', $jornadaTesoreria->id)
+            ->where('cajero_crown_id', $cajero->id)
             ->where('tipo', TesoreriaCrownComprobanteSupport::RENDICION)
             ->whereNull('revierte_id')
             ->exists();
         if ($yaHayRendicion) {
             throw new InvalidArgumentException(
-                'La caja de '.$mozo->nombre.' ya tiene una rendición en tesorería para esta jornada.'
+                'El cajero de '.$mozo->nombre.' ya tiene una rendición en tesorería para esta jornada.'
             );
         }
 
         return DB::transaction(function () use (
-            $asignacion,
+            $cajero,
             $jornadaTesoreria,
             $jornada,
             $mozo,
             $mozoId,
             $totalX,
             $fechaYmd,
-            $salaId,
         ) {
             $nroX = $this->siguienteNroX($fechaYmd);
             $hora = now()->format('H:i:s');
 
             $comprobante = TesoreriaCrownComprobante::query()->create([
-                'sala_id' => (int) $asignacion->sala_id,
+                'sala_id' => (int) $jornadaTesoreria->sala_id,
                 'empresa_id' => (int) $jornadaTesoreria->empresa_id,
                 'jornada_id' => (int) $jornadaTesoreria->id,
-                'asignacion_id' => (int) $asignacion->id,
+                'cajero_crown_id' => (int) $cajero->id,
+                'asignacion_id' => null,
                 'tipo' => TesoreriaCrownComprobanteSupport::RENDICION,
-                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $asignacion->sala_id, TesoreriaCrownComprobanteSupport::RENDICION),
+                'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $jornadaTesoreria->sala_id, TesoreriaCrownComprobanteSupport::RENDICION),
                 'estado' => TesoreriaCrownComprobanteSupport::BORRADOR,
                 'total_x' => $totalX,
                 'nro_z' => (string) $nroX,
@@ -387,16 +383,16 @@ class GastronomiaCrownCierreXService
         }
 
         $comps = TesoreriaCrownComprobante::query()
-            ->with(['asignacion.cajero:id,mozo_gastronomia_id'])
+            ->with(['cajero:id,mozo_gastronomia_id,tipo_tarea'])
             ->where('jornada_id', (int) $jornadaTesoreria)
             ->where('tipo', TesoreriaCrownComprobanteSupport::RENDICION)
             ->whereNull('revierte_id')
-            ->whereHas('asignacion', fn ($q) => $q->where('tipo_tarea', 'G'))
+            ->whereHas('cajero', fn ($q) => $q->where('tipo_tarea', 'G'))
             ->get();
 
         $out = [];
         foreach ($comps as $comp) {
-            $mozoId = (int) ($comp->asignacion->cajero->mozo_gastronomia_id ?? 0);
+            $mozoId = (int) ($comp->cajero->mozo_gastronomia_id ?? 0);
             if ($mozoId > 0) {
                 $out[$mozoId] = (int) $comp->id;
             }

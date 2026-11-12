@@ -3330,9 +3330,10 @@ Route::post('caja/tesoreria-crown/jornada/{id}/cerrar', 'Caja\TesoreriaCrownJorn
 Route::post('caja/tesoreria-crown/jornada/{id}/sanear-auditorias', 'Caja\TesoreriaCrownJornadaController@sanearAuditorias')->name('sanear_auditorias_tesoreria_crown_jornada');
 Route::post('caja/tesoreria-crown/jornada/{id}/datos-anexo', 'Caja\TesoreriaCrownJornadaController@actualizarDatosAnexo')->name('datos_anexo_tesoreria_crown_jornada');
 Route::delete('caja/tesoreria-crown/jornada/{id}', 'Caja\TesoreriaCrownJornadaController@eliminar')->name('eliminar_tesoreria_crown_jornada');
-Route::post('caja/tesoreria-crown/jornada/{id}/asignar', 'Caja\TesoreriaCrownJornadaController@asignar')->name('asignar_tesoreria_crown_jornada');
-Route::delete('caja/tesoreria-crown/jornada/asignacion/{id}', 'Caja\TesoreriaCrownJornadaController@quitar')->name('quitar_tesoreria_crown_asignacion');
-Route::delete('caja/tesoreria-crown/jornada/asignacion/{id}/vaciar', 'Caja\TesoreriaCrownJornadaController@vaciar')->name('vaciar_tesoreria_crown_asignacion');
+// Asignación caja–cajero deprecada: el día del cajero arranca con HAB/REN.
+// Route::post('caja/tesoreria-crown/jornada/{id}/asignar', 'Caja\TesoreriaCrownJornadaController@asignar')->name('asignar_tesoreria_crown_jornada');
+// Route::delete('caja/tesoreria-crown/jornada/asignacion/{id}', 'Caja\TesoreriaCrownJornadaController@quitar')->name('quitar_tesoreria_crown_asignacion');
+// Route::delete('caja/tesoreria-crown/jornada/asignacion/{id}/vaciar', 'Caja\TesoreriaCrownJornadaController@vaciar')->name('vaciar_tesoreria_crown_asignacion');
 Route::get('caja/tesoreria-crown/jornada/resolver-deposito', 'Caja\TesoreriaCrownJornadaController@resolverDeposito')->name('resolver_deposito_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/consulta-deposito', 'Caja\TesoreriaCrownJornadaController@consultaDeposito')->name('consulta_deposito_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/resolver-cajero', 'Caja\TesoreriaCrownJornadaController@resolverCajero')->name('resolver_cajero_tesoreria_crown_jornada');
@@ -3411,13 +3412,13 @@ Route::post('caja/tesoreria-crown/boveda/{id}', 'Caja\TesoreriaCrownBovedaContro
 Route::post('caja/tesoreria-crown/boveda/{id}/confirmar', 'Caja\TesoreriaCrownBovedaController@confirmar')->name('confirmar_tesoreria_crown_boveda');
 Route::post('caja/tesoreria-crown/boveda/{id}/revertir', 'Caja\TesoreriaCrownBovedaController@revertir')->name('revertir_tesoreria_crown_boveda');
 Route::delete('caja/tesoreria-crown/boveda/{id}', 'Caja\TesoreriaCrownBovedaController@eliminar')->name('eliminar_tesoreria_crown_boveda');
-Route::get('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaCrownCierreController@ver')->name('ver_tesoreria_crown_cierre');
-Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}', 'Caja\TesoreriaCrownCierreController@cerrar')->name('cerrar_tesoreria_crown_cierre');
-Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/revisar', 'Caja\TesoreriaCrownCierreController@revisar')->name('revisar_tesoreria_crown_cierre');
-Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/auditar', 'Caja\TesoreriaCrownCierreController@auditar')->name('auditar_tesoreria_crown_cierre');
-Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/auditoria', 'Caja\TesoreriaCrownCierreController@firmarAuditoria')->name('firmar_auditoria_tesoreria_crown_cierre');
-Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/reabrir', 'Caja\TesoreriaCrownCierreController@reabrir')->name('reabrir_tesoreria_crown_cierre');
-Route::post('caja/tesoreria-crown/jornada/cierre/{asignacion}/ajustar', 'Caja\TesoreriaCrownCierreController@ajustar')->name('ajustar_tesoreria_crown_cierre');
+Route::get('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre', 'Caja\TesoreriaCrownCierreController@ver')->name('ver_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre', 'Caja\TesoreriaCrownCierreController@cerrar')->name('cerrar_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre/revisar', 'Caja\TesoreriaCrownCierreController@revisar')->name('revisar_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre/auditar', 'Caja\TesoreriaCrownCierreController@auditar')->name('auditar_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre/auditoria', 'Caja\TesoreriaCrownCierreController@firmarAuditoria')->name('firmar_auditoria_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre/reabrir', 'Caja\TesoreriaCrownCierreController@reabrir')->name('reabrir_tesoreria_crown_cierre');
+Route::post('caja/tesoreria-crown/jornada/{jornada}/cajero/{cajero}/cierre/ajustar', 'Caja\TesoreriaCrownCierreController@ajustar')->name('ajustar_tesoreria_crown_cierre');
 Route::get('caja/tesoreria-crown/jornada/cajeros/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarCajeros')->name('listar_cajeros_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/jornada/mesas/listar/{formato?}', 'Caja\TesoreriaCrownJornadaController@listarMesas')->name('listar_mesas_tesoreria_crown_jornada');
 Route::get('caja/tesoreria-crown/slot', 'Caja\TesoreriaCrownSlotController@index')->name('tesoreria_crown_slot');

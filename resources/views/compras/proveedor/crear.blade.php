@@ -6,6 +6,7 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/localidad/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/domicilio.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
@@ -64,6 +65,7 @@
                 </div>
             </form>
             @include('includes.configuracion.modalconsultalocalidad')
+            @include('includes.configuracion.modalconsultaprovincia')
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('includes.compras.arca_impuestos_validacion_modal')
             @include('includes.compras.arca_apoc_validacion_modal')

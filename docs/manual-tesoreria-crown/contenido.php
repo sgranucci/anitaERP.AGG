@@ -67,12 +67,12 @@ return [
             ],
             'items' => [
                 '1) Abrir la jornada de la sala y la fecha (una sola abierta por sala).',
-                '2) Asignar cada caja: depósito, cajero, turno (M/T/N) y tarea (T/G/H/K/E/L).',
-                '3) Tesorería crea habilitación(es), carga efectivo, pide firmas: firma tesorería (entrega) + cajero con PIN propio (recibe) → Conforme. Sale de bóveda (HAB).',
+                '2) La tarea del cajero (T/G/H/K/E/L) vive en el maestro de cajeros; no hay asignación de caja.',
+                '3) Tesorería crea habilitación(es) eligiendo cajero: carga efectivo, pide firmas (tesorería entrega + cajero con PIN) → Conforme. Sale de bóveda (HAB). El día del cajero arranca con el primer movimiento.',
                 '4) Durante el día: mesas (A/R/C/F/D), slots (drop/soft-count), bingo, movimientos de bóveda, resultado online.',
                 '5) Cajero rinde: efectivo + fichas + medios; en G/H aplica cierres fiscales (ERP, Anita si falta) y/o PXSol. Pide firmas: cajero entrega + tesorería recibe → Conforme. Entra a bóveda (REN).',
-                '6) Cerrar cada caja con movimiento (cierre parcial): control habilitación vs rendición, tolerancia, firmas. Estados terminales: conforme / revisada / cierre de auditoría (permiso auditor).',
-                '7) Cuando todas las cajas con comprobantes tienen cierre terminal → cerrar jornada.',
+                '6) Cerrar cada cajero con movimiento: control habilitación vs rendición, tolerancia, firmas. Estados terminales: conforme / revisada / cierre de auditoría (permiso auditor).',
+                '7) Cuando todos los cajeros con comprobantes tienen cierre terminal → cerrar jornada.',
                 '8) Consultar y exportar anexos I–VIII (caja final = Anexo VIII). Revisar bandeja de Avisos / mail de la mañana.',
             ],
             'tabla' => [
@@ -242,11 +242,12 @@ return [
                 'caption' => 'Propinas — reglas cerradas (Anexo VIII / II / I)',
                 'headers' => ['Dónde', 'Regla'],
                 'rows' => [
-                    ['Mesa tipo F confirmada', 'Campo propina del movimiento estado final.'],
-                    ['Anexo VIII — propina acumulada', '`tesoreria_crown_propina_dia` del día; si falta → Σ propinas F confirmadas ERP ≤ jornada.'],
+                    ['Mesa tipo F confirmada', 'Billetaje ARS de propina en el estado final: el total va al Anexo II y el detalle a bóveda PROP / Mesas. Sin billetaje (import Anita) se descompone el importe.'],
+                    ['Bóveda PROP', 'Tipo PROPINA con subtipos Híbrida (sin billetaje, solo RRHH), Mesas y Pública (ingresan billetes). Mesas también nace automático desde el F.'],
+                    ['RRHH', 'Tabla `tesoreria_crown_propina_dia` se mantiene para puntos de liquidación; ya no suma al Anexo VIII.'],
                     ['Anexo II pie', 'Propina del día = Σ F del día; % propina = caja_empleado / drop.'],
                     ['Anexo I', 'Ingreso “Recaudación propina empleados” + egreso “Depósito propina”.'],
-                    ['Total caja final VIII', 'La propina suma al total. Las fichas / poder público se listan aparte y no entran.'],
+                    ['Total caja final VIII', 'Sin propina acumulada. Las fichas / poder público se listan aparte y no entran.'],
                 ],
             ],
             'parrafos2' => [

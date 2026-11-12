@@ -83,7 +83,7 @@
                                                 {{ $comprobante->asignacion->deposito->codigo ?? '' }} — {{ $comprobante->asignacion->deposito->nombre ?? '' }}
                                                 @break
                                             @case('cajero')
-                                                {{ $comprobante->asignacion->cajero->nombre ?? '' }}
+                                                {{ $comprobante->cajeroOperativo()->nombre ?? '' }}
                                                 @break
                                             @case('estado')
                                                 {{ \App\Support\Caja\TesoreriaCrownComprobanteSupport::estado($comprobante->estado) }}

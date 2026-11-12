@@ -45,11 +45,17 @@
                 <div class="card-body">
                     @include('includes.form-error')
                     @if ($banca)
-                        <p class="mb-3">Banca {{ $banca->codigo }} {{ $banca->nombre }}, vigente desde {{ $banca->vigencia_desde->format('d/m/Y') }}.</p>
+                        <p class="mb-3">
+                            Banca tipo {{ $banca->codigo }} {{ $banca->nombre }}, vigente desde {{ $banca->vigencia_desde->format('d/m/Y') }}.
+                            En <strong>Habilitación</strong> se precarga esa banca.
+                        </p>
                     @else
                         <p class="text-muted mb-3">Esta mesa no tiene una banca vigente para esta fecha.</p>
                     @endif
-                    <p class="text-muted mb-3">Elegí el tipo. El movimiento se abre para cargar las cantidades.</p>
+                    <p class="text-muted mb-3">
+                        Elegí el tipo. El movimiento se abre para cargar las cantidades.
+                        Para propina de mesa usá <strong>Estado final</strong> (billetaje ARS: total Anexo II + detalle a bóveda PROP/Mesas).
+                    </p>
                     <div class="form-row align-items-end">
                         @include('caja.tesoreria_crown.partials.campo_cajero', [
                             'salaId' => $jornada->sala_id,

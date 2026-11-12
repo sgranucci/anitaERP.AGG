@@ -138,6 +138,38 @@
                                 </div>
                             </div>
                             <div class="form-group row">
+                                <label for="tipo_tarea" class="col-lg-3 control-label text-right pr-2 requerido">Tarea</label>
+                                <div class="col-lg-4">
+                                    @php
+                                        $tareaActual = (string) old('tipo_tarea', $cajero->tipo_tarea ?? 'T');
+                                    @endphp
+                                    <select name="tipo_tarea" id="tipo_tarea" class="form-control" required>
+                                        @foreach ($tareas as $codigo => $nombre)
+                                            <option value="{{ $codigo }}" @selected($tareaActual === $codigo)>{{ $codigo }} — {{ $nombre }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group row">
+                                <label class="col-lg-3 control-label text-right pr-2">Rendición</label>
+                                <div class="col-lg-8 pt-2">
+                                    @php
+                                        $permiteSinHab = (string) old(
+                                            'permite_rendir_sin_habilitacion',
+                                            ($cajero->permite_rendir_sin_habilitacion ?? false) ? '1' : '0'
+                                        ) === '1';
+                                    @endphp
+                                    <div class="custom-control custom-checkbox">
+                                        <input type="checkbox" class="custom-control-input" id="permite_rendir_sin_habilitacion"
+                                               name="permite_rendir_sin_habilitacion" value="1" @checked($permiteSinHab)>
+                                        <label class="custom-control-label" for="permite_rendir_sin_habilitacion">
+                                            Permite rendir sin habilitación
+                                            <span class="text-muted small">(empleados, QR, kiosco)</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group row">
                                 <label for="clave" class="col-lg-3 control-label text-right pr-2">PIN / clave</label>
                                 <div class="col-lg-4">
                                     <input type="password" name="clave" id="clave" class="form-control" maxlength="20" autocomplete="new-password"
@@ -220,4 +252,19 @@
     ])
 </template>
 @include('includes.admin.modalconsultausuario')
+<script>
+(function () {
+    var tarea = document.getElementById('tipo_tarea');
+    var flag = document.getElementById('permite_rendir_sin_habilitacion');
+    if (!tarea || !flag) {
+        return;
+    }
+    var sugeridos = { E: true, K: true };
+    tarea.addEventListener('change', function () {
+        if (sugeridos[tarea.value]) {
+            flag.checked = true;
+        }
+    });
+})();
+</script>
 @endsection

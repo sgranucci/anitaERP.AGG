@@ -78,7 +78,7 @@
                                         <td>
                                             @if ($asignacionId && empty($fila['propina']))
                                                 <a class="text-primary" target="_blank" rel="noopener"
-                                                   href="{{ route('ver_tesoreria_crown_cierre', $asignacionId) }}">{{ $fila['caja'] }}</a>
+                                                   href="{{ route('ver_tesoreria_crown_cierre', ['jornada' => $jornada->id, 'cajero' => ($fila['cajero_crown_id'] ?? $asignacionId)]) }}">{{ $fila['caja'] }}</a>
                                             @else
                                                 {{ $fila['caja'] }}
                                             @endif

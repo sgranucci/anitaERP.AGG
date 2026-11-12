@@ -24,7 +24,7 @@
             </div>
             @include('caja.tesoreria_crown.partials.sala_chips', ['ruta' => 'tesoreria_crown_tipo_valor'])
             <div class="card-body border-bottom py-2">
-                <p class="text-muted mb-0">El tipo agrupa el valor. La ficha o el billete concreto está en Valores: la serie y la denominación. Fichas de color no llevan stock. Fichas de valor, pesos, dólares y euros sí. Dólares y euros toman la cotización de la jornada; el resto queda en 1.</p>
+                <p class="text-muted mb-0">El tipo agrupa el valor. La ficha o el billete concreto está en Valores: la serie y la denominación. Fichas (de valor) unifican las ex fichas de color / no negociable. Pesos, dólares y euros también controlan stock. Dólares y euros toman la cotización de la jornada; el resto queda en 1.</p>
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-sm table-hover table-bordered mb-0" id="tabla-paginada">

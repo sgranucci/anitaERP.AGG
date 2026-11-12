@@ -58,7 +58,7 @@
             </tr>
             <tr>
                 <td>Caja: {{ $comprobante->asignacion->deposito->codigo ?? '' }} {{ $comprobante->asignacion->deposito->nombre ?? '' }}</td>
-                <td>Cajero: {{ $comprobante->asignacion->cajero->nombre ?? '' }}</td>
+                <td>Cajero: {{ $comprobante->cajeroOperativo()->nombre ?? '' }}</td>
                 <td class="muted">
                     @foreach ($cambiosDia as $cambio)
                         @if (! $loop->first)
@@ -179,7 +179,7 @@
             </table>
         @endif
         @if ($comprobante->tipo === TesoreriaCrownComprobanteSupport::RENDICION)
-            @foreach (TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->asignacion->tipo_tarea ?? '') as $grupoMedio)
+            @foreach (TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->tipoTareaOperativa()) as $grupoMedio)
                 <h2>{{ $grupoMedio['titulo'] }}</h2>
                 <table>
                     <tbody>
@@ -205,12 +205,12 @@
                 <td style="width:50%;">
                     <div class="linea"></div>
                     {{ TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, 'entrega') }}<br>
-                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->entregaUsuario, $comprobante->entrega_at, TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo) === 'entrega' ? ($comprobante->asignacion->cajero->nombre ?? null) : null) }}</span>
+                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->entregaUsuario, $comprobante->entrega_at, TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo) === 'entrega' ? ($comprobante->cajeroOperativo()->nombre ?? null) : null) }}</span>
                 </td>
                 <td style="width:50%;">
                     <div class="linea"></div>
                     {{ TesoreriaCrownFirmaSupport::etiqueta($comprobante->tipo, 'recibe') }}<br>
-                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->recibeUsuario, $comprobante->recibe_at, TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo) === 'recibe' ? ($comprobante->asignacion->cajero->nombre ?? null) : null) }}</span>
+                    <span class="muted">{{ TesoreriaCrownFirmaSupport::textoFirma($comprobante->recibeUsuario, $comprobante->recibe_at, TesoreriaCrownFirmaSupport::ladoCajero($comprobante->tipo) === 'recibe' ? ($comprobante->cajeroOperativo()->nombre ?? null) : null) }}</span>
                 </td>
             </tr>
         </table>

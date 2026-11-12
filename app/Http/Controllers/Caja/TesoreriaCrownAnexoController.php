@@ -349,7 +349,6 @@ class TesoreriaCrownAnexoController extends Controller
                 foreach ($c['resumen_detalle'] ?? [] as $item) {
                     $filas[] = ['', '  '.$item['descripcion'], '', (float) $item['monto']];
                 }
-                $filas[] = ['', 'Propina acumulada', '', (float) ($c['propina'] ?? 0)];
                 if (((float) ($c['usd_pesos'] ?? 0)) > 0.001) {
                     $filas[] = [
                         '',

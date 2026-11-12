@@ -38,7 +38,10 @@
             <select name="subtipo_id" id="subtipo_id" class="form-control" {{ $subtipos->isEmpty() ? '' : 'required' }}>
                 <option value="">Elegí…</option>
                 @foreach ($subtipos as $st)
-                    <option value="{{ $st->id }}" data-codigo="{{ $st->codigo }}" @selected((int) $subtipoId === (int) $st->id)>
+                    <option value="{{ $st->id }}"
+                            data-codigo="{{ $st->codigo }}"
+                            data-mueve-billetaje="{{ ($st->mueve_billetaje ?? true) ? '1' : '0' }}"
+                            @selected((int) $subtipoId === (int) $st->id)>
                         {{ $st->etiqueta() }}
                     </option>
                 @endforeach
@@ -46,12 +49,18 @@
             <input type="text" name="subtipo_texto" id="subtipo_texto" class="form-control mt-2 {{ strtoupper((string) optional($subtipos->firstWhere('id', (int) $subtipoId))->codigo) === 'OTR' ? '' : 'd-none' }}"
                    maxlength="80" placeholder="Detalle del subtipo (obligatorio si es Otro)"
                    value="{{ $subtipoTexto }}">
+            <small id="tc-boveda-subtipo-aviso" class="form-text text-muted d-none">
+                Este subtipo no mueve billetaje: queda asentado solo a fines informativos (RRHH).
+            </small>
         @else
             @php $stSel = $subtipos->firstWhere('id', (int) $subtipoId); @endphp
             <p class="form-control-plaintext mb-0">
                 {{ $stSel?->etiqueta() ?? '—' }}
                 @if ($subtipoTexto !== '')
                     · {{ $subtipoTexto }}
+                @endif
+                @if ($stSel && ! ($stSel->mueve_billetaje ?? true))
+                    <span class="d-block text-muted">Sin billetaje (informativo RRHH).</span>
                 @endif
             </p>
         @endif

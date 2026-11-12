@@ -19,7 +19,7 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
                             {--fecha-iva : Filtra por com_fecha_iva (IVA compras) en vez de com_fecha}
                             {--limite= : Máximo de comprobantes nuevos a crear (por proveedor)}
                             {--nro-interno= : Solo este com_nro_interno de Anita}
-                            {--usuario-id=1 : usuario_id de auditoría}
+                            {--usuario-id= : usuario_id de auditoría (default: primer usuario activo)}
                             {--sin-cuenta-corriente : Solo documentos (CP + conceptos); no crea CC ni aplicaciones}
                             {--sin-completar-conceptos : No completa concmov en CP ya existentes sin conceptos}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
@@ -67,7 +67,15 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
         }
         $desde = $this->option('desde') ? (string) $this->option('desde') : null;
         $hasta = $this->option('hasta') ? (string) $this->option('hasta') : null;
-        $usuarioId = max(1, (int) $this->option('usuario-id'));
+        $usuarioIdOpt = $this->option('usuario-id');
+        $usuarioId = ($usuarioIdOpt !== null && $usuarioIdOpt !== '')
+            ? max(1, (int) $usuarioIdOpt)
+            : (int) (\App\Models\Seguridad\Usuario::query()->soloActivos()->orderBy('id')->value('id') ?: 0);
+        if ($usuarioId <= 0 || ! \App\Models\Seguridad\Usuario::query()->whereKey($usuarioId)->exists()) {
+            $this->error('usuario_id inválido (no existe en usuario). Indique --usuario-id= de un usuario activo.');
+
+            return self::FAILURE;
+        }
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(

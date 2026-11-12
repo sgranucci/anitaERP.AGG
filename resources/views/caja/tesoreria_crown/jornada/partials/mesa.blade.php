@@ -85,6 +85,9 @@
                                             @if ($movMesa->esReversa())
                                                 (reversa)
                                             @endif
+                                            @if ($movMesa->tipo === 'F' && abs((float) $movMesa->propina) > 0.001)
+                                                <span class="d-block small text-muted">Propina {{ number_format((float) $movMesa->propina, 2, ',', '.') }}</span>
+                                            @endif
                                         </td>
                                         <td>{{ $movMesa->cajero->nombre ?? '' }}</td>
                                         <td>

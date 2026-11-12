@@ -36,6 +36,7 @@ class ValidacionTesoreriaCrownBovedaSubtipo extends FormRequest
             ],
             'nombre' => ['required', 'string', 'max:60'],
             'activo' => ['required', 'in:0,1'],
+            'mueve_billetaje' => ['required', 'in:0,1'],
         ];
     }
 
@@ -47,6 +48,7 @@ class ValidacionTesoreriaCrownBovedaSubtipo extends FormRequest
             'codigo' => 'código',
             'nombre' => 'nombre',
             'activo' => 'activo',
+            'mueve_billetaje' => 'mueve billetaje',
         ];
     }
 }

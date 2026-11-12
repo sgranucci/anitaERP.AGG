@@ -8,8 +8,8 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * prom_ret_ibr (promae) ↔ condicionIIBB.
  *
  * Crown: catálogo operativo Convenio / Local / No alcanzado. La letra Anita I
- * («No inscripto» en help) se mapea a Convenio; la tasa 5% fuera de RN sale de
- * retencionIIBB.porcentajeretencion_fuera, no de una condición aparte.
+ * («No inscripto» en help) se mapea a Convenio; la tasa 5% sin inscripción RN
+ * (domicilio ni CM05) sale de retencionIIBB.porcentajeretencion_fuera.
  *
  * Resto de clientes: I → id 3 No inscripto (legado).
  */

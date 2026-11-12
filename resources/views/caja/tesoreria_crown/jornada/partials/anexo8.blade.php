@@ -11,8 +11,9 @@
         @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
         <p class="text-muted small mb-2">
             Formato de <code>l-estboveda.c</code>: primero stock de fichas (informativo, no entra al total),
-            después efectivo (arqueo del día + slots + drops) + resumen final + propina + FX.
-            Fuentes ERP: stock del día / arqueo conforme, bóveda, propina_dia / mesas F, monextr.
+            después efectivo (arqueo del día + slots + drops) + resumen final + FX.
+            La propina ya no suma al VIII: se carga en bóveda PROP (Mesas/Pública con billetes; Híbrida solo RRHH).
+            Fuentes ERP: stock del día / arqueo conforme, bóveda, monextr.
             <strong>Diferencia tesorería</strong> va dentro del resumen final (movimientos 35/36).
             <strong>Dif. final de bóveda</strong> = total VIII − saldo final Anexo I (caja por variación).
         </p>
@@ -37,8 +38,6 @@
                                 <th class="text-right">Valor</th>
                                 <th class="text-right">Cant. fichas</th>
                                 <th class="text-right">Monto fichas</th>
-                                <th class="text-right">Cant. placas</th>
-                                <th class="text-right">Monto placas</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -47,25 +46,14 @@
                                     <td>{{ $fila['serie'] }}</td>
                                     <td>{{ $fila['descripcion'] }}</td>
                                     <td class="text-right">{{ $pesos($fila['valor']) }}</td>
-                                    @if ($fila['canje'])
-                                        <td class="text-right"></td>
-                                        <td class="text-right"></td>
-                                        <td class="text-right">{{ $enteros($fila['cantidad']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['monto']) }}</td>
-                                    @else
-                                        <td class="text-right">{{ $enteros($fila['cantidad']) }}</td>
-                                        <td class="text-right">{{ $pesos($fila['monto']) }}</td>
-                                        <td class="text-right"></td>
-                                        <td class="text-right"></td>
-                                    @endif
+                                    <td class="text-right">{{ $enteros($fila['cantidad']) }}</td>
+                                    <td class="text-right">{{ $pesos($fila['monto']) }}</td>
                                 </tr>
                             @endforeach
                             <tr style="font-weight:bold;background:#f5f5f5;">
                                 <td colspan="3">Total</td>
                                 <td class="text-right">{{ $enteros($fichas['cant_fichas']) }}</td>
                                 <td class="text-right">{{ $pesos($fichas['monto_fichas']) }}</td>
-                                <td class="text-right">{{ $enteros($fichas['cant_placas']) }}</td>
-                                <td class="text-right">{{ $pesos($fichas['monto_placas']) }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -103,10 +91,6 @@
                                     @endif
                                 </td>
                                 <td class="text-right">{{ $pesos($c['resumen'] ?? 0) }}</td>
-                            </tr>
-                            <tr>
-                                <td>Propina acumulada</td>
-                                <td class="text-right">{{ $pesos($c['propina'] ?? 0) }}</td>
                             </tr>
                             @if (((float) ($c['usd_pesos'] ?? 0)) > 0.001)
                                 <tr>

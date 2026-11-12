@@ -66,6 +66,21 @@ final class LibroIvaDigitalVentasPeriodoSupport
         });
     }
 
+    /**
+     * Excluye Factura/ND/NC T (TurIVA) del archivo de ventas ordinario.
+     * Código ERP típico: «FAC T 00128-00000155» (letra T como palabra).
+     *
+     * @param  EloquentBuilder<Venta>|QueryBuilder  $query
+     */
+    public static function aplicarExcluirTuriva(
+        EloquentBuilder|QueryBuilder $query,
+        string $aliasVenta = 'venta',
+    ): void {
+        $col = $aliasVenta.'.codigo';
+        // MySQL/MariaDB: palabra T aislada (no "FACTURA").
+        $query->whereRaw($col.' NOT REGEXP ?', ['[[:<:]]T[[:>:]]']);
+    }
+
     public static function fechaYmd(?string $fechajornada, ?string $fecha, bool $porFechaJornada): string
     {
         $raw = $porFechaJornada

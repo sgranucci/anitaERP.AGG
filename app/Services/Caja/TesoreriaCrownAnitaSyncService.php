@@ -62,8 +62,12 @@ class TesoreriaCrownAnitaSyncService
         $bancas = $this->planBancas(
             $this->consultar('tipoj_tipojuego,tipoj_desc', 'SELECT tipoj_tipojuego, tipoj_desc FROM tipojuego'),
             $this->consultar('bant_tipojuego,bant_codigo,bant_cantidad', 'SELECT bant_tipojuego, bant_codigo, bant_cantidad FROM bancatipo'),
-            $this->consultar('fichm_codigo,fichm_serie', 'SELECT fichm_codigo, fichm_serie FROM fichamae'),
-            $salaId
+            $this->consultar(
+                'fichm_codigo,fichm_serie,fichm_valor',
+                'SELECT fichm_codigo, fichm_serie, fichm_valor FROM fichamae'
+            ),
+            $salaId,
+            $tiposValor['FVAL'] ?? null
         );
 
         $mesasBanca = $this->planMesasBanca($this->consultar(
@@ -236,7 +240,7 @@ class TesoreriaCrownAnitaSyncService
         $tipos = TesoreriaCrownTipoValor::query()
             ->where('sala_id', $salaId)
             ->pluck('id', 'codigo');
-        foreach (['FCOL', 'FVAL', 'ARS', 'USD', 'EUR'] as $codigo) {
+        foreach (['FVAL', 'ARS', 'USD', 'EUR'] as $codigo) {
             if (! isset($tipos[$codigo])) {
                 throw new RuntimeException('La sala no tiene el tipo de valor '.$codigo.'.');
             }
@@ -277,14 +281,14 @@ class TesoreriaCrownAnitaSyncService
 
                 continue;
             }
-            $color = strtoupper(trim((string) ($fila->fichm_venta_caja ?? ''))) === 'S'
-                || strtoupper(trim((string) ($fila->fichm_ficha_canje ?? ''))) === 'S';
-            $tipoId = $color ? $tipos['FCOL'] : $tipos['FVAL'];
+            $desc = trim((string) ($fila->fichm_desc_color ?? ''));
+            $desc = preg_replace('/^NO\s+NEGOCIABLE\s+/iu', '', $desc) ?? $desc;
+            // Fichas de color / no negociable unificadas como fichas de valor.
             $datos = [
                 'sala_id' => $salaId,
-                'tipo_valor_id' => $tipoId,
+                'tipo_valor_id' => $tipos['FVAL'],
                 'serie' => $serie,
-                'descripcion' => trim((string) ($fila->fichm_desc_color ?? '')),
+                'descripcion' => $desc,
                 'denominacion' => (float) ($fila->fichm_valor ?? 0),
                 'orden' => (int) ($fila->fichm_orden_carga ?? 0),
                 'activo' => true,
@@ -478,19 +482,23 @@ class TesoreriaCrownAnitaSyncService
      * @param  list<object>  $fichas
      * @return array{leer: int, crear: int, actualizar: int, omitir: int, filas: list<array<string, mixed>>, avisos: list<string>}
      */
-    private function planBancas(array $tipos, array $composicion, array $fichas, int $salaId): array
+    private function planBancas(array $tipos, array $composicion, array $fichas, int $salaId, ?int $fvalTipoId): array
     {
         $plan = $this->planVacio(count($tipos));
         $seriePorFicha = [];
+        $denominacionPorSerie = [];
         foreach ($fichas as $ficha) {
             $serie = strtoupper(trim((string) ($ficha->fichm_serie ?? '')));
             if ($serie !== '') {
                 $seriePorFicha[(int) $ficha->fichm_codigo] = $serie;
+                $denominacionPorSerie[$serie] = (float) ($ficha->fichm_valor ?? 0);
             }
         }
-        $valorPorSerie = TesoreriaCrownValor::query()
-            ->where('sala_id', $salaId)
-            ->pluck('id', 'serie');
+        $valorPorSerie = $this->mapaValorPorSerieConAliasDenominacion(
+            $salaId,
+            $fvalTipoId,
+            $denominacionPorSerie
+        );
         $lineasPorTipo = [];
         foreach ($composicion as $fila) {
             $tipo = (int) ($fila->bant_tipojuego ?? 0);
@@ -789,6 +797,17 @@ class TesoreriaCrownAnitaSyncService
             ->where('serie', $datos['serie'])
             ->first();
         if (! $existente) {
+            // Una sola ficha de valor por denominación: no recrear series Anita duplicadas.
+            $porDenom = TesoreriaCrownValor::query()
+                ->where('sala_id', $datos['sala_id'])
+                ->where('tipo_valor_id', $datos['tipo_valor_id'])
+                ->whereRaw('ABS(denominacion - ?) < 0.001', [(float) $datos['denominacion']])
+                ->first();
+            if ($porDenom) {
+                $plan['omitir']++;
+
+                return;
+            }
             $plan['crear']++;
             $plan['filas'][] = ['accion' => 'crear', 'datos' => $datos];
 
@@ -805,6 +824,52 @@ class TesoreriaCrownAnitaSyncService
             return;
         }
         $plan['omitir']++;
+    }
+
+    /**
+     * Serie Anita → valor ERP; si la serie no está (unificada), alias por denominación FVAL.
+     *
+     * @param  array<string, float>  $denominacionPorSerie
+     * @return array<string, int>
+     */
+    private function mapaValorPorSerieConAliasDenominacion(
+        int $salaId,
+        ?int $fvalTipoId,
+        array $denominacionPorSerie
+    ): array {
+        $valorPorSerie = TesoreriaCrownValor::query()
+            ->where('sala_id', $salaId)
+            ->get(['id', 'serie', 'tipo_valor_id', 'denominacion'])
+            ->keyBy(fn ($v) => strtoupper(trim((string) $v->serie)))
+            ->map(fn ($v) => (int) $v->id)
+            ->all();
+
+        if (! $fvalTipoId || $denominacionPorSerie === []) {
+            return $valorPorSerie;
+        }
+
+        $fvalPorDenom = [];
+        foreach (
+            TesoreriaCrownValor::query()
+                ->where('sala_id', $salaId)
+                ->where('tipo_valor_id', $fvalTipoId)
+                ->get(['id', 'denominacion']) as $valor
+        ) {
+            $clave = number_format((float) $valor->denominacion, 2, '.', '');
+            $fvalPorDenom[$clave] = (int) $valor->id;
+        }
+
+        foreach ($denominacionPorSerie as $serie => $denominacion) {
+            if (isset($valorPorSerie[$serie])) {
+                continue;
+            }
+            $clave = number_format((float) $denominacion, 2, '.', '');
+            if (isset($fvalPorDenom[$clave])) {
+                $valorPorSerie[$serie] = $fvalPorDenom[$clave];
+            }
+        }
+
+        return $valorPorSerie;
     }
 
     /**

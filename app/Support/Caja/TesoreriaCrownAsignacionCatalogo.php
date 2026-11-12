@@ -2,6 +2,10 @@
 
 namespace App\Support\Caja;
 
+/**
+ * @deprecated Preferir TesoreriaCrownTareaCatalogo para tareas.
+ * Se mantiene por turnos históricos y referencias hasta sacar la asignación.
+ */
 class TesoreriaCrownAsignacionCatalogo
 {
     /** @var array<string, string> */
@@ -23,7 +27,7 @@ class TesoreriaCrownAsignacionCatalogo
 
     public static function tarea(string $codigo): string
     {
-        return self::TAREAS[$codigo] ?? $codigo;
+        return TesoreriaCrownTareaCatalogo::tarea($codigo);
     }
 
     public static function turno(string $codigo): string

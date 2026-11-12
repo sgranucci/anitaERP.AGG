@@ -28,12 +28,12 @@ final class TesoreriaCrownMesaSupport
 
     /** @var array<string, string> */
     public const AYUDA = [
-        'A' => 'Fichas con las que arranca la mesa. Suman al stock.',
+        'A' => 'Fichas con las que arranca la mesa. Se precarga la banca tipo configurada; podés ajustarla. Suman al stock.',
         'R' => 'Fichas que se agregan durante el juego. Suman al stock.',
         'C' => 'Fichas que salen de la mesa. Restan del stock.',
-        'F' => 'Conteo al cerrar. Pasa a ser la apertura del día siguiente.',
+        'F' => 'Conteo al cerrar (fichas). La propina se carga con billetaje ARS: el total va al Anexo II y el detalle a bóveda PROP/Mesas. Queda como apertura del día siguiente.',
         'D' => 'Drop de la mesa. No mueve el stock de fichas.',
-        'P' => 'Propina de la mesa. No mueve el stock de fichas.',
+        'P' => 'Propina suelta (legado). Preferí cargar la propina en el Estado final.',
     ];
 
     /** Habilitación y reposición suman fichas a la mesa. El crédito las saca. El estado final y el drop son conteos. */
@@ -280,6 +280,62 @@ final class TesoreriaCrownMesaSupport
         ));
     }
 
+    /**
+     * Billetaje ARS de propina en estado final (Anexo II = total; bóveda = detalle).
+     *
+     * @return array<int, array{codigo: string, titulo: string, filas: mixed}>
+     */
+    public static function gruposPropinaBilletaje(int $salaId): array
+    {
+        $grupos = TesoreriaCrownComprobanteSupport::gruposEdicion($salaId, TesoreriaCrownComprobanteSupport::RENDICION);
+
+        return array_values(array_filter(
+            $grupos,
+            fn (array $grupo) => ($grupo['codigo'] ?? '') === 'ARS'
+        ));
+    }
+
+    /**
+     * @return array<int, float> valor_id => cantidad
+     */
+    public static function cantidadesDeBanca(int $bancaId): array
+    {
+        return DB::table('tesoreria_crown_banca_linea')
+            ->where('banca_id', $bancaId)
+            ->pluck('cantidad', 'valor_id')
+            ->map(fn ($cantidad) => (float) $cantidad)
+            ->all();
+    }
+
+    /**
+     * Normaliza billetaje de propina: solo cantidades > 0 de valores ARS activos de la sala.
+     *
+     * @param  array<int|string, mixed>  $cantidades
+     * @return array{0: array<int, int>, 1: float} [lineas, total]
+     */
+    public static function normalizarPropinaBilletaje(int $salaId, array $cantidades): array
+    {
+        $idsArs = [];
+        foreach (self::gruposPropinaBilletaje($salaId) as $grupo) {
+            foreach ($grupo['filas'] as $valor) {
+                $idsArs[(int) $valor->id] = (float) $valor->denominacion;
+            }
+        }
+        $lineas = [];
+        $total = 0.0;
+        foreach ($cantidades as $valorId => $cantidad) {
+            $valorId = (int) $valorId;
+            $cantidad = (int) $cantidad;
+            if ($cantidad <= 0 || ! isset($idsArs[$valorId])) {
+                continue;
+            }
+            $lineas[$valorId] = $cantidad;
+            $total += $cantidad * $idsArs[$valorId];
+        }
+
+        return [$lineas, round($total, 2)];
+    }
+
     private static function ultimoEstadoFinalAntes(int $depositoId, string $fechaYmd): ?TesoreriaCrownMesa
     {
         return TesoreriaCrownMesa::query()
@@ -348,15 +404,4 @@ final class TesoreriaCrownMesaSupport
         return $cantidades;
     }
 
-    /**
-     * @return array<int, float>
-     */
-    private static function cantidadesDeBanca(int $bancaId): array
-    {
-        return DB::table('tesoreria_crown_banca_linea')
-            ->where('banca_id', $bancaId)
-            ->pluck('cantidad', 'valor_id')
-            ->map(fn ($cantidad) => (float) $cantidad)
-            ->all();
-    }
 }

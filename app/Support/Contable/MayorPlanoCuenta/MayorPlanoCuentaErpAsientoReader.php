@@ -355,6 +355,17 @@ final class MayorPlanoCuentaErpAsientoReader
                 $nro = $visible['nro'];
             }
             $sistemaPersistido = trim((string) ($row->anita_sistema ?? ''));
+            $fks = $this->fksDeFila($row, $columnasFk);
+            $sistema = $sistemaPersistido !== '' ? $sistemaPersistido : (string) ($visible['sistema'] ?? '');
+            // Facturas ERP nativas (PV ARCA, etc.): tip FAC sin anita_sistema → ventas.
+            if ($sistema === ''
+                && (
+                    (int) ($fks['venta_id'] ?? 0) > 0
+                    || strtoupper(trim((string) ($row->tipo_asiento ?? ''))) === MayorPlanoCuentaVentasFiltroSupport::TIPO_ASIENTO_VENTA
+                )
+            ) {
+                $sistema = MayorPlanoCuentaVentasFiltroSupport::SISTEMA_VENTAS;
+            }
 
             $filaCtamov = (object) [
                 'ctav_empresa' => (int) $row->empresa_id,
@@ -375,12 +386,12 @@ final class MayorPlanoCuentaErpAsientoReader
                 'ctav_balancea' => 'S',
                 'ctav_o_compra' => (int) ($row->mov_nro_ordencompra ?? 0),
                 'ctav_ccosto' => (int) ($row->ccosto_codigo ?? 0),
-                'ctav_sistema' => $sistemaPersistido !== '' ? $sistemaPersistido : $visible['sistema'],
+                'ctav_sistema' => $sistema,
                 'ctav_asi_mon_ref' => AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP,
                 'erp_origen_subdiario' => $esSub,
                 'erp_asiento_obs' => $obsAsiento,
                 'erp_asiento_id' => (int) $row->asiento_id,
-                'erp_asiento_fks' => $this->fksDeFila($row, $columnasFk),
+                'erp_asiento_fks' => $fks,
                 'erp_mov_comprobante_proveedor_id' => (int) ($row->mov_comprobante_proveedor_id ?? 0),
             ];
             if ($emisorPersistido !== '') {

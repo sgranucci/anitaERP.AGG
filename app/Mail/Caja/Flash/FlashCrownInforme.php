@@ -26,9 +26,11 @@ class FlashCrownInforme extends Mailable
             ? $this->informe['fecha']
             : Carbon::parse((string) ($this->informe['fecha'] ?? now()));
 
-        $asunto = $this->formato === FlashCrownInformeSupport::FORMATO_GAMING
-            ? 'Gaming Revenues '.$fecha->format('d-m-y')
-            : 'Flash Crown '.$fecha->format('d-m-y');
+        $asunto = match ($this->formato) {
+            FlashCrownInformeSupport::FORMATO_GAMING => 'Gaming Revenues '.$fecha->format('d-m-y'),
+            FlashCrownInformeSupport::FORMATO_DAILY => 'Daily Flash Report '.$fecha->format('d-m-y'),
+            default => 'Flash Crown '.$fecha->format('d-m-y'),
+        };
 
         return $this->subject($asunto)->view('mails.caja.flash.informe_crown', [
             'informe' => $this->informe,

@@ -10113,6 +10113,24 @@ class FacturacionService
 		return (bool) $tipo->genera_asiento;
 	}
 
+	/**
+	 * Código de cliente para anita_emisor del asiento (mayor plano / Anita).
+	 * Se guarda como en el maestro; el mayor normaliza ceros a la izquierda.
+	 */
+	private function codigoClienteAnitaParaAsiento(int $ventaId): string
+	{
+		if ($ventaId <= 0) {
+			return '';
+		}
+
+		$codigo = Venta::query()
+			->whereKey($ventaId)
+			->join('cliente', 'cliente.id', '=', 'venta.cliente_id')
+			->value('cliente.codigo');
+
+		return trim((string) ($codigo ?? ''));
+	}
+
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
 											?string $modoFacturacionPv = null, ?string $fechaJornada = null, bool $omitirAnita = false,
@@ -10157,6 +10175,13 @@ class FacturacionService
 		$data['letra'] = $letra;
 		$data['sucursal'] = $sucursal;
 		$data['nro'] = $nro;
+		// Mayor plano (fuente ERP): sin anita_sistema/emisor la columna Emisor queda vacía
+		// aunque la venta tenga cliente (PV ARCA / facturas nativas).
+		$data['sistema_ctav'] = 'V';
+		$codigoClienteAsiento = $this->codigoClienteAnitaParaAsiento((int) $venta_id);
+		if ($codigoClienteAsiento !== '') {
+			$data['anita_emisor'] = $codigoClienteAsiento;
+		}
 		$data['modofacturacion_pv'] = $modoFacturacionPv;
 		$data['alcance_cierre_contable'] = PeriodoContableCierreSupport::ALCANCE_FACTURACION;
 		if ($fechaJornada !== null && trim($fechaJornada) !== '') {

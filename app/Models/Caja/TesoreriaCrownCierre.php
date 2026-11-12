@@ -19,6 +19,7 @@ class TesoreriaCrownCierre extends Model implements Auditable
         'sala_id',
         'empresa_id',
         'jornada_id',
+        'cajero_crown_id',
         'asignacion_id',
         'numero',
         'efectivo_habilitado',
@@ -50,6 +51,11 @@ class TesoreriaCrownCierre extends Model implements Auditable
         'auditor_at' => 'datetime',
         'reabierta_at' => 'datetime',
     ];
+
+    public function cajero(): BelongsTo
+    {
+        return $this->belongsTo(CajeroCrown::class, 'cajero_crown_id');
+    }
 
     public function asignacion(): BelongsTo
     {

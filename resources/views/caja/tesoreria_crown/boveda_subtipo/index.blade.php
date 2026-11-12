@@ -42,8 +42,9 @@
             ])
             <div class="card-body border-bottom py-2">
                 <p class="text-muted mb-0">
-                    Subtipos opcionales por tipo de movimiento de bóveda (p. ej. OEGR → Devolución en sala / Envío a otro casino).
+                    Subtipos opcionales por tipo de movimiento de bóveda (p. ej. OEGR → Devolución; PROP → Híbrida / Mesas / Pública).
                     Si el tipo tiene subtipos activos, al cargar el movimiento hay que elegir uno.
+                    Híbrida no mueve billetaje (solo RRHH); Mesas y Pública sí ingresan billetes.
                     @if ($tipoFiltro ?? null)
                         <span class="d-block mt-1">
                             Filtrado por tipo
@@ -60,6 +61,7 @@
                             <th>Tipo</th>
                             <th>Código</th>
                             <th>Nombre</th>
+                            <th>Billetaje</th>
                             <th>Activo</th>
                             <th class="text-left" style="width:90px;">Acciones</th>
                         </tr>
@@ -70,6 +72,7 @@
                                 <td>{{ $subtipo->tipo?->etiqueta() ?? '—' }}</td>
                                 <td>{{ $subtipo->codigo }}</td>
                                 <td>{{ $subtipo->nombre }}</td>
+                                <td>{{ ($subtipo->mueve_billetaje ?? true) ? 'Sí' : 'No (informativo)' }}</td>
                                 <td>{{ $subtipo->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-boveda-subtipo', false))

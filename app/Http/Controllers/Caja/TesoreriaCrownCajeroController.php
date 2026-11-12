@@ -18,6 +18,7 @@ use App\Support\Caja\CajeroCrownSistemaExternoSupport;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
+use App\Support\Caja\TesoreriaCrownTareaCatalogo;
 use App\Support\Caja\TesoreriaCrownWorkbenchSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
@@ -146,10 +147,13 @@ class TesoreriaCrownCajeroController extends Controller
             'cajero' => new CajeroCrown([
                 'sala_id' => $sala->id,
                 'empresa_id' => $sala->empresa_id,
+                'tipo_tarea' => 'T',
+                'permite_rendir_sin_habilitacion' => false,
                 'activo' => true,
             ]),
             'externos' => collect(),
             'sistemas' => CajeroCrownSistemaExternoSupport::sistemas(),
+            'tareas' => TesoreriaCrownTareaCatalogo::TAREAS,
             'edicion' => false,
             'accion' => route('guardar_tesoreria_crown_cajero'),
             'metodo' => 'POST',
@@ -168,6 +172,7 @@ class TesoreriaCrownCajeroController extends Controller
             'cajero' => $cajero,
             'externos' => $cajero->externos,
             'sistemas' => CajeroCrownSistemaExternoSupport::sistemas(),
+            'tareas' => TesoreriaCrownTareaCatalogo::TAREAS,
             'edicion' => true,
             'accion' => route('actualizar_tesoreria_crown_cajero', $cajero->id),
             'metodo' => 'PUT',
@@ -407,6 +412,12 @@ class TesoreriaCrownCajeroController extends Controller
         }
         $cajaId = $this->resolverCajaId($sala, trim((string) ($datos['caja_codigo'] ?? '')));
         $mozoId = $this->resolverMozoId($sala, trim((string) ($datos['mozo_codigo'] ?? '')));
+        $tipoTarea = (string) ($datos['tipo_tarea'] ?? 'T');
+        $permiteSinHab = (bool) ($datos['permite_rendir_sin_habilitacion'] ?? false);
+        if (! $request->has('permite_rendir_sin_habilitacion')
+            && TesoreriaCrownTareaCatalogo::sugiereRendirSinHabilitacion($tipoTarea)) {
+            $permiteSinHab = true;
+        }
         $out = [
             'empresa_id' => (int) $sala->empresa_id,
             'sala_id' => (int) $sala->id,
@@ -416,6 +427,8 @@ class TesoreriaCrownCajeroController extends Controller
             'usuario_id' => $usuario?->id,
             'caja_id' => $cajaId,
             'mozo_gastronomia_id' => $mozoId,
+            'tipo_tarea' => $tipoTarea,
+            'permite_rendir_sin_habilitacion' => $permiteSinHab,
             'activo' => TesoreriaCrownAcceso::marcado($datos['activo'] ?? 1),
         ];
         $clave = trim((string) ($datos['clave'] ?? ''));

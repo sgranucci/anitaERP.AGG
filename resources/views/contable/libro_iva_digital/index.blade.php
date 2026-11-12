@@ -552,7 +552,8 @@
                         Período {{ $resultado['periodo']['etiqueta'] ?? '' }}.
                         Importaciones y ajustes manuales DJ se cargan en las tablas auxiliares
                         (<code>libro_iva_importacion_*</code>, <code>libro_iva_ajuste_dj</code>).
-                        TurIVA queda fuera de alcance para AGG.
+                        Las Facturas T (TurIVA, tipos 195/196/197) se excluyen del archivo de ventas;
+                        la sección TurIVA aún no se genera.
                     </p>
                 @elseif ($consultado)
                     <p class="text-muted">No se generaron datos para los filtros indicados.</p>

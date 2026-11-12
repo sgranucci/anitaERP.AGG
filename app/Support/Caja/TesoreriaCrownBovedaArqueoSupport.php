@@ -79,7 +79,10 @@ final class TesoreriaCrownBovedaArqueoSupport
             if ($cantidad < 0.0001) {
                 continue;
             }
-            $efecto = TesoreriaCrownBovedaSupport::efecto((string) $fila->signo);
+            $efecto = TesoreriaCrownBovedaSupport::efectoConSubtipo(
+                (string) $fila->signo,
+                $fila->mueve_billetaje ?? null
+            );
             if ($efecto > 0) {
                 $ingresos[$valorId] = ($ingresos[$valorId] ?? 0.0) + $cantidad;
             } elseif ($efecto < 0) {
@@ -203,6 +206,7 @@ final class TesoreriaCrownBovedaArqueoSupport
         $q = DB::table('tesoreria_crown_boveda_linea as l')
             ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
+            ->leftJoin('tesoreria_crown_boveda_subtipo as st', 'st.id', '=', 'b.subtipo_id')
             ->where('b.deposito_id', $depositoId)
             ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
             ->where('b.confirmado_at', '>', $desdeExclusive)
@@ -211,7 +215,15 @@ final class TesoreriaCrownBovedaArqueoSupport
             $q->where('t.abreviatura', '<>', 'APER');
         }
 
-        return $q->get(['l.valor_id', 'l.cantidad', 't.signo', 't.abreviatura', 'b.id', 'b.numero']);
+        return $q->get([
+            'l.valor_id',
+            'l.cantidad',
+            't.signo',
+            't.abreviatura',
+            'st.mueve_billetaje',
+            'b.id',
+            'b.numero',
+        ]);
     }
 
     public static function persistirDesdeCalculo(

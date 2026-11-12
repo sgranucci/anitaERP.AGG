@@ -153,7 +153,7 @@ class TesoreriaCrownComprobanteSupport
             return $grupos;
         }
 
-        foreach (['FVAL' => 'Fichas', 'FCOL' => 'Fichas de color'] as $codigo => $titulo) {
+        foreach (['FVAL' => 'Fichas'] as $codigo => $titulo) {
             $filas = self::deCodigo($valores, $codigo)
                 ->sort(function (TesoreriaCrownValor $a, TesoreriaCrownValor $b): int {
                     $porOrden = (int) $a->orden <=> (int) $b->orden;

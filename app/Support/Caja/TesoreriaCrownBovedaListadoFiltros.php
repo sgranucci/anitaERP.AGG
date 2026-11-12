@@ -128,13 +128,20 @@ class TesoreriaCrownBovedaListadoFiltros
             ->join('tesoreria_crown_tipo_valor as tv', 'tv.id', '=', 'v.tipo_valor_id')
             ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
+            ->leftJoin('tesoreria_crown_boveda_subtipo as st', 'st.id', '=', 'b.subtipo_id')
             ->whereNotIn('tv.codigo', ['FVAL', 'FCOL'])
             ->where(function ($q) {
                 $q->where('tv.es_moneda_referencia', 1)->orWhere('tv.cotizacion_fija', 1);
             })
             ->groupBy('l.boveda_id')
             ->select('l.boveda_id')
-            ->selectRaw("SUM(l.cantidad * v.denominacion * CASE t.signo WHEN '0' THEN 1 WHEN '1' THEN -1 ELSE 0 END) as importe");
+            ->selectRaw(
+                "SUM(l.cantidad * v.denominacion * CASE"
+                ." WHEN st.mueve_billetaje = 0 THEN 0"
+                ." WHEN t.signo = '0' THEN 1"
+                ." WHEN t.signo = '1' THEN -1"
+                .' ELSE 0 END) as importe'
+            );
 
         $query = TesoreriaCrownBoveda::query()
             ->select('tesoreria_crown_boveda.*')
@@ -144,7 +151,7 @@ class TesoreriaCrownBovedaListadoFiltros
             ->leftJoinSub($importe, 'tc_boveda_importe', 'tc_boveda_importe.boveda_id', '=', 'tesoreria_crown_boveda.id')
             ->where('tesoreria_crown_boveda.jornada_id', $jornadaId)
             ->where('tesoreria_crown_boveda.deposito_id', $depositoId)
-            ->with(['tipo', 'deposito', 'comprobante', 'lineas.valor.tipoValor', 'usuario', 'revierte', 'reversa']);
+            ->with(['tipo', 'subtipo', 'deposito', 'comprobante', 'lineas.valor.tipoValor', 'usuario', 'revierte', 'reversa']);
 
         self::aplicarQbe($query, (array) ($filtros['qbe'] ?? []));
         self::aplicarTexto($query, trim((string) ($filtros['valor'] ?? '')));

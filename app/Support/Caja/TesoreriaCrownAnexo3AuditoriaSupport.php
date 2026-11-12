@@ -118,7 +118,10 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'como_auditar' => self::comoAuditar($columna, (string) ($fila['tarea'] ?? '')),
             'avisos' => $detalle['avisos'],
             'movimientos' => $detalle['movimientos'],
-            'cierre_url' => route('ver_tesoreria_crown_cierre', $asignacion->id),
+            'cierre_url' => route('ver_tesoreria_crown_cierre', [
+                'jornada' => $asignacion->jornada_id,
+                'cajero' => $asignacion->cajero_crown_id,
+            ]),
         ];
     }
 

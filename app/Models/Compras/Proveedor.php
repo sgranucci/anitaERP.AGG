@@ -90,6 +90,11 @@ class Proveedor extends Model implements Auditable
 		return $this->hasMany(Proveedor_Sala::class, 'proveedor_id');
 	}
 
+	public function proveedor_cm05s()
+	{
+		return $this->hasMany(Proveedor_Cm05::class, 'proveedor_id');
+	}
+
     public function tipossuspensionproveedores()
     {
         return $this->belongsTo(Tiposuspensionproveedor::class, 'tiposuspension_id');

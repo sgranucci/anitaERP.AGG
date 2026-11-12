@@ -58,4 +58,21 @@ class MayorPlanoCuentaEmisorSupportTest extends TestCase
 
         $this->assertSame('', $resuelto['codigo']);
     }
+
+    public function test_fac_sin_sistema_es_cliente(): void
+    {
+        $resuelto = MayorPlanoCuentaEmisorSupport::resolver('', 'FAC', '', 'FAC A 00075 221');
+
+        $this->assertSame('', $resuelto['codigo']);
+        $this->assertSame(MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE, $resuelto['entidad']);
+        $this->assertFalse($resuelto['deducido']);
+    }
+
+    public function test_nce_sin_sistema_es_cliente(): void
+    {
+        $this->assertSame(
+            MayorPlanoCuentaEmisorSupport::ENTIDAD_CLIENTE,
+            MayorPlanoCuentaEmisorSupport::entidad('', 'NCE')
+        );
+    }
 }

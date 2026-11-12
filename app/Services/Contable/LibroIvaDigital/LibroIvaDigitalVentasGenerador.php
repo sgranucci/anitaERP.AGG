@@ -257,6 +257,7 @@ class LibroIvaDigitalVentasGenerador
             ->where('pv_lid.empresa_id', $empresaId);
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
+        LibroIvaDigitalVentasPeriodoSupport::aplicarExcluirTuriva($query);
 
         $tiposSinCae = DB::table('tipotransaccion')
             ->whereIn('abreviatura', LibroIvaDigitalMapeosSupport::abreviaturasSinCaeInformables())
@@ -293,8 +294,15 @@ class LibroIvaDigitalVentasGenerador
         $esRmv = LibroIvaDigitalMapeosSupport::esRmv($abrev);
         $esSinCaeInformable = LibroIvaDigitalMapeosSupport::esSinCaeInformable($abrev);
         $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
+        // TurIVA (195/196/197): sección propia; fuera del archivo de ventas ordinario.
+        if (LibroIvaDigitalMapeosSupport::esLetraTuriva($letra)) {
+            return null;
+        }
         $codigoBase = (string) ($venta->tipotransacciones->codigo ?? '001');
         $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoBase, $letra, $abrev);
+        if (LibroIvaDigitalMapeosSupport::esTipoTuriva($tipoComprobante)) {
+            return null;
+        }
         $puntoVenta = (int) ($venta->puntoventas->codigo ?? 0);
         $numero = (int) $venta->numerocomprobante;
 
@@ -471,15 +479,19 @@ class LibroIvaDigitalVentasGenerador
                 $percIibb += $importe;
                 continue;
             }
-            if (stripos($concepto, 'Gravado al') !== false) {
+            if (IvaVentasDesgloseSupport::esConceptoGravado($concepto)) {
                 $tasa = round((float) $imp->tasa, 3);
                 $alicuotas[$tasa]['neto'] = ($alicuotas[$tasa]['neto'] ?? 0) + $importe;
                 $alicuotas[$tasa]['tasa'] = $tasa;
                 continue;
             }
-            if (stripos($concepto, 'Iva ') !== false || stripos($concepto, 'IVA') === 0) {
+            if (IvaVentasDesgloseSupport::esConceptoIvaLiquidado($concepto)) {
                 $tasa = round((float) $imp->tasa, 3);
+                $base = abs((float) $imp->baseimponible);
                 $alicuotas[$tasa]['iva'] = ($alicuotas[$tasa]['iva'] ?? 0) + $importe;
+                if ($base > 0 && (($alicuotas[$tasa]['neto'] ?? 0) <= 0)) {
+                    $alicuotas[$tasa]['neto'] = ($alicuotas[$tasa]['neto'] ?? 0) + $base;
+                }
                 $alicuotas[$tasa]['tasa'] = $tasa;
             }
         }

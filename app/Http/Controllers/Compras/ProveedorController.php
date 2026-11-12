@@ -41,6 +41,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Compras\Proveedor_SalaRepositoryInterface;
+use App\Repositories\Compras\Proveedor_Cm05RepositoryInterface;
 use App\Support\Compras\ProveedorSalaAnitaSupport;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -100,6 +101,7 @@ class ProveedorController extends Controller
     private $proveedor_formapagoRepository;
     private $proveedor_servicioRepository;
     private $proveedor_salaRepository;
+    private $proveedor_cm05Repository;
     private $proveedor_encuestaRepository;
     private $proveedor_encuesta_preguntaRepository;
     private $proveedor_cuentacorrienteRepository;
@@ -151,6 +153,7 @@ class ProveedorController extends Controller
         Proveedor_FormapagoRepositoryInterface $proveedor_formapagorepository,
         Proveedor_ServicioRepositoryInterface $proveedor_serviciorepository,
         Proveedor_SalaRepositoryInterface $proveedor_salarepository,
+        Proveedor_Cm05RepositoryInterface $proveedor_cm05repository,
 		Proveedor_ArchivoRepositoryInterface $proveedor_archivorepository,
         Proveedor_Documento_FiscalRepositoryInterface $proveedor_documento_fiscalrepository,
         Proveedor_EncuestaRepositoryInterface $proveedor_encuestarepository, 
@@ -172,6 +175,7 @@ class ProveedorController extends Controller
         $this->proveedor_formapagoRepository = $proveedor_formapagorepository;
         $this->proveedor_servicioRepository = $proveedor_serviciorepository;
         $this->proveedor_salaRepository = $proveedor_salarepository;
+        $this->proveedor_cm05Repository = $proveedor_cm05repository;
         $this->proveedor_cuentacorrienteRepository = $proveedor_cuentacorrienterepository;
         $this->tiposuspensionproveedorRepository = $tiposuspensionproveedorrepository;
         $this->tipoempresaRepository = $tipoempresarepository;
@@ -683,6 +687,7 @@ class ProveedorController extends Controller
                 $this->proveedor_servicioRepository->create($request->all(), $proveedor->id);
                 if (EntornoEmpresaSupport::esCrown()) {
                     $this->proveedor_salaRepository->create($request->all(), (int) $proveedor->id);
+                    $this->proveedor_cm05Repository->create($request->all(), (int) $proveedor->id);
                 }
                 $proveedor_archivo = $this->proveedor_archivoRepository->create($request, $proveedor->id);
                 $this->proveedor_documento_fiscalRepository->sincronizarDesdeRequest((int) $proveedor->id, $request);
@@ -811,6 +816,7 @@ class ProveedorController extends Controller
 
             if (EntornoEmpresaSupport::esCrown()) {
                 $this->proveedor_salaRepository->update($request->all(), (int) $id);
+                $this->proveedor_cm05Repository->update($request->all(), (int) $id);
             }
 
             // Graba archivos asociados

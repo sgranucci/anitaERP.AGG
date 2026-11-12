@@ -21,6 +21,7 @@ use App\Support\Caja\TesoreriaCrownAsignacionCatalogo;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
+use App\Support\Caja\TesoreriaCrownDiaCajeroSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownJornadaCierreBloqueoSupport;
 use App\Services\Caja\TesoreriaCrownAvisoGenerador;
@@ -839,36 +840,31 @@ class TesoreriaCrownJornadaController extends Controller
         }
         $armadoCajeros = null;
         $asignaciones = collect();
+        $asignacionesTodas = TesoreriaCrownDiaCajeroSupport::filasDeJornada($jornada);
         if ($panel === 'cajeros') {
-            $asignacionesTodas = $jornada->asignaciones()
-                ->with(['deposito', 'cajero', 'comprobantes', 'cierre', 'cierres'])
-                ->orderBy('turno')
-                ->orderBy('deposito_id')
-                ->get();
             $armadoCajeros = $this->workbenchCajeros($request, (int) $jornada->id);
             if ($armadoCajeros instanceof \Illuminate\Http\RedirectResponse) {
                 return $armadoCajeros;
             }
-            $asignaciones = TesoreriaCrownCajeroListadoFiltros::consulta((int) $jornada->id, $armadoCajeros['filtros'])->get();
-        } else {
-            // Solo firmas pendientes: no cargar cierres ni el grafo completo.
-            $asignacionesTodas = $jornada->asignaciones()
-                ->with([
-                    'deposito',
-                    'comprobantes' => fn ($q) => $q->where('estado', TesoreriaCrownComprobanteSupport::PENDIENTE),
-                ])
-                ->orderBy('turno')
-                ->orderBy('deposito_id')
-                ->get();
+            $asignaciones = $asignacionesTodas;
+            $busqueda = trim((string) ($armadoCajeros['filtros']['valor'] ?? ''));
+            if ($busqueda !== '') {
+                $needle = mb_strtolower($busqueda);
+                $asignaciones = $asignacionesTodas->filter(function ($fila) use ($needle) {
+                    $hay = mb_strtolower(trim(
+                        ($fila->cajero->codigo ?? '').' '.($fila->cajero->nombre ?? '').' '.($fila->tipo_tarea ?? '')
+                    ));
+
+                    return str_contains($hay, $needle);
+                })->values();
+            }
         }
         $fecha = $jornada->fecha->format('Y-m-d');
         $stock = $mesaFila
             ? TesoreriaCrownMesaSupport::stock((int) $mesaFila['mesa']->id, (int) $sala->id, $fecha)
             : null;
 
-        $navAsignaciones = $panel === 'cajeros'
-            ? $asignacionesTodas->count()
-            : TesoreriaCrownAsignacion::query()->where('jornada_id', $jornada->id)->count();
+        $navAsignaciones = $asignacionesTodas->count();
         $navMesas = $puedeMesas
             ? ($panel === 'mesas'
                 ? count($tableroMesas['mesas'])
@@ -905,6 +901,11 @@ class TesoreriaCrownJornadaController extends Controller
                 ->get(),
             'tareas' => TesoreriaCrownAsignacionCatalogo::TAREAS,
             'turnos' => TesoreriaCrownAsignacionCatalogo::TURNOS,
+            'cajerosActivos' => CajeroCrown::query()
+                ->where('sala_id', $sala->id)
+                ->where('activo', true)
+                ->orderBy('codigo')
+                ->get(['id', 'codigo', 'nombre', 'tipo_tarea', 'permite_rendir_sin_habilitacion']),
             'abierta' => TesoreriaCrownJornada::query()
                 ->where('sala_id', $sala->id)
                 ->where('estado', TesoreriaCrownJornada::ABIERTA)

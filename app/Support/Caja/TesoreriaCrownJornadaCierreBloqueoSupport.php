@@ -34,22 +34,64 @@ final class TesoreriaCrownJornadaCierreBloqueoSupport
      */
     public static function deJornada(TesoreriaCrownJornada $jornada): array
     {
-        $filas = $jornada->asignaciones()
-            ->with(['deposito', 'cajero', 'cierre'])
-            ->withCount('comprobantes')
-            ->orderBy('turno')
-            ->orderBy('deposito_id')
-            ->get();
-
         $out = [];
-        foreach ($filas as $fila) {
-            $bloqueo = self::deAsignacion($fila);
+        foreach (TesoreriaCrownDiaCajeroSupport::filasDeJornada($jornada) as $fila) {
+            $bloqueo = self::deDiaCajero($fila);
             if ($bloqueo !== null) {
                 $out[] = $bloqueo;
             }
         }
 
         return $out;
+    }
+
+    /**
+     * @param  object{
+     *     cajero_crown_id: int,
+     *     jornada_id: int,
+     *     cajero: \App\Models\Caja\CajeroCrown,
+     *     tipo_tarea: string,
+     *     comprobantes: \Illuminate\Support\Collection,
+     *     cierre: ?TesoreriaCrownCierre
+     * }  $fila
+     * @return array<string, mixed>|null
+     */
+    public static function deDiaCajero(object $fila): ?array
+    {
+        $comps = $fila->comprobantes->count();
+        if ($comps === 0) {
+            return null;
+        }
+        $cierre = $fila->cierre;
+        if ($cierre !== null && TesoreriaCrownCierreSupport::terminal((string) $cierre->estado)) {
+            return null;
+        }
+        $estado = $cierre !== null ? (string) $cierre->estado : null;
+        $diferencia = $cierre !== null ? round((float) $cierre->diferencia, 2) : null;
+        [$accion, $sanear] = self::accionSugerida($estado, $diferencia);
+
+        return [
+            'asignacion_id' => 0,
+            'cajero_crown_id' => (int) $fila->cajero_crown_id,
+            'jornada_id' => (int) $fila->jornada_id,
+            'cierre_id' => $cierre !== null ? (int) $cierre->id : null,
+            'caja' => '',
+            'cajero' => (string) ($fila->cajero->nombre ?? ''),
+            'turno' => '',
+            'tarea' => (string) ($fila->tipo_tarea ?? $fila->cajero->tipo_tarea ?? ''),
+            'comprobantes' => $comps,
+            'estado' => $estado,
+            'estado_txt' => $estado === null
+                ? 'Sin cierre'
+                : TesoreriaCrownCierreSupport::estado($estado),
+            'diferencia' => $diferencia,
+            'accion' => $accion,
+            'sanear_auditoria' => $sanear,
+            'url_cierre' => route('ver_tesoreria_crown_cierre', [
+                'jornada' => $fila->jornada_id,
+                'cajero' => $fila->cajero_crown_id,
+            ]),
+        ];
     }
 
     /**
@@ -100,7 +142,10 @@ final class TesoreriaCrownJornadaCierreBloqueoSupport
             'diferencia' => $diferencia,
             'accion' => $accion,
             'sanear_auditoria' => $sanear,
-            'url_cierre' => route('ver_tesoreria_crown_cierre', $fila->id),
+            'url_cierre' => route('ver_tesoreria_crown_cierre', [
+                'jornada' => $fila->jornada_id,
+                'cajero' => $fila->cajero_crown_id,
+            ]),
         ];
     }
 

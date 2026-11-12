@@ -20,7 +20,10 @@ namespace App\Support\Contable\MayorPlanoCuenta;
  * | T       | OPP, OPA, OPV, AOP, CHP, APA…  | Proveedor     |
  * | T       | COB, CHT                       | Cliente       |
  * | T       | ING, EGR, DEP, TRF             | Cuenta de caja|
- * | V       | FAE, FOV, NCE, NDB             | Cliente       |
+ * | V       | FAE, FOV, NCE, NDB, FAC…       | Cliente       |
+ *
+ * Los asientos ERP nativos de factura suelen grabar Tip=FAC sin anita_sistema:
+ * esos tipos de venta también se tratan como cliente aunque el sistema venga vacío.
  */
 final class MayorPlanoCuentaEmisorSupport
 {
@@ -36,8 +39,15 @@ final class MayorPlanoCuentaEmisorSupport
 
     private const SISTEMA_VENTAS = 'V';
 
-    /** Cobranzas y cheques de terceros: el emisor es quien nos pagó. */
-    private const TIPOS_CLIENTE = ['COB', 'CHT'];
+    /**
+     * Cobranzas / cheques de terceros y comprobantes de venta: el emisor es el cliente.
+     * FAC/FA/FAE cubren facturas ERP (obs. «FAC A 00075 221») sin subd_sistema V.
+     */
+    private const TIPOS_CLIENTE = [
+        'COB', 'CHT',
+        'FAC', 'FA', 'FAE', 'FAH', 'FCE', 'FOV',
+        'NCE', 'NCD', 'NCA', 'NCG', 'NDB', 'NDA', 'NDE',
+    ];
 
     /** Ingresos y egresos de caja: solo existen en tesorería. */
     private const TIPOS_CUENTACAJA = ['ING', 'EGR'];

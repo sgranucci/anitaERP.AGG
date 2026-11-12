@@ -1,7 +1,7 @@
 @extends("theme.$theme.layout")
 
 @section('titulo')
-    Cierre de caja
+    Cierre de cajero
 @endsection
 
 @section('styles')
@@ -14,7 +14,7 @@
     <div class="alert alert-warning">
         <strong>PIN del cajero.</strong>
         {{ $asignacion->cajero->nombre }} todavía no tiene un PIN propio.
-        Al cerrar la caja el sistema le va a pedir que elija uno nuevo (y lo repita) en este mismo formulario.
+        Al cerrar el cajero el sistema le va a pedir que elija uno nuevo (y lo repita) en este mismo formulario.
     </div>
 @endif
 @php
@@ -62,12 +62,12 @@
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">
-                    Cierre de caja
+                    Cierre de cajero
                     @if ($cierre)
                         {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($cierre->numero) }}
                     @endif
                     · {{ $asignacion->jornada->fecha->format('d/m/Y') }}
-                    — {{ $asignacion->deposito->codigo ?? '' }} {{ $asignacion->deposito->nombre ?? '' }}
+                    
                     — {{ $asignacion->cajero->codigo ?? '' }} {{ $asignacion->cajero->nombre ?? '' }}
                 </h3>
                 <div class="card-tools">
@@ -279,7 +279,7 @@
                 @endif
 
                 @if (! $cierre && $calculo['puede'] && $abierta && can('editar-tesoreria-crown-movimiento', false))
-                    <form method="POST" action="{{ route('cerrar_tesoreria_crown_cierre', $asignacion->id) }}" class="form-horizontal form--label-right" data-enter-campos="1">
+                    <form method="POST" action="{{ route('cerrar_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="form-horizontal form--label-right" data-enter-campos="1">
                         @csrf
                         @include('includes.form-error')
                         @if ($calculo['supera'])
@@ -341,7 +341,7 @@
                 @if ($puedeMover && can('editar-tesoreria-crown-movimiento', false))
                     <div class="row">
                         <div class="col-md-6">
-                            <form method="POST" action="{{ route('revisar_tesoreria_crown_cierre', $asignacion->id) }}" class="border rounded p-3 mb-3" data-enter-campos="1">
+                            <form method="POST" action="{{ route('revisar_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="border rounded p-3 mb-3" data-enter-campos="1">
                                 @csrf
                                 <h4 class="h6">Marcar revisada</h4>
                                 <input type="text" name="observacion" class="form-control form-control-sm mb-2" maxlength="500" placeholder="Observación">
@@ -351,7 +351,7 @@
                             </form>
                         </div>
                         <div class="col-md-6">
-                            <form method="POST" action="{{ route('auditar_tesoreria_crown_cierre', $asignacion->id) }}" class="border rounded p-3 mb-3" data-enter-campos="1">
+                            <form method="POST" action="{{ route('auditar_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="border rounded p-3 mb-3" data-enter-campos="1">
                                 @csrf
                                 <h4 class="h6">Enviar a auditoría</h4>
                                 <input type="text" name="observacion" class="form-control form-control-sm mb-2" maxlength="500" placeholder="Observación">
@@ -394,7 +394,7 @@
                 @endif
 
                 @if ($cierre && can(\App\Support\Caja\TesoreriaCrownCierreSupport::PERMISO_AJUSTAR, false))
-                    <form method="POST" action="{{ route('ajustar_tesoreria_crown_cierre', $asignacion->id) }}" class="border rounded p-3 mb-3 form-horizontal form--label-right" style="max-width:44rem;" data-enter-campos="1">
+                    <form method="POST" action="{{ route('ajustar_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="border rounded p-3 mb-3 form-horizontal form--label-right" style="max-width:44rem;" data-enter-campos="1">
                         @csrf
                         <h4 class="h6">Ajuste de caja</h4>
                         <p class="text-muted">Comprobante nuevo sobre este cierre. No reescribe la habilitación, la rendición ni los números originales, y no reabre la caja ni el día. Un importe positivo suma al concepto; uno negativo lo resta. Si la diferencia vigente supera la tolerancia, el caso vuelve a auditoría.</p>
@@ -439,7 +439,7 @@
                 @endif
 
                 @if ($cierre && can(\App\Support\Caja\TesoreriaCrownCierreSupport::PERMISO_REABRIR, false))
-                    <form method="POST" action="{{ route('reabrir_tesoreria_crown_cierre', $asignacion->id) }}" class="border rounded p-3 mb-3 form-horizontal form--label-right" style="max-width:40rem;" data-enter-campos="1">
+                    <form method="POST" action="{{ route('reabrir_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="border rounded p-3 mb-3 form-horizontal form--label-right" style="max-width:40rem;" data-enter-campos="1">
                         @csrf
                         <h4 class="h6">Reabrir caja</h4>
                         <p class="text-muted">El cierre no se borra. La caja vuelve a operativa para revertir o cargar otro comprobante y cerrarla de nuevo. Si el día estaba cerrado y no hay otra jornada abierta, el día también vuelve a abierto. Lo autoriza un usuario con el permiso de reabrir, con su clave.</p>
@@ -461,7 +461,7 @@
                 @endif
 
                 @if ($estado === \App\Support\Caja\TesoreriaCrownCierreSupport::AUDITORIA && can('editar-tesoreria-crown-movimiento', false))
-                    <form method="POST" action="{{ route('firmar_auditoria_tesoreria_crown_cierre', $asignacion->id) }}" class="border rounded p-3 mb-3" style="max-width:36rem;" data-enter-campos="1">
+                    <form method="POST" action="{{ route('firmar_auditoria_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="border rounded p-3 mb-3" style="max-width:36rem;" data-enter-campos="1">
                         @csrf
                         <h4 class="h6">Cierre de auditoría</h4>
                         <p class="text-muted">Lo firma otra persona, distinta de quien mandó el caso a auditoría.</p>

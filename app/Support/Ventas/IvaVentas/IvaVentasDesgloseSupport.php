@@ -78,6 +78,37 @@ final class IvaVentasDesgloseSupport
     }
 
     /**
+     * Neto gravado: «Gravado al 21%» / «Gravado al 21.000%» o el rótulo corto «Gravado».
+     * No matchea «No Gravado».
+     */
+    public static function esConceptoGravado(string $concepto): bool
+    {
+        $concepto = trim($concepto);
+
+        return stripos($concepto, 'Gravado al') !== false
+            || stripos($concepto, 'Gravado') === 0;
+    }
+
+    /**
+     * Línea de IVA liquidado («Iva 21%», «IVA 21.000%»), no percepciones.
+     */
+    public static function esConceptoIvaLiquidado(string $concepto): bool
+    {
+        $concepto = trim($concepto);
+        if (self::esTotalIva($concepto)) {
+            return true;
+        }
+        if (PercepcionNoCategorizadoSupport::esConcepto($concepto)) {
+            return false;
+        }
+        if (stripos($concepto, 'Percepcion IVA') !== false || stripos($concepto, 'Perc. IVA') !== false) {
+            return false;
+        }
+
+        return stripos($concepto, 'Iva ') !== false || stripos($concepto, 'IVA') === 0;
+    }
+
+    /**
      * @return array{
      *   no_gravado: float,
      *   exento: float,
@@ -151,11 +182,11 @@ final class IvaVentasDesgloseSupport
                 $noGravado += $importe;
                 continue;
             }
-            if (stripos($concepto, 'Gravado al') !== false || stripos($concepto, 'Gravado') === 0) {
+            if (self::esConceptoGravado($concepto)) {
                 $gravadoAl += $importe;
                 continue;
             }
-            if (stripos($concepto, 'Iva ') !== false || stripos($concepto, 'IVA') === 0) {
+            if (self::esConceptoIvaLiquidado($concepto)) {
                 $iva += $importe;
                 $baseIva += $base;
             }

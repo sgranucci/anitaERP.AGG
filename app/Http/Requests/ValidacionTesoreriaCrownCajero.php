@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Caja\CajeroCrownSistemaExternoSupport;
+use App\Support\Caja\TesoreriaCrownTareaCatalogo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -36,6 +37,8 @@ class ValidacionTesoreriaCrownCajero extends FormRequest
             'usuario_id' => ['nullable', 'integer', 'min:0'],
             'caja_codigo' => ['nullable', 'string', 'max:20'],
             'mozo_codigo' => ['nullable', 'string', 'max:20'],
+            'tipo_tarea' => ['required', 'string', Rule::in(array_keys(TesoreriaCrownTareaCatalogo::TAREAS))],
+            'permite_rendir_sin_habilitacion' => ['sometimes', 'boolean'],
             'clave' => ['nullable', 'string', 'min:4', 'max:20'],
             'activo' => ['required', 'in:0,1'],
             'externos' => ['nullable', 'array'],
@@ -56,6 +59,8 @@ class ValidacionTesoreriaCrownCajero extends FormRequest
             'usuario_id' => 'usuario',
             'caja_codigo' => 'caja',
             'mozo_codigo' => 'mozo',
+            'tipo_tarea' => 'tarea',
+            'permite_rendir_sin_habilitacion' => 'permite rendir sin habilitación',
             'clave' => 'PIN / clave',
             'activo' => 'activo',
         ];
@@ -66,5 +71,8 @@ class ValidacionTesoreriaCrownCajero extends FormRequest
         if (! $this->has('activo')) {
             $this->merge(['activo' => '0']);
         }
+        $this->merge([
+            'permite_rendir_sin_habilitacion' => $this->boolean('permite_rendir_sin_habilitacion'),
+        ]);
     }
 }

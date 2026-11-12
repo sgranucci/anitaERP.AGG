@@ -6,6 +6,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Sala;
 use App\Models\Seguridad\Usuario;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
+use App\Support\Caja\TesoreriaCrownDiaCajeroSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -22,6 +23,7 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         'sala_id',
         'empresa_id',
         'jornada_id',
+        'cajero_crown_id',
         'asignacion_id',
         'tipo',
         'numero',
@@ -109,6 +111,11 @@ class TesoreriaCrownComprobante extends Model implements Auditable
         return $this->belongsTo(TesoreriaCrownJornada::class, 'jornada_id');
     }
 
+    public function cajero(): BelongsTo
+    {
+        return $this->belongsTo(CajeroCrown::class, 'cajero_crown_id');
+    }
+
     public function asignacion(): BelongsTo
     {
         return $this->belongsTo(TesoreriaCrownAsignacion::class, 'asignacion_id');
@@ -157,5 +164,34 @@ class TesoreriaCrownComprobante extends Model implements Auditable
     public function firmasCompletas(): bool
     {
         return $this->entrega_at !== null && $this->recibe_at !== null;
+    }
+
+    public function cajeroOperativo(): ?CajeroCrown
+    {
+        return TesoreriaCrownDiaCajeroSupport::cajeroDeComprobante($this);
+    }
+
+    public function tipoTareaOperativa(): string
+    {
+        return TesoreriaCrownDiaCajeroSupport::tipoTareaDeComprobante($this);
+    }
+
+    public function permiteRendirSinHabilitacion(): bool
+    {
+        return TesoreriaCrownDiaCajeroSupport::permiteRendirSinHab($this);
+    }
+
+    public function cierreOperativo(): ?TesoreriaCrownCierre
+    {
+        $cajeroId = (int) ($this->cajero_crown_id ?: 0);
+        if ($cajeroId <= 0) {
+            $this->loadMissing('asignacion');
+            $cajeroId = (int) ($this->asignacion->cajero_crown_id ?? 0);
+        }
+        if ($cajeroId <= 0) {
+            return null;
+        }
+
+        return TesoreriaCrownDiaCajeroSupport::cierreAbierto((int) $this->jornada_id, $cajeroId);
     }
 }
