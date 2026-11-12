@@ -794,7 +794,7 @@ $(function () {
                 });
             };
             if ($('#total').length) {
-                $('#total').val(fmtVacio(0));
+                $('#total').val(fmtVacio(0)).trigger('change.cpWscdc');
             }
             if ($('#subtotal').length) {
                 $('#subtotal').val(fmtVacio(0));
@@ -820,7 +820,7 @@ $(function () {
             total = Math.round(precargaTotal * 100) / 100;
         }
         if ($('#total').length) {
-            $('#total').val(fmt(total));
+            $('#total').val(fmt(total)).trigger('change.cpWscdc');
         }
         if ($('#subtotal').length && Math.abs(subtotal) > 0.0001) {
             $('#subtotal').val(fmt(subtotal));
@@ -5231,4 +5231,171 @@ $(function () {
             actualizarBadgeAsiento(false);
         }
     }
+
+    (function initConstatarWscdcAsync() {
+        if (contabilizado) {
+            return;
+        }
+        var url = String($form.attr('data-constatar-wscdc-url') || '').trim();
+        if (!url) {
+            return;
+        }
+
+        var timer = null;
+        var seq = 0;
+        var ultimaKey = '';
+        var $slot = $('#cp-wscdc-async-slot');
+        var $token = $('#wscdc_async_token');
+        var $fp = $('#wscdc_async_fingerprint');
+
+        function csrf() {
+            return String($form.find('input[name="_token"]').val() || $('meta[name="csrf-token"]').attr('content') || '');
+        }
+
+        function payloadWscdc() {
+            var tipoAut = String($('#tipo_autorizacion').val() || $('input[name="tipo_autorizacion"]').val() || '').trim();
+            return {
+                empresa_id: parseInt($('#empresa_id').val() || '0', 10) || 0,
+                proveedor_id: parseInt($('#proveedor_id').val() || '0', 10) || 0,
+                tipotransaccion_compra_id: parseInt($('#tipotransaccion_compra_id').val() || '0', 10) || 0,
+                letra: String($('#letra').val() || '').toUpperCase().trim().charAt(0) || '',
+                sucursal: parseInt($('#sucursal').val() || '0', 10) || 0,
+                numerocomprobante: parseInt($('#numerocomprobante').val() || '0', 10) || 0,
+                fechacomprobante: String($('#fechacomprobante').val() || '').trim(),
+                total: parseMonto($('#total').val() || '0'),
+                numerocae: String($('#numerocae').val() || '').replace(/\D/g, ''),
+                tipo_autorizacion: tipoAut
+            };
+        }
+
+        function setCompleto(p) {
+            return p.empresa_id > 0
+                && p.proveedor_id > 0
+                && p.tipotransaccion_compra_id > 0
+                && !!p.letra
+                && p.sucursal > 0
+                && p.numerocomprobante > 0
+                && !!p.fechacomprobante
+                && p.total > 0
+                && p.numerocae.length === 14
+                && String(p.tipo_autorizacion || '').toUpperCase() !== 'CAEA';
+        }
+
+        function clave(p) {
+            return [
+                p.empresa_id, p.proveedor_id, p.tipotransaccion_compra_id, p.letra,
+                p.sucursal, p.numerocomprobante, p.fechacomprobante,
+                p.total.toFixed(2), p.numerocae, p.tipo_autorizacion
+            ].join('|');
+        }
+
+        function limpiarToken() {
+            $token.val('');
+            $fp.val('');
+        }
+
+        function pintar(estado, mensaje) {
+            if (!mensaje) {
+                $slot.addClass('d-none').removeClass('alert alert-info alert-success alert-danger alert-warning').empty();
+                return;
+            }
+            var cls = 'alert-info';
+            var icon = 'fa-spinner fa-spin';
+            if (estado === 'ok') {
+                cls = 'alert-success';
+                icon = 'fa-check';
+            } else if (estado === 'error') {
+                cls = 'alert-danger';
+                icon = 'fa-exclamation-triangle';
+            } else if (estado === 'aviso') {
+                cls = 'alert-warning';
+                icon = 'fa-exclamation-circle';
+            }
+            $slot
+                .removeClass('d-none alert-info alert-success alert-danger alert-warning')
+                .attr('class', 'alert ' + cls + ' py-2')
+                .html('<i class="fa ' + icon + '"></i> <strong>ARCA WSCDC:</strong> ' + $('<div>').text(mensaje).html());
+        }
+
+        function disparar() {
+            var p = payloadWscdc();
+            var key = clave(p);
+            if (!setCompleto(p)) {
+                if (String(p.tipo_autorizacion || '').toUpperCase() === 'CAEA' && p.numerocae.length > 0) {
+                    pintar('aviso', 'CAEA: no se constata por WSCDC.');
+                } else {
+                    pintar('', '');
+                }
+                if (key !== ultimaKey) {
+                    limpiarToken();
+                    ultimaKey = '';
+                }
+                return;
+            }
+            if (key === ultimaKey && $token.val()) {
+                return;
+            }
+            ultimaKey = key;
+            limpiarToken();
+            var mySeq = ++seq;
+            pintar('loading', 'Constando comprobante en ARCA…');
+            $.ajax({
+                url: url,
+                method: 'POST',
+                dataType: 'json',
+                data: $.extend({}, p, { _token: csrf() })
+            }).done(function (res) {
+                if (mySeq !== seq) {
+                    return;
+                }
+                if (!res || !res.aplica) {
+                    pintar('', '');
+                    return;
+                }
+                if (!res.listo) {
+                    pintar('aviso', res.mensaje || 'Faltan datos para constatar.');
+                    return;
+                }
+                if (res.token) {
+                    $token.val(String(res.token));
+                    $fp.val(String(res.fingerprint || ''));
+                }
+                if (res.ok) {
+                    var msgOk = res.mensaje || 'Comprobante validado en ARCA.';
+                    if (res.total_arca != null) {
+                        msgOk += ' Total ARCA: ' + Number(res.total_arca).toLocaleString('es-AR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                    }
+                    pintar('ok', msgOk);
+                    return;
+                }
+                pintar(res.bloquear ? 'error' : 'aviso', res.mensaje || (res.errores || []).join(' ') || 'Constatación rechazada.');
+            }).fail(function (xhr) {
+                if (mySeq !== seq) {
+                    return;
+                }
+                limpiarToken();
+                var msg = (xhr.responseJSON && xhr.responseJSON.message)
+                    ? xhr.responseJSON.message
+                    : 'No se pudo constatar en ARCA (revisá luego).';
+                pintar('aviso', msg);
+            });
+        }
+
+        function programar() {
+            clearTimeout(timer);
+            timer = setTimeout(disparar, 450);
+        }
+
+        $(document).on(
+            'change.cpWscdc blur.cpWscdc',
+            '#empresa_id, #proveedor_id, #tipotransaccion_compra_id, #letra, #sucursal, #numerocomprobante, #fechacomprobante, #total, #numerocae, #tipo_autorizacion, input[name="tipo_autorizacion"]',
+            programar
+        );
+
+        // Primera pasada si el form ya viene completo (precarga / edición).
+        setTimeout(programar, 300);
+    })();
 });

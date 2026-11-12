@@ -129,7 +129,7 @@ final class ChequeRechazadoDeudaProveedorService
             $cotizacion = 1;
         }
 
-        $numero = $this->proximoNumero($empresaId, (int) $tipo->id, $cuit);
+        $numero = $this->proximoNumero((int) $tipo->id, $cuit);
         $leyenda = $this->leyenda($cheque, $ventaNd);
 
         return DB::transaction(function () use (
@@ -407,10 +407,10 @@ final class ChequeRechazadoDeudaProveedorService
         return $concepto;
     }
 
-    private function proximoNumero(int $empresaId, int $tipoId, string $cuit): int
+    /** Numeración de todo el grupo: la unicidad fiscal no distingue empresa. */
+    private function proximoNumero(int $tipoId, string $cuit): int
     {
         $max = (int) Comprobante_Proveedor::query()
-            ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_compra_id', $tipoId)
             ->where('letra', 'A')
             ->where('sucursal', 0)
@@ -418,7 +418,6 @@ final class ChequeRechazadoDeudaProveedorService
 
         $numero = $max + 1;
         $ocupado = Comprobante_Proveedor::query()
-            ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_compra_id', $tipoId)
             ->where('letra', 'A')
             ->where('sucursal', 0)

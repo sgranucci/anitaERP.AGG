@@ -16,6 +16,7 @@ use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\ComprobanteProveedorBloqueoPagoService;
+use App\Services\Compras\ComprobanteProveedorComplianceValidacionService;
 use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPrefillService;
@@ -664,6 +665,55 @@ class Comprobante_ProveedorController extends Controller
             ),
             $avisos
         );
+    }
+
+    /**
+     * Constatación ARCA WSCDC en vivo (async). Se dispara cuando la cabecera ya tiene
+     * todos los datos del CmpReq; el grabado reutiliza el token y no vuelve a llamar al WS.
+     */
+    public function apiConstatarWscdc(Request $request, ComprobanteProveedorComplianceValidacionService $compliance): JsonResponse
+    {
+        if (! can('crear-comprobante-proveedor', false)
+            && ! can('editar-comprobante-proveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $total = $request->input('total', 0);
+        if (! is_numeric($total)) {
+            $total = \App\Support\Contable\MontoEsArSupport::parse($total);
+        }
+
+        $payload = [
+            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'proveedor_id' => (int) $request->input('proveedor_id', 0),
+            'tipotransaccion_compra_id' => (int) $request->input('tipotransaccion_compra_id', 0),
+            'letra' => strtoupper(substr(trim((string) $request->input('letra', '')), 0, 1)),
+            'sucursal' => (int) $request->input('sucursal', 0),
+            'numerocomprobante' => (int) $request->input('numerocomprobante', 0),
+            'fechacomprobante' => (string) $request->input('fechacomprobante', ''),
+            'total' => (float) $total,
+            'numerocae' => (string) $request->input('numerocae', ''),
+            'tipo_autorizacion' => (string) $request->input('tipo_autorizacion', ''),
+        ];
+
+        $out = $compliance->constatarEnVivo($payload);
+
+        return response()->json([
+            'ok' => (bool) ($out['ok'] ?? false),
+            'aplica' => (bool) ($out['aplica'] ?? false),
+            'listo' => (bool) ($out['listo'] ?? false),
+            'fingerprint' => (string) ($out['fingerprint'] ?? ''),
+            'token' => $out['token'] ?? null,
+            'mensaje' => $out['mensaje'] ?? null,
+            'errores' => $out['errores'] ?? [],
+            'avisos' => $out['avisos'] ?? [],
+            'total_arca' => $out['total_arca'] ?? null,
+            'bloquear' => filter_var(config('arca_wscdc.comprobante.bloquear_al_fallar', true), FILTER_VALIDATE_BOOLEAN)
+                && ! ($out['ok'] ?? false)
+                && ($out['aplica'] ?? false)
+                && ($out['listo'] ?? false)
+                && empty(($out['wscdc']['ws_caido'] ?? false)),
+        ]);
     }
 
     /**

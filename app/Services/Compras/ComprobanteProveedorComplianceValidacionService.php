@@ -19,7 +19,10 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -68,6 +71,158 @@ class ComprobanteProveedorComplianceValidacionService
         $resultado['ok'] = $resultado['errores'] === [];
 
         return $resultado;
+    }
+
+    /**
+     * Constatación en vivo (AJAX): una llamada al WS y cache firmada por fingerprint.
+     * El grabado reutiliza ese resultado y no vuelve a pegarle a ARCA.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array{
+     *   aplica: bool,
+     *   listo: bool,
+     *   ok: bool,
+     *   fingerprint: string,
+     *   token: string|null,
+     *   mensaje: string|null,
+     *   errores: list<string>,
+     *   avisos: list<string>,
+     *   total_arca: float|null,
+     *   wscdc: array<string, mixed>|null
+     * }
+     */
+    public function constatarEnVivo(array $payload): array
+    {
+        $base = [
+            'aplica' => false,
+            'listo' => false,
+            'ok' => true,
+            'fingerprint' => '',
+            'token' => null,
+            'mensaje' => null,
+            'errores' => [],
+            'avisos' => [],
+            'total_arca' => null,
+            'wscdc' => null,
+        ];
+
+        if (! $this->wscdcHabilitadoParaComprobante()) {
+            $base['mensaje'] = 'WSCDC deshabilitado.';
+
+            return $base;
+        }
+
+        $tipoAut = strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? '')));
+        $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
+
+        if ($cae === '' && $tipoAut === '') {
+            $base['mensaje'] = 'Sin CAE: no aplica constatación.';
+
+            return $base;
+        }
+
+        if ($tipoAut === ComprobanteProveedorTipoAutorizacion::CAEA) {
+            $base['aplica'] = true;
+            $base['listo'] = true;
+            $base['avisos'][] = 'CAEA: la constatación WSCDC no aplica del mismo modo que CAE.';
+            $base['mensaje'] = $base['avisos'][0];
+            $base['fingerprint'] = $this->fingerprintWscdc($payload);
+
+            return $base;
+        }
+
+        if (strlen($cae) !== 14) {
+            $base['aplica'] = true;
+            $base['ok'] = false;
+            $base['errores'][] = 'El CAE debe tener 14 dígitos.';
+            $base['mensaje'] = $base['errores'][0];
+            $base['fingerprint'] = $this->fingerprintWscdc($payload);
+
+            return $base;
+        }
+
+        $cmpReq = $this->armarCmpReqDesdePayload($payload, $cae);
+        if ($cmpReq === null) {
+            $base['aplica'] = true;
+            $base['mensaje'] = 'Faltan datos para constatar (CUIT, tipo AFIP, fecha, sucursal o número).';
+            $base['fingerprint'] = $this->fingerprintWscdc($payload);
+
+            return $base;
+        }
+
+        $fingerprint = $this->fingerprintWscdc($payload);
+        $base['aplica'] = true;
+        $base['listo'] = true;
+        $base['fingerprint'] = $fingerprint;
+
+        try {
+            $respuesta = $this->wscdcService->comprobanteConstatar($cmpReq);
+        } catch (Throwable $e) {
+            Log::warning('WSCDC async comprobante proveedor: fallo de constatación', [
+                'error' => $e->getMessage(),
+                'cmp_req' => $cmpReq,
+            ]);
+            $wscdc = [
+                'ejecutada' => true,
+                'ok' => false,
+                'ws_caido' => true,
+                'error' => $e->getMessage(),
+                'errores' => [],
+                'avisos' => ['No se pudo constatar en ARCA (WSCDC). Detalle: '.$e->getMessage()],
+            ];
+            $token = $this->guardarCacheAsync($fingerprint, $wscdc, true, [], $wscdc['avisos']);
+
+            return array_merge($base, [
+                'ok' => true, // WS caído: no bloquea, igual que al grabar
+                'token' => $token,
+                'avisos' => $wscdc['avisos'],
+                'mensaje' => $wscdc['avisos'][0],
+                'wscdc' => $wscdc,
+            ]);
+        }
+
+        $resultadoWscdc = $this->interpretarRespuestaWscdc($payload, $respuesta, $cmpReq);
+        $errores = array_map('strval', $resultadoWscdc['errores'] ?? []);
+        $avisos = array_map('strval', $resultadoWscdc['avisos'] ?? []);
+        $ok = ($resultadoWscdc['ok'] ?? false) === true;
+        $token = $this->guardarCacheAsync($fingerprint, $resultadoWscdc, $ok, $errores, $avisos);
+        $totalArca = isset($resultadoWscdc['cmp_resp']['imp_total'])
+            ? (float) $resultadoWscdc['cmp_resp']['imp_total']
+            : null;
+
+        return array_merge($base, [
+            'ok' => $ok,
+            'token' => $token,
+            'errores' => $errores,
+            'avisos' => $avisos,
+            'mensaje' => $ok
+                ? ($avisos[0] ?? 'Constatación ARCA OK.')
+                : implode(' ', $errores !== [] ? $errores : ['Constatación ARCA rechazada.']),
+            'total_arca' => $totalArca,
+            'wscdc' => $resultadoWscdc,
+        ]);
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    public function fingerprintWscdc(array $payload): string
+    {
+        $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
+        $fecha = (string) ($payload['fechacomprobante'] ?? '');
+        $ts = strtotime($fecha);
+        $fechaYmd = $ts !== false ? date('Y-m-d', $ts) : preg_replace('/\D/', '', $fecha);
+
+        return hash('sha256', implode('|', [
+            (int) ($payload['empresa_id'] ?? 0),
+            (int) ($payload['proveedor_id'] ?? 0),
+            (int) ($payload['tipotransaccion_compra_id'] ?? 0),
+            strtoupper(substr(trim((string) ($payload['letra'] ?? '')), 0, 1)),
+            (int) ($payload['sucursal'] ?? 0),
+            (int) ($payload['numerocomprobante'] ?? 0),
+            (string) $fechaYmd,
+            number_format(round((float) ($payload['total'] ?? 0), 2), 2, '.', ''),
+            $cae,
+            strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? ''))),
+        ]));
     }
 
     /**
@@ -269,29 +424,86 @@ class ComprobanteProveedorComplianceValidacionService
             return;
         }
 
-        try {
-            $respuesta = $this->wscdcService->comprobanteConstatar($cmpReq);
-        } catch (Throwable $e) {
-            Log::warning('WSCDC comprobante proveedor: fallo de constatación', [
-                'error' => $e->getMessage(),
-                'cmp_req' => $cmpReq,
+        // Preferir la constatación async de pantalla: no volver a llamar al WS al grabar.
+        $fingerprint = $this->fingerprintWscdc($payload);
+        $cache = $this->leerCacheAsync((string) ($payload['wscdc_async_token'] ?? ''));
+        if (is_array($cache) && ($cache['fingerprint'] ?? '') === $fingerprint) {
+            $resultado['wscdc'] = array_merge($cache['wscdc'] ?? [], [
+                'ejecutada' => true,
+                'desde_cache_async' => true,
             ]);
-            // WS caído / timeout / cert: nunca bloquea el grabado.
-            $resultado['avisos'][] = 'No se pudo constatar en ARCA (WSCDC); se grabó igual. Revise luego. Detalle: '.$e->getMessage();
-            $resultado['wscdc'] = ['ejecutada' => true, 'ok' => false, 'error' => $e->getMessage()];
+            if (! empty($cache['ws_caido'])) {
+                foreach ($cache['avisos'] ?? [] as $aviso) {
+                    $resultado['avisos'][] = (string) $aviso;
+                }
+
+                return;
+            }
+            foreach ($cache['errores'] ?? [] as $err) {
+                $this->agregarHallazgoWscdc($resultado, (string) $err);
+            }
+            foreach ($cache['avisos'] ?? [] as $aviso) {
+                $resultado['avisos'][] = (string) $aviso;
+            }
 
             return;
         }
 
-        $resultadoWscdc = $this->interpretarRespuestaWscdc($payload, $respuesta, $cmpReq);
-        $resultado['wscdc'] = $resultadoWscdc;
+        // Sin cache vigente: no martillar ARCA en el POST (la UI debe constatar en vivo).
+        $this->agregarHallazgoWscdc(
+            $resultado,
+            'Falta la constatación ARCA (WSCDC) en vivo para estos datos. Esperá el resultado en pantalla o revisá CAE, número, fecha o total.'
+        );
+        $resultado['wscdc'] = [
+            'ejecutada' => false,
+            'ok' => false,
+            'desde_cache_async' => false,
+            'motivo' => 'sin_cache_async',
+        ];
+    }
 
-        foreach ($resultadoWscdc['errores'] ?? [] as $err) {
-            $this->agregarHallazgoWscdc($resultado, (string) $err);
+    /**
+     * @param  array<string, mixed>  $wscdc
+     * @param  list<string>  $errores
+     * @param  list<string>  $avisos
+     */
+    private function guardarCacheAsync(
+        string $fingerprint,
+        array $wscdc,
+        bool $ok,
+        array $errores,
+        array $avisos,
+    ): string {
+        $token = Str::random(40);
+        $ttl = now()->addHours(2);
+        Cache::put($this->cacheKeyAsync($token), [
+            'fingerprint' => $fingerprint,
+            'ok' => $ok,
+            'ws_caido' => ! empty($wscdc['ws_caido']),
+            'errores' => array_values($errores),
+            'avisos' => array_values($avisos),
+            'wscdc' => $wscdc,
+            'user_id' => Auth::id(),
+        ], $ttl);
+
+        return $token;
+    }
+
+    /** @return array<string, mixed>|null */
+    private function leerCacheAsync(string $token): ?array
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return null;
         }
-        foreach ($resultadoWscdc['avisos'] ?? [] as $aviso) {
-            $resultado['avisos'][] = $aviso;
-        }
+        $data = Cache::get($this->cacheKeyAsync($token));
+
+        return is_array($data) ? $data : null;
+    }
+
+    private function cacheKeyAsync(string $token): string
+    {
+        return 'wscdc:cp:async:'.sha1($token);
     }
 
     /**

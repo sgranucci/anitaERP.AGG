@@ -415,7 +415,7 @@ final class ProveedorSaldarDeudaInternaSinAsientoService
             $normalizadas,
             $ultimoVto,
         ) {
-            $numero = $this->proximoNumero($empresaId, (int) $tipoNdi->id, $cuit);
+            $numero = $this->proximoNumero((int) $tipoNdi->id, $cuit);
             $datosCp = [
                 'empresa_id' => $empresaId,
                 'proveedor_id' => (int) $proveedor->id,
@@ -869,7 +869,7 @@ final class ProveedorSaldarDeudaInternaSinAsientoService
             throw new RuntimeException('Total interno en cero.');
         }
 
-        $numero = $this->proximoNumero($empresaId, (int) $tipo->id, $cuit);
+        $numero = $this->proximoNumero((int) $tipo->id, $cuit);
 
         $datosCp = [
             'empresa_id' => $empresaId,
@@ -1124,10 +1124,13 @@ final class ProveedorSaldarDeudaInternaSinAsientoService
         return $id;
     }
 
-    private function proximoNumero(int $empresaId, int $tipoId, string $cuit): int
+    /**
+     * Numeración de todo el grupo: en Anita aplmovp y promov identifican el comprobante por
+     * proveedor + tipo + letra + sucursal + número, sin empresa.
+     */
+    private function proximoNumero(int $tipoId, string $cuit): int
     {
         $max = (int) Comprobante_Proveedor::query()
-            ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_compra_id', $tipoId)
             ->where('letra', self::LETRA)
             ->where('sucursal', self::SUCURSAL)
@@ -1135,7 +1138,6 @@ final class ProveedorSaldarDeudaInternaSinAsientoService
 
         $numero = max(1, $max + 1);
         while (Comprobante_Proveedor::query()
-            ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_compra_id', $tipoId)
             ->where('letra', self::LETRA)
             ->where('sucursal', self::SUCURSAL)

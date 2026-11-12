@@ -309,13 +309,25 @@ class ApiController extends Controller
             try {
                 $empresaOc = $resolucionEmpresa->resolverEmpresaPorOc($numeroOc);
                 if ((int) $empresaOc['empresa_id'] !== (int) $resueltoEmpresa['empresa_id']) {
-                    $log->warning('recibe_comprobante.empresa_oc_prevalece', [
+                    // Cargarla en la empresa de la OC deja libre la factura en la empresa receptora
+                    // real, que la vuelve a cargar por legajo: mismo comprobante fiscal pagado dos veces.
+                    $mensaje = sprintf(
+                        'La factura está emitida a %s (CUIT %s) pero la OC %s es de %s: '
+                        .'informe la OC de la empresa receptora o cargue la factura sin OC.',
+                        $resueltoEmpresa['nombre'] ?? 'empresa #'.$resueltoEmpresa['empresa_id'],
+                        $request->cuit_empresa,
+                        $numeroOc,
+                        $empresaOc['nombre'] ?? 'empresa #'.$empresaOc['empresa_id'],
+                    );
+                    $log->warning('recibe_comprobante.empresa_oc_distinta', [
                         'cuit_empresa' => $request->cuit_empresa,
                         'empresa_cuit_id' => $resueltoEmpresa['empresa_id'],
                         'empresa_oc_id' => $empresaOc['empresa_id'],
                         'numero_oc' => $numeroOc,
+                        'status' => 422,
                     ]);
-                    $resueltoEmpresa = $empresaOc;
+
+                    return response()->json(['message' => $mensaje], 422);
                 }
             } catch (\RuntimeException) {
                 // OC sin empresa local: se mantiene la del CUIT.
@@ -660,6 +672,9 @@ class ApiController extends Controller
                 (int) $request->sucursal,
                 (int) $request->numero_factura,
                 $proveedor_id,
+                null,
+                $numeroCae,
+                isset($data['tipo_autorizacion']) ? (string) $data['tipo_autorizacion'] : null,
             );
         } catch (\RuntimeException $e) {
             $log->warning('recibe_comprobante.factura_duplicada', [

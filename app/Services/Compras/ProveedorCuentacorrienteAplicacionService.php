@@ -39,6 +39,8 @@ class ProveedorCuentacorrienteAplicacionService
             throw new RuntimeException('Fecha de aplicación inválida.');
         }
 
+        $this->assertNoCancelaBloqueadasConPagos($lineas);
+
         $resultado = DB::transaction(function () use ($proveedorId, $fecha, $lineas) {
             $ids = [];
             foreach ($lineas as $linea) {
@@ -291,6 +293,42 @@ class ProveedorCuentacorrienteAplicacionService
      * @param  list<int>  $ccIds
      * @return array<int, float>
      */
+    /**
+     * Aplicar un anticipo u OP contra una factura retenida equivale a pagarla. Una NC sí se
+     * permite: suele ser justamente la que resuelve la diferencia que motivó el bloqueo.
+     *
+     * @param  list<array{credito_id:int,deuda_id:int}>  $lineas
+     */
+    private function assertNoCancelaBloqueadasConPagos(array $lineas): void
+    {
+        $creditoIds = array_values(array_unique(array_filter(array_map(
+            static fn ($l) => (int) ($l['credito_id'] ?? 0),
+            $lineas
+        ))));
+        if ($creditoIds === []) {
+            return;
+        }
+
+        $creditosPago = Proveedor_Cuentacorriente::query()
+            ->whereIn('id', $creditoIds)
+            ->whereNotNull('pagoproveedor_id')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        $deudaIds = [];
+        foreach ($lineas as $linea) {
+            if (in_array((int) ($linea['credito_id'] ?? 0), $creditosPago, true)) {
+                $deudaIds[] = (int) ($linea['deuda_id'] ?? 0);
+            }
+        }
+
+        try {
+            app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($deudaIds);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            throw new RuntimeException(implode(' ', \Illuminate\Support\Arr::flatten($e->errors())));
+        }
+    }
+
     private function sumasAplicadas(array $ccIds): array
     {
         if ($ccIds === []) {

@@ -247,6 +247,21 @@ final class ComprobanteProveedorPdfIaService
             throw new RuntimeException('Faltan datos resueltos de empresa, proveedor o tipo de comprobante.');
         }
 
+        // El preview ya lo controló, pero `resuelto` vuelve del navegador (o del portal del proveedor).
+        if ($numeroOc !== '') {
+            try {
+                $empresaOc = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
+            } catch (RuntimeException) {
+                $empresaOc = null;
+            }
+            if ($empresaOc !== null && (int) $empresaOc['empresa_id'] !== $empresaId) {
+                throw new RuntimeException(
+                    'La OC '.$numeroOc.' es de '.$empresaOc['nombre']
+                    .' y la factura se está grabando en otra empresa: indique la OC de la empresa receptora.'
+                );
+            }
+        }
+
         $conceptosAsignados = $resuelto['conceptos_asignados'] ?? [];
         if ($conceptosAsignados === []) {
             throw new RuntimeException('No hay conceptos asignados para grabar.');
@@ -620,15 +635,17 @@ final class ComprobanteProveedorPdfIaService
 
             try {
                 $empresaOc = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
-                if ((int) $empresaOc['empresa_id'] !== (int) $empresa['empresa_id']) {
-                    $advertencias[] = 'El CUIT destinatario matcheó '.$empresa['nombre']
-                        .', pero la OC '.$numeroOc.' es de '.$empresaOc['nombre']
-                        .'. Se usa la empresa de la OC.';
-                    $empresa = $empresaOc;
-                    $extraido['cuit_destinatario_origen'] = 'oc_prevalece';
-                }
+                $distinta = (int) $empresaOc['empresa_id'] !== (int) $empresa['empresa_id'];
             } catch (RuntimeException) {
                 // Sin OC local: se mantiene la empresa del CUIT.
+                $distinta = false;
+            }
+            if ($distinta) {
+                throw new RuntimeException(
+                    'La factura está emitida a '.$empresa['nombre'].' (CUIT '.$cuitDestinatario
+                    .') pero la OC '.$numeroOc.' es de '.$empresaOc['nombre']
+                    .': indique la OC de la empresa receptora o cargue la factura sin OC.'
+                );
             }
 
             $proveedor = $this->resolucionSupport->resolverProveedorPorOc($cuitProveedor, $numeroOc);

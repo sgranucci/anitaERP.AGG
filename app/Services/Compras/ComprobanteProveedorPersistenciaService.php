@@ -1476,10 +1476,45 @@ class ComprobanteProveedorPersistenciaService
     /**
      * @param  array<string, mixed>  $payload
      */
+    /**
+     * La factura de una empresa contra la OC de otra deja libre la del receptor real para
+     * cargarse de nuevo. La precarga trae la empresa receptora leída del comprobante.
+     */
+    private function assertEmpresaCoincideConOcYPrecarga(array $payload, ?Ordencompra $ordencompra): void
+    {
+        $empresaId = (int) ($payload['empresa_id'] ?? 0);
+        $nombre = static fn (int $id) => (string) (\App\Models\Configuracion\Empresa::query()->whereKey($id)->value('nombre')
+            ?: 'empresa #'.$id);
+
+        if ($ordencompra && (int) $ordencompra->empresa_id !== $empresaId) {
+            throw new RuntimeException(sprintf(
+                'El comprobante es de %s pero la OC %s es de %s: elija la OC de la empresa receptora de la factura.',
+                $nombre($empresaId),
+                (string) $ordencompra->numeroordencompra,
+                $nombre((int) $ordencompra->empresa_id),
+            ));
+        }
+
+        $precargaId = (int) ($payload['precarga_comprobante_proveedor_id'] ?? 0);
+        if ($precargaId <= 0) {
+            return;
+        }
+        $empresaPrecarga = (int) Precarga_Comprobante_Proveedor::query()->whereKey($precargaId)->value('empresa_id');
+        if ($empresaPrecarga > 0 && $empresaPrecarga !== $empresaId) {
+            throw new RuntimeException(sprintf(
+                'La precarga #%d es de %s y el comprobante se está grabando en %s.',
+                $precargaId,
+                $nombre($empresaPrecarga),
+                $nombre($empresaId),
+            ));
+        }
+    }
+
     private function ejecutarControlesDesdeRequest(Request $request, array &$payload, ?int $excluirComprobanteId): void
     {
         $ordencompraId = (int) ($payload['ordencompra_id'] ?? 0);
         $ordencompra = $ordencompraId > 0 ? Ordencompra::query()->find($ordencompraId) : null;
+        $this->assertEmpresaCoincideConOcYPrecarga($payload, $ordencompra);
 
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
             $request->input('concepto_ivacompra_ids', []),
@@ -1559,9 +1594,11 @@ class ComprobanteProveedorPersistenciaService
             $request->merge(['recepcion_proveedor_ids' => $idsEfectivos]);
         }
 
+        $payload['wscdc_async_token'] = trim((string) $request->input('wscdc_async_token', ''));
         $this->aplicarResultadoCompliance(
             $this->complianceValidacion->validarAlGrabar($payload, $lineas)
         );
+        unset($payload['wscdc_async_token']);
     }
 
     /** @param array{ok: bool, avisos: list<string>, errores: list<string>} $resultado */

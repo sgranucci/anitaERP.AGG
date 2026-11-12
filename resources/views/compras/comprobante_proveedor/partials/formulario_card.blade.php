@@ -67,6 +67,7 @@
         <div id="cp-aviso-duplicado-cabecera-slot"></div>
         <div id="cp-aviso-intercompany-cabecera-slot"></div>
         <div id="cp-aviso-anita-async-slot"></div>
+        <div id="cp-wscdc-async-slot" class="d-none" role="status" aria-live="polite"></div>
         <div id="cp-sync-oc-com-banner" class="alert alert-info py-2 d-none" role="status">
             <i class="fa fa-spinner fa-spin"></i>
             <span id="cp-sync-oc-com-texto">Consultando orden de compra y recepciones en Anita…</span>
@@ -222,12 +223,15 @@
                 data-anita-nro="{{ (int) ($data->anita_nro_interno ?? 0) }}"
                 data-aviso-anita-url="{{ route('comprobante_proveedor_aviso_factura_anita') }}"
                 data-verificar-duplicado-url="{{ route('comprobante_proveedor_verificar_duplicado_cabecera') }}"
+                data-constatar-wscdc-url="{{ route('comprobante_proveedor_constatar_wscdc') }}"
                 data-sync-oc-com-url="{{ route('comprobante_proveedor_sincronizar_oc_com') }}"
                 data-precarga-cargada-url="{{ route('precarga_comprobante_proveedor', ['estado' => \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA]) }}">
                 @csrf
                 @if ($esEdicion)
                     @method('PUT')
                 @endif
+                <input type="hidden" name="wscdc_async_token" id="wscdc_async_token" value="">
+                <input type="hidden" name="wscdc_async_fingerprint" id="wscdc_async_fingerprint" value="">
 
                 @include('includes.tabs-activas-estilos')
                 <div class="tabs-activas px-3 pt-2 bg-white border-bottom">

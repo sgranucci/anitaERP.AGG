@@ -127,6 +127,16 @@ class ComprobanteProveedorPrefillService
         $ordencompra = $this->resolverOrdencompraDesdePrecarga($precarga);
         if ($ordencompra) {
             $ordencompra->loadMissing(['empresas', 'proveedores.condicionivas', 'ordencompra_articulos']);
+            if ((int) $precarga->empresa_id > 0 && (int) $ordencompra->empresa_id !== (int) $precarga->empresa_id) {
+                abort(422, sprintf(
+                    'La precarga #%d es de %s pero la OC %s es de %s: corrija la OC de la precarga '
+                    .'(debe ser de la empresa receptora de la factura) antes de cargarla en Cuentas a pagar.',
+                    (int) $precarga->id,
+                    $precarga->empresas?->nombre ?? 'empresa #'.(int) $precarga->empresa_id,
+                    (string) $precarga->numeroordencompra,
+                    $ordencompra->empresas?->nombre ?? 'empresa #'.(int) $ordencompra->empresa_id,
+                ));
+            }
         }
 
         $fechacomprobante = $precarga->fechafactura
@@ -696,8 +706,8 @@ class ComprobanteProveedorPrefillService
             ->with('ordencompra_articulos')
             ->where('numeroordencompra', $nro);
 
-        // El número de la precarga manda. Si la OC está en otra empresa (CUIT del PDF
-        // vs empresa de la OC), igual se usa esa OC; no otra del mismo proveedor.
+        // El número de la precarga manda. Si la OC está en otra empresa se devuelve igual
+        // (no otra del mismo proveedor) para que desdePrecarga rechace la diferencia.
         $mismaEmpresa = (clone $base)
             ->where('empresa_id', $precarga->empresa_id)
             ->first();

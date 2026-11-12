@@ -158,11 +158,15 @@ final class ProgramaPagoOpPlanSupport
 
         $filas = DB::table('proveedor_cuentacorriente as cc')
             ->leftJoinSub($aplicaciones, 'apl', 'apl.proveedor_cuentacorriente_id', '=', 'cc.id')
+            ->leftJoin('comprobante_proveedor as cpb', 'cpb.id', '=', 'cc.comprobante_proveedor_id')
             ->where('cc.empresa_id', $empresaId)
             ->where('cc.proveedor_id', $proveedorId)
             ->where('cc.fecha', '<=', $fechaHasta)
             ->whereRaw(SqlDialectSupport::sqlAlcanceDeudaAbiertaProveedorCc('cc'))
             ->whereRaw('('.$saldoExpr.') > 0.009')
+            ->where(function ($q) {
+                $q->whereNull('cpb.id')->orWhere('cpb.bloqueado_pago', false)->orWhereNull('cpb.bloqueado_pago');
+            })
             ->orderBy('cc.fecha')
             ->orderBy('cc.id')
             ->selectRaw('cc.id as id, cc.moneda_id as moneda_id, cc.cotizacion as cotizacion, ('.$saldoExpr.') as saldo')

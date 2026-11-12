@@ -9,6 +9,7 @@ use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Moneda;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
+use App\Support\Compras\ComprobanteProveedorReceptorPdfSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoFacturaArcaSupport;
@@ -67,6 +68,9 @@ class OrdencompraLegajoFacturaPdfService
         if (! $proveedor) {
             throw new RuntimeException('Proveedor de la orden de compra inexistente.');
         }
+
+        app(ComprobanteProveedorReceptorPdfSupport::class)
+            ->assertReceptorEs((string) $pdf->getRealPath(), $empresaId, 'la OC '.$oc->numeroordencompra);
 
         // Mismo cableado que adjuntarPdfAlLegajo / paquete CxP: abreviatura fina por
         // CC destino + tipo de artículos de la OC (FGA solo si CC 85). El código AFIP
@@ -190,6 +194,9 @@ class OrdencompraLegajoFacturaPdfService
         if (! $proveedor) {
             throw new RuntimeException('Proveedor de la orden de compra inexistente.');
         }
+
+        app(ComprobanteProveedorReceptorPdfSupport::class)
+            ->assertReceptorEs((string) $pdf->getRealPath(), $empresaId, 'la OC '.$oc->numeroordencompra);
 
         $ruta = $this->guardarPdfLegajo($pdf, $oc, $proveedor);
 

@@ -1064,6 +1064,24 @@ class PagoproveedorService
     }
 
     /**
+     * Propuestas y programas informan el error por proveedor y siguen con los demás:
+     * no pueden dejar escapar la excepción.
+     *
+     * @param  list<int>  $cuentacorrienteIds
+     */
+    private function motivoNoPagable(array $cuentacorrienteIds): ?string
+    {
+        try {
+            app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($cuentacorrienteIds);
+            $this->assertWscdcAntesDePagar($cuentacorrienteIds);
+        } catch (ValidationException $e) {
+            return implode(' ', \Illuminate\Support\Arr::flatten($e->errors()));
+        }
+
+        return null;
+    }
+
+    /**
      * Revalida WSCDC sobre las facturas aplicadas. Si ARCA rechaza o el total no cierra,
      * marca bloqueado_pago y corta la OP. WS caído también corta (no emitir a ciegas).
      *
@@ -2381,6 +2399,10 @@ class PagoproveedorService
             $dataPreflight['cotizacioncomprobantes'][] = $cotApl;
             $dataPreflight['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? 0) ?: $cotApl;
         }
+        $noPagable = $this->motivoNoPagable($dataPreflight['idcuentacorrientes']);
+        if ($noPagable !== null) {
+            return ['errores' => $noPagable];
+        }
         // Antes de abrir TX / quemar correlativos: Anita no revierte al rollback MySQL.
         $this->assertNumeradoresAnitaAntesDeGrabar(
             $empresaId,
@@ -2662,6 +2684,10 @@ class PagoproveedorService
             $cotApl = (float) ($apl['cotizacion'] ?? 0) ?: 1;
             $dataPreflight['cotizacioncomprobantes'][] = $cotApl;
             $dataPreflight['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? 0) ?: $cotApl;
+        }
+        $noPagable = $this->motivoNoPagable($dataPreflight['idcuentacorrientes']);
+        if ($noPagable !== null) {
+            return ['errores' => $noPagable];
         }
         $this->assertNumeradoresAnitaAntesDeGrabar($empresaId, $dataPreflight, 'CONFIRMADA', $tipoComprobante);
 

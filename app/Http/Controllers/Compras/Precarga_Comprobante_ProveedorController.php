@@ -651,7 +651,11 @@ class Precarga_Comprobante_ProveedorController extends Controller
             return redirect()->back()->with('errores', ['No se encontró la precarga.']);
         }
 
-        if ($errores = $this->erroresCargaManual($request, $precargaActual->rutaalmacenamiento)) {
+        $errores = array_merge(
+            $this->erroresCargaManual($request, $precargaActual->rutaalmacenamiento),
+            $this->erroresEdicionPrecarga($request, $precargaActual),
+        );
+        if ($errores !== []) {
             return redirect()->back()->withInput()->with('errores', $errores);
         }
 
@@ -662,6 +666,9 @@ class Precarga_Comprobante_ProveedorController extends Controller
                     $this->payloadCargaManual($request, $precargaActual->rutaalmacenamiento),
                     $lineas
                 );
+                // El estado y el origen los maneja el circuito, no el formulario.
+                $payload['estado'] = $precargaActual->estado;
+                $payload['origen_entrada'] = $precargaActual->origen_entrada;
                 $this->precarga_comprobante_proveedorRepository->update($payload, $id);
 
                 $this->precarga_comprobante_proveedor_conceptoRepository
@@ -721,6 +728,10 @@ class Precarga_Comprobante_ProveedorController extends Controller
             $errores[] = 'Indicá la fecha del comprobante.';
         }
 
+        if ($error = $this->errorOcDeOtraEmpresa($request)) {
+            $errores[] = $error;
+        }
+
         $pdf = $request->file('factura_pdf');
         if (! $pdf && ! filled($rutaExistente)) {
             $errores[] = 'Adjuntá el PDF de la factura.';
@@ -731,10 +742,82 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 $errores[] = 'El scan tiene que ser un PDF.';
             } elseif ($pdf->getSize() > 20 * 1024 * 1024) {
                 $errores[] = 'El PDF supera los 20 MB.';
+            } elseif ((int) $request->input('empresa_id') > 0) {
+                try {
+                    app(\App\Support\Compras\ComprobanteProveedorReceptorPdfSupport::class)->assertReceptorEs(
+                        (string) $pdf->getRealPath(),
+                        (int) $request->input('empresa_id'),
+                        'la precarga'
+                    );
+                } catch (RuntimeException $e) {
+                    $errores[] = $e->getMessage();
+                }
             }
         }
 
         return $errores;
+    }
+
+    private function errorOcDeOtraEmpresa(Request $request): ?string
+    {
+        $numeroOc = (int) preg_replace('/\D/', '', (string) $request->input('numeroordencompra', ''));
+        $empresaId = (int) $request->input('empresa_id');
+        if ($numeroOc <= 0 || $empresaId <= 0) {
+            return null;
+        }
+
+        $empresasOc = \App\Models\Compras\Ordencompra::query()
+            ->where('numeroordencompra', $numeroOc)
+            ->pluck('empresa_id')
+            ->map(static fn ($id) => (int) $id)
+            ->unique();
+        if ($empresasOc->isEmpty() || $empresasOc->contains($empresaId)) {
+            return null;
+        }
+
+        return 'La OC '.$numeroOc.' es de '.$this->nombreEmpresa((int) $empresasOc->first())
+            .' y la precarga es de '.$this->nombreEmpresa($empresaId)
+            .': indicá la OC de la empresa receptora de la factura.';
+    }
+
+    /**
+     * La empresa de una precarga automática es el receptor leído del comprobante; y una precarga
+     * que ya generó comprobante se corrige desde el comprobante, no desde acá.
+     *
+     * @return list<string>
+     */
+    private function erroresEdicionPrecarga(Request $request, Precarga_Comprobante_Proveedor $actual): array
+    {
+        $errores = [];
+
+        $generado = \App\Models\Compras\Comprobante_Proveedor::query()
+            ->where('precarga_comprobante_proveedor_id', (int) $actual->id)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhere('estado', '!=', \App\Support\Compras\ComprobanteProveedorEstados::ANULADO);
+            })
+            ->value('id');
+        if ($generado) {
+            $errores[] = 'La precarga ya generó el comprobante #'.$generado.'. Corregí el comprobante (o anulalo) en lugar de la precarga.';
+        }
+
+        $automatica = ! in_array((string) $actual->origen_entrada, [
+            \App\Support\Compras\PrecargaComprobanteOrigenEntrada::MANUAL,
+            \App\Support\Compras\PrecargaComprobanteOrigenEntrada::LEGAJO,
+            \App\Support\Compras\PrecargaComprobanteOrigenEntrada::SCAN_ANITA,
+        ], true);
+        if ($automatica && (int) $actual->empresa_id > 0 && (int) $request->input('empresa_id') !== (int) $actual->empresa_id) {
+            $errores[] = 'La empresa de esta precarga es el receptor que figura en la factura ('
+                .$this->nombreEmpresa((int) $actual->empresa_id).') y no se puede cambiar.';
+        }
+
+        return $errores;
+    }
+
+    private function nombreEmpresa(int $empresaId): string
+    {
+        return (string) (\App\Models\Configuracion\Empresa::query()->whereKey($empresaId)->value('nombre')
+            ?: 'empresa #'.$empresaId);
     }
 
     /**
