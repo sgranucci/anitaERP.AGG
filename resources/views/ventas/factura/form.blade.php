@@ -1112,7 +1112,7 @@
 			<div class="col-md-6">
 				<div class="form-group" id="div_leyendaexportacion">
                 	<label>Leyenda Exportaci&oacute;n</label>
-                	<textarea id="leyendaexportacion" class="form-control" cols="90" rows="6" placeholder="Leyendas de exportación ..."></textarea>
+                	<textarea id="leyendaexportacion" name="leyendaexportacion" class="form-control" cols="90" rows="6" placeholder="Leyendas de exportación ..."></textarea>
 				</div>
 			</div>
 			<div class="col-md-4">
@@ -1128,7 +1128,7 @@
 				</div>
 				<div class="form-group row" id="div_mercaderia">
 					<label for="mercaderia" class="col-lg-4 control-label text-right pr-2">Mercader&iacute;a</label>
-					<input type="text" class="col-lg-6 form-control" id="mercaderia" name="marcaderia" value=""></input>
+					<input type="text" class="col-lg-6 form-control" id="mercaderia" name="mercaderia" value="" maxlength="60" title="Descripci&oacute;n corta del tipo de mercader&iacute;a">
 				</div>
 			</div>
         </div>

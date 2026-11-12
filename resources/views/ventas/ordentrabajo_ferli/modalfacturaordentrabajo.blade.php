@@ -110,7 +110,7 @@
             </div>
             <div class="form-group" id="div_leyendaexportacion">
                 <label>Leyenda Exportaci&oacute;n</label>
-                <textarea id="leyendaexportacion" class="form-control" cols="90" rows="6" placeholder="Leyendas de exportación ..."></textarea>
+                <textarea id="leyendaexportacion" name="leyendaexportacion" class="form-control" cols="90" rows="6" placeholder="Leyendas de exportación ..."></textarea>
             </div>
             <div class="form-group row" id="div_incoterm">
                 <label for="recipient-name" class="col-lg-4 col-form-label requerido">Condiciones de venta (incoterms)</label>
@@ -124,7 +124,7 @@
             </div>
             <div class="form-group row" id="div_mercaderia">
                 <label for="recipient-name" class="col-lg-4 col-form-label">Mercader&iacute;a</label>
-                <input type="text" class="col-lg-5 form-control" id="mercaderia" name="marcaderia" value=""></input>
+                <input type="text" class="col-lg-5 form-control" id="mercaderia" name="mercaderia" value="" maxlength="60">
             </div>
             @if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
             <div class="form-group row mb-0">

@@ -1310,7 +1310,7 @@
 			if (puntoventa_id) {
 				leePuntoVenta(puntoventa_id);
 			} else {
-				$('#div_formapago, #div_mercaderia, #div_incoterm, #div_leyendaexportacion').hide();
+				$('#datos_exportacion, #div_formapago, #div_mercaderia, #div_incoterm, #div_leyendaexportacion').hide();
 				if (!window.pedidoSinRemitoObligatorio) {
 					$('#div_peso_neto_exportacion').hide();
 				}
@@ -1564,6 +1564,7 @@
 			
 			if (data.modofacturacion == 'E')
 			{
+				$('#datos_exportacion').show();
 				$('#div_formapago').show();
 				$('#div_mercaderia').show();
 				$('#div_incoterm').show();
@@ -1573,6 +1574,7 @@
 			}
 			else
 			{
+				$('#datos_exportacion').hide();
 				$('#div_formapago').hide();
 				$('#div_mercaderia').hide();
 				$('#div_incoterm').hide();

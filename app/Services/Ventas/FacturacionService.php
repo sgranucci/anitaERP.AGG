@@ -1030,28 +1030,8 @@ class FacturacionService
 		$this->descuentoLinea = 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'];
 		$this->cantidadBulto = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
-		$this->pesoNetoExportacion = (float) ($data['peso_neto'] ?? 0);
 		$this->puntoventaremito_id = $data['puntoventaremito_id'];
-		$this->formapago_id = $data['formapago_id'];
-		$this->incoterm_id = $data['incoterm_id'];
-		$this->mercaderiaExportacion = $data['mercaderia'];
-		$this->leyendaExportacion = $data['leyendaexportacion'];
-		$this->numeroDespacho = '';
-		$this->condicionVentaExportacion = '';
-		$this->formaPagoExportacion = '';
-		$this->monedaExportacion = '';
-		$this->abreviaturaIncoterm = '';
-		if ((int) $this->incoterm_id >= 1) {
-			$incoterm = $this->incotermRepository->find($this->incoterm_id);
-			if ($incoterm) {
-				$this->condicionVentaExportacion = $incoterm->nombre;
-				$this->abreviaturaIncoterm = $incoterm->abreviatura;
-			}
-			$formapago = $this->formapagoRepository->find($this->formapago_id);
-			if ($formapago) {
-				$this->formaPagoExportacion = $formapago->nombre;
-			}
-		}
+		$this->asignarDatosExportacionDesdeRequest($data);
 
 		$this->cuentacontable_id = $cliente->cuentacontable_id;
 		$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
@@ -2632,6 +2612,76 @@ class FacturacionService
 	}
 
 	/**
+	 * Incoterm / forma de pago / mercadería / leyenda de exportación (FAE/FAF y PV modo E).
+	 * Usado por pedido, OT y facturación mostrador.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	protected function asignarDatosExportacionDesdeRequest(array $data): void
+	{
+		$this->pesoNetoExportacion = (float) ($data['peso_neto'] ?? 0);
+		$this->formapago_id = (int) ($data['formapago_id'] ?? 0);
+		$this->incoterm_id = (int) ($data['incoterm_id'] ?? 0);
+		// Form viejo tipaba name="marcaderia"; aceptar ambos.
+		$mercaderia = $data['mercaderia'] ?? ($data['marcaderia'] ?? '');
+		$this->mercaderiaExportacion = is_string($mercaderia) ? $mercaderia : (string) $mercaderia;
+		$this->leyendaExportacion = (string) ($data['leyendaexportacion'] ?? '');
+		$this->numeroDespacho = '';
+		$this->condicionVentaExportacion = '';
+		$this->formaPagoExportacion = '';
+		$this->monedaExportacion = '';
+		$this->abreviaturaIncoterm = '';
+
+		if ($this->incoterm_id >= 1) {
+			$incoterm = $this->incotermRepository->find($this->incoterm_id);
+			if ($incoterm) {
+				$this->condicionVentaExportacion = $incoterm->nombre;
+				$this->abreviaturaIncoterm = $incoterm->abreviatura;
+			}
+			$formapago = $this->formapagoRepository->find($this->formapago_id);
+			if ($formapago) {
+				$this->formaPagoExportacion = $formapago->nombre;
+			}
+		}
+	}
+
+	/**
+	 * En Ferli/mostrador el template viejo mandaba descuentos[] dos veces por renglón
+	 * (hidden vacío + input visible). Eso desplazaba el % y el total salía sin dto de línea.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	protected function normalizaDescuentosLineaGrillaMostrador(array $data): array
+	{
+		if (facturaUsaLayoutItemsPedido()) {
+			return $data;
+		}
+
+		$articulos = $data['articulo_ids'] ?? null;
+		$descuentos = $data['descuentos'] ?? null;
+		if (! is_array($articulos) || ! is_array($descuentos)) {
+			return $data;
+		}
+
+		$nItems = count($articulos);
+		$nDto = count($descuentos);
+		if ($nItems <= 0 || $nDto === $nItems || $nDto !== (2 * $nItems)) {
+			return $data;
+		}
+
+		$reales = [];
+		for ($i = 0; $i < $nItems; $i++) {
+			$hidden = $descuentos[$i * 2] ?? '';
+			$visible = $descuentos[($i * 2) + 1] ?? '';
+			$reales[$i] = (trim((string) $visible) !== '') ? $visible : $hidden;
+		}
+		$data['descuentos'] = $reales;
+
+		return $data;
+	}
+
+	/**
 	 * Convierte kilos y descuentoventa_ids (grilla estilo pedido en factura directa) al formato de calculaFacturaGeneral.
 	 */
 	protected function normalizaItemsFacturaGeneralDesdePedido(array $data): array
@@ -2721,6 +2771,7 @@ class FacturacionService
 		}
 
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
+		$data = $this->normalizaDescuentosLineaGrillaMostrador($data);
 		VentaNotaCreditoPrecioLiteralSupport::aplicarPreciosFacturaOrigen($data);
 		VentaNotaCreditoPrecioLiteralSupport::aplicarImpuestosFacturaOrigen($data);
 		\App\Support\Ventas\FacturacionLocal\FacturacionLocalNcPrecioSupport::normalizarPayloadNc($data);
@@ -3603,6 +3654,7 @@ class FacturacionService
 		$this->descuentoLinea = $data['descuentolinea'] ?? 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'] ?? 0;
 		$this->anularDescuentoPieSiVillafranca();
+		$this->asignarDatosExportacionDesdeRequest($data);
 
 		if (isset($data['fecha']))
 			$fechaFactura = $data['fecha'];
@@ -4240,31 +4292,7 @@ class FacturacionService
 		$this->descuentoImportePie = $data['descuentoimportepie'];
 		$this->cantidadBulto = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
 		$this->puntoventaremito_id = $data['puntoventaremito_id'];
-		$this->formapago_id = $data['formapago_id'];
-		$this->incoterm_id = $data['incoterm_id'];
-		$this->mercaderiaExportacion = $data['mercaderia'];
-		$this->leyendaExportacion = $data['leyendaexportacion'];
-		$this->numeroDespacho = '';
-		$this->condicionVentaExportacion = '';
-		$this->formaPagoExportacion = '';
-		$this->monedaExportacion = '';
-		$this->abreviaturaIncoterm = '';
-		// Arma variables de exportacion
-		if ($this->incoterm_id >= 1)
-		{
-			$incoterm = $this->incotermRepository->find($this->incoterm_id);
-
-			if ($incoterm)
-			{
-				$this->condicionVentaExportacion = $incoterm->nombre;
-				$this->abreviaturaIncoterm = $incoterm->abreviatura;
-			}
-			
-			$formapago = $this->formapagoRepository->find($this->formapago_id);
-
-			if ($formapago)
-				$this->formaPagoExportacion = $formapago->nombre;
-		}
+		$this->asignarDatosExportacionDesdeRequest($data);
 
 		// Lee los items a facturar. Un solo cliente para toda la sesión.
 		$dataFactura = [];

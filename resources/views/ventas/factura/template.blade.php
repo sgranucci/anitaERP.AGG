@@ -5,7 +5,6 @@
 			<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="" />
 			<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="" />
 			<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="" />
-			<input type="hidden" name="descuentos[]" class="form-control descuento" readonly value="" />
 			<input type="hidden" name="ids[]" class="form-control ids" value="" />
 			<input type="hidden" name="loteids[]" class="form-control loteids" value="" />
 			@include('ventas.factura.partials.ot_pedido_campos', [
