@@ -456,11 +456,14 @@ class ProgramaPagoService
                 ->sortByDesc('id')
                 ->first(static fn ($o) => (int) ($o->pagoproveedor_id ?? 0) > 0);
             $pago = $op?->pagoproveedor;
+            $prov = $linea->proveedores;
             $filas[] = [
                 'id' => (int) $linea->id,
                 'proveedor_id' => (int) $linea->proveedor_id,
-                'codigo' => (string) ($linea->proveedores->codigo ?? ''),
-                'nombre' => (string) ($linea->proveedores->nombre ?? ''),
+                'codigo' => (string) ($prov->codigo ?? ''),
+                'nombre' => (string) ($prov->nombre ?? ''),
+                'acepta_cheque_fisico' => $prov ? $prov->aceptaChequeFisico() : true,
+                'acepta_echeq' => $prov ? $prov->aceptaEcheq() : true,
                 'saldo_adeudado' => $saldo,
                 'observacion' => (string) ($linea->observacion ?? ''),
                 'asignaciones' => $asignaciones,

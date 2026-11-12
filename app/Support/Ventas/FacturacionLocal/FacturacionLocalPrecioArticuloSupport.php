@@ -25,13 +25,12 @@ final class FacturacionLocalPrecioArticuloSupport
             $fecha = now()->format('Y-m-d');
             $comb = $combinacionId > 0 ? $combinacionId : null;
 
-            // Lista del local (Lugano/Web/etc.) manda.
+            // Lista del local (Lugano/Web/etc.) manda. Si está en 0 o sin vigencia,
+            // no inventar precio de fábrica (listas 1–5 por rango de talle).
             if ($articuloId > 0 && $listaId > 0) {
                 $precio = $svc->precioVigente($articuloId, $listaId, $comb, $fecha);
-            }
-
-            // Fallback: lista por rango de talle (ABM Ferli clásico).
-            if ($precio <= 0 && $articuloId > 0 && $talleId > 0) {
+            } elseif ($articuloId > 0 && $talleId > 0) {
+                // Solo sin lista de local: ABM Ferli clásico por talle.
                 $filas = $svc->asignaPrecio($articuloId, $comb, $talleId, $fecha);
                 $precio = PrecioServiceFerli::primerPrecioNumerico($filas);
                 if (is_array($filas[0] ?? null) && (int) ($filas[0]['listaprecio_id'] ?? 0) > 0) {

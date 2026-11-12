@@ -360,6 +360,17 @@ window.programaPagoCfg = {
                                             <input type="hidden" name="lineas[{{ $idx }}][saldo_adeudado]" value="{{ $fila['saldo_adeudado'] }}">
                                             <span class="badge badge-secondary pp-badge-estado">Pendiente</span>
                                             <span class="pp-nombre-proveedor"><strong>{{ $fila['codigo'] }}</strong> {{ $fila['nombre'] }}</span>
+                                            @php
+                                                $aceptaFisico = (bool) ($fila['acepta_cheque_fisico'] ?? true);
+                                                $aceptaEcheq = (bool) ($fila['acepta_echeq'] ?? true);
+                                            @endphp
+                                            @if (! $aceptaFisico || ! $aceptaEcheq)
+                                                <span class="text-muted small ml-1" title="CHT que acepta el proveedor">
+                                                    @if ($aceptaFisico)<span class="badge badge-light border">F&iacute;sico</span>@endif
+                                                    @if ($aceptaEcheq)<span class="badge badge-light border">e-cheq</span>@endif
+                                                    @if (! $aceptaFisico && ! $aceptaEcheq)<span class="badge badge-light border text-danger">Sin CHT</span>@endif
+                                                </span>
+                                            @endif
                                             @if ($opEmitida)
                                                 <div class="mt-1">
                                                     <a class="badge badge-success"

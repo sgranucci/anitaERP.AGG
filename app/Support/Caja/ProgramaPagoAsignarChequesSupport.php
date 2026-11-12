@@ -50,7 +50,11 @@ final class ProgramaPagoAsignarChequesSupport
 
         $lineasQuery = ProgramaPagoLinea::query()
             ->where('programa_pago_id', $programa->id)
-            ->with(['asignaciones', 'chequesAsignados', 'proveedores:id,codigo,nombre']);
+            ->with([
+                'asignaciones',
+                'chequesAsignados',
+                'proveedores:id,codigo,nombre,acepta_cheque_fisico,acepta_echeq',
+            ]);
         if ($lineaId !== null && $lineaId > 0) {
             $lineasQuery->where('id', $lineaId);
         }
@@ -89,11 +93,14 @@ final class ProgramaPagoAsignarChequesSupport
                 if ($objetivo < 0.01) {
                     continue;
                 }
+                $prov = $linea->proveedores;
                 $demandas[] = [
                     'linea_id' => $lineaId,
                     'proveedor_id' => (int) $linea->proveedor_id,
-                    'codigo' => (string) ($linea->proveedores->codigo ?? ''),
-                    'nombre' => (string) ($linea->proveedores->nombre ?? ''),
+                    'codigo' => (string) ($prov->codigo ?? ''),
+                    'nombre' => (string) ($prov->nombre ?? ''),
+                    'acepta_cheque_fisico' => $prov ? $prov->aceptaChequeFisico() : true,
+                    'acepta_echeq' => $prov ? $prov->aceptaEcheq() : true,
                     'clave' => $clave,
                     'monto_programado' => $montoBruto,
                     'monto_objetivo' => $objetivo,
@@ -186,7 +193,11 @@ final class ProgramaPagoAsignarChequesSupport
             foreach ($demandas as $demanda) {
                 $clave = $demanda['clave'];
                 $target = round((float) ($demanda['monto_objetivo'] ?? $demanda['monto_programado']), 2);
-                $pool = $poolPorMes[$clave] ?? [];
+                $pool = self::filtrarPoolPorAceptacion(
+                    $poolPorMes[$clave] ?? [],
+                    (bool) ($demanda['acepta_cheque_fisico'] ?? true),
+                    (bool) ($demanda['acepta_echeq'] ?? true),
+                );
                 $elegidos = self::seleccionarCheques($target, $pool);
                 $suma = round(array_sum(array_map(static fn ($c) => $c['monto'], $elegidos)), 2);
 
@@ -200,8 +211,16 @@ final class ProgramaPagoAsignarChequesSupport
                 }
 
                 if ($elegidos === [] || ! self::dentroTolerancia($suma, $target)) {
+                    $tipoPend = $elegidos === [] ? 'sin_cheques' : 'fuera_tolerancia';
+                    if (
+                        $tipoPend === 'sin_cheques'
+                        && ($poolPorMes[$clave] ?? []) !== []
+                        && $pool === []
+                    ) {
+                        $tipoPend = 'sin_aceptacion';
+                    }
                     $pendientes[] = $demanda + [
-                        'tipo' => $elegidos === [] ? 'sin_cheques' : 'fuera_tolerancia',
+                        'tipo' => $tipoPend,
                         'disponibles_mes' => count($pool),
                         'suma_mes' => $suma,
                     ];
@@ -225,12 +244,23 @@ final class ProgramaPagoAsignarChequesSupport
                 $clave = $demanda['clave'];
                 $target = round((float) ($demanda['monto_objetivo'] ?? $demanda['monto_programado']), 2);
                 $brutoCelda = round((float) $demanda['monto_programado'], 2);
+                $aceptaFisico = (bool) ($demanda['acepta_cheque_fisico'] ?? true);
+                $aceptaEcheq = (bool) ($demanda['acepta_echeq'] ?? true);
                 $limite = Carbon::createFromFormat('Y-m', $clave)->addMonth()->startOfMonth();
-                $poolAdelante = array_values(array_filter(
-                    $poolDesde,
-                    static fn ($c) => Carbon::parse((string) $c['fechapago'])->greaterThanOrEqualTo($limite)
-                ));
-                $propuesta = self::proponerCobertura($target, $poolPorMes[$clave] ?? [], $poolAdelante);
+                $poolMes = self::filtrarPoolPorAceptacion(
+                    $poolPorMes[$clave] ?? [],
+                    $aceptaFisico,
+                    $aceptaEcheq,
+                );
+                $poolAdelante = self::filtrarPoolPorAceptacion(
+                    array_values(array_filter(
+                        $poolDesde,
+                        static fn ($c) => Carbon::parse((string) $c['fechapago'])->greaterThanOrEqualTo($limite)
+                    )),
+                    $aceptaFisico,
+                    $aceptaEcheq,
+                );
+                $propuesta = self::proponerCobertura($target, $poolMes, $poolAdelante);
                 $detalle = self::mensajeDiscrepancia(
                     (string) $demanda['tipo'],
                     $target,
@@ -374,7 +404,7 @@ final class ProgramaPagoAsignarChequesSupport
             ->whereBetween('fechapago', [$desde, $hasta])
             ->when($excluirChequeIds !== [], static fn (Builder $q) => $q->whereNotIn('id', $excluirChequeIds));
 
-        foreach ($query->get(['id', 'monto', 'numerocheque', 'nro_interno_anita', 'fechapago']) as $cheque) {
+        foreach ($query->get(['id', 'monto', 'numerocheque', 'nro_interno_anita', 'fechapago', 'negociable']) as $cheque) {
             $clave = Carbon::parse((string) $cheque->fechapago)->format('Y-m');
             if (! array_key_exists($clave, $porMes)) {
                 continue;
@@ -382,6 +412,7 @@ final class ProgramaPagoAsignarChequesSupport
             $porMes[$clave][] = [
                 'id' => (int) $cheque->id,
                 'monto' => round((float) $cheque->monto, 2),
+                'negociable' => strtoupper(trim((string) ($cheque->negociable ?? 'N'))) ?: 'N',
                 'numerocheque' => (string) ($cheque->numerocheque ?? ''),
                 'nro_interno_anita' => $cheque->nro_interno_anita !== null ? (int) $cheque->nro_interno_anita : null,
                 'fechapago' => (string) $cheque->fechapago,
@@ -406,7 +437,7 @@ final class ProgramaPagoAsignarChequesSupport
             ->when($excluirChequeIds !== [], static fn (Builder $q) => $q->whereNotIn('id', $excluirChequeIds));
 
         $out = [];
-        foreach ($query->get(['id', 'monto', 'numerocheque', 'nro_interno_anita', 'fechapago']) as $cheque) {
+        foreach ($query->get(['id', 'monto', 'numerocheque', 'nro_interno_anita', 'fechapago', 'negociable']) as $cheque) {
             $out[] = self::filaCheque($cheque);
         }
 
@@ -699,7 +730,7 @@ final class ProgramaPagoAsignarChequesSupport
     }
 
     /**
-     * @return array{id:int,monto:float,numerocheque:string,nro_interno_anita:?int,fechapago:string}
+     * @return array{id:int,monto:float,numerocheque:string,nro_interno_anita:?int,fechapago:string,negociable:string}
      */
     private static function filaCheque(Cheque $cheque): array
     {
@@ -709,7 +740,33 @@ final class ProgramaPagoAsignarChequesSupport
             'numerocheque' => (string) ($cheque->numerocheque ?? ''),
             'nro_interno_anita' => $cheque->nro_interno_anita !== null ? (int) $cheque->nro_interno_anita : null,
             'fechapago' => Carbon::parse((string) $cheque->fechapago)->toDateString(),
+            'negociable' => strtoupper(trim((string) ($cheque->negociable ?? 'N'))) ?: 'N',
         ];
+    }
+
+    /**
+     * Deja en el pool solo CHT del tipo que el proveedor acepta (físico / e-cheq).
+     *
+     * @param  list<array{id:int,monto:float,negociable?:string}>  $pool
+     * @return list<array{id:int,monto:float,negociable?:string}>
+     */
+    public static function filtrarPoolPorAceptacion(array $pool, bool $aceptaFisico, bool $aceptaEcheq): array
+    {
+        if ($aceptaFisico && $aceptaEcheq) {
+            return array_values($pool);
+        }
+        if (! $aceptaFisico && ! $aceptaEcheq) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $pool,
+            static function (array $c) use ($aceptaFisico, $aceptaEcheq): bool {
+                $esEcheq = strtoupper(trim((string) ($c['negociable'] ?? 'N'))) === 'E';
+
+                return $esEcheq ? $aceptaEcheq : $aceptaFisico;
+            }
+        ));
     }
 
     /**
@@ -1192,6 +1249,9 @@ final class ProgramaPagoAsignarChequesSupport
     private static function mensajeDiscrepancia(string $tipo, float $target, float $suma, int $disponibles): string
     {
         $tolPct = (int) round(self::TOLERANCIA * 100);
+        if ($tipo === 'sin_aceptacion') {
+            return "El proveedor no acepta el tipo de CHT disponible en el mes para cubrir {$target} (±{$tolPct}%). Revisá Físico / e-cheq en el ABM del proveedor.";
+        }
         if ($tipo === 'sin_cheques') {
             if ($disponibles <= 0) {
                 return "Sin cheques disponibles en el mes para cubrir {$target} (±{$tolPct}%).";

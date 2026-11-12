@@ -149,6 +149,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 		$data = LocalidadProvinciaSupport::aplicar($data);
 		$data = $this->aplicarCuentaMeDesdeOrigenSiCorresponde($data);
+		$data = $this->normalizarAceptaCheques($data);
 
         $proveedor = $this->model->create($data);
 
@@ -163,6 +164,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$data = $this->normalizarEmpresaId($data);
 		$data = LocalidadProvinciaSupport::aplicar($data);
 		$data = $this->aplicarCuentaMeDesdeOrigenSiCorresponde($data);
+		$data = $this->normalizarAceptaCheques($data);
 
         $proveedorActual = $this->model->findOrFail($id);
 		if (! isset($data['estado']) || $data['estado'] === '' || $data['estado'] === null) {
@@ -2277,6 +2279,24 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		if ($mn > 0 && $me <= 0) {
 			$data['cuentacontableme_id'] = $mn;
 		}
+
+		return $data;
+	}
+
+	/**
+	 * Checkboxes de CHT: hidden 0 + checkbox 1. Si no vienen (API vieja), default true.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function normalizarAceptaCheques(array $data): array
+	{
+		$data['acepta_cheque_fisico'] = array_key_exists('acepta_cheque_fisico', $data)
+			? filter_var($data['acepta_cheque_fisico'], FILTER_VALIDATE_BOOLEAN)
+			: true;
+		$data['acepta_echeq'] = array_key_exists('acepta_echeq', $data)
+			? filter_var($data['acepta_echeq'], FILTER_VALIDATE_BOOLEAN)
+			: true;
 
 		return $data;
 	}

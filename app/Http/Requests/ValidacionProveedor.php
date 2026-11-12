@@ -71,6 +71,8 @@ class ValidacionProveedor extends FormRequest
             'pais_id' => 'required',
             'condicioniva_id' => ['integer', 'nullable'],
             'condicionpago_id' => ['integer', 'nullable'],
+            'acepta_cheque_fisico' => ['nullable', 'boolean'],
+            'acepta_echeq' => ['nullable', 'boolean'],
             'cuentacontable_id' => 'required',
             'cuentacontableme_id' => 'required',
             'nroinscripcion' => $nroInscripcionRules,

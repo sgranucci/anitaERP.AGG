@@ -41,7 +41,8 @@ class Proveedor extends Model implements Auditable
                             'nroinscripcion', 'condicioniva_id', 'agentepercepcioniva', 'retieneiva', 'retencioniva_id',
                             'retieneganancia', 'condicionganancia', 'retencionganancia_id', 'retienesuss', 
                             'retencionsuss_id','condicionIIBB_id', 'agentepercepcionIIBB', 'nroIIBB', 
-                            'condicionpago_id', 'condicionentrega_id', 'dias_atraso', 'condicioncompra_id', 'cuentacontable_id', 
+                            'condicionpago_id', 'acepta_cheque_fisico', 'acepta_echeq',
+                            'condicionentrega_id', 'dias_atraso', 'condicioncompra_id', 'cuentacontable_id',
                             'cuentacontableme_id', 'cuentacontablecompra_id', 'centrocostocompra_id', 'conceptogasto_id',
                             'estado', 'leyenda', 'tiposuspension_id', 'tipoalta', 'semaforo', 'facturas_apocrifas',
                             'facturas_apocrifas_consulta_at', 'facturas_apocrifas_detalle', 'emailoc', 'usuario_id',
@@ -53,7 +54,31 @@ class Proveedor extends Model implements Auditable
 			'deleted_at' => 'datetime',
             'facturas_apocrifas' => 'boolean',
             'facturas_apocrifas_consulta_at' => 'datetime',
+            'acepta_cheque_fisico' => 'boolean',
+            'acepta_echeq' => 'boolean',
 	];
+
+    /** ¿Acepta CHT en papel? Default true si el campo aún no migró. */
+    public function aceptaChequeFisico(): bool
+    {
+        return (bool) ($this->acepta_cheque_fisico ?? true);
+    }
+
+    /** ¿Acepta e-cheq? Default true si el campo aún no migró. */
+    public function aceptaEcheq(): bool
+    {
+        return (bool) ($this->acepta_echeq ?? true);
+    }
+
+    /**
+     * ¿Acepta este instrumento CHT? negociable E = e-cheq; resto = físico.
+     */
+    public function aceptaChequeNegociable(?string $negociable): bool
+    {
+        $esEcheq = strtoupper(trim((string) $negociable)) === 'E';
+
+        return $esEcheq ? $this->aceptaEcheq() : $this->aceptaChequeFisico();
+    }
 
     public function proveedor_exclusiones()
 	{

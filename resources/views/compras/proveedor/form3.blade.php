@@ -20,6 +20,10 @@
         $filasFormapago = $data->proveedor_formapagos;
     }
 @endphp
+@php
+    $aceptaChequeFisico = (bool) old('acepta_cheque_fisico', isset($data) ? ($data->acepta_cheque_fisico ?? true) : true);
+    $aceptaEcheq = (bool) old('acepta_echeq', isset($data) ? ($data->acepta_echeq ?? true) : true);
+@endphp
 <div id="tab3" class="card form3 tab-content" style="display: none">
     <div class="card-body">
 		<h3>Formas de pago</h3>
@@ -27,6 +31,22 @@
 			En cada rengl&oacute;n con datos son obligatorios: Nombre, Forma de pago y Moneda.
 			TC, CBU, Alias CBU, C.U.I.T., N&uacute;mero de cuenta, Banco y Medio de pago son opcionales.
 		</p>
+		<div class="border rounded px-3 py-2 mb-3" style="background:#f8f9fa; max-width:28rem;">
+			<div class="small text-muted mb-1">Cheques de terceros que acepta</div>
+			<div class="custom-control custom-checkbox custom-control-inline">
+				<input type="hidden" name="acepta_cheque_fisico" value="0">
+				<input type="checkbox" class="custom-control-input" id="acepta_cheque_fisico" name="acepta_cheque_fisico" value="1"
+					@checked($aceptaChequeFisico)>
+				<label class="custom-control-label" for="acepta_cheque_fisico">F&iacute;sico</label>
+			</div>
+			<div class="custom-control custom-checkbox custom-control-inline">
+				<input type="hidden" name="acepta_echeq" value="0">
+				<input type="checkbox" class="custom-control-input" id="acepta_echeq" name="acepta_echeq" value="1"
+					@checked($aceptaEcheq)>
+				<label class="custom-control-label" for="acepta_echeq">e-cheq</label>
+			</div>
+			<div class="small text-muted mt-1 mb-0">El programa de pagos solo asigna CHT del tipo marcado.</div>
+		</div>
     	<table class="table" id="formapago-table">
     		<thead>
     			<tr>
