@@ -381,6 +381,7 @@ class ConciliacionBancariaService
         int $mes,
         int $anio,
         bool $incluirAnteriores = false,
+        ?string $fechaDia = null,
     ): array {
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
@@ -434,6 +435,39 @@ class ConciliacionBancariaService
             $cuentacajaId,
         );
 
+        $fechaDiaNorm = null;
+        if ($fechaDia !== null && trim($fechaDia) !== '') {
+            try {
+                $fechaDiaNorm = Carbon::parse($fechaDia)->toDateString();
+            } catch (\Throwable) {
+                $fechaDiaNorm = null;
+            }
+        }
+        if ($fechaDiaNorm !== null
+            && ($fechaDiaNorm < $fechaDesde->toDateString() || $fechaDiaNorm > $fechaHasta->toDateString())
+        ) {
+            $extra = $this->cargarMovimientosInterbanking(
+                $empresaId,
+                $cuentaInterbanking,
+                Carbon::parse($fechaDiaNorm)->startOfDay(),
+                Carbon::parse($fechaDiaNorm)->endOfDay(),
+                $cuentacajaId,
+            );
+            $vistos = [];
+            foreach ($banco as $mov) {
+                $vistos[(string) ($mov['hash'] ?? '')] = true;
+            }
+            foreach ($extra as $mov) {
+                $h = (string) ($mov['hash'] ?? '');
+                if ($h === '' || isset($vistos[$h])) {
+                    continue;
+                }
+                $mov['fecha_extra'] = true;
+                $banco[] = $mov;
+                $vistos[$h] = true;
+            }
+        }
+
         $pares = ConciliacionBancariaPar::query()
             ->where('empresa_id', $empresaId)
             ->where('cuentacaja_id', $cuentacajaId)
@@ -445,9 +479,10 @@ class ConciliacionBancariaService
             ->limit(3000)
             ->get();
 
-        $hashesContables = [];
+        $hashesGlobal = $this->hashesConciliadosCuenta($empresaId, $cuentacajaId);
+        $hashesContablesMes = [];
         foreach ($contables as $mov) {
-            $hashesContables[(string) ($mov['hash'] ?? '')] = true;
+            $hashesContablesMes[(string) ($mov['hash'] ?? '')] = true;
         }
 
         $anteriores = [];
@@ -458,7 +493,7 @@ class ConciliacionBancariaService
                     continue;
                 }
                 $hash = (string) ($mov['hash'] ?? '');
-                if ($hash === '' || isset($hashesContables[$hash])) {
+                if ($hash === '' || isset($hashesContablesMes[$hash]) || isset($hashesGlobal['contables'][$hash])) {
                     continue;
                 }
                 $mov['anterior'] = true;
@@ -472,7 +507,7 @@ class ConciliacionBancariaService
                     break;
                 }
                 $hash = (string) ($mov['hash'] ?? '');
-                if ($hash === '' || isset($hashesContables[$hash])) {
+                if ($hash === '' || isset($hashesContablesMes[$hash]) || isset($hashesGlobal['contables'][$hash])) {
                     continue;
                 }
                 $mov['anterior'] = true;
@@ -484,6 +519,8 @@ class ConciliacionBancariaService
             'contables' => array_map(fn (array $mov) => $this->filaTableroContable($mov), array_merge($contables, $anteriores)),
             'banco' => array_map(fn (array $mov) => $this->filaTableroBanco($mov), $banco),
             'pares' => $pares->map(fn (ConciliacionBancariaPar $par) => $this->filaTableroPar($par))->all(),
+            'hashes_contables' => array_keys($hashesGlobal['contables']),
+            'hashes_banco' => array_keys($hashesGlobal['banco']),
         ];
     }
 
@@ -814,6 +851,46 @@ class ConciliacionBancariaService
     /**
      * @param  list<array{contable: array<string,mixed>, banco: array<string,mixed>}>  $pares
      */
+    public function persistirParesConciliados(int $empresaId, int $cuentacajaId, array $pares, ?int $usuarioId): int
+    {
+        $antes = ConciliacionBancariaPar::query()->where('cuentacaja_id', $cuentacajaId)->count();
+        $this->persistirPares($empresaId, $cuentacajaId, $pares, $usuarioId);
+
+        return ConciliacionBancariaPar::query()->where('cuentacaja_id', $cuentacajaId)->count() - $antes;
+    }
+
+    /**
+     * Hashes ya conciliados de la cuenta (todos los períodos).
+     *
+     * @return array{contables: array<string, true>, banco: array<string, true>}
+     */
+    public function hashesConciliadosCuenta(int $empresaId, int $cuentacajaId): array
+    {
+        $contables = [];
+        $banco = [];
+        ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->orderBy('id')
+            ->chunkById(2000, function ($chunk) use (&$contables, &$banco): void {
+                foreach ($chunk as $par) {
+                    $hc = (string) $par->hash_contable;
+                    $hb = (string) $par->hash_banco;
+                    if ($hc !== '') {
+                        $contables[$hc] = true;
+                    }
+                    if ($hb !== '') {
+                        $banco[$hb] = true;
+                    }
+                }
+            });
+
+        return ['contables' => $contables, 'banco' => $banco];
+    }
+
+    /**
+     * @param  list<array{contable: array<string,mixed>, banco: array<string,mixed>}>  $pares
+     */
     private function persistirPares(int $empresaId, int $cuentacajaId, array $pares, ?int $usuarioId): void
     {
         DB::transaction(function () use ($empresaId, $cuentacajaId, $pares, $usuarioId) {
@@ -841,8 +918,8 @@ class ConciliacionBancariaService
                     'hash_banco' => $hashB,
                     'contable_json' => $cont,
                     'banco_json' => $banco,
-                    'fecha_contable' => self::fechaDesdeYmdOString($cont['fecha'] ?? null),
-                    'fecha_banco' => self::fechaDesdeYmdOString($banco['process_date'] ?? null),
+                    'fecha_contable' => self::fechaDesdeYmdOString($cont['fecha'] ?? $cont['fecha_fmt'] ?? null),
+                    'fecha_banco' => self::fechaDesdeYmdOString($banco['process_date'] ?? $banco['fecha'] ?? null),
                     'importe' => ConciliacionBancariaHashSupport::importeFirmadoContable($cont),
                     'conciliado_por_usuario_id' => $usuarioId,
                     'conciliado_at' => now(),
@@ -1320,6 +1397,15 @@ class ConciliacionBancariaService
      */
     private function aplicarReclaCheques(array $arm, int $cuentacontableId, Carbon $fechaCorte): array
     {
+        // Contaduría ya trae el stock de Pendientes “de carátula”; no netear RECLA encima
+        // (en ex Itaú RSA el RECLA ≈ stock y dejaba cheques en 0 vs Excel).
+        $fuente = (string) ($arm['fuente'] ?? '');
+        if (str_contains($fuente, 'excel')) {
+            $arm['recla_cheques'] = 0.0;
+
+            return $arm;
+        }
+
         $recla = ConciliacionBancariaReclaSupport::netaAlCierre($cuentacontableId, $fechaCorte);
         $arm['recla_cheques'] = $recla;
         if (abs($recla) < 0.5) {
@@ -1332,7 +1418,7 @@ class ConciliacionBancariaService
         }
 
         $arm['suma_caratula'] = round($stock - $recla, 2);
-        $arm['fuente'] = (string) ($arm['fuente'] ?? '').'+recla';
+        $arm['fuente'] = $fuente.'+recla';
 
         return $arm;
     }

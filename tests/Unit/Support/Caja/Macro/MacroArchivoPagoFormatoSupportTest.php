@@ -130,6 +130,100 @@ class MacroArchivoPagoFormatoSupportTest extends TestCase
         $this->assertSame('', $bnf);
     }
 
+    public function test_orden_pago_cheque_con_fecha_distingue_cuotas_mismo_nro(): void
+    {
+        $a = MacroArchivoPagoFormatoSupport::ordenPagoCheque('OPP', 1, 126010, 82048489, '2026-12-05');
+        $b = MacroArchivoPagoFormatoSupport::ordenPagoCheque('OPP', 1, 126010, 82048489, '2027-01-05');
+        $c = MacroArchivoPagoFormatoSupport::ordenPagoCheque('OPP', 1, 126010, 82048489, '2027-02-05');
+
+        $this->assertNotSame($a, $b);
+        $this->assertNotSame($b, $c);
+        $this->assertLessThanOrEqual(30, strlen($a));
+        $this->assertLessThanOrEqual(30, strlen($b));
+        $this->assertLessThanOrEqual(30, strlen($c));
+        $this->assertSame('OPP-01-126010-82048489-261205', $a);
+        $this->assertSame('OPP-01-126010-82048489-270105', $b);
+        $this->assertSame('OPP-01-126010-82048489-270205', $c);
+    }
+
+    public function test_clave_fila_opg_no_colapsa_cuotas_diferidas_mismo_nro(): void
+    {
+        $base = [
+            'orden_pago' => 'OPP-01-126010-82048489-261205',
+            'medio' => 'cheque',
+            'referencia_cbu_o_cheque' => '82048489',
+        ];
+        $k1 = MacroArchivoPagoFormatoSupport::claveFilaOpg($base + ['fecha_cheque' => '2026-12-05']);
+        $k2 = MacroArchivoPagoFormatoSupport::claveFilaOpg([
+            'orden_pago' => 'OPP-01-126010-82048489-270105',
+            'medio' => 'cheque',
+            'referencia_cbu_o_cheque' => '82048489',
+            'fecha_cheque' => '2027-01-05',
+        ]);
+        $k3 = MacroArchivoPagoFormatoSupport::claveFilaOpg([
+            'orden_pago' => 'OPP-01-126010-82048489-270205',
+            'medio' => 'cheque',
+            'referencia_cbu_o_cheque' => '82048489',
+            'fecha_cheque' => '2027-02-05',
+        ]);
+
+        $this->assertCount(3, array_unique([$k1, $k2, $k3]));
+
+        // Simula el merge del servicio: 3 cuotas → 3 filas OPG.
+        $filas = [];
+        foreach ([$k1, $k2, $k3] as $i => $clave) {
+            $filas[$clave] = ['i' => $i];
+        }
+        $this->assertCount(3, $filas);
+
+        $opg = MacroArchivoPagoFormatoSupport::generarOpg([
+            [
+                'cuit' => '30710115296',
+                'sucursal_banco' => 651,
+                'orden_pago' => 'OPP-01-126010-82048489-261205',
+                'nombre' => 'PROVEEDOR',
+                'importe' => 100.0,
+                'cuenta_debito' => '365109401250715',
+                'referencia_cbu_o_cheque' => '82048489',
+                'modalidad' => MacroArchivoPagoFormatoSupport::MODALIDAD_CHEQUE_DIFERIDO,
+                'flag_entrega' => 1,
+                'fecha_pago' => '2026-11-12',
+                'fecha_cheque' => '2026-12-05',
+            ],
+            [
+                'cuit' => '30710115296',
+                'sucursal_banco' => 651,
+                'orden_pago' => 'OPP-01-126010-82048489-270105',
+                'nombre' => 'PROVEEDOR',
+                'importe' => 100.0,
+                'cuenta_debito' => '365109401250715',
+                'referencia_cbu_o_cheque' => '82048489',
+                'modalidad' => MacroArchivoPagoFormatoSupport::MODALIDAD_CHEQUE_DIFERIDO,
+                'flag_entrega' => 1,
+                'fecha_pago' => '2026-11-12',
+                'fecha_cheque' => '2027-01-05',
+            ],
+            [
+                'cuit' => '30710115296',
+                'sucursal_banco' => 651,
+                'orden_pago' => 'OPP-01-126010-82048489-270205',
+                'nombre' => 'PROVEEDOR',
+                'importe' => 100.0,
+                'cuenta_debito' => '365109401250715',
+                'referencia_cbu_o_cheque' => '82048489',
+                'modalidad' => MacroArchivoPagoFormatoSupport::MODALIDAD_CHEQUE_DIFERIDO,
+                'flag_entrega' => 1,
+                'fecha_pago' => '2026-11-12',
+                'fecha_cheque' => '2027-02-05',
+            ],
+        ]);
+        $lineas = array_values(array_filter(explode("\n", $opg)));
+        $this->assertCount(3, $lineas);
+        $this->assertStringContainsString('05/12/2026', $lineas[0]);
+        $this->assertStringContainsString('05/01/2027', $lineas[1]);
+        $this->assertStringContainsString('05/02/2027', $lineas[2]);
+    }
+
     public function test_modalidad_macro_vs_otros(): void
     {
         $this->assertSame(

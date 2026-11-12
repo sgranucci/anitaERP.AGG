@@ -233,7 +233,8 @@ final class ConciliacionBancariaPendientesCpromaeSupport
 
         $q = PosicionBancariaCheque::query()
             ->where('empresa_id', $empresaId)
-            ->where('cuentacaja_id', (int) $ccId);
+            ->where('cuentacaja_id', (int) $ccId)
+            ->where('activo', true);
 
         if ($numeros !== []) {
             $q->whereIn('numero_cheque', $numeros);

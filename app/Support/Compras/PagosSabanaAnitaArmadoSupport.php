@@ -79,7 +79,7 @@ final class PagosSabanaAnitaArmadoSupport
             $totalCab = abs((float) ($pago->pag_trec ?? 0));
             $totalPago = $totalMedios > 0.005 ? round($totalMedios, 2) : round($totalCab, 2);
 
-            $filas[] = [
+            $filaBase = [
                 'tipo_fila' => 'detalle',
                 'origen' => 'anita',
                 'pk_id' => 0,
@@ -130,6 +130,10 @@ final class PagosSabanaAnitaArmadoSupport
                 'anita_empresa' => $empresaAnita,
                 'anita_clave' => $clave,
             ];
+
+            foreach (self::expandirFilaPorCuotasPropios($filaBase, $desglose['cuotas_ch_propios'] ?? []) as $fila) {
+                $filas[] = $fila;
+            }
         }
 
         usort($filas, static function (array $a, array $b): int {
@@ -141,23 +145,115 @@ final class PagosSabanaAnitaArmadoSupport
     }
 
     /**
+     * Una fila por cuota de cheque propio diferido (como OPG.TXT / Anita clásico).
+     * Si hay 0–1 cuotas, deja la fila intacta.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  list<array{importe: float, emi: string, fecha: string, banco: string}>  $cuotas
+     * @return list<array<string, mixed>>
+     */
+    public static function expandirFilaPorCuotasPropios(array $fila, array $cuotas): array
+    {
+        if (count($cuotas) <= 1) {
+            if (count($cuotas) === 1) {
+                $c = $cuotas[0];
+                if (($c['emi'] ?? '') !== '') {
+                    $fila['ch_prop_emi'] = (string) $c['emi'];
+                }
+                if (($c['fecha'] ?? '') !== '') {
+                    $fila['fecha_cheque'] = (string) $c['fecha'];
+                }
+                if (($c['banco'] ?? '') !== '') {
+                    $fila['banco'] = (string) $c['banco'];
+                }
+            }
+
+            return [$fila];
+        }
+
+        $chOriginal = round((float) ($fila['ch_propios'] ?? 0), 2);
+        $totalOriginal = round((float) ($fila['total_pago'] ?? 0), 2);
+        $otros = round($totalOriginal - $chOriginal, 2);
+
+        $out = [];
+        foreach ($cuotas as $i => $cuota) {
+            $importe = round((float) ($cuota['importe'] ?? 0), 2);
+            $filaCuota = $fila;
+            $filaCuota['ch_propios'] = $importe;
+            $filaCuota['ch_prop_emi'] = (string) ($cuota['emi'] ?? '');
+            $filaCuota['fecha_cheque'] = (string) ($cuota['fecha'] ?? '');
+            $filaCuota['banco'] = (string) ($cuota['banco'] ?? '');
+            $filaCuota['tipo_medio'] = 'CHQ';
+
+            if ($i === 0) {
+                $filaCuota['total_pago'] = round($otros + $importe, 2);
+            } else {
+                foreach ([
+                    'efectivo', 'transferencia', 'ch_terceros', 'doc_propios', 'doc_terceros',
+                    'retencion_iva', 'retencion_gan', 'retencion_ibr', 'retencion_suss',
+                    'creditos', 'adelantos', 'varios', 'intercompany',
+                ] as $claveMedio) {
+                    $filaCuota[$claveMedio] = 0.0;
+                }
+                $filaCuota['comprobantes'] = '';
+                $filaCuota['comprobantes_links'] = [];
+                $filaCuota['comprobantes_refs'] = [];
+                $filaCuota['ch_terc_ent'] = '';
+                $filaCuota['doc_prop_emit'] = '';
+                $filaCuota['doc_terc_entr'] = '';
+                $filaCuota['centros_costo'] = '';
+                $filaCuota['ordenes_compra'] = '';
+                $filaCuota['ordenes_compra_links'] = [];
+                $filaCuota['total_pago'] = $importe;
+            }
+
+            $out[] = $filaCuota;
+        }
+
+        return $out;
+    }
+
+    /**
      * Fallback Anita: fecha de pago del cheque (axp_fecha_co). No usa la fecha de la OP.
      *
      * @param  array<string, mixed>  $out
      */
     private static function sumarFechaCheque(array &$out, object $axp, string $clave): void
     {
-        $iso = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($axp->axp_fecha_co ?? '');
-        if ($iso === '') {
+        $fechaTxt = self::fechaChequeDmyDesdeAxp($axp);
+        if ($fechaTxt === '') {
             return;
         }
+        $out['fechas_cheque'][$clave] = $fechaTxt;
+    }
+
+    private static function fechaChequeDmyDesdeAxp(object $axp): string
+    {
+        $iso = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($axp->axp_fecha_co ?? '');
+        if ($iso === '') {
+            return '';
+        }
         $partes = explode('-', $iso);
-        $out['fechas_cheque'][$clave] = sprintf(
+
+        return sprintf(
             '%02d/%02d/%04d',
             (int) ($partes[2] ?? 0),
             (int) ($partes[1] ?? 0),
             (int) ($partes[0] ?? 0),
         );
+    }
+
+    /**
+     * Distingue cuotas diferidas con el mismo nro (como cpromae: nro + fecha).
+     */
+    private static function claveCuotaCheque(string $base, object $axp): string
+    {
+        $fechaTxt = self::fechaChequeDmyDesdeAxp($axp);
+        if ($fechaTxt === '') {
+            return $base;
+        }
+
+        return $base.'@'.$fechaTxt;
     }
 
     public static function clavePago(int $empresa, string $tipo, int $rec): string
@@ -203,6 +299,7 @@ final class PagosSabanaAnitaArmadoSupport
             'comprobantes_refs' => [],
             'ch_prop_emi' => [],
             'fechas_cheque' => [],
+            'cuotas_ch_propios' => [],
             'ch_terc_ent' => [],
             'doc_prop_emit' => [],
             'doc_terc_entr' => [],
@@ -225,21 +322,32 @@ final class PagosSabanaAnitaArmadoSupport
                 $txt = '';
                 if ($nro !== '' && $nro !== '0') {
                     $txt = $nro.($bancoNom !== '' ? '/'.mb_substr($bancoNom, 0, 4).'.' : '');
-                    $out['ch_prop_emi'][$txt] = $txt;
                 }
-                self::sumarFechaCheque($out, $axp, $txt !== '' ? $txt : 'P:'.$nro);
+                $fechaTxt = self::fechaChequeDmyDesdeAxp($axp);
+                $claveCuota = self::claveCuotaCheque($txt !== '' ? $txt : 'P:'.$nro, $axp);
+                if ($txt !== '') {
+                    $out['ch_prop_emi'][$claveCuota] = $txt;
+                }
+                self::sumarFechaCheque($out, $axp, $claveCuota);
                 if ($bancoNom !== '') {
                     $out['bancos'][$bancoNom] = $bancoNom;
                 }
+                $out['cuotas_ch_propios'][] = [
+                    'importe' => round($monto, 2),
+                    'emi' => $txt,
+                    'fecha' => $fechaTxt,
+                    'banco' => $bancoNom,
+                ];
                 continue;
             }
 
             if (in_array($tipoAp, ['CHT', 'CTC', 'CTA'], true)) {
                 $out['ch_terceros'] += $monto;
+                $claveCuota = self::claveCuotaCheque('T:'.$nro, $axp);
                 if ($nro !== '' && $nro !== '0') {
-                    $out['ch_terc_ent'][$nro] = $nro;
+                    $out['ch_terc_ent'][$claveCuota] = $nro;
                 }
-                self::sumarFechaCheque($out, $axp, 'T:'.$nro);
+                self::sumarFechaCheque($out, $axp, $claveCuota);
                 continue;
             }
 

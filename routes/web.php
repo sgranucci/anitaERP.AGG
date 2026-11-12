@@ -1486,9 +1486,11 @@ Route::put('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomatic
 
 Route::get('contable/conciliacion-bancaria', 'Contable\ConciliacionBancariaController@index')->name('conciliacion_bancaria');
 Route::get('contable/conciliacion-bancaria/manual', 'Contable\ConciliacionBancariaController@manual')->name('conciliacion_bancaria_manual');
+Route::get('contable/conciliacion-bancaria/manual/exportar', 'Contable\ConciliacionBancariaController@exportarManual')->name('conciliacion_bancaria_manual_exportar');
 Route::get('contable/conciliacion-bancaria/api/enganche-cuentacaja', 'Contable\ConciliacionBancariaController@apiEngancheCuentacaja')->name('conciliacion_bancaria_api_enganche');
 Route::get('contable/conciliacion-bancaria/api/cuentacaja-por-codigo/{codigo}', 'Contable\ConciliacionBancariaController@apiCuentacajaPorCodigo')->name('conciliacion_bancaria_api_cuentacaja_por_codigo');
 Route::get('contable/conciliacion-bancaria/api/tablero', 'Contable\ConciliacionBancariaController@apiTablero')->name('conciliacion_bancaria_api_tablero');
+Route::post('contable/conciliacion-bancaria/api/sincronizar-dia', 'Contable\ConciliacionBancariaController@apiSincronizarDia')->name('conciliacion_bancaria_api_sincronizar_dia');
 Route::post('contable/conciliacion-bancaria/api/conciliar', 'Contable\ConciliacionBancariaController@apiConciliar')->name('conciliacion_bancaria_api_conciliar');
 Route::post('contable/conciliacion-bancaria/api/desconciliar', 'Contable\ConciliacionBancariaController@apiDesconciliar')->name('conciliacion_bancaria_api_desconciliar');
 Route::post('contable/conciliacion-bancaria/api/generar-gastos', 'Contable\ConciliacionBancariaController@apiGenerarGastos')->name('conciliacion_bancaria_api_generar_gastos');

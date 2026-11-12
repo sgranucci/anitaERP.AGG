@@ -116,10 +116,36 @@ function chequeraDesdeLista(lista, idActual, preferirDiferido) {
     return lista[0] || null;
 }
 
+function numerosChequeUsadosEnMismaTabla($tr, selectorNro) {
+    var usados = {};
+    var $tabla = $tr && $tr.length ? $tr.closest('tbody') : $();
+    if (!$tabla.length) {
+        return usados;
+    }
+    $tabla.find('tr').each(function () {
+        if ($tr && this === $tr[0]) {
+            return;
+        }
+        var n = String($(this).find(selectorNro).val() || '').replace(/\D/g, '');
+        if (n) {
+            usados[n] = true;
+        }
+    });
+    return usados;
+}
+
 function aplicarNumeroSugeridoCheque($tr, $nro, data, forzarNumero) {
     var auto = $nro.data('auto') === 1 || !$nro.val();
     if (data.proximo_numero && (forzarNumero || auto)) {
-        $nro.val(data.proximo_numero).data('auto', 1);
+        // Varias cuotas en la misma OP: no repetir el próximo de chequera en cada renglón.
+        var base = parseInt(String(data.proximo_numero).replace(/\D/g, ''), 10) || 0;
+        var selectorNro = $nro.is('.numerocheque_reemplazo') ? '.numerocheque_reemplazo' : '.numerocheque_emitido';
+        var usados = numerosChequeUsadosEnMismaTabla($tr, selectorNro);
+        var candidato = base;
+        while (candidato > 0 && usados[String(candidato)]) {
+            candidato += 1;
+        }
+        $nro.val(candidato > 0 ? String(candidato) : String(data.proximo_numero)).data('auto', 1);
     } else if ((forzarNumero || auto) && data.aviso && !data.proximo_numero) {
         $nro.val('').data('auto', 1);
     }

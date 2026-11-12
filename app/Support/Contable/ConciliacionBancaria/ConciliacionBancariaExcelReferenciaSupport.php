@@ -36,7 +36,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
         }
 
         try {
-            $libro = self::cargarLibroReferencia($ruta);
+            $libro = self::cargarLibroReferencia($ruta, array_merge(['CARATULA'], self::HOJAS_MES));
         } catch (Throwable $e) {
             throw new RuntimeException('Error abriendo Excel de referencia: '.$e->getMessage(), 0, $e);
         }
@@ -50,6 +50,8 @@ final class ConciliacionBancariaExcelReferenciaSupport
                 $vals = self::extraerDesdeHoja($libro, $fuente);
             }
         }
+        unset($libro);
+        gc_collect_cycles();
 
         // Algunas carátulas dejan "pendientes soporte" en 0 aunque el saldo ajustado
         // ya descuenta el TOTAL de MAYO (caso Rebisco mayo/2026).
@@ -246,11 +248,18 @@ final class ConciliacionBancariaExcelReferenciaSupport
             throw new RuntimeException('No se puede leer el Excel de referencia: '.$ruta);
         }
 
-        $libro = self::cargarLibroReferencia($ruta);
+        // Solo pendientes + mes actual (no las 12 hojas): baja mucho la memoria en Excels grandes.
+        $mesActual = self::HOJAS_MES[(int) date('n') - 1] ?? 'OCTUBRE';
+        // Preferimos octubre del corte típico AGG; el resolver case-insensitive elige la real.
+        $libro = self::cargarLibroReferencia($ruta, array_merge(
+            ['Pendientes', 'PENDIENTES', 'PEND NUEVO', 'Pend Nuevo'],
+            self::HOJAS_MES, // nombres wanted; setLoadSheetsOnly resuelve solo las que existen
+            [$mesActual],
+        ));
         $cheques = [];
         $sumaCh = 0.0;
 
-        $hoja = self::hojaPorNombres($libro, ['Pendientes', 'PENDIENTES']);
+        $hoja = self::hojaPorNombres($libro, ['Pendientes', 'PENDIENTES', 'PEND NUEVO', 'Pend Nuevo']);
         if ($hoja !== null) {
             $max = (int) $hoja->getHighestRow();
             for ($r = 6; $r <= $max; $r++) {
@@ -285,7 +294,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
         $hojaMayo = self::hojaMes($libro);
         if ($hojaMayo !== null) {
             $enBloque = false;
-            $max = min(120, (int) $hojaMayo->getHighestRow());
+            $max = min(250, (int) $hojaMayo->getHighestRow());
             for ($r = 1; $r <= $max; $r++) {
                 $blob = '';
                 for ($c = 1; $c <= 8; $c++) {
@@ -294,7 +303,9 @@ final class ConciliacionBancariaExcelReferenciaSupport
                         $blob .= ' '.self::normTexto($v);
                     }
                 }
-                if (str_contains($blob, 'movimientos bancarios pendientes')) {
+                if (str_contains($blob, 'movimientos bancarios pendientes')
+                    || str_contains($blob, 'mov pendientes')
+                    || str_contains($blob, 'movimientos pendientes de contabilizar')) {
                     $enBloque = true;
                     continue;
                 }
@@ -315,6 +326,9 @@ final class ConciliacionBancariaExcelReferenciaSupport
                 $sumaB += $fila['importe'];
             }
         }
+
+        unset($libro);
+        gc_collect_cycles();
 
         return [
             'cheques' => $cheques,
@@ -337,13 +351,15 @@ final class ConciliacionBancariaExcelReferenciaSupport
         }
 
         try {
-            $libro = self::cargarLibroReferencia($ruta);
+            $libro = self::cargarLibroReferencia($ruta, ['Saldo']);
         } catch (Throwable $e) {
             throw new RuntimeException('Error abriendo Excel de referencia: '.$e->getMessage(), 0, $e);
         }
 
         $hoja = $libro->getSheetByName('Saldo');
         if ($hoja === null) {
+            unset($libro);
+
             return [];
         }
 
@@ -372,6 +388,9 @@ final class ConciliacionBancariaExcelReferenciaSupport
             $out[$clave] ??= $codigo;
         }
 
+        unset($libro);
+        gc_collect_cycles();
+
         return $out;
     }
 
@@ -384,21 +403,206 @@ final class ConciliacionBancariaExcelReferenciaSupport
 
     /**
      * Evita OOM en Excels Contaduría con hojas fantasma (EXTRACTO NUEVO ~1M filas).
+     *
+     * @param  list<string>|null  $soloHojas
      */
-    private static function cargarLibroReferencia(string $ruta)
+    private static function cargarLibroReferencia(string $ruta, ?array $soloHojas = null)
     {
         $reader = IOFactory::createReaderForFile($ruta);
         if (method_exists($reader, 'setReadDataOnly')) {
             $reader->setReadDataOnly(true);
         }
         if (method_exists($reader, 'setLoadSheetsOnly')) {
-            $reader->setLoadSheetsOnly(array_merge(
-                ['CARATULA', 'Saldo', 'Pendientes', 'PENDIENTES', 'EXTRACTO', 'Extracto.', 'ING-GTOS DIARIOS'],
+            $wanted = $soloHojas ?? array_merge(
+                [
+                    'CARATULA', 'Saldo', 'Pendientes', 'PENDIENTES', 'PEND NUEVO', 'Pend Nuevo',
+                    'EXTRACTO', 'Extracto', 'Extracto.', 'ING-GTOS DIARIOS',
+                ],
                 self::HOJAS_MES,
-            ));
+            );
+            $hojas = self::resolverNombresHojasReales($ruta, $wanted, $reader);
+            if ($hojas !== []) {
+                $reader->setLoadSheetsOnly($hojas);
+            }
         }
 
         return $reader->load($ruta);
+    }
+
+    /**
+     * @param  list<string>  $wanted
+     * @return list<string>
+     */
+    private static function resolverNombresHojasReales(string $ruta, array $wanted, $reader = null): array
+    {
+        $wantedMap = [];
+        foreach ($wanted as $nombre) {
+            $wantedMap[mb_strtolower(trim($nombre))] = true;
+        }
+
+        try {
+            $reader ??= IOFactory::createReaderForFile($ruta);
+            $nombres = method_exists($reader, 'listWorksheetNames')
+                ? $reader->listWorksheetNames($ruta)
+                : [];
+        } catch (Throwable) {
+            return array_values($wanted);
+        }
+
+        $out = [];
+        foreach ($nombres as $nombre) {
+            if (isset($wantedMap[mb_strtolower(trim((string) $nombre))])) {
+                $out[] = (string) $nombre;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Lee el extracto Contaduría (solapa EXTRACTO / Extracto) normalizado al shape Interbanking.
+     *
+     * @return array{
+     *   account_number: string,
+     *   account_type: string,
+     *   bank_number: string,
+     *   denominacion: string,
+     *   movimientos: list<array<string, mixed>>,
+     *   archivo: string
+     * }
+     */
+    public static function leerExtracto(string $ruta): array
+    {
+        if (! is_readable($ruta)) {
+            throw new RuntimeException('No se puede leer el Excel de referencia: '.$ruta);
+        }
+
+        $libro = self::cargarLibroReferencia($ruta, ['EXTRACTO', 'Extracto', 'Extracto.']);
+        $hoja = self::hojaPorNombres($libro, ['EXTRACTO', 'Extracto', 'Extracto.']);
+        if ($hoja === null) {
+            unset($libro);
+            throw new RuntimeException('El Excel no tiene solapa EXTRACTO: '.basename($ruta));
+        }
+
+        $accountRaw = '';
+        $denominacion = '';
+        $maxScan = min(30, (int) $hoja->getHighestRow());
+        for ($r = 1; $r <= $maxScan; $r++) {
+            $a = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
+            $b = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(2, $r)));
+            $an = self::normTexto($a);
+            if (str_contains($an, 'tipo y nro') || str_contains($an, 'tipo y n') || $an === 'cuenta') {
+                $accountRaw = $b !== '' ? $b : $accountRaw;
+            }
+            if (str_contains($an, 'denominacion') || str_contains($an, 'denominación')) {
+                $denominacion = $b;
+            }
+            // A veces el nro de cuenta está solo en columna A con prefijo CC.
+            if ($accountRaw === '' && preg_match('/CC\s*\$/i', $a)) {
+                $accountRaw = $a;
+            }
+        }
+
+        $accountNumber = self::soloDigitos($accountRaw);
+        if ($accountNumber === '' || $accountNumber === '0') {
+            throw new RuntimeException('No se pudo derivar cuenta Interbanking desde EXTRACTO ('.basename($ruta).').');
+        }
+
+        $accountType = 'CC';
+        if (preg_match('/\b(CC|CA|CT)\b/i', $accountRaw, $m)) {
+            $accountType = strtoupper($m[1]);
+        }
+
+        $headerRow = 0;
+        $max = (int) $hoja->getHighestRow();
+        for ($r = 1; $r <= min(40, $max); $r++) {
+            $blob = '';
+            for ($c = 1; $c <= 12; $c++) {
+                $v = self::valorCelda($hoja->getCellByColumnAndRow($c, $r));
+                if (is_string($v) || is_numeric($v)) {
+                    $blob .= ' '.self::normTexto((string) $v);
+                }
+            }
+            if (str_contains($blob, 'fecha valor') && str_contains($blob, 'importe')) {
+                $headerRow = $r;
+                break;
+            }
+        }
+        if ($headerRow === 0) {
+            throw new RuntimeException('No se encontró cabecera de EXTRACTO en '.basename($ruta));
+        }
+
+        $movimientos = [];
+        for ($r = $headerRow + 1; $r <= $max; $r++) {
+            $fechaValor = self::celdaFechaAYmd(self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
+            $importe = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(8, $r)));
+            $concepto = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(3, $r)));
+            if ($fechaValor === null || $importe === null) {
+                // Fin de bloque o fila basura.
+                if ($concepto === '' && $importe === null) {
+                    continue;
+                }
+                if ($fechaValor === null) {
+                    continue;
+                }
+            }
+            if ($importe === null || abs($importe) < 0.00001) {
+                continue;
+            }
+
+            $voucherRaw = self::valorCelda($hoja->getCellByColumnAndRow(5, $r));
+            $voucherDigits = self::soloDigitos(is_scalar($voucherRaw) ? (string) $voucherRaw : '');
+            $voucher = $voucherDigits !== '' ? (int) $voucherDigits : 0;
+            $dc = $importe < 0 ? 'D' : 'C';
+            $codOp = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(4, $r)));
+            $descBank = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(9, $r)));
+            $codOpBco = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(10, $r)));
+            $pcc = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(11, $r)));
+            $suc = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(7, $r)));
+
+            $movimientos[] = [
+                'process_date' => $fechaValor.' 12:00:00',
+                'debit_credit_type' => $dc,
+                'amount' => round(abs($importe), 2),
+                'operation_code_ib' => $codOp,
+                'operation_code_bank' => $codOpBco,
+                'code_description_ib' => $concepto !== '' ? $concepto : $descBank,
+                'code_description_bank' => $descBank !== '' ? $descBank : $concepto,
+                'voucher_number' => $voucher,
+                'grouping_code_ib' => $pcc,
+                'branch_office_activity' => $suc,
+                'depositor_description' => '',
+                'customer_cuit' => null,
+                'depositor_code' => null,
+                'account_cbu' => null,
+                'importe_firmado' => round($importe, 2),
+            ];
+        }
+
+        unset($libro);
+        gc_collect_cycles();
+
+        return [
+            'account_number' => $accountNumber,
+            'account_type' => $accountType,
+            'bank_number' => '285', // Macro
+            'denominacion' => $denominacion,
+            'movimientos' => $movimientos,
+            'archivo' => basename($ruta),
+        ];
+    }
+
+    /**
+     * Extrae el código Anita del nombre de archivo Contaduría, p.ej. "(127) …" → "127".
+     */
+    public static function codigoCuentacajaDesdeNombreArchivo(string $rutaONombre): ?string
+    {
+        $base = basename($rutaONombre);
+        if (preg_match('/^\((\d+)\)/', $base, $m)) {
+            return ltrim($m[1], '0') !== '' ? ltrim($m[1], '0') : $m[1];
+        }
+
+        return null;
     }
 
     private static function hojaMes($libro)
@@ -414,6 +618,18 @@ final class ConciliacionBancariaExcelReferenciaSupport
         foreach ($nombres as $nombre) {
             $hoja = $libro->getSheetByName($nombre);
             if ($hoja !== null) {
+                return $hoja;
+            }
+        }
+
+        // Contaduría a veces usa "Octubre" / "Pendientes" con capitalización mixta.
+        $wanted = [];
+        foreach ($nombres as $nombre) {
+            $wanted[mb_strtolower(trim($nombre))] = true;
+        }
+        foreach ($libro->getAllSheets() as $hoja) {
+            $title = mb_strtolower(trim((string) $hoja->getTitle()));
+            if (isset($wanted[$title])) {
                 return $hoja;
             }
         }
@@ -448,9 +664,13 @@ final class ConciliacionBancariaExcelReferenciaSupport
     private static function filaMayoPendienteBanco($hoja, int $r): ?array
     {
         $layouts = [
-            // BSA (columnas corridas)
+            // BSA (columnas corridas, importe en G)
             ['fecha' => 2, 'ref' => 3, 'concepto' => 5, 'importe' => 7],
-            // KSA / RSA
+            // Ex Itaú / algunas carátulas (importe en F)
+            ['fecha' => 2, 'ref' => 3, 'concepto' => 5, 'importe' => 6],
+            // RSA ex Itaú: columnas corridas una más (C=Fecha … G=Importe)
+            ['fecha' => 3, 'ref' => 4, 'concepto' => 6, 'importe' => 7],
+            // KSA / RSA Gerli
             ['fecha' => 1, 'ref' => 2, 'concepto' => 4, 'importe' => 5],
         ];
 
@@ -460,7 +680,12 @@ final class ConciliacionBancariaExcelReferenciaSupport
             if ($importe === null || abs($importe) < 0.005) {
                 continue;
             }
-            if ($concepto === '' || str_contains(self::normTexto($concepto), 'gastos bancarios')) {
+            $conceptoNorm = self::normTexto($concepto);
+            // "Gastos bancarios" como título de bloque se salta; si trae importe propio, entra.
+            if ($concepto === '' || ($conceptoNorm === 'gastos bancarios' && abs($importe) < 0.005)) {
+                continue;
+            }
+            if (str_contains($conceptoNorm, 'gastos bancarios') && abs($importe) < 0.005) {
                 continue;
             }
             if (is_numeric($concepto)) {
@@ -469,7 +694,8 @@ final class ConciliacionBancariaExcelReferenciaSupport
             $fecha = self::valorCelda($hoja->getCellByColumnAndRow($layout['fecha'], $r));
             $ref = self::valorCelda($hoja->getCellByColumnAndRow($layout['ref'], $r));
             $fechaS = self::celdaFechaAYmd($fecha);
-            if ($fechaS === null && ! ($fecha instanceof \DateTimeInterface) && ! is_numeric($fecha)) {
+            $esGastosConImporte = str_contains($conceptoNorm, 'gastos bancarios') && abs($importe) >= 0.005;
+            if ($fechaS === null && ! ($fecha instanceof \DateTimeInterface) && ! is_numeric($fecha) && ! $esGastosConImporte) {
                 // Layout incorrecto (p.ej. "34.075.628" como fecha).
                 continue;
             }
@@ -503,7 +729,12 @@ final class ConciliacionBancariaExcelReferenciaSupport
         }
 
         $implicito = round($ajustado - $extracto - $cheques, 2);
-        if ($pend === null || (abs($pend) < 0.005 && abs($implicito) >= 0.005)) {
+        // Algunas carátulas (ex Itaú) ponen el pendiente con signo opuesto al de la identidad.
+        $signoOpuesto = $pend !== null
+            && abs($implicito) >= 0.005
+            && abs(abs($pend) - abs($implicito)) <= 1.0
+            && ($pend * $implicito) < 0;
+        if ($pend === null || (abs($pend) < 0.005 && abs($implicito) >= 0.005) || $signoOpuesto) {
             $vals['movimientos_pendientes_banco'] = $implicito;
         }
 

@@ -198,7 +198,7 @@ class PagosSabanaReporteService
 
         $filasDetalle = [];
         foreach ($cabeceras as $cab) {
-            $filasDetalle[] = $this->armarFila(
+            foreach ($this->armarFilas(
                 $cab,
                 $mediosPp,
                 $mediosIe,
@@ -208,7 +208,9 @@ class PagosSabanaReporteService
                 $aplicaciones,
                 $spCentros,
                 $formapagos,
-            );
+            ) as $fila) {
+                $filasDetalle[] = $fila;
+            }
         }
 
         $columnas = PagosSabanaColumnasSupport::resolverVisibles($filasDetalle);
@@ -337,7 +339,10 @@ class PagosSabanaReporteService
                 (string) ($filaErp['tip'] ?? ''),
                 (int) ($filaErp['numero_op'] ?? 0),
             );
-            $porClave[$clave] = $filaErp;
+            // Primera cuota conserva comprobantes/CC/OC; las siguientes van en cero.
+            if (! isset($porClave[$clave])) {
+                $porClave[$clave] = $filaErp;
+            }
         }
 
         foreach ($filas as &$fila) {
@@ -370,9 +375,12 @@ class PagosSabanaReporteService
             if (! empty($erpFila['anulado'])) {
                 $fila = $this->aplicarMarcaAnulada($fila);
             }
-            $fechaErp = trim((string) ($erpFila['fecha_cheque'] ?? ''));
-            if ($fechaErp !== '') {
-                $fila['fecha_cheque'] = $fechaErp;
+            // No pisar fechas/cuotas ya armadas por Anita (una fila por cheque diferido).
+            if (trim((string) ($fila['fecha_cheque'] ?? '')) === '') {
+                $fechaErp = trim((string) ($erpFila['fecha_cheque'] ?? ''));
+                if ($fechaErp !== '') {
+                    $fila['fecha_cheque'] = $fechaErp;
+                }
             }
         }
         unset($fila);
@@ -1282,9 +1290,9 @@ class PagosSabanaReporteService
      * @param  array<int, array{comprobantes: list<array<string, mixed>>, centros: list<string>|array, ocs: list<array<string, mixed>>|array}>  $aplicaciones
      * @param  array<int, list<string>>  $spCentros
      * @param  array{pp: array<int, string>, ie: array<int, string>}  $formapagos
-     * @return array<string, mixed>
+     * @return list<array<string, mixed>>
      */
-    private function armarFila(
+    private function armarFilas(
         object $cab,
         array $mediosPp,
         array $mediosIe,
@@ -1437,11 +1445,16 @@ class PagosSabanaReporteService
 
         $revertida = strtoupper(trim((string) ($cab->estado ?? ''))) === 'REVERTIDA'
             || (int) ($cab->pagoproveedor_revertido_por_id ?? 0) > 0;
-        if ($revertida) {
-            $fila = $this->aplicarMarcaAnulada($fila);
+
+        $filasExpandidas = PagosSabanaAnitaArmadoSupport::expandirFilaPorCuotasPropios(
+            $fila,
+            $desglose['cuotas_ch_propios'] ?? [],
+        );
+        if (! $revertida) {
+            return $filasExpandidas;
         }
 
-        return $fila;
+        return array_map(fn (array $f): array => $this->aplicarMarcaAnulada($f), $filasExpandidas);
     }
 
     /**
@@ -1472,6 +1485,7 @@ class PagosSabanaReporteService
         $chPropEmi = [];
         $chTercEnt = [];
         $fechasCheque = [];
+        $cuotasChPropios = [];
 
         foreach ($lineasCaja as $linea) {
             $importe = $this->importeMn($linea->monto ?? 0, $linea->moneda_id ?? 1, $linea->cotizacion ?? 1);
@@ -1512,22 +1526,31 @@ class PagosSabanaReporteService
             $texto = $nro !== '' ? ($nro.($bancoCh !== '' ? '/'.mb_substr($bancoCh, 0, 4).'.' : '')) : '';
 
             $fechaTxt = $this->fechaChequeDmy($cheque->fechapago ?? '');
+            // nro+fecha: cuotas diferidas con mismo numerocheque no deben pisarse.
+            $claveCuota = ($texto !== '' ? $texto : $origen.':'.$nro)
+                .($fechaTxt !== '' ? '@'.$fechaTxt : '');
             if ($fechaTxt !== '') {
-                $fechasCheque[$texto !== '' ? $texto : $origen.':'.$nro] = $fechaTxt;
+                $fechasCheque[$claveCuota !== '' ? $claveCuota : $fechaTxt] = $fechaTxt;
             }
 
             if ($origen === 'E') {
                 $out['ch_propios'] += $importe;
                 if ($texto !== '') {
-                    $chPropEmi[$texto] = $texto;
+                    $chPropEmi[$claveCuota !== '' ? $claveCuota : $texto] = $texto;
                 }
                 if ($bancoCh !== '') {
                     $bancos[$bancoCh] = $bancoCh;
                 }
+                $cuotasChPropios[] = [
+                    'importe' => round($importe, 2),
+                    'emi' => $texto,
+                    'fecha' => $fechaTxt,
+                    'banco' => $bancoCh,
+                ];
             } elseif ($origen === 'R') {
                 $out['ch_terceros'] += $importe;
                 if ($texto !== '') {
-                    $chTercEnt[$texto] = $texto;
+                    $chTercEnt[$claveCuota !== '' ? $claveCuota : $texto] = $texto;
                 }
             }
         }
@@ -1539,6 +1562,7 @@ class PagosSabanaReporteService
         $out['fecha_cheque'] = implode(' | ', array_values($fechasCheque));
         $out['ch_terc_ent'] = implode(' ', array_values($chTercEnt));
         $out['banco'] = implode(' | ', array_values($bancos));
+        $out['cuotas_ch_propios'] = $cuotasChPropios;
 
         return $out;
     }

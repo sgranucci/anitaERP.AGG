@@ -124,7 +124,7 @@ class MacroArchivoPagoService
                 $errores
             );
             foreach ($filasAnita as $f) {
-                $clave = $this->claveFila($f);
+                $clave = MacroArchivoPagoFormatoSupport::claveFilaOpg($f);
                 $filas[$clave] = $f;
                 $opsAnita[$this->claveOp((string) $f['tipo'], (int) $f['numero'])] = true;
             }
@@ -152,7 +152,7 @@ class MacroArchivoPagoService
                 $opsAnita
             );
             foreach ($filasErp as $f) {
-                $clave = $this->claveFila($f);
+                $clave = MacroArchivoPagoFormatoSupport::claveFilaOpg($f);
                 if (! isset($filas[$clave])) {
                     $filas[$clave] = $f;
                 }
@@ -646,7 +646,14 @@ class MacroArchivoPagoService
                         self::fechaYmd($ch->fechaemision) ?? '',
                         self::fechaYmd($ch->fechapago) ?? ''
                     );
-                    $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipo, $suc, $rec, $nroCh);
+                    $fechaCheque = self::fechaYmd($ch->fechapago);
+                    $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque(
+                        $tipo,
+                        $suc,
+                        $rec,
+                        $nroCh,
+                        $fechaCheque
+                    );
                     $ordenPagoRtn = $orden;
                     $filas[] = [
                         'origen' => 'ERP',
@@ -658,7 +665,7 @@ class MacroArchivoPagoService
                         'sucursal' => $suc,
                         'numero' => $rec,
                         'fecha' => $fecha,
-                        'fecha_cheque' => self::fechaYmd($ch->fechapago),
+                        'fecha_cheque' => $fechaCheque,
                         'cbu' => '',
                         'importe' => $imp,
                         'orden_pago' => $orden,
@@ -880,7 +887,7 @@ class MacroArchivoPagoService
             }
             $n = (int) ($f['referencia_cbu_o_cheque'] ?? 0);
             if ($n > 0) {
-                $yaCheques[$n] = true;
+                $yaCheques[$n.'|'.trim((string) ($f['fecha_cheque'] ?? ''))] = true;
             }
         }
 
@@ -921,7 +928,9 @@ class MacroArchivoPagoService
             if ($nroCh <= 0 || $imp < 0.005) {
                 continue;
             }
-            if (isset($yaCheques[$nroCh])) {
+            $fechaCheque = self::fechaYmd($ch->fechapago);
+            $claveCheque = $nroCh.'|'.trim((string) $fechaCheque);
+            if (isset($yaCheques[$claveCheque])) {
                 continue;
             }
 
@@ -956,9 +965,15 @@ class MacroArchivoPagoService
             $fecha = self::fechaYmd($mov->fecha ?? $ch->fechaemision);
             $modalidad = MacroArchivoPagoFormatoSupport::modalidadCheque(
                 self::fechaYmd($ch->fechaemision) ?? '',
-                self::fechaYmd($ch->fechapago) ?? ''
+                $fechaCheque ?? ''
             );
-            $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipoOpg, $suc, max($rec, 0), $nroCh);
+            $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque(
+                $tipoOpg,
+                $suc,
+                max($rec, 0),
+                $nroCh,
+                $fechaCheque
+            );
 
             $filas[] = [
                 'origen' => 'ERP-CANJE',
@@ -970,7 +985,7 @@ class MacroArchivoPagoService
                 'sucursal' => $suc,
                 'numero' => $rec,
                 'fecha' => $fecha,
-                'fecha_cheque' => self::fechaYmd($ch->fechapago),
+                'fecha_cheque' => $fechaCheque,
                 'cbu' => '',
                 'importe' => $imp,
                 'orden_pago' => $orden,
@@ -982,7 +997,7 @@ class MacroArchivoPagoService
                 ),
                 'sucursal_banco' => $sucursalBanco,
             ];
-            $yaCheques[$nroCh] = true;
+            $yaCheques[$claveCheque] = true;
 
             if ($cuit !== '' && $prov) {
                 $beneficiarios[$cuit] = $this->beneficiarioDesdeProveedorErp(
@@ -1143,12 +1158,6 @@ class MacroArchivoPagoService
         return $comps;
     }
 
-    private function claveFila(array $f): string
-    {
-        return strtoupper((string) ($f['orden_pago'] ?? ''))
-            .'|'.(string) ($f['medio'] ?? '')
-            .'|'.(string) ($f['referencia_cbu_o_cheque'] ?? '');
-    }
 
     /**
      * OP originales en ERP ya dadas de baja o revertidas (no compensatorios AOP).

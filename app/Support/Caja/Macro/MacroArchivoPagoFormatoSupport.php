@@ -275,15 +275,56 @@ final class MacroArchivoPagoFormatoSupport
         return sprintf('%3.3s-%04d-%08d', strtoupper(substr(trim($tipo), 0, 3)), $sucursal, $numero);
     }
 
-    public static function ordenPagoCheque(string $tipo, int $sucursal, int $numero, int $nroCheque): string
-    {
+    /**
+     * Identificador OPG de un cheque. Con fecha de pago cabe en 30 chars y distingue
+     * cuotas diferidas que reutilizan el mismo numerocheque (nro + fecha, como cpromae).
+     */
+    public static function ordenPagoCheque(
+        string $tipo,
+        int $sucursal,
+        int $numero,
+        int $nroCheque,
+        ?string $fechaChequeYmd = null
+    ): string {
+        $tipo3 = strtoupper(substr(trim($tipo), 0, 3));
+        $ymd = self::ymdSoloDigitos((string) $fechaChequeYmd);
+        if (strlen($ymd) >= 8) {
+            // OPP-01-126010-82048489-261205 (29) — único por nro+fecha sin truncar el pad 30.
+            return sprintf(
+                '%3.3s-%02d-%06d-%08d-%s',
+                $tipo3,
+                $sucursal % 100,
+                $numero % 1_000_000,
+                $nroCheque,
+                substr($ymd, 2, 6)
+            );
+        }
+
         return sprintf(
             '%3.3s-%04d-%08d-%08d',
-            strtoupper(substr(trim($tipo), 0, 3)),
+            $tipo3,
             $sucursal,
             $numero,
             $nroCheque
         );
+    }
+
+    /**
+     * Clave de dedupe OPG: cheques diferidos con mismo nro no deben colapsar.
+     *
+     * @param  array<string, mixed>  $f
+     */
+    public static function claveFilaOpg(array $f): string
+    {
+        $clave = strtoupper((string) ($f['orden_pago'] ?? ''))
+            .'|'.(string) ($f['medio'] ?? '')
+            .'|'.(string) ($f['referencia_cbu_o_cheque'] ?? '');
+
+        if (strtolower((string) ($f['medio'] ?? '')) === 'cheque') {
+            $clave .= '|'.trim((string) ($f['fecha_cheque'] ?? ''));
+        }
+
+        return $clave;
     }
 
     /**

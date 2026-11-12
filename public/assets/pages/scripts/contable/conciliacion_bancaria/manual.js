@@ -1,6 +1,8 @@
 (function () {
     var cfg = window.conciliacionManual || {};
-    var estado = { contables: [], banco: [], pares: [] };
+    var estado = { contables: [], banco: [], pares: [], hashes_contables: [], hashes_banco: [] };
+    var mapHashesC = {};
+    var mapHashesB = {};
     var selC = null;
     var selB = null;
     var tope = 250;
@@ -64,8 +66,39 @@
         return n === null ? null : Math.abs(n);
     }
 
+    function fechaFiltro() {
+        var el = document.getElementById('filtro-fecha');
+        return el && el.value ? el.value : '';
+    }
+
+    function fechaMov(mov, lado) {
+        if (lado === 'c') {
+            var f = String(mov.fecha || '');
+            if (/^\d{4}-\d{2}-\d{2}/.test(f)) return f.substring(0, 10);
+            var fmt = String(mov.fecha_fmt || '');
+            var m = fmt.match(/^(\d{2})\/(\d{2})\/(\d{2,4})$/);
+            if (m) {
+                var yy = m[3].length === 2 ? ('20' + m[3]) : m[3];
+                return yy + '-' + m[2] + '-' + m[1];
+            }
+            return '';
+        }
+        return String(mov.process_date || '').substring(0, 10);
+    }
+
     function difImporte(mov, imp) {
         return Math.abs(Math.abs(Number(mov.importe) || 0) - imp);
+    }
+
+    function rebuildHashMaps() {
+        mapHashesC = {};
+        mapHashesB = {};
+        (estado.hashes_contables || []).forEach(function (h) { mapHashesC[h] = true; });
+        (estado.hashes_banco || []).forEach(function (h) { mapHashesB[h] = true; });
+        (estado.pares || []).forEach(function (p) {
+            if (p.hash_contable) mapHashesC[p.hash_contable] = true;
+            if (p.hash_banco) mapHashesB[p.hash_banco] = true;
+        });
     }
 
     function pasa(mov, lado, ignorarConciliados) {
@@ -74,8 +107,10 @@
             ? texto(mov.tipo_comp + ' ' + mov.descripcion + ' ' + mov.nro_asiento_fmt + ' ' + mov.nro)
             : texto(mov.code_description_ib + ' ' + mov.code_description_bank + ' ' + mov.voucher_number);
         if (q && blob.indexOf(q) === -1) return false;
+        var fFiltro = fechaFiltro();
+        if (fFiltro && fechaMov(mov, lado) !== fFiltro) return false;
         if (!ignorarConciliados && document.getElementById('solo-pendientes').checked) {
-            var usados = lado === 'c' ? hashesContables() : hashesBanco();
+            var usados = lado === 'c' ? mapHashesC : mapHashesB;
             if (usados[mov.hash]) return false;
         }
         return true;
@@ -90,22 +125,12 @@
             .sort(function (a, b) { return difImporte(a, imp) - difImporte(b, imp); });
     }
 
-    function hashesContables() {
-        var map = {};
-        estado.pares.forEach(function (p) { map[p.hash_contable] = p; });
-        return map;
-    }
-
-    function hashesBanco() {
-        var map = {};
-        estado.pares.forEach(function (p) { map[p.hash_banco] = p; });
-        return map;
-    }
-
     function filaHtml(mov, lado, imp) {
         var activo = (lado === 'c' ? selC : selB) && (lado === 'c' ? selC.hash : selB.hash) === mov.hash;
         var sugerido = mov._sugerido ? ' background:#FDEBD0;' : '';
-        var marca = mov.anterior ? ' <span class="badge badge-secondary">anterior</span>' : '';
+        var marca = '';
+        if (mov.anterior) marca += ' <span class="badge badge-secondary">anterior</span>';
+        if (mov.fecha_extra) marca += ' <span class="badge badge-info">día extra</span>';
         var dif = (imp != null && difImporte(mov, imp) > 0.02)
             ? ' <span class="small text-muted">dif. ' + dinero(difImporte(mov, imp)) + '</span>'
             : '';
@@ -118,12 +143,20 @@
             + '<div class="small text-muted text-truncate">' + det + '</div></div>';
     }
 
+    function labelModo(modo) {
+        if (modo === 'cierre_contaduria') return 'cierre Contaduría';
+        if (modo === 'manual') return 'manual';
+        return modo || 'auto';
+    }
+
     function pintar() {
         var imp = importeFiltro();
         var cont = porImporte(estado.contables.filter(function (m) { return pasa(m, 'c'); }), imp);
         var ban = porImporte(estado.banco.filter(function (m) { return pasa(m, 'b'); }), imp);
-        document.getElementById('cuenta-contable').textContent = cont.length + ' / ' + estado.contables.length;
-        document.getElementById('cuenta-banco').textContent = ban.length + ' / ' + estado.banco.length;
+        var pendC = estado.contables.filter(function (m) { return !mapHashesC[m.hash]; }).length;
+        var pendB = estado.banco.filter(function (m) { return !mapHashesB[m.hash]; }).length;
+        document.getElementById('cuenta-contable').textContent = cont.length + ' visibles · ' + pendC + ' pend. / ' + estado.contables.length;
+        document.getElementById('cuenta-banco').textContent = ban.length + ' visibles · ' + pendB + ' pend. / ' + estado.banco.length;
         document.getElementById('lista-contable').innerHTML = cont.slice(0, tope).map(function (m) { return filaHtml(m, 'c', imp); }).join('')
             || '<div class="p-3 text-muted">Sin movimientos con este filtro.</div>';
         document.getElementById('lista-banco').innerHTML = ban.slice(0, tope).map(function (m) { return filaHtml(m, 'b', imp); }).join('')
@@ -134,7 +167,7 @@
             var ocultos = porImporte(estado.contables.filter(function (m) { return pasa(m, 'c', true); }), imp).length
                 || porImporte(estado.banco.filter(function (m) { return pasa(m, 'b', true); }), imp).length;
             aviso.textContent = ocultos
-                ? 'Ese importe ya está conciliado. Destildá Solo pendientes para verlo.'
+                ? 'Ese importe ya está conciliado (puede ser de otro mes). Destildá Solo pendientes para verlo.'
                 : 'No hay movimientos por ' + dinero(imp) + '.';
         } else if (aprox) {
             var mejor = cont.concat(ban).slice().sort(function (a, b) { return difImporte(a, imp) - difImporte(b, imp); })[0];
@@ -147,11 +180,16 @@
         var pares = estado.pares.map(function (p) {
             return '<div class="px-2 py-1 border-bottom d-flex justify-content-between align-items-center">'
                 + '<span class="small">' + escapar((p.fecha_contable || '') + ' ' + (p.detalle_contable || '') + ' ↔ ' + (p.fecha_banco || '') + ' ' + (p.detalle_banco || ''))
-                + ' <span class="badge badge-light">' + escapar(p.modo || '') + '</span></span>'
+                + ' <span class="badge badge-light">' + escapar(labelModo(p.modo)) + '</span></span>'
                 + '<span><strong class="mr-2">' + dinero(p.importe) + '</strong>'
                 + '<button type="button" class="btn btn-outline-danger btn-sm js-desconciliar" data-id="' + p.id + '">Desconciliar</button></span></div>';
         }).join('');
         document.getElementById('lista-pares').innerHTML = pares || '<div class="p-2 text-muted">Todavía no hay cruces en el mes.</div>';
+
+        var sugerido = document.querySelector('.js-fila[style*="FDEBD0"]');
+        if (sugerido && sugerido.scrollIntoView) {
+            sugerido.scrollIntoView({ block: 'nearest' });
+        }
     }
 
     function buscar(lista, hash) {
@@ -168,7 +206,7 @@
         estado.banco.forEach(function (m) { m._sugerido = false; });
         var base = lado === 'c' ? selC : selB;
         var otra = lado === 'c' ? estado.banco : estado.contables;
-        var usados = lado === 'c' ? hashesBanco() : hashesContables();
+        var usados = lado === 'c' ? mapHashesB : mapHashesC;
         if (base) {
             otra.forEach(function (m) {
                 if (!usados[m.hash] && Math.abs(Math.abs(m.importe) - Math.abs(base.importe)) <= 0.05) m._sugerido = true;
@@ -181,29 +219,74 @@
     function actualizarEstado() {
         var el = document.getElementById('estado-cruce');
         if (!selC || !selB) {
-            el.textContent = 'Elegí uno de cada lado. Enter concilia. Los importes iguales quedan marcados.';
+            el.textContent = 'Elegí uno de cada lado. Enter concilia · Esc limpia selección.';
             return;
         }
         var diff = Math.round(((Number(selC.importe) || 0) - (Number(selB.importe) || 0)) * 100) / 100;
         el.textContent = 'Diferencia ' + dinero(diff);
     }
 
+    function queryTablero() {
+        return '?empresa_id=' + cfg.empresaId + '&cuentacaja_id=' + cfg.cuentacajaId
+            + '&mes=' + cfg.mes + '&anio=' + cfg.anio
+            + (document.getElementById('incluir-anteriores').checked ? '&incluir_anteriores=1' : '')
+            + (fechaFiltro() ? '&fecha=' + encodeURIComponent(fechaFiltro()) : '');
+    }
+
     function cargar() {
         overlay(true, 'Cargando movimientos…');
-        var url = cfg.tableroUrl + '?empresa_id=' + cfg.empresaId + '&cuentacaja_id=' + cfg.cuentacajaId
-            + '&mes=' + cfg.mes + '&anio=' + cfg.anio
-            + (document.getElementById('incluir-anteriores').checked ? '&incluir_anteriores=1' : '');
-        fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        fetch(cfg.tableroUrl + queryTablero(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) throw new Error(data.error || 'No se pudo cargar');
                 estado = data;
+                estado.hashes_contables = data.hashes_contables || [];
+                estado.hashes_banco = data.hashes_banco || [];
+                rebuildHashMaps();
                 selC = null;
                 selB = null;
                 pintar();
             })
             .catch(function (e) { alert(e.message || 'Error'); })
             .finally(function () { overlay(false); });
+    }
+
+    function traerBanco() {
+        var fecha = fechaFiltro();
+        if (!fecha) {
+            alert('Indicá una fecha para traer movimientos del banco (ej. cheques debitados ese día).');
+            return;
+        }
+        overlay(true, 'Consultando Interbanking…');
+        var body = new URLSearchParams();
+        body.set('empresa_id', cfg.empresaId);
+        body.set('cuentacaja_id', cfg.cuentacajaId);
+        body.set('fecha', fecha);
+        fetch(cfg.sincronizarUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRF-TOKEN': token(), 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body.toString()
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            if (!data.ok) throw new Error(data.error || 'No se pudo sincronizar');
+            overlay(true, 'Actualizando tablero…');
+            return fetch(cfg.tableroUrl + queryTablero(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(function (r) { return r.json(); })
+                .then(function (tablero) {
+                    if (!tablero.ok) throw new Error(tablero.error || 'No se pudo cargar');
+                    estado = tablero;
+                    estado.hashes_contables = tablero.hashes_contables || [];
+                    estado.hashes_banco = tablero.hashes_banco || [];
+                    rebuildHashMaps();
+                    selC = null;
+                    selB = null;
+                    pintar();
+                    var aviso = document.getElementById('estado-cruce');
+                    aviso.textContent = 'IB ' + fecha + ': ' + (data.filas || 0) + ' fila(s) sincronizada(s).';
+                });
+        }).catch(function (e) {
+            alert(e.message || 'Error');
+        }).finally(function () { overlay(false); });
     }
 
     function conciliar(forzar) {
@@ -244,7 +327,7 @@
             return;
         }
         var otra = selC ? estado.banco : estado.contables;
-        var usados = selC ? hashesBanco() : hashesContables();
+        var usados = selC ? mapHashesB : mapHashesC;
         var mejor = null;
         var mejorDiff = 1e12;
         otra.forEach(function (m) {
@@ -263,6 +346,11 @@
         else selC = mejor;
         actualizarEstado();
         pintar();
+    }
+
+    function exportar() {
+        var url = cfg.exportarUrl + queryTablero();
+        window.location.href = url;
     }
 
     document.addEventListener('click', function (ev) {
@@ -295,12 +383,28 @@
 
     document.getElementById('btn-conciliar').addEventListener('click', function () { conciliar(false); });
     document.getElementById('btn-sugerir').addEventListener('click', sugerir);
+    document.getElementById('btn-traer-banco').addEventListener('click', traerBanco);
+    document.getElementById('btn-exportar').addEventListener('click', function (ev) {
+        ev.preventDefault();
+        exportar();
+    });
     ['filtro-texto', 'filtro-importe'].forEach(function (id) {
         document.getElementById(id).addEventListener('input', pintar);
+    });
+    document.getElementById('filtro-fecha').addEventListener('change', function () {
+        cargar();
     });
     document.getElementById('solo-pendientes').addEventListener('change', pintar);
     document.getElementById('incluir-anteriores').addEventListener('change', cargar);
     document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') {
+            selC = null;
+            selB = null;
+            estado.contables.forEach(function (m) { m._sugerido = false; });
+            estado.banco.forEach(function (m) { m._sugerido = false; });
+            pintar();
+            return;
+        }
         if (ev.key === 'Enter' && (ev.target.id === 'filtro-texto' || ev.target.id === 'filtro-importe' || ev.target.tagName === 'BODY')) {
             ev.preventDefault();
             conciliar(false);

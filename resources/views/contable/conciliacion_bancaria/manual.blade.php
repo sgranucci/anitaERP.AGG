@@ -13,7 +13,9 @@
         anio: {{ (int) $anio }},
         tableroUrl: @json(route('conciliacion_bancaria_api_tablero')),
         conciliarUrl: @json(route('conciliacion_bancaria_api_conciliar')),
-        desconciliarUrl: @json(route('conciliacion_bancaria_api_desconciliar'))
+        desconciliarUrl: @json(route('conciliacion_bancaria_api_desconciliar')),
+        sincronizarUrl: @json(route('conciliacion_bancaria_api_sincronizar_dia')),
+        exportarUrl: @json(route('conciliacion_bancaria_manual_exportar'))
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/contable/conciliacion_bancaria/manual.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/conciliacion_bancaria/manual.js')) ?: time() }}"></script>
@@ -41,6 +43,10 @@
             <div class="card-body pb-2">
                 <div class="d-flex flex-wrap align-items-end mb-2" style="gap:8px;">
                     <div>
+                        <label class="mb-0 small" for="filtro-fecha">Fecha</label>
+                        <input type="date" id="filtro-fecha" class="form-control form-control-sm" style="width:150px;" title="Filtra y permite traer movimientos IB de ese día">
+                    </div>
+                    <div>
                         <label class="mb-0 small" for="filtro-texto">Texto</label>
                         <input type="text" id="filtro-texto" class="form-control form-control-sm" placeholder="Detalle, tipo, comprobante" style="width:220px;">
                     </div>
@@ -56,8 +62,14 @@
                         <input type="checkbox" class="form-check-input" id="incluir-anteriores">
                         <label class="form-check-label" for="incluir-anteriores">Incluir pendientes anteriores</label>
                     </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-traer-banco" title="Consulta Interbanking y persiste movimientos de la fecha">
+                        <i class="fa fa-cloud-download-alt"></i> Traer del banco
+                    </button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-sugerir">Sugerir par</button>
                     <button type="button" class="btn btn-success btn-sm" id="btn-conciliar">Conciliar</button>
+                    <a href="#" class="btn btn-outline-success btn-sm" id="btn-exportar">
+                        <i class="fa fa-file-excel"></i> Excel
+                    </a>
                     <span class="small text-muted" id="estado-cruce"></span>
                 </div>
                 <div class="row">

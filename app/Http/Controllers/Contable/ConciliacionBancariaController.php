@@ -3,14 +3,19 @@
 namespace App\Http\Controllers\Contable;
 
 use App\Exports\Contable\ConciliacionBancariaExport;
+use App\Exports\Contable\ConciliacionBancariaManualExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\Cuentacaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Caja\InterbankingMovimientoPersistenciaService;
+use App\Services\Caja\InterbankingService;
 use App\Services\Contable\ConciliacionBancariaGastoDocumentoService;
 use App\Services\Contable\ConciliacionBancariaService;
+use App\Support\Caja\InterbankingCuentacajaParametrosSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaEngancheSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use Auth;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 
@@ -268,6 +273,66 @@ class ConciliacionBancariaController extends Controller
         ]);
     }
 
+    public function exportarManual(Request $request)
+    {
+        if (! can('exportar-conciliacion-bancaria', false) && ! can('ejecutar-conciliacion-bancaria', false)) {
+            can('exportar-conciliacion-bancaria');
+        }
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $mes = max(1, min(12, (int) $request->input('mes')));
+        $anio = max(2000, (int) $request->input('anio'));
+        $fechaDia = trim((string) $request->input('fecha', ''));
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0) {
+            return redirect()
+                ->route('conciliacion_bancaria_manual', $request->only(['empresa_id', 'cuentacaja_id', 'mes', 'anio']))
+                ->with('errores', ['Faltan empresa o cuenta de caja.']);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        try {
+            $tablero = $this->service->tableroManual(
+                $empresaId,
+                $cuentacajaId,
+                $mes,
+                $anio,
+                $request->boolean('incluir_anteriores'),
+                $fechaDia !== '' ? $fechaDia : null,
+            );
+            $cc = Cuentacaja::query()->find($cuentacajaId);
+            $nombre = sprintf(
+                'conciliacion_manual_%s_%02d_%d.xlsx',
+                $cc->codigo ?? 'cuenta',
+                $mes,
+                $anio,
+            );
+
+            return (new ConciliacionBancariaManualExport)
+                ->parametros($tablero, [
+                    'cuenta' => trim(($cc->codigo ?? '').' '.($cc->nombre ?? '')),
+                    'empresa' => 'empresa '.$empresaId,
+                    'mes' => $mes,
+                    'anio' => $anio,
+                ])
+                ->descargar($nombre);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('conciliacion_bancaria_manual', [
+                    'empresa_id' => $empresaId,
+                    'cuentacaja_id' => $cuentacajaId,
+                    'mes' => $mes,
+                    'anio' => $anio,
+                ])
+                ->with('errores', [$e->getMessage()]);
+        }
+    }
+
     public function apiTablero(Request $request)
     {
         can('ejecutar-conciliacion-bancaria');
@@ -276,6 +341,7 @@ class ConciliacionBancariaController extends Controller
         $cuentacajaId = (int) $request->input('cuentacaja_id');
         $mes = max(1, min(12, (int) $request->input('mes')));
         $anio = max(2000, (int) $request->input('anio'));
+        $fechaDia = trim((string) $request->input('fecha', ''));
 
         if ($empresaId <= 0 || $cuentacajaId <= 0) {
             return response()->json(['ok' => false, 'error' => 'Empresa y cuenta de caja requeridas.'], 422);
@@ -291,12 +357,97 @@ class ConciliacionBancariaController extends Controller
                 $mes,
                 $anio,
                 $request->boolean('incluir_anteriores'),
+                $fechaDia !== '' ? $fechaDia : null,
             );
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         }
 
         return response()->json(['ok' => true] + $tablero);
+    }
+
+    public function apiSincronizarDia(
+        Request $request,
+        InterbankingService $interbankingService,
+        InterbankingMovimientoPersistenciaService $persistenciaService,
+    ) {
+        can('ejecutar-conciliacion-bancaria');
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $fecha = trim((string) $request->input('fecha', ''));
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || $fecha === '') {
+            return response()->json(['ok' => false, 'error' => 'Empresa, cuenta y fecha son requeridas.'], 422);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        try {
+            $dia = Carbon::parse($fecha)->toDateString();
+        } catch (\Throwable) {
+            return response()->json(['ok' => false, 'error' => 'Fecha inválida.'], 422);
+        }
+
+        $cuenta = Cuentacaja::query()->with(['bancos', 'monedas'])->find($cuentacajaId);
+        if (! $cuenta || ! $cuenta->perteneceAEmpresa($empresaId)) {
+            return response()->json(['ok' => false, 'error' => 'Cuenta de caja inválida.'], 422);
+        }
+
+        $accountNumber = trim((string) ($cuenta->cuenta_interbanking ?? ''));
+        if ($accountNumber === '') {
+            return response()->json(['ok' => false, 'error' => 'La cuenta no tiene Interbanking configurado.'], 422);
+        }
+
+        $params = InterbankingCuentacajaParametrosSupport::parametrosApiDesdeCuentacaja($cuenta, $empresaId);
+        $bankNumber = $params['bank_number'] ?? InterbankingCuentacajaParametrosSupport::normalizarBankNumber3(
+            (string) ($cuenta->bancos?->codigo ?? '285')
+        );
+        if ($bankNumber === '' || $bankNumber === '000') {
+            $bankNumber = '285';
+        }
+        $accountType = $params['account_type'] ?? 'CC';
+        $currency = $params['currency'] ?? 'ARS';
+
+        $filas = 0;
+        $errores = [];
+        foreach (['dia', 'anteriores'] as $movementType) {
+            $res = $persistenciaService->sincronizarDesdeApi(
+                $interbankingService,
+                $empresaId,
+                $accountNumber,
+                $bankNumber,
+                $accountType,
+                $currency,
+                $movementType,
+                $dia,
+                $dia,
+                200,
+                20,
+                true,
+            );
+            if (! empty($res['ok'])) {
+                $filas += (int) ($res['filas_guardadas'] ?? 0);
+            } else {
+                $errores[] = $movementType.': '.($res['error'] ?? 'error');
+            }
+        }
+
+        if ($filas === 0 && $errores !== []) {
+            return response()->json([
+                'ok' => false,
+                'error' => implode(' · ', $errores),
+                'filas' => 0,
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'filas' => $filas,
+            'fecha' => $dia,
+            'avisos' => $errores,
+        ]);
     }
 
     public function apiConciliar(Request $request)
