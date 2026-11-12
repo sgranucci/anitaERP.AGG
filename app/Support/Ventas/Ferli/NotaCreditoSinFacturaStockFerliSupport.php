@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Log;
  * Ferli: NC de mostrador sin factura origen.
  * Exige combinación/talle en las líneas de mercadería y genera entrada de stock
  * (alta producción), porque NCD tiene operacionstock = O y no mueve stock genérico.
+ *
+ * No usar cuando la emisión ya movió stock (PV de local fuerza ENTRADA sobre NCD):
+ * ahí el movimiento queda como NCD "Credito" y un ALTAP extra duplicaría el par.
  */
 final class NotaCreditoSinFacturaStockFerliSupport
 {
@@ -278,14 +281,18 @@ final class NotaCreditoSinFacturaStockFerliSupport
         int $combinacionId,
         string $lote
     ): bool {
+        // Cualquier entrada ya grabada para esta NC (Credito forzado en local u otro ALTAP).
         $q = Articulo_Movimiento::query()
             ->where('venta_id', $ventaNcId)
             ->where('articulo_id', $articuloId)
             ->where('combinacion_id', $combinacionId)
-            ->where('concepto', self::CONCEPTO_DEVOLUCION_NC);
+            ->where('cantidad', '>', 0);
 
         if ($lote !== '') {
-            $q->where('lote', $lote);
+            $q->where(function ($inner) use ($lote) {
+                $inner->where('lote', $lote)
+                    ->orWhere('concepto', self::CONCEPTO_DEVOLUCION_NC);
+            });
         }
 
         return $q->exists();

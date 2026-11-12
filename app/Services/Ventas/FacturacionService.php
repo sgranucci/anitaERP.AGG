@@ -5904,7 +5904,10 @@ class FacturacionService
 					(int) $vta->id,
 					(string) $fechaFactura
 				);
-				if (empty($opcionesNc['omitir_movimiento_stock'])) {
+				// ALTAP "Devolución NC" solo si la emisión NO movió stock (NCD suele ser
+				// operacionstock=O). En PV de local ya se fuerza ENTRADA → NCD "Credito";
+				// volver a grabar ALTAP duplicaba el par (informe x color).
+				if (empty($opcionesNc['omitir_movimiento_stock']) && $omitirMovimientoStock) {
 					NotaCreditoSinFacturaStockFerliSupport::alGrabarNcSinOrigen(
 						(int) $vta->id,
 						$dataFactura,

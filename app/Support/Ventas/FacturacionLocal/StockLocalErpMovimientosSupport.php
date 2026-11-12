@@ -106,6 +106,7 @@ final class StockLocalErpMovimientosSupport
                 ->leftJoin('tipotransaccion_stock as ts', 'ts.id', '=', 'am.tipotransaccion_stock_id')
                 ->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'am.tipotransaccion_id')
                 ->leftJoin('venta as v', 'v.id', '=', 'am.venta_id')
+                ->leftJoin('tipotransaccion as tt_v', 'tt_v.id', '=', 'v.tipotransaccion_id')
                 ->leftJoin('movimientostock as ms', 'ms.id', '=', 'am.movimientostock_id')
                 ->whereIn('am.articulo_id', $chunk)
                 ->whereNotNull('am.articulo_id');
@@ -145,8 +146,8 @@ final class StockLocalErpMovimientosSupport
                 't_am.codigo as medida_am',
                 't_am.nombre as medida_nombre_am',
                 'v.codigo as venta_codigo',
-                'tt.abreviatura as tipo_venta_abreviatura',
-                'tt.nombre as tipo_venta_nombre',
+                'tt_v.abreviatura as tipo_venta_abreviatura',
+                'tt_v.nombre as tipo_venta_nombre',
                 'ms.codigo as movimiento_codigo',
                 DB::raw('COALESCE(ts.nombre, tt.nombre) AS tipo_nombre'),
                 DB::raw('COALESCE(ts.abreviatura, tt.abreviatura) AS tipo_abreviatura'),
