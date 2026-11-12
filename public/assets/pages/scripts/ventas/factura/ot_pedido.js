@@ -147,7 +147,11 @@
 		filas.forEach(function (fila) {
 			var $tr = $('<tr></tr>');
 			$tr.append($('<td></td>').text(fila.pedido_codigo || ''));
-			$tr.append($('<td></td>').text(fila.ot_codigo || ''));
+			var otTexto = String(fila.ot_codigo || '');
+			if (fila.ot_stock_codigo) {
+				otTexto += ' (stock ' + fila.ot_stock_codigo + ')';
+			}
+			$tr.append($('<td></td>').text(otTexto));
 			$tr.append($('<td></td>').text(((fila.sku || '') + ' ' + (fila.descripcion || '')).trim()));
 			$tr.append($('<td></td>').text(fila.combinacion || ''));
 			$tr.append($('<td class="text-right"></td>').text(fila.pares != null ? fila.pares : ''));

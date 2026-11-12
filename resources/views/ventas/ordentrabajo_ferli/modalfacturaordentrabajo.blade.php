@@ -108,22 +108,23 @@
                 <label>Leyendas</label>
                 <textarea id="leyendafactura" class="form-control" cols="40" rows="6" placeholder="Leyendas de factura ..."></textarea>
             </div>
-            <div class="form-group" id="div_leyendaexportacion">
+            {{-- Ocultos hasta leePuntoVenta(modo E). Evita enviar export vacío o validar mal. --}}
+            <div class="form-group" id="div_leyendaexportacion" style="display: none;">
                 <label>Leyenda Exportaci&oacute;n</label>
                 <textarea id="leyendaexportacion" name="leyendaexportacion" class="form-control" cols="90" rows="6" placeholder="Leyendas de exportación ..."></textarea>
             </div>
-            <div class="form-group row" id="div_incoterm">
-                <label for="recipient-name" class="col-lg-4 col-form-label requerido">Condiciones de venta (incoterms)</label>
+            <div class="form-group row" id="div_incoterm" style="display: none;">
+                <label for="incoterm_id" class="col-lg-4 col-form-label requerido">Condiciones de venta (incoterms)</label>
                 <select name="incoterm_id" id="incoterm_id" data-placeholder="Incoterms" class="col-lg-5 form-control required" data-fouc>
                 </select>
             </div>
-            <div class="form-group row" id="div_formapago">
-                <label for="recipient-name" class="col-lg-4 col-form-label requerido">Forma de pago</label>
+            <div class="form-group row" id="div_formapago" style="display: none;">
+                <label for="formapago_id" class="col-lg-4 col-form-label requerido">Forma de pago</label>
                 <select name="formapago_id" id="formapago_id" data-placeholder="Forma de pago" class="col-lg-5 form-control required" data-fouc>
                 </select>
             </div>
-            <div class="form-group row" id="div_mercaderia">
-                <label for="recipient-name" class="col-lg-4 col-form-label">Mercader&iacute;a</label>
+            <div class="form-group row" id="div_mercaderia" style="display: none;">
+                <label for="mercaderia" class="col-lg-4 col-form-label">Mercader&iacute;a</label>
                 <input type="text" class="col-lg-5 form-control" id="mercaderia" name="mercaderia" value="" maxlength="60">
             </div>
             @if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())

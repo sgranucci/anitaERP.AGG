@@ -5,6 +5,7 @@ namespace App\Services\Arca;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\ArcaUnidadMedidaAfipSupport;
+use App\Support\Ventas\ArcaWsfexIncotermsSupport;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use SoapClient;
@@ -343,8 +344,11 @@ class ArcaWsfexFacturaElectronicaService
             $permisoExistente = '';
         }
 
-        $incoterms = trim((string) ($datos['incoterms'] ?? ''));
+        $incoterms = ArcaWsfexIncotermsSupport::normalizar((string) ($datos['incoterms'] ?? ''));
         $incotermsDs = trim((string) ($datos['incoterms_ds'] ?? ''));
+        if ($msgIncoterm = ArcaWsfexIncotermsSupport::mensajeSiInvalidoParaAuthorize($incoterms, $cbteTipo, $tipoExpo)) {
+            throw new Exception('WSFEX — '.$msgIncoterm);
+        }
         if ($incoterms !== '' && $incotermsDs === '') {
             $incotermsDs = ' ';
         }

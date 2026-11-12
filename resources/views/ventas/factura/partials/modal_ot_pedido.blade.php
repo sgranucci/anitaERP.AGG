@@ -8,7 +8,7 @@
 			</div>
 			<div class="modal-body">
 				<p class="small text-muted mb-2">OT terminadas y sin facturar del cliente de esta factura. Se pueden mezclar pedidos en el mismo comprobante.</p>
-				<input type="text" id="factura_ot_pedido_buscar" class="form-control form-control-sm mb-2" placeholder="Pedido, OT, art&iacute;culo o combinaci&oacute;n" autocomplete="off">
+				<input type="text" id="factura_ot_pedido_buscar" class="form-control form-control-sm mb-2" placeholder="Pedido, OT, OT de stock del ticket, art&iacute;culo o combinaci&oacute;n" autocomplete="off">
 				<div class="table-responsive" style="max-height: 360px;">
 					<table class="table table-sm table-bordered mb-0">
 						<thead style="background:#85C1E9;color:#17202A;">

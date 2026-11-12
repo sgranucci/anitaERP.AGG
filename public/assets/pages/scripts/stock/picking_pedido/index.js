@@ -370,6 +370,18 @@
                 return false;
             }
 
+            // WSFEX [1640]: Incoterms/forma de pago obligatorios en PV exportación.
+            if ($('#div_incoterm').is(':visible') && !String(incoterm_id || '').trim()) {
+                alert('Factura de exportación: indique Incoterms (FOB, CIF, EXW, etc.).');
+                $('#incoterm_id').focus();
+                return false;
+            }
+            if ($('#div_formapago').is(':visible') && !String(formapago_id || '').trim()) {
+                alert('Factura de exportación: indique la forma de pago.');
+                $('#formapago_id').focus();
+                return false;
+            }
+
             if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
                 return false;
             }

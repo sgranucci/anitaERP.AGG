@@ -24,7 +24,10 @@ class ValidacionCai extends FormRequest
                 'required',
                 'string',
                 'max:18',
-                Rule::unique('cai', 'numero_cai')->ignore($id),
+                Rule::unique('cai', 'numero_cai')
+                    ->where('letra', 'R')
+                    ->where('sucursal', (int) $this->input('sucursal'))
+                    ->ignore($id),
             ],
             'fecha_vencimiento' => 'required|date',
         ];
@@ -38,6 +41,13 @@ class ValidacionCai extends FormRequest
             'sucursal' => 'sucursal',
             'numero_cai' => 'número CAI',
             'fecha_vencimiento' => 'fecha de vencimiento',
+        ];
+    }
+
+    public function messages()
+    {
+        return [
+            'numero_cai.unique' => 'El número CAI ya está cargado para esta sucursal.',
         ];
     }
 }

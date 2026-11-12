@@ -58,6 +58,17 @@ final class FacturacionCircuitoAfipSupportTest extends TestCase
         $this->assertStringContainsString('exportación', mb_strtolower($err));
     }
 
+    public function test_fac_letra_e_historico_exige_incoterm(): void
+    {
+        $pv = (object) ['codigo' => '00103', 'nombre' => 'COMERCIO EXTERIOR', 'modofacturacion' => 'E', 'webservice' => 'wsfex_v1'];
+        $fac = (object) ['abreviatura' => 'FAC', 'codigo' => '001', 'nombre' => 'Factura'];
+
+        $this->assertNull(FacturacionCircuitoAfipSupport::mensajeErrorSiInvalido($pv, $fac, 'E', null, 2));
+        $err = FacturacionCircuitoAfipSupport::mensajeErrorSiInvalido($pv, $fac, 'E', null, 0);
+        $this->assertNotNull($err);
+        $this->assertStringContainsString('incoterm', mb_strtolower($err));
+    }
+
     public function test_fae_en_pv_local_falla(): void
     {
         $pv = (object) ['codigo' => '00005', 'nombre' => 'Local', 'modofacturacion' => 'C', 'webservice' => 'wsfev1'];

@@ -575,11 +575,34 @@
 		return true;
 	}
 
+	function exportacionFacturaMostradorOk() {
+		var exportVisible = $('#datos_exportacion').is(':visible') || $('#div_incoterm').is(':visible');
+		if (!exportVisible) {
+			return true;
+		}
+		var incotermId = String($('#incoterm_id').val() || '').trim();
+		var formapagoId = String($('#formapago_id').val() || '').trim();
+		if (!incotermId) {
+			alert('Factura de exportación: indique Incoterms (FOB, CIF, EXW, etc.).');
+			$('#incoterm_id').trigger('focus');
+			return false;
+		}
+		if (!formapagoId) {
+			alert('Factura de exportación: indique la forma de pago.');
+			$('#formapago_id').trigger('focus');
+			return false;
+		}
+		return true;
+	}
+
 	window.validarSubmitFacturaConOverlay = function (event) {
 		if (event && typeof event.preventDefault === 'function') {
 			event.preventDefault();
 		}
 		if (!bultosFacturaFerliOk()) {
+			return false;
+		}
+		if (!exportacionFacturaMostradorOk()) {
 			return false;
 		}
 		// false = bloqueado o re-disparo async con omitir; no detener overlay acá

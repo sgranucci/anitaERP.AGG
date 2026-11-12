@@ -185,7 +185,9 @@ switch(strtoupper(config('app.empresa')))
             "CUENTACONTABLE_VENTA" => env('FACTURACION_CUENTA_VENTA', '411000001'),
             "USA_DETRACCION" => 'N',
             "DECIMAL_CANTIDAD" => 0,
-            "NETEA_DESCUENTO_LINEA" => false,
+            // true: el % de descuento de la grilla queda en el precio del renglón;
+            // no se arma una fila "Descuento" en el pie (el dto. pie % sigue aparte).
+            "NETEA_DESCUENTO_LINEA" => true,
             "IMPUESTO_INTERNO_LISTAPRECIO_POR_EMPRESA" => $impuestoInternoListasPorEmpresa,
             "IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE" => $impuestoInternoTipoArticulo,
             "CONCEPTO_OBLIGATORIO_SIN_ARTICULO" => filter_var(env('FACTURACION_CONCEPTO_OBLIGATORIO_SIN_ARTICULO', false), FILTER_VALIDATE_BOOLEAN),

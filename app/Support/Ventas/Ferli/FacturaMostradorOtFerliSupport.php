@@ -67,6 +67,9 @@ final class FacturaMostradorOtFerliSupport
             $query->where(function ($w) use ($like) {
                 $w->whereHas('ordenestrabajo', function ($o) use ($like) {
                     $o->where('codigo', 'like', $like);
+                })->orWhereHas('pedido_combinacion_talles.pedidos_combinacion_ordenes', function ($o) use ($like) {
+                    // El ticket de empaque imprime la OT de stock de donde salieron los pares.
+                    $o->where('ordentrabajo_stock_id', 'like', $like);
                 })->orWhereHas('pedidos', function ($p) use ($like) {
                     $p->where('codigo', 'like', $like);
                 })->orWhereHas('articulos', function ($a) use ($like) {
@@ -94,6 +97,7 @@ final class FacturaMostradorOtFerliSupport
                 'pedido_combinacion_id' => (int) $pc->id,
                 'ordentrabajo_id' => (int) $ot->id,
                 'ot_codigo' => (string) ($ot->codigo ?? ''),
+                'ot_stock_codigo' => self::otStockDeOt($ot, (int) $pc->id),
                 'pedido_codigo' => (string) ($pc->pedidos->codigo ?? ''),
                 'sku' => (string) ($pc->articulos->sku ?? ''),
                 'descripcion' => (string) ($pc->articulos->descripcion ?? ''),
@@ -442,6 +446,22 @@ final class FacturaMostradorOtFerliSupport
         }
 
         return $pares;
+    }
+
+    private static function otStockDeOt(Ordentrabajo $ot, int $pedidoCombinacionId): string
+    {
+        foreach ($ot->ordentrabajo_combinacion_talles as $oct) {
+            $pct = $oct->pedido_combinacion_talles;
+            if (! $pct || (int) $pct->pedido_combinacion_id !== $pedidoCombinacionId) {
+                continue;
+            }
+            $stock = (int) ($oct->ordentrabajo_stock_id ?? 0);
+            if ($stock > 0 && $stock !== (int) $ot->codigo) {
+                return (string) $stock;
+            }
+        }
+
+        return '';
     }
 
     /**

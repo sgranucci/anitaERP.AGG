@@ -181,13 +181,19 @@ final class FacturacionCircuitoAfipSupport
                     .($pvLabel !== ' ' ? " (no «{$pvLabel}»)." : '.');
             }
 
-            if (! self::esTipoPermitidoEnExportacion($tipotransaccion)) {
+            // Histórico Ferli: FAC + letra E en PV WSFEX se remapea a AFIP 19
+            // (FacturaelectronicaService::armaTipoTransaccion). Se admite con Incoterm.
+            $esFacHistoricoExport = $abrev === 'FAC' && $letra === 'E';
+
+            if (! self::esTipoPermitidoEnExportacion($tipotransaccion) && ! $esFacHistoricoExport) {
                 return 'Circuito exportación: use tipo FAE/FAF o NCE/NDE/NCD,'
                     ." no «{$tipoLabel}».";
             }
 
-            if (in_array($abrev, self::ABREV_EXPORT_FACTURA, true) && $incotermId <= 0) {
-                return 'Factura de exportación: indique incoterm (FOB, CIF, EXW, etc.).';
+            $exigeIncoterm = in_array($abrev, self::ABREV_EXPORT_FACTURA, true) || $esFacHistoricoExport;
+            if ($exigeIncoterm && $incotermId <= 0) {
+                return 'Factura de exportación: indique Incoterm (FOB, CIF, EXW, etc.).'
+                    .' Valores AFIP: '.implode(', ', ArcaWsfexIncotermsSupport::CODIGOS_AFIP).'.';
             }
 
             return null;

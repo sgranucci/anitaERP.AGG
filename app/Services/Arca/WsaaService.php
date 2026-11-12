@@ -128,9 +128,15 @@ class WsaaService
         try {
             $this->ensureDir($tmpDir, 'directorio temporal');
         } catch (Exception $e) {
-            // Fallback: para la firma PKCS7, alcanza con un tmp del sistema.
-            $tmpDir = rtrim(sys_get_temp_dir(), '/').'/anitaERP/arca/sr_padron/tmp';
-            $this->ensureDir($tmpDir, 'directorio temporal (fallback /tmp)');
+            // Fallback: subdir propio bajo /tmp del proceso (no reutilizar
+            // /tmp/anitaERP/…: suele quedar de un CLI como sergio:sergio 0775
+            // y php-fpm www-data no puede crear ni escribir ahí).
+            $tmpDir = rtrim(sys_get_temp_dir(), '/').'/arca_wsaa_'.getmypid();
+            try {
+                $this->ensureDir($tmpDir, 'directorio temporal (fallback /tmp)');
+            } catch (Exception $e2) {
+                throw new Exception($e->getMessage().'; fallback: '.$e2->getMessage());
+            }
         }
 
         $base = $tmpDir.'/'.Str::uuid()->toString();

@@ -2224,6 +2224,7 @@ class FacturacionService
 		$this->descuentoPie = $data['descuentopie'];
 		$this->descuentoLinea = $data['descuentolinea'];
 		$this->descuentoImportePie = $data['descuentoimportepie'];
+		$this->asignarDatosExportacionDesdeRequest($data);
 
 		$moneda_id = $calculoFactura['datosfactura'][0]['moneda_id'];
 
@@ -2386,11 +2387,15 @@ class FacturacionService
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
 							'formapago' => $cliente->condicionventas->nombre ?? 'CONTADO',
-							'formapagoexportacion' => null,
-							'incoterms' => null,
+							'formapagoexportacion' => $this->formaPagoExportacion,
+							'incoterms' => $this->abreviaturaIncoterm,
+							'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
 							'numeroordenventa' => $numeroOrdenventa,
 							'items' => $dataFactura
 					];
+					if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventa, $tipotransaccion)) {
+						return $errorIncoterm;
+					}
 				}
 
 				// Graba la factura
@@ -2636,7 +2641,9 @@ class FacturacionService
 			$incoterm = $this->incotermRepository->find($this->incoterm_id);
 			if ($incoterm) {
 				$this->condicionVentaExportacion = $incoterm->nombre;
-				$this->abreviaturaIncoterm = $incoterm->abreviatura;
+				$this->abreviaturaIncoterm = \App\Support\Ventas\ArcaWsfexIncotermsSupport::normalizar(
+					(string) ($incoterm->abreviatura ?? '')
+				);
 			}
 			$formapago = $this->formapagoRepository->find($this->formapago_id);
 			if ($formapago) {
@@ -3672,6 +3679,11 @@ class FacturacionService
 			return $errorCircuito;
 		}
 
+		$puntoventaCircuito = $this->puntoventaRepository->find($data['puntoventa_id'] ?? 0);
+		if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventaCircuito, $tipotransaccion)) {
+			return $errorIncoterm;
+		}
+
 		if ($tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data)) {
 			if ($errorNcCliente = NotaCreditoClienteAprobacionSupport::errorSiNoAutoriza($clientePolitica)) {
 				return $errorNcCliente;
@@ -4190,11 +4202,23 @@ class FacturacionService
 							'nombrecliente' => $arcaNombre,
 							'domicilio' => $arcaDomicilio,
 							'formapago' => $cliente->condicionventas->nombre ?? 'CONTADO',
-							'formapagoexportacion' => null,
-							'incoterms' => null,
+							'formapagoexportacion' => $this->formaPagoExportacion,
+							'incoterms' => $this->abreviaturaIncoterm,
+							'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
 							'numeroordenventa' => '',
 							'items' => $dataFactura
 					];
+					if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventa, $tipotransaccion)) {
+						Log::warning('facturacion.export.incoterm_faltante', [
+							'origen' => 'mostrador',
+							'incoterm_id' => $this->incoterm_id,
+							'abreviatura' => $this->abreviaturaIncoterm,
+							'puntoventa' => $puntoventa->codigo ?? null,
+							'tipo' => $tipotransaccion->abreviatura ?? null,
+						]);
+
+						return $errorIncoterm;
+					}
 					// NCE/NDE: opcional 22 (obs. 329) y sin período (obs. 159).
 					if (ArcaFceNcMostradorSupport::esTipoNcNdFce((int) $codigoTipoTransaccion)) {
 						if ($fceAnulacionSn === null) {
@@ -4600,6 +4624,19 @@ class FacturacionService
 			return ['error' => 'Tipo de transacción inexistente'];
 		}
 
+		if ($errorCircuito = $this->errorCircuitoAfipFacturacion(
+			$data,
+			$cliente,
+			$tipotransaccion,
+			(string) ($pedido->codigo ?? '')
+		)) {
+			return $errorCircuito;
+		}
+
+		if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventa, $tipotransaccion)) {
+			return $errorIncoterm;
+		}
+
 		$requierePvRemito = (string) ($puntoventa->modofacturacion ?? '') !== 'M'
 			&& $this->tipoEmiteRemito($tipotransaccion);
 		if ($requierePvRemito && ! $puntoventaremito) {
@@ -4733,6 +4770,17 @@ class FacturacionService
 							'incoterms' => $this->abreviaturaIncoterm,
 							'items' => $dataFactura
 					];
+
+					if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventa, $tipotransaccion)) {
+						Log::warning('facturacion.export.incoterm_faltante', [
+							'incoterm_id' => $this->incoterm_id,
+							'abreviatura' => $this->abreviaturaIncoterm,
+							'puntoventa' => $puntoventa->codigo ?? null,
+							'tipo' => $tipotransaccion->abreviatura ?? null,
+						]);
+
+						return $errorIncoterm;
+					}
 				}
 				else {
 					$cotizacion = 1.;
@@ -8426,7 +8474,32 @@ class FacturacionService
 			$tipotransaccion,
 			$letra !== '' ? $letra : null,
 			$codigoDocumento,
-			(int) ($data['incoterm_id'] ?? 0),
+			(int) ($data['incoterm_id'] ?? $this->incoterm_id ?? 0),
+		);
+
+		return $mensaje !== null ? ['error' => $mensaje] : null;
+	}
+
+	/**
+	 * WSFEX [1640]: Incoterms obligatorio y del catálogo AFIP en FAC/FAE/FAF export.
+	 *
+	 * @return array{error: string}|null
+	 */
+	protected function errorIncotermsWsfexSiCorresponde(?object $puntoventa, ?object $tipotransaccion): ?array
+	{
+		if (! FacturacionCircuitoAfipSupport::esPuntoventaExportacion($puntoventa)) {
+			return null;
+		}
+
+		$abrev = strtoupper(trim((string) ($tipotransaccion->abreviatura ?? '')));
+		if (in_array($abrev, ['NCE', 'NDE', 'NCD'], true)) {
+			return null;
+		}
+
+		$mensaje = \App\Support\Ventas\ArcaWsfexIncotermsSupport::mensajeSiFaltaEnExportacion(
+			true,
+			(string) ($this->abreviaturaIncoterm ?? ''),
+			true,
 		);
 
 		return $mensaje !== null ? ['error' => $mensaje] : null;

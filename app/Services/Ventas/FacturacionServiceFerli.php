@@ -254,7 +254,9 @@ class FacturacionServiceFerli extends FacturacionService
             $incoterm = $this->incotermRepository->find($this->incoterm_id);
             if ($incoterm) {
                 $this->condicionVentaExportacion = $incoterm->nombre;
-                $this->abreviaturaIncoterm = $incoterm->abreviatura;
+                $this->abreviaturaIncoterm = \App\Support\Ventas\ArcaWsfexIncotermsSupport::normalizar(
+                    (string) ($incoterm->abreviatura ?? '')
+                );
             }
             $formapago = $this->formapagoRepository->find($this->formapago_id);
             if ($formapago) {

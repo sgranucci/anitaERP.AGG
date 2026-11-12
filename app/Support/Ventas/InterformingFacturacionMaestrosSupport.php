@@ -41,9 +41,13 @@ final class InterformingFacturacionMaestrosSupport
         ['abreviatura' => 'CFR', 'nombre' => 'Cost and Freight'],
         ['abreviatura' => 'FCA', 'nombre' => 'Free Carrier'],
         ['abreviatura' => 'CIP', 'nombre' => 'Carriage and Insurance Paid To'],
-        ['abreviatura' => 'DDU', 'nombre' => 'Delivered Duty Unpaid'],
+        // DPU reemplaza a DDU (AFIP WSFEX [1640]; DDU/DAF/DES ya no valen).
+        ['abreviatura' => 'DPU', 'nombre' => 'Delivered at Place Unloaded'],
         ['abreviatura' => 'DDP', 'nombre' => 'Delivered Duty Paid'],
         ['abreviatura' => 'EXW', 'nombre' => 'Ex Works'],
+        ['abreviatura' => 'CPT', 'nombre' => 'Carriage Paid To'],
+        ['abreviatura' => 'DAP', 'nombre' => 'Delivered At Place'],
+        ['abreviatura' => 'FAS', 'nombre' => 'Free Alongside Ship'],
     ];
 
     /** @var list<array{abreviatura: string, nombre: string}> */
