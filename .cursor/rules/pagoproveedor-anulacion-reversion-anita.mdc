@@ -36,7 +36,12 @@ Excepción: el espejo OPA que el propio IE crea al pagar una solicitud anticipad
 circuito de caja (`eliminarDesdeMovimiento` + solicitud a AUTORIZADA). Revertir el pago desde la
 solicitud de pago no delega: ese botón reabre la solicitud.
 
-La anulación física desde ingresos y egresos no usa este circuito.
+Al **revertir** o **anular físicamente** un I/E, las facturas de proveedor con
+`origen_entrada = INGRESO_EGRESO` colgadas del movimiento se borran físicamente
+(`ComprobanteProveedorEliminarService`: ERP + Anita si había sync). Si no, la FAC
+queda CONTABILIZADA y bloquea una recarga por unicidad fiscal.
+
+La anulación física desde ingresos y egresos no usa el circuito de Pagoproveedor.
 
 ## Anulación física (`anularFisicamente`) — Anita va DENTRO de la TX
 

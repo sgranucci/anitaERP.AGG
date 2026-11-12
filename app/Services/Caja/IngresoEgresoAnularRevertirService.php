@@ -32,7 +32,8 @@ use DB;
 use RuntimeException;
 
 /**
- * Anulación física (borra OP en ERP+Anita) y reversión (compensatorio + SP a AUTORIZADA).
+ * Anulación física (borra movimiento en ERP+Anita) y reversión (compensatorio + SP a AUTORIZADA).
+ * En ambos caminos borra las facturas IVA de origen INGRESO_EGRESO del movimiento.
  */
 class IngresoEgresoAnularRevertirService
 {
@@ -249,6 +250,10 @@ class IngresoEgresoAnularRevertirService
             );
             $this->solicitudpagoPagoService->remarcPagadaSiQuedaPagoVigente($movimiento);
 
+            // Misma limpieza que anularFisicamente: la FAC de I/E no puede
+            // quedar CONTABILIZADA bloqueando una recarga (unicidad fiscal).
+            $this->eliminarComprobantesIvaDelMovimiento((int) $movimiento->id);
+
             return [
                 'mensaje' => 'ok',
                 'caja_movimiento_id' => (int) $movimiento->id,
@@ -287,8 +292,11 @@ class IngresoEgresoAnularRevertirService
     }
 
     /**
-     * Facturas de proveedor con origen INGRESO_EGRESO cuelgan del movimiento
-     * (FK ON DELETE CASCADE) y su asiento no se puede caer en cascada.
+     * Facturas de proveedor con origen INGRESO_EGRESO nacidas en el movimiento.
+     * Se borran físicamente en ERP (+ Anita si tenían sync) al anular o revertir
+     * el I/E, para liberar la unicidad fiscal y no dejar deuda fantasma.
+     * En anulación física además evita el CASCADE de caja_movimiento sobre un
+     * asiento propio del comprobante (ON DELETE RESTRICT en asiento_movimiento).
      */
     private function eliminarComprobantesIvaDelMovimiento(int $cajaMovimientoId): void
     {
