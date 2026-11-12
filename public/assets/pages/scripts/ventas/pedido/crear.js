@@ -3548,7 +3548,7 @@
 
 		$.get(listarUri, function(data){
 			
-			if (data.modofacturacion == 'E')
+			if ((data.modofacturacion == 'E' || /^(wsfex_v1|wsfex|wsfexv1)$/i.test(String(data.webservice || '').trim())))
 			{
 				$('#div_formapago').show();
 				$('#div_mercaderia').show();

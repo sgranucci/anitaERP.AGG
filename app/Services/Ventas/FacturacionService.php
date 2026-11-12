@@ -1621,9 +1621,9 @@ class FacturacionService
 					}
 					PedidoFacturacionProfiler::etapa('items_stock_fin');
 
-					// C/E: no ctamov hasta CAE. Diferido Bierzo: ctamov con venta/vencae post-respuesta.
+					// C/E ARCA online: no ctamov hasta CAE. Diferido Bierzo: ctamov post-respuesta.
 					$omitirAnitaAsiento = $deferAnitaPedido
-						|| in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+						|| FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($puntoventa->modofacturacion ?? null)
 						|| ! $this->replicaFacturacionAdministrativaEnAnita();
 					PedidoFacturacionProfiler::etapa($omitirAnitaAsiento ? 'asiento_erp_sin_anita_inicio' : 'asiento_erp_anita_inicio');
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
@@ -2617,7 +2617,7 @@ class FacturacionService
 	}
 
 	/**
-	 * Incoterm / forma de pago / mercadería / leyenda de exportación (FAE/FAF y PV modo E).
+	 * Incoterm / forma de pago / mercadería / leyenda de exportación (FAE/FAF y PV export WSFEX).
 	 * Usado por pedido, OT y facturación mostrador.
 	 *
 	 * @param  array<string, mixed>  $data
@@ -3679,9 +3679,12 @@ class FacturacionService
 			return $errorCircuito;
 		}
 
-		$puntoventaCircuito = $this->puntoventaRepository->find($data['puntoventa_id'] ?? 0);
-		if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventaCircuito, $tipotransaccion)) {
-			return $errorIncoterm;
+		// POS gastronomía/estacionamiento: no exige Incoterms (misma exclusión que el circuito AFIP).
+		if (! $this->esEmisionPos($data)) {
+			$puntoventaCircuito = $this->puntoventaRepository->find($data['puntoventa_id'] ?? 0);
+			if ($errorIncoterm = $this->errorIncotermsWsfexSiCorresponde($puntoventaCircuito, $tipotransaccion)) {
+				return $errorIncoterm;
+			}
 		}
 
 		if ($tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data)) {
@@ -4990,8 +4993,8 @@ class FacturacionService
 										//guardaArticuloMovimiento('create',
 										//$dataArticuloMovimiento, $dataTalle);
 					}
-					// Graba contabilidad (ERP; ctamov Anita diferido en C/E hasta CAE post-commit)
-					$omitirAnitaAsiento = in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+					// Graba contabilidad (ERP; ctamov Anita diferido en C/E ARCA online hasta CAE post-commit)
+					$omitirAnitaAsiento = FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($puntoventa->modofacturacion ?? null)
 						|| ! $this->replicaFacturacionAdministrativaEnAnita();
 					Self::grabaAsientoContable(
 						$asientoContable,
@@ -5186,8 +5189,8 @@ class FacturacionService
 							}
 						}
 
-						// Modo C/E: asiento ERP se grabó sin ctamov; sincronizar tras CAE + Anita venta.
-						if (in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)) {
+						// Modo C/E ARCA online: asiento ERP sin ctamov; sincronizar tras CAE + Anita venta.
+						if (FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($puntoventa->modofacturacion ?? null)) {
 							try {
 								$this->sincronizarCtamovAnitaDeVenta(
 									(int) $vta->id,
@@ -5348,11 +5351,11 @@ class FacturacionService
 		$omitirStkmovAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_stkmov_anita']);
 		$omitirNumeraAnitaFin = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_numera_anita_fin']);
 		$this->activarGrabacionAnitaVillafrancaSiSignoDivision((int) ($puntoventa->id ?? 0), $signo);
-		// CAE (C/E): el número lo asigna ARCA; Anita no debe avanzar compemis.
+		// CAE/WSFEX (C/E ARCA online): el número lo asigna ARCA; Anita no debe avanzar compemis.
 		// CAEA AGG: el ERP ya numeró. El Bierzo CAEA: Anita sigue vivo, numeraAnita al cierre.
 		if (
 			! $omitirNumeraAnitaFin
-			&& in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+			&& FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($puntoventa->modofacturacion ?? null)
 		) {
 			$omitirNumeraAnitaFin = true;
 		}
@@ -8506,13 +8509,13 @@ class FacturacionService
 	}
 
 	/**
-	 * CAE (modos C/E): el número lo fija ARCA. Si ese número lo ocupa un espejo
+	 * CAE/WSFEX (modos C/E ARCA online): el número lo fija ARCA. Si ese número lo ocupa un espejo
 	 * Anita de consulta sin CAE, lo suelta dentro de la transacción de emisión.
 	 */
 	private function cederNumeroArcaSiLoOcupaEspejoAnita(object $puntoventa, string $codigoTipoTransaccion, int $numero): void
 	{
 		$modo = (string) ($puntoventa->modofacturacion ?? '');
-		if (! in_array($modo, ['C', 'E'], true) || $numero <= 0) {
+		if (! FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($modo) || $numero <= 0) {
 			return;
 		}
 
@@ -11558,7 +11561,7 @@ class FacturacionService
 	 */
 	private function recuperarCaeTrasFallaComunicacion($empresa, $codigoTipoTransaccion, $puntoventa, int $numeroComprobante): ?array
 	{
-		if (! in_array($puntoventa->modofacturacion, ['C', 'E'], true)) {
+		if (! FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($puntoventa->modofacturacion ?? null)) {
 			return null;
 		}
 

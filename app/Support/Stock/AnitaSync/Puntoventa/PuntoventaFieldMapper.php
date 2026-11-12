@@ -84,9 +84,14 @@ final class PuntoventaFieldMapper
     }
 
     /**
-     * AGG / histórico: N→M, E→E, L→C, A→A, R→R, M→L, O→O, I→I.
-     * Ferli / Interforming: E→C (electrónica CAE), X→E (exportación WSFEX), F/N→M.
-     * Anita IF: suc 4 fiscal=X (export), suc 5 fiscal=E (local electrónica).
+     * Semántica ERP unificada (todos los clientes):
+     * - C = electrónica CAE (wsfev1)
+     * - E = exportación WSFEX (wsfex_v1)
+     * - A = CAEA, M = manual, …
+     *
+     * Anita → ERP:
+     * - Ferli / Interforming: E→C, X→E (export)
+     * - Crown / AGG: E→C (electrónica); AGG ya no guarda E+wsfe
      */
     public static function mapModoFacturacion(object $row): string
     {
@@ -100,6 +105,7 @@ final class PuntoventaFieldMapper
 
             return match ($fiscal) {
                 'E' => 'C',
+                'X' => 'E',
                 'A' => 'A',
                 'L' => 'C',
                 'R' => 'R',
@@ -126,9 +132,11 @@ final class PuntoventaFieldMapper
             };
         }
 
+        // AGG y resto: misma semántica canónica (Anita E = electrónica → C).
         return match ($fiscal) {
             'N' => 'M',
-            'E' => 'E',
+            'E' => 'C',
+            'X' => 'E',
             'L' => 'C',
             'A' => 'A',
             'R' => 'R',
@@ -141,7 +149,7 @@ final class PuntoventaFieldMapper
 
     public static function mapWebservice(object $row): string
     {
-        if (self::usaMapaFiscalExportacion() && self::mapModoFacturacion($row) === 'E') {
+        if (self::mapModoFacturacion($row) === 'E') {
             return 'wsfex_v1';
         }
 

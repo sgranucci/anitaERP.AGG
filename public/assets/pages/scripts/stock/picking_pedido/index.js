@@ -65,7 +65,7 @@
     function leePuntoVenta(puntoventa_id) {
         if (!puntoventa_id) return;
         $.get(carpetaBase + '/ventas/chequeapuntoventa/' + puntoventa_id, function (data) {
-            if (data.modofacturacion == 'E') {
+            if ((data.modofacturacion == 'E' || /^(wsfex_v1|wsfex|wsfexv1)$/i.test(String(data.webservice || '').trim()))) {
                 $('#div_formapago, #div_mercaderia, #div_incoterm, #div_leyendaexportacion').show();
             } else {
                 $('#div_formapago, #div_mercaderia, #div_incoterm, #div_leyendaexportacion').hide();

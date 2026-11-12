@@ -278,11 +278,11 @@ class ConfiguracionPuntoventaGastronomiaAnitaSyncService
                 ->where('estado', 'A')
                 ->whereNull('deleted_at')
                 ->first();
-            if ($pv && in_array((string) $pv->modofacturacion, ['C', 'E'], true)) {
+            if ($pv && \App\Support\Ventas\FacturacionCircuitoAfipSupport::esModoCaeLocal($pv->modofacturacion ?? null)) {
                 return (int) $pv->id;
             }
             if ($pv) {
-                $advertencias[] = "{$host}: suc {$codigo} modo={$pv->modofacturacion} (no C/E) → fallback CAE";
+                $advertencias[] = "{$host}: suc {$codigo} modo={$pv->modofacturacion} (no CAE local C) → fallback CAE";
             } else {
                 $advertencias[] = "{$host}: suc Anita {$sucAnita} no encontrada → fallback CAE";
             }

@@ -116,7 +116,8 @@ final class ElBierzoFacturacionCaeaSaltoSupport
             ];
         }
 
-        if (! in_array($modo, ['C', 'E'], true)) {
+        // Solo CAE local (C). Modo E = exportación WSFEX, no salta a CAEA.
+        if (! \App\Support\Ventas\FacturacionCircuitoAfipSupport::esModoCaeLocal($modo)) {
             return null;
         }
 

@@ -55,11 +55,11 @@
 	}
 
 	function esPvExportFromData($opt) {
-		var modo = norm($opt.data('modofacturacion') || $opt.attr('data-modofacturacion'));
-		if (modo === 'E') {
+		// Canónico: WSFEX o modo E (export). No usar E solo como “electrónica” (AGG ya migró a C).
+		if (esWsFex($opt.data('webservice') || $opt.attr('data-webservice'))) {
 			return true;
 		}
-		return esWsFex($opt.data('webservice') || $opt.attr('data-webservice'));
+		return norm($opt.data('modofacturacion') || $opt.attr('data-modofacturacion')) === 'E';
 	}
 
 	function esTipoExportExclusivoItem(item) {
@@ -85,10 +85,10 @@
 	}
 
 	function esPvExportItem(item) {
-		if (norm(item.modofacturacion) === 'E') {
+		if (esWsFex(item.webservice)) {
 			return true;
 		}
-		return esWsFex(item.webservice);
+		return norm(item.modofacturacion) === 'E';
 	}
 
 	function documentoEsExport(codigo) {

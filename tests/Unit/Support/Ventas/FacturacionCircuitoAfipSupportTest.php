@@ -17,6 +17,44 @@ final class FacturacionCircuitoAfipSupportTest extends TestCase
         $this->assertTrue(FacturacionCircuitoAfipSupport::documentoEsExportacion('FAF E-00103-00002047'));
     }
 
+    public function test_modos_canonicos_cae_vs_exportacion(): void
+    {
+        // Canónico: C + wsfe = CAE local (AGG/Crown/Ferli electrónica).
+        $pvCae = (object) [
+            'codigo' => '00009',
+            'nombre' => 'FCE BSA Restaurante',
+            'modofacturacion' => 'C',
+            'webservice' => 'wsfev1',
+        ];
+        $this->assertFalse(FacturacionCircuitoAfipSupport::esPuntoventaExportacion($pvCae));
+        $this->assertTrue(FacturacionCircuitoAfipSupport::esModoCaeLocal('C'));
+        $this->assertTrue(FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline('C'));
+        $this->assertSame(
+            FacturacionCircuitoAfipSupport::CIRCUITO_LOCAL,
+            FacturacionCircuitoAfipSupport::resolverCircuito($pvCae, (object) ['abreviatura' => 'FAC', 'codigo' => '006'], 'C', null)
+        );
+
+        // Canónico: E + wsfex = exportación.
+        $pvExport = (object) [
+            'codigo' => '00103',
+            'nombre' => 'COMERCIO EXTERIOR',
+            'modofacturacion' => 'E',
+            'webservice' => 'wsfex_v1',
+        ];
+        $this->assertTrue(FacturacionCircuitoAfipSupport::esPuntoventaExportacion($pvExport));
+        $this->assertTrue(FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline('E'));
+        $this->assertFalse(FacturacionCircuitoAfipSupport::esModoCaeLocal('E'));
+
+        // Legado inconsistente E+wsfe: webservice gana → no exportación.
+        $legado = (object) [
+            'codigo' => '00070',
+            'nombre' => 'Fact.Elect. Gastro EGA',
+            'modofacturacion' => 'E',
+            'webservice' => 'wsfev1',
+        ];
+        $this->assertFalse(FacturacionCircuitoAfipSupport::esPuntoventaExportacion($legado));
+    }
+
     public function test_fae_con_pv_export_ok_sin_incoterm_falla(): void
     {
         $pv = (object) ['codigo' => '00004', 'nombre' => 'Export', 'modofacturacion' => 'E', 'webservice' => 'wsfex_v1'];

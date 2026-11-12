@@ -68,7 +68,7 @@ class ValidacionConfiguracionPcGastronomiaCrown extends FormRequest
                 Rule::exists('puntoventa', 'id')->where(function ($query) use ($empresaId) {
                     $query->where('empresa_id', $empresaId)
                         ->where('estado', 'A')
-                        ->whereIn('modofacturacion', ['C', 'E'])
+                        ->where('modofacturacion', 'C')
                         ->whereNull('deleted_at');
                 }),
             ],

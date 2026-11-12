@@ -136,7 +136,7 @@ class ConfiguracionPcGastronomiaCrownController extends Controller
         return [
             'data' => $data,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'puntoventa_cae_query' => (clone $puntoventaQuery)->whereIn('modofacturacion', ['C', 'E'])->get(),
+            'puntoventa_cae_query' => (clone $puntoventaQuery)->where('modofacturacion', 'C')->get(),
             'puntoventa_caea_query' => (clone $puntoventaQuery)->where('modofacturacion', 'A')->get(),
             'salida_query' => $this->salidaRepository->all()->sortBy('nombre')->values(),
             'listaprecio_query' => Listaprecio::query()

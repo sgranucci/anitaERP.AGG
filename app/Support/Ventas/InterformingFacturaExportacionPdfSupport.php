@@ -16,8 +16,8 @@ final class InterformingFacturaExportacionPdfSupport
             return false;
         }
 
-        $modo = strtoupper(trim((string) ($venta->puntoventas->modofacturacion ?? '')));
-        if ($modo === 'E') {
+        $pv = $venta->puntoventas;
+        if (FacturacionCircuitoAfipSupport::esPuntoventaExportacion($pv)) {
             return true;
         }
 

@@ -69,4 +69,31 @@ class PuntoventaFieldMapperFerliTest extends TestCase
         $this->assertNull($mapped['pathafip']);
         $this->assertSame('wsfev1', $mapped['webservice']);
     }
+
+    public function test_agg_suc_fiscal_e_es_cae_local_no_exportacion(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::AGG]);
+        $row = (object) ['suc_fiscal' => 'E'];
+
+        $this->assertSame('C', PuntoventaFieldMapper::mapModoFacturacion($row));
+        $this->assertSame('wsfev1', PuntoventaFieldMapper::mapWebservice($row));
+    }
+
+    public function test_agg_suc_fiscal_x_es_exportacion_wsfex(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::AGG]);
+        $row = (object) ['suc_fiscal' => 'X'];
+
+        $this->assertSame('E', PuntoventaFieldMapper::mapModoFacturacion($row));
+        $this->assertSame('wsfex_v1', PuntoventaFieldMapper::mapWebservice($row));
+    }
+
+    public function test_crown_suc_fiscal_e_es_cae_local(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::CROWN]);
+        $row = (object) ['suc_fiscal' => 'E', 'suc_empresa' => 'Sala'];
+
+        $this->assertSame('C', PuntoventaFieldMapper::mapModoFacturacion($row));
+        $this->assertSame('wsfev1', PuntoventaFieldMapper::mapWebservice($row));
+    }
 }

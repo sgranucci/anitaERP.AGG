@@ -100,7 +100,7 @@ final class FacturacionHuecoArcaCargaService
         $nombreReceptor = trim((string) ($opciones['nombre'] ?? ''));
 
         $pvs = Puntoventa::query()
-            ->whereIn('modofacturacion', ['C', 'E'])
+            ->where('modofacturacion', 'C')
             ->where('webservice', 'wsfev1')
             ->orderBy('codigo')
             ->get();

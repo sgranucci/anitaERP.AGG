@@ -10,7 +10,8 @@ namespace App\Support\Ventas;
  * {@see \App\Services\Ventas\FacturacionService} omite esta matriz vía esEmisionPos.
  *
  * Matriz:
- * - Exportación: cliente letra E y/o doc PEX/FAE/FAF → PV modo E (WSFEX)
+ * - Exportación: cliente letra E y/o doc PEX/FAE/FAF → PV modo E / WSFEX
+ *   (canónico todos los clientes: C=CAE local, E=export WSFEX)
  *   + tipo factura FAE (Interforming) / FAF (Ferli)
  *   + NC/ND NCE/NDE (Interforming) o NCD en PV export (Ferli; NCD también es local)
  * - Local: resto → no usar PV exportación ni tipos exclusivos de export (FAE/FAF/NCE/NDE)
@@ -141,14 +142,32 @@ final class FacturacionCircuitoAfipSupport
             return false;
         }
 
-        $modo = strtoupper(trim((string) ($puntoventa->modofacturacion ?? '')));
-        if ($modo === 'E') {
+        $ws = $puntoventa->webservice ?? null;
+        // WSFEX manda. WSFE explícito nunca es exportación (evita E+wsfe legado AGG).
+        if (ArcaPuntoventaWebserviceSupport::esWsfex($ws)) {
             return true;
         }
+        if (ArcaPuntoventaWebserviceSupport::esWsfe($ws)) {
+            return false;
+        }
 
-        $ws = strtolower(trim((string) ($puntoventa->webservice ?? '')));
+        // Sin webservice claro: canónico modo E = exportación.
+        return strtoupper(trim((string) ($puntoventa->modofacturacion ?? ''))) === 'E';
+    }
 
-        return in_array($ws, ArcaPuntoventaWebserviceSupport::ALIASES_WSFEX, true);
+    /**
+     * Emisión online ARCA (CAE WSFE o WSFEX). No manual ni CAEA.
+     * Canónico: C = electrónica local, E = exportación.
+     */
+    public static function esModoEmisionArcaOnline(?string $modo): bool
+    {
+        return in_array(strtoupper(trim((string) $modo)), ['C', 'E'], true);
+    }
+
+    /** CAE local (wsfev1). No incluye exportación WSFEX. */
+    public static function esModoCaeLocal(?string $modo): bool
+    {
+        return strtoupper(trim((string) $modo)) === 'C';
     }
 
     /**
