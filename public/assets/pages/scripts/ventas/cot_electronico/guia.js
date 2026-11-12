@@ -12,9 +12,13 @@
     var suburbanoHabilitado = String($card.data('suburbano-habilitado') || '0') === '1';
     var suburbanoExcelBase = String($card.data('suburbano-excel-base') || '').replace(/\/$/, '');
     var consultaCuitXhr = null;
+    var avisoSesion419Mostrado = false;
 
     function token() {
-        return csrf || $('input[name="_token"]').first().val() || '';
+        return csrf
+            || $('meta[name="csrf-token"]').attr('content')
+            || $('input[name="_token"]').first().val()
+            || '';
     }
 
     function soloDigitosCuit(valor) {
@@ -47,8 +51,10 @@
     }
 
     function pintarTitularCuit($titular, texto, modo) {
-        $titular.removeClass('text-warning text-muted border-warning');
-        if (modo === 'aviso') {
+        $titular.removeClass('text-warning text-muted text-danger border-warning border-danger');
+        if (modo === 'sesion') {
+            $titular.addClass('text-danger border-danger');
+        } else if (modo === 'aviso') {
             $titular.addClass('text-warning border-warning');
         } else if (modo === 'vacio') {
             $titular.addClass('text-muted');
@@ -64,6 +70,43 @@
         }
 
         return base + ': ' + extra;
+    }
+
+    function mensajeSesionExpirada() {
+        return 'Sesión expirada — recargue la página (F5)';
+    }
+
+    function avisarSesionExpirada($titular) {
+        pintarTitularCuit($titular, mensajeSesionExpirada(), 'sesion');
+        if (avisoSesion419Mostrado) {
+            return;
+        }
+        avisoSesion419Mostrado = true;
+        alert(
+            'La sesión expiró o el token de seguridad ya no es válido.\n\n'
+            + 'Esto no es un error del padrón ARCA.\n'
+            + 'Recargue la página con F5 (o Ctrl+F5), vuelva a ingresar si hace falta, y reintente.'
+        );
+    }
+
+    function refrescarTokenCsrf() {
+        var url = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/csrf-token';
+        return $.ajax({
+            url: url,
+            type: 'GET',
+            dataType: 'json',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        }).then(function (resp) {
+            if (resp && resp.token) {
+                csrf = resp.token;
+                $('meta[name="csrf-token"]').attr('content', resp.token);
+                $('input[name="_token"]').val(resp.token);
+                return resp.token;
+            }
+            return token();
+        }, function () {
+            return $.Deferred().reject().promise();
+        });
     }
 
     function marcarEstadoCuit(estado) {
@@ -142,20 +185,38 @@
 
         $loading.removeClass('d-none');
 
-        consultaCuitXhr = $.ajax({
-            url: arcaConstanciaUrl,
-            type: 'POST',
-            dataType: 'json',
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || token(),
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            contentType: 'application/json; charset=UTF-8',
-            data: JSON.stringify({ cuit: cuit }),
-        });
+        function postConstancia(tok) {
+            return $.ajax({
+                url: arcaConstanciaUrl,
+                type: 'POST',
+                dataType: 'json',
+                headers: {
+                    'X-CSRF-TOKEN': tok || token(),
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                contentType: 'application/json; charset=UTF-8',
+                data: JSON.stringify({ cuit: cuit }),
+            });
+        }
+
+        consultaCuitXhr = postConstancia();
 
         return consultaCuitXhr
+            .then(null, function (jqXHR, status) {
+                if (status === 'abort') {
+                    return $.Deferred().reject(jqXHR, status).promise();
+                }
+                if (jqXHR && jqXHR.status === 419) {
+                    return refrescarTokenCsrf().then(function (nuevoToken) {
+                        consultaCuitXhr = postConstancia(nuevoToken);
+                        return consultaCuitXhr;
+                    }, function () {
+                        return $.Deferred().reject(jqXHR, status).promise();
+                    });
+                }
+                return $.Deferred().reject(jqXHR, status).promise();
+            })
             .done(function (resp) {
                 var nombre = '';
                 if (resp && resp.ok && resp.data) {
@@ -175,8 +236,12 @@
                 if (status === 'abort') {
                     return;
                 }
+                if (jqXHR && (jqXHR.status === 419 || jqXHR.status === 401)) {
+                    avisarSesionExpirada($titular);
+                    return;
+                }
                 var detalle = 'No se pudo consultar padrón ARCA';
-                if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                if (jqXHR && jqXHR.responseJSON && jqXHR.responseJSON.message) {
                     detalle = jqXHR.responseJSON.message;
                 }
                 // Nunca marcar is-invalid ni frenar el envío: el titular es solo ayuda visual.

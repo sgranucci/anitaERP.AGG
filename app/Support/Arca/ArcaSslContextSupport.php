@@ -16,11 +16,38 @@ final class ArcaSslContextSupport
 
     private const BUNDLE_REL = 'arca/ca/cacert_bundle.pem';
 
+    private static bool $aplicadoAlProceso = false;
+
+    /**
+     * Aplica el bundle CA al proceso PHP (openssl.cafile / curl.cainfo).
+     * SoapClient a veces ignora el cafile del stream_context; el ini sí lo usa.
+     */
+    public static function aplicarAlProceso(): void
+    {
+        if (self::$aplicadoAlProceso) {
+            return;
+        }
+
+        $cafile = self::cafile();
+        if ($cafile === null) {
+            return;
+        }
+
+        @ini_set('openssl.cafile', $cafile);
+        @ini_set('curl.cainfo', $cafile);
+        @putenv('SSL_CERT_FILE='.$cafile);
+        @putenv('CURL_CA_BUNDLE='.$cafile);
+
+        self::$aplicadoAlProceso = true;
+    }
+
     /**
      * @return array{verify_peer: bool, verify_peer_name: bool, ciphers: string, cafile?: string}
      */
     public static function sslOptions(): array
     {
+        self::aplicarAlProceso();
+
         $options = [
             'verify_peer' => true,
             'verify_peer_name' => true,

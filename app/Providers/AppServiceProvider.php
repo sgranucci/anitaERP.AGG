@@ -54,6 +54,8 @@ class AppServiceProvider extends ServiceProvider
     {
         ProteccionComandosDestructivosProduccion::registrar();
         ExcelSeleccionHojaSupport::registrar();
+        // aws.arca.gob.ar omite intermedio Sectigo: SoapClient necesita este CA bundle.
+        \App\Support\Arca\ArcaSslContextSupport::aplicarAlProceso();
 
         Paginator::useBootstrap();
 

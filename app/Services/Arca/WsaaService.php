@@ -2,6 +2,7 @@
 
 namespace App\Services\Arca;
 
+use App\Support\Arca\ArcaSslContextSupport;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Str;
@@ -39,10 +40,13 @@ class WsaaService
 
     private function requestNewTa(string $serviceId, ?array $context = null): string
     {
+        ArcaSslContextSupport::aplicarAlProceso();
+
         $traXml = $this->createTraXml($serviceId);
         $cms = $this->signTra($traXml, $context);
 
         $wsaa = $this->wsaaConfig();
+        $timeout = max(5, (int) config('arca.padron.soap_timeout', 25));
 
         $client = new SoapClient($wsaa['wsdl'], [
             'soap_version' => SOAP_1_2,
@@ -50,6 +54,14 @@ class WsaaService
             'trace' => 1,
             'exceptions' => true,
             'cache_wsdl' => WSDL_CACHE_NONE,
+            'connection_timeout' => $timeout,
+            'stream_context' => stream_context_create([
+                'http' => [
+                    'timeout' => $timeout,
+                    'user_agent' => 'anitaERP-ARCA-WSAA',
+                ],
+                'ssl' => ArcaSslContextSupport::sslOptions(),
+            ]),
         ]);
 
         $resp = $client->loginCms(['in0' => $cms]);

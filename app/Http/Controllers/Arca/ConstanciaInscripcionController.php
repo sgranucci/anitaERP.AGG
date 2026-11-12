@@ -8,6 +8,7 @@ use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ConstanciaInscripcionController extends Controller
 {
@@ -42,12 +43,28 @@ class ConstanciaInscripcionController extends Controller
             ]);
         } catch (Exception $e) {
             $soap = $this->service->getLastSoapTrace();
+            $mensaje = $e->getMessage();
+            $esTransporte = (bool) preg_match(
+                '/could not connect to host|failed to load external entity|ssl|timed out|connection refused/i',
+                $mensaje
+            );
+
+            Log::warning('arca.padron.constancia_fallo', [
+                'cuit' => preg_replace('/\D+/', '', (string) $request->input('cuit')),
+                'error' => $mensaje,
+                'transporte' => $esTransporte,
+            ]);
+
+            // El titular CUIT en COT es informativo: devolvemos 503 (no 500) y un texto claro.
+            if ($esTransporte) {
+                $mensaje = 'Padrón ARCA no disponible (no bloquea el COT)';
+            }
 
             return response()->json(array_filter([
                 'ok' => false,
-                'message' => $e->getMessage(),
+                'message' => $mensaje,
                 'soap' => $soap,
-            ]), 500);
+            ]), $esTransporte ? 503 : 500);
         }
     }
 

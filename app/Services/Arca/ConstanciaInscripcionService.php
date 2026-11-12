@@ -29,6 +29,7 @@ class ConstanciaInscripcionService
     public function getPersonaV2(string $cuitConsultada): array
     {
         $this->lastSoapTrace = null;
+        ArcaSslContextSupport::aplicarAlProceso();
 
         $cuitConsultada = $this->soloDigitos($cuitConsultada);
         if (strlen($cuitConsultada) !== 11) {
