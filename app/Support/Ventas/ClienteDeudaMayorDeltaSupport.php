@@ -17,7 +17,9 @@ use Illuminate\Support\Facades\DB;
  * con el signo del mayor (negativo = débito).
  *
  * El aviso es la suma. Un cobro que acredita la cuenta y baja la factura no
- * mueve el conjunto. Entran las cuentas de rubro Activo asignadas al cliente.
+ * mueve el conjunto. Entran las cuentas de rubro Activo asignadas al cliente,
+ * excepto las que son medio de cobro (`cuentacaja`): esas reciben ventas de
+ * clientes varios, no la CC del cliente espejo del medio (DAFITI, VISA, …).
  */
 final class ClienteDeudaMayorDeltaSupport
 {
@@ -245,6 +247,10 @@ final class ClienteDeudaMayorDeltaSupport
     /**
      * Cuentas de rubro Activo asignadas en el maestro de clientes.
      *
+     * Se excluyen las que también son medio de cobro (`cuentacaja.cuentacontable_id`):
+     * L-PAGO NUBE, L-MERCADOLIBRE, L-VISA, etc. Ahí asientan ventas de clientes
+     * varios / contado; no son la cuenta corriente del cliente espejo del medio.
+     *
      * @return array<int, true>
      */
     private function cuentasCliente(): array
@@ -253,11 +259,21 @@ final class ClienteDeudaMayorDeltaSupport
             return $this->cuentasCliente;
         }
 
+        $idsMedio = DB::table('cuentacaja')
+            ->whereNotNull('cuentacontable_id')
+            ->where('cuentacontable_id', '>', 0)
+            ->distinct()
+            ->pluck('cuentacontable_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->all();
+
         $ids = DB::table('cliente as cl')
             ->join('cuentacontable as c', 'c.id', '=', 'cl.cuentacontable_id')
             ->join('rubrocontable as r', 'r.id', '=', 'c.rubrocontable_id')
             ->whereNull('cl.deleted_at')
             ->whereRaw(SqlDialectSupport::lower('r.nombre').' = ?', ['activo'])
+            ->when($idsMedio !== [], static fn ($q) => $q->whereNotIn('c.id', $idsMedio))
             ->distinct()
             ->pluck('c.id');
 

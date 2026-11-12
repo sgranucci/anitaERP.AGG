@@ -6,8 +6,9 @@ return [
     | Auditor diario deuda vs ficha CC clientes (ventas:auditar-deuda-ficha-cliente).
     | Un mail por empresa; el asunto lleva el nombre de la empresa.
     | Sin diferencias: mail verde «todo cuadrado». Con diferencias: detalle cliente a cliente.
-    | Además guarda el delta mayor − deuda de las cuentas Activo del cliente y avisa
-    | si esa suma cambia de un día al otro.
+    | Además guarda el delta mayor − deuda de las cuentas Activo del cliente (sin
+    | cuentas que son medio de cobro / cuentacaja: ahí van ventas de clientes varios)
+    | y avisa si esa suma cambia de un día al otro.
     | No graba ajustes: solo informa. La verdad operativa es la deuda.
     | empresas vacío = todas. En Crown: solo la empresa 1.
     */

@@ -53,6 +53,8 @@
 <h3 style="margin:16px 0 6px 0;">Delta conjunto (mayor − deuda)</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
+    Solo cuentas Activo de clientes de cuenta corriente; no entran medios de cobro
+    (L-PAGO NUBE, L-VISA, etc.), aunque figure un cliente espejo en el maestro.
     @if (! empty($delta['hay_base_anterior']))
         Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
     @else
