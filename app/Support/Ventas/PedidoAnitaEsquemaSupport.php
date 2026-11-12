@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Anita\AnitaTextoSanitizer;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
@@ -22,6 +23,23 @@ final class PedidoAnitaEsquemaSupport
     public const TABLA_COMPROB = 'comprob';
 
     public const TIPOS_PEDIDO = ['PED', 'PEX'];
+
+    /**
+     * Literal SQL Informix entre comillas (contenido ya escapado, sin las comillas externas).
+     * Vacío → un espacio: el bridge/sql de Anita rechaza '' con error -282 (comilla sin cierre).
+     */
+    public static function sqlTexto(?string $valor, int $maxLen = 0): string
+    {
+        $texto = AnitaTextoSanitizer::sanitizar((string) ($valor ?? ''));
+        if ($maxLen > 0) {
+            $texto = mb_substr($texto, 0, $maxLen);
+        }
+        if ($texto === '') {
+            $texto = ' ';
+        }
+
+        return str_replace("'", "''", $texto);
+    }
 
     /**
      * @return list<string>

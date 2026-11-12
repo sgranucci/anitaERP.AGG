@@ -79,6 +79,7 @@ use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\PedidoInterformingFacturacionSupport;
+use App\Support\Ventas\PedidoAnitaEsquemaSupport;
 use App\Support\Ventas\FacturacionCircuitoAfipSupport;
 use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
@@ -7027,10 +7028,12 @@ class FacturacionService
 		$apiAnita = new ApiAnita();
 		$esInterformingComprob = EntornoEmpresaSupport::esInterforming();
 		$leyenda5Anita = '';
+		$incotermAnita = '';
 		if ($esInterformingComprob) {
 			// Preferir leyenda de exportación (FAE); si viene vacía, caer a la leyenda general.
 			$leyendaExport = trim((string) ($this->leyendaExportacion ?? ''));
-			$leyenda5Anita = mb_substr($leyendaExport !== '' ? $leyendaExport : trim((string) ($leyenda ?? '')), 0, 60);
+			$leyenda5Anita = $leyendaExport !== '' ? $leyendaExport : trim((string) ($leyenda ?? ''));
+			$incotermAnita = (string) ($this->abreviaturaIncoterm ?? '');
 		}
 		$pesoNetoAnita = (float) ($venta['peso_neto'] ?? $this->pesoNetoExportacion ?? 0);
 		$data = array( 	'tabla' => 'comprob', 
@@ -7081,8 +7084,8 @@ class FacturacionService
 							'".' '."',
 							'".date('Ymd', strtotime($fechaVencimiento))."'" : "").
 							($esInterformingComprob ?
-							", '".str_replace("'", "''", $leyenda5Anita)."',
-							'".str_replace("'", "''", (string) ($this->abreviaturaIncoterm ?? ''))."',
+							", '".PedidoAnitaEsquemaSupport::sqlTexto($leyenda5Anita, 60)."',
+							'".PedidoAnitaEsquemaSupport::sqlTexto($incotermAnita, 10)."',
 							'".$this->cantidadBultoParaAnita($venta)."',
 							'".$pesoNetoAnita."'" : "")." "
 					);
