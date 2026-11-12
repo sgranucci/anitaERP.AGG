@@ -1054,7 +1054,9 @@
                 fecha: $('#fecha').val(),
                 moneda_id: $('#moneda_id').val(),
                 cotizacion: $('#cotizacion').val(),
-                pagoproveedor_id: $('input[name="id"]').val() || $('#id').val() || '',
+                // Excluir esta OP del acumulado Ganancias (RG 830). Sin esto, al reeditar
+                // se cuenta el propio certificado y la retención “vuelve a calcular” de más.
+                pagoproveedor_id: $('#pagoproveedor_id').val() || $('input[name="pagoproveedor_id"]').val() || '',
                 importe_neto: $('#importe_neto_retencion').val(),
                 importe_iva: $('#importe_iva_retencion').val(),
                 idcuentacorrientes: $form.find('input[name="idcuentacorrientes[]"]').map(function () { return $(this).val(); }).get(),

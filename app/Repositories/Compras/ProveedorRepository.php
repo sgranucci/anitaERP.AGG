@@ -41,6 +41,7 @@ use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Seguridad\Usuario;
 use App\Traits\AnitaBridgeEscritura;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Schema;
 use App\ApiAnita;
 use Carbon\Carbon;
 use Auth;
@@ -214,6 +215,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
     public function find($id)
     {
+        // proveedor_cm05 solo existe en Crown (migración gated); en Ferli/AGG no hay tabla.
         return $this->model->with("proveedor_exclusiones")
 									->with("proveedor_archivos")
 									->with("proveedor_documentos_fiscales")
@@ -221,7 +223,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("proveedor_integrantes")
 									->with("proveedor_servicios")
 									->with("proveedor_salas.salas")
-									->with("proveedor_cm05s.provincias")
+									->when(Schema::hasTable('proveedor_cm05'), fn ($q) => $q->with('proveedor_cm05s.provincias'))
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
 									->with("condicionIIBBs")
@@ -301,7 +303,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("proveedor_integrantes")
 											->with("proveedor_servicios")
 											->with("proveedor_salas.salas")
-											->with("proveedor_cm05s.provincias")
+											->when(Schema::hasTable('proveedor_cm05'), fn ($q) => $q->with('proveedor_cm05s.provincias'))
 											->with("tipossuspensionproveedores")
 											->with("tipoempresas")
 											->with("condicionIIBBs")

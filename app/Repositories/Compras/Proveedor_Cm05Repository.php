@@ -5,6 +5,7 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Proveedor_Cm05;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 class Proveedor_Cm05Repository implements Proveedor_Cm05RepositoryInterface
 {
@@ -24,6 +25,10 @@ class Proveedor_Cm05Repository implements Proveedor_Cm05RepositoryInterface
 
     public function sincronizarDesdeRequest(int $proveedorId, array $data): void
     {
+        if (! Schema::hasTable('proveedor_cm05')) {
+            return;
+        }
+
         $filas = $this->filasDesdeRequest($data);
         $idsConservar = [];
 

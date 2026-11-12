@@ -9,6 +9,7 @@ use App\Models\Compras\RetencionIIBB_Condicion;
 use App\Models\Configuracion\Condicioniva;
 use App\Support\Compras\ProveedorRetencionIibbAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Matriz Crown: condición IIBB × inscripción en RN.
@@ -194,6 +195,11 @@ final class RetencionIibbCrownMatrizSupport
         }
 
         if (! $proveedor->exists || ! (int) ($proveedor->id ?? 0)) {
+            return false;
+        }
+
+        // Tabla solo en Crown; en otros entornos no hay inscripción CM05.
+        if (! Schema::hasTable('proveedor_cm05')) {
             return false;
         }
 

@@ -75,11 +75,15 @@ final class RetencionGananciasAcumuladoAnitaClaveSupport
     public static function etiqueta(string $tipo, string $letra, int $sucursal, int $nro): string
     {
         $letra = self::letra($letra);
+        // Misma clave visual que Pagoproveedor::etiquetaComprobante cuando la letra ERP es dummy.
+        if ($letra === ' ') {
+            return sprintf('%s %d-%d', self::tipo($tipo), $sucursal > 0 ? $sucursal : 1, $nro);
+        }
 
         return sprintf(
             '%s %s-%04d-%d',
             self::tipo($tipo),
-            $letra === ' ' ? '·' : $letra,
+            $letra,
             $sucursal,
             $nro
         );

@@ -35,9 +35,14 @@
     @endphp
     window.ppOldAplicaciones = @json($ppOldAplicaciones);
     window.ppOldRetencionesJson = @json(old('pp_retenciones_json', ''));
+    {{-- Total de certificados grabados: la barra no arranca en 0 antes del AJAX de recálculo. --}}
+    window.ppTotalRetenciones = {{ number_format((float) ($data->totalRetenciones() ?? 0), 2, '.', '') }};
     $(function () {
         if (typeof activa_eventos_consulta_cbu_pago === 'function') {
             activa_eventos_consulta_cbu_pago();
+        }
+        if (typeof window.pintarResumenDesembolso === 'function') {
+            window.pintarResumenDesembolso();
         }
     });
 </script>
