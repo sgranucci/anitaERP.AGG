@@ -2,6 +2,7 @@
 
 namespace App\Services\Arca;
 
+use App\Support\Arca\ArcaSslContextSupport;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -292,11 +293,7 @@ class WsapocConsultaService
                     'timeout' => $timeout,
                     'user_agent' => 'anitaERP-ARCA-WSAPOC',
                 ],
-                'ssl' => [
-                    'verify_peer' => true,
-                    'verify_peer_name' => true,
-                    'ciphers' => 'DEFAULT@SECLEVEL=1',
-                ],
+                'ssl' => ArcaSslContextSupport::sslOptions(),
             ]),
         ], $this->opcionesProxySoap()));
     }
@@ -404,11 +401,7 @@ class WsapocConsultaService
             }
             $ctx = stream_context_create([
                 'http' => $http,
-                'ssl' => [
-                    'verify_peer' => true,
-                    'verify_peer_name' => true,
-                    'ciphers' => 'DEFAULT@SECLEVEL=1',
-                ],
+                'ssl' => ArcaSslContextSupport::sslOptions(),
             ]);
 
             $body = @file_get_contents($remoteUrl, false, $ctx);

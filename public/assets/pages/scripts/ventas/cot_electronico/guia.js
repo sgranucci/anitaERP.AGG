@@ -46,6 +46,26 @@
         return resultado === parseInt(cuit.charAt(10), 10);
     }
 
+    function pintarTitularCuit($titular, texto, modo) {
+        $titular.removeClass('text-warning text-muted border-warning');
+        if (modo === 'aviso') {
+            $titular.addClass('text-warning border-warning');
+        } else if (modo === 'vacio') {
+            $titular.addClass('text-muted');
+        }
+        $titular.val(texto || '').attr('title', texto || '');
+    }
+
+    function mensajePadronArcaAviso(detalle) {
+        var base = 'Padrón ARCA no disponible (no bloquea el COT)';
+        var extra = String(detalle || '').trim();
+        if (extra === '' || /could not connect to host/i.test(extra)) {
+            return base;
+        }
+
+        return base + ': ' + extra;
+    }
+
     function marcarEstadoCuit(estado) {
         var $input = $('#cuit_chofer');
         var $error = $('#fila-cuit-chofer-cot .cot-cuit-error');
@@ -62,12 +82,14 @@
         if (estado === 'invalido') {
             $input.addClass('is-invalid');
             $error.removeClass('d-none');
-            $titular.val('').attr('title', 'CUIT inválida');
+            pintarTitularCuit($titular, '', 'vacio');
+            $titular.attr('title', 'CUIT inválida');
             return;
         }
 
         $error.addClass('d-none');
-        $titular.val('').attr('title', 'Se completa al validar la CUIT en padrón ARCA');
+        pintarTitularCuit($titular, '', 'vacio');
+        $titular.attr('title', 'Informativo: padrón ARCA. Si falla, igual se puede enviar el COT.');
     }
 
     function nombreDesdePadronArca(data) {
@@ -110,10 +132,11 @@
             return $.Deferred().resolve().promise();
         }
 
+        // El padrón ARCA es solo informativo: el envío a ARBA valida formato de CUIT, no el titular.
         marcarEstadoCuit('valido');
 
         if (!arcaConstanciaUrl) {
-            $titular.val('').attr('title', 'Consulta padrón no configurada');
+            pintarTitularCuit($titular, mensajePadronArcaAviso('consulta no configurada'), 'aviso');
             return $.Deferred().resolve().promise();
         }
 
@@ -139,21 +162,25 @@
                     nombre = nombreDesdePadronArca(resp.data);
                 }
                 if (nombre !== '') {
-                    $titular.val(nombre).attr('title', nombre);
+                    pintarTitularCuit($titular, nombre, 'ok');
                     return;
                 }
-                var mensaje = (resp && resp.message) ? resp.message : 'Sin datos en padrón ARCA';
-                $titular.val(mensaje).attr('title', mensaje);
+                pintarTitularCuit(
+                    $titular,
+                    mensajePadronArcaAviso((resp && resp.message) ? resp.message : 'sin datos'),
+                    'aviso'
+                );
             })
             .fail(function (jqXHR, status) {
                 if (status === 'abort') {
                     return;
                 }
-                var mensaje = 'No se pudo consultar padrón ARCA';
+                var detalle = 'No se pudo consultar padrón ARCA';
                 if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-                    mensaje = jqXHR.responseJSON.message;
+                    detalle = jqXHR.responseJSON.message;
                 }
-                $titular.val(mensaje).attr('title', mensaje);
+                // Nunca marcar is-invalid ni frenar el envío: el titular es solo ayuda visual.
+                pintarTitularCuit($titular, mensajePadronArcaAviso(detalle), 'aviso');
             })
             .always(function () {
                 $loading.addClass('d-none');

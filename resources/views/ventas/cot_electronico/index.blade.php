@@ -156,7 +156,7 @@
                                     <th>Nombre</th>
                                     <th style="width:140px;">Dominio cami&oacute;n</th>
                                     <th style="width:160px;">CUIT chofer</th>
-                                    <th>Titular CUIT</th>
+                                    <th title="Informativo (padr&oacute;n ARCA). Si falla la consulta, igual se puede enviar el COT.">Titular CUIT</th>
                                     <th style="width:70px;"></th>
                                 </tr>
                             </thead>
@@ -202,7 +202,7 @@
                                         </td>
                                         <td>
                                             <input type="text" class="form-control form-control-sm input-titular-cuit" readonly
-                                                value="" title="Se completa al validar la CUIT en padr&oacute;n ARCA">
+                                                value="" title="Informativo: padr&oacute;n ARCA. Si falla, igual se puede enviar el COT.">
                                         </td>
                                         <td class="text-center">
                                             <button type="button" class="btn btn-outline-danger btn-sm btn-quitar-reparto" title="Quitar fila">

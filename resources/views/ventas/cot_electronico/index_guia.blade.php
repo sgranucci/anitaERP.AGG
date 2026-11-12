@@ -148,10 +148,10 @@
                             </div>
                             <small class="text-danger cot-cuit-error d-none">CUIT inv&aacute;lida</small>
                         </div>
-                        <label class="col-lg-2 col-form-label text-right pr-2">Titular CUIT</label>
+                        <label class="col-lg-2 col-form-label text-right pr-2" title="Informativo (padr&oacute;n ARCA). Si falla, igual se puede enviar el COT.">Titular CUIT</label>
                         <div class="col-lg-3">
                             <input type="text" id="titular_cuit_chofer" class="form-control form-control-sm input-titular-cuit" readonly
-                                value="" title="Se completa al validar la CUIT en padr&oacute;n ARCA">
+                                value="" title="Informativo: padr&oacute;n ARCA. Si falla, igual se puede enviar el COT.">
                         </div>
                     </div>
                     <div class="form-group row">

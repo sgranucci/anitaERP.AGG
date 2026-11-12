@@ -58,10 +58,12 @@ return [
             'service_id' => 'ws_sr_constancia_inscripcion',
             'homo' => [
                 'wsdl' => 'https://awshomo.arca.gob.ar/sr-padron/webservices/personaServiceA5?WSDL',
+                'url' => 'https://awshomo.arca.gob.ar/sr-padron/webservices/personaServiceA5',
                 'wsdl_local' => $padronBase.'/wsdl/homo/personaServiceA5.wsdl',
             ],
             'prod' => [
                 'wsdl' => 'https://aws.arca.gob.ar/sr-padron/webservices/personaServiceA5?WSDL',
+                'url' => 'https://aws.arca.gob.ar/sr-padron/webservices/personaServiceA5',
                 'wsdl_local' => $padronBase.'/wsdl/prod/personaServiceA5.wsdl',
             ],
         ],

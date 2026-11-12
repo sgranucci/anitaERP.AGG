@@ -4,6 +4,7 @@ namespace App\Services\Arca;
 
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
+use App\Support\Arca\ArcaSslContextSupport;
 use Exception;
 use SoapClient;
 use Throwable;
@@ -82,19 +83,33 @@ class ConstanciaInscripcionService
 
         $timeout = max(5, (int) config('arca.padron.soap_timeout', 25));
 
-        $this->clientePadron = new SoapClient($this->wsdl(), array_merge([
+        $env = (string) config('arca.env', 'homo');
+        $location = (string) config("arca.padron.ws_sr_constancia_inscripcion.{$env}.url", '');
+        if ($location === '') {
+            // Fallback: mismo host del WSDL remoto sin query.
+            $remote = (string) config("arca.padron.ws_sr_constancia_inscripcion.{$env}.wsdl", '');
+            $location = $remote !== '' ? preg_replace('/\?.*$/', '', $remote) ?? $remote : '';
+        }
+
+        $opciones = [
             'trace' => 1,
             'exceptions' => true,
             'cache_wsdl' => WSDL_CACHE_DISK,
             'connection_timeout' => $timeout,
             'stream_context' => $this->soapStreamContext($timeout, false),
-        ], $this->opcionesProxySoap()));
+        ];
+        if ($location !== '') {
+            $opciones['location'] = $location;
+        }
+
+        $this->clientePadron = new SoapClient($this->wsdl(), array_merge($opciones, $this->opcionesProxySoap()));
 
         return $this->clientePadron;
     }
 
     /**
      * OpenSSL 3: sin SECLEVEL=1 AFIP/ARCA suele fallar con "dh key too small".
+     * Además aws.arca.gob.ar omite el intermedio Sectigo OV R36 → cafile propio.
      *
      * @return resource
      */
@@ -115,11 +130,7 @@ class ConstanciaInscripcionService
 
         return stream_context_create([
             'http' => $http,
-            'ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-                'ciphers' => 'DEFAULT@SECLEVEL=1',
-            ],
+            'ssl' => ArcaSslContextSupport::sslOptions(),
         ]);
     }
 
