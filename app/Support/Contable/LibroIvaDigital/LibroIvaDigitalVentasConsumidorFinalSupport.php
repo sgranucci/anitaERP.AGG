@@ -8,9 +8,15 @@ use App\Support\Configuracion\ParametroSistemaSupport;
 /**
  * Identificación comprador Factura B (RG 1415 modificada por RG 5700/2025).
  * Umbral compartido con emisión WSFE ({@see ParametroSistemaSupport::topeConsumidorFinal()}).
+ *
+ * Factura/ND/NC A y M: ARCA exige CUIT (80). El import Pxsol deja el CUIT en leyenda
+ * y el cliente genérico CF; no informar 99 en esos tipos.
  */
 final class LibroIvaDigitalVentasConsumidorFinalSupport
 {
+    /** Letras que no admiten documento 99 / CF anónimo en el Libro IVA Digital. */
+    private const LETRAS_EXIGEN_CUIT = ['A', 'M'];
+
     public static function umbralIdentificacion(): float
     {
         return ParametroSistemaSupport::topeConsumidorFinal();
@@ -24,6 +30,11 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
             || stripos((string) ($condicion->nombre ?? ''), 'consumidor final') !== false;
     }
 
+    public static function letraExigeCuit(string $letra): bool
+    {
+        return in_array(strtoupper(trim($letra)), self::LETRAS_EXIGEN_CUIT, true);
+    }
+
     public static function numeroDocumentoComprador(Venta $venta): string
     {
         $desdeVenta = preg_replace(
@@ -34,6 +45,13 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
 
         if ($desdeVenta !== '') {
             return $desdeVenta;
+        }
+
+        $desdeLeyenda = LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda(
+            (string) ($venta->leyenda ?? ''),
+        );
+        if ($desdeLeyenda !== '') {
+            return $desdeLeyenda;
         }
 
         if (self::esConsumidorFinal($venta)) {
@@ -83,11 +101,17 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
     /**
      * @return array{codigo_documento: string, numero_identificacion: string, nombre: string}
      */
-    public static function resolverComprador(Venta $venta, float $importeTotal): array
+    public static function resolverComprador(Venta $venta, float $importeTotal, ?string $letra = null): array
     {
+        $letraNorm = strtoupper(trim((string) $letra));
+        $nombre = trim((string) ($venta->nombre ?: $venta->clientes?->nombre ?: ''));
+
+        if (self::letraExigeCuit($letraNorm)) {
+            return self::compradorConCuitObligatorio($venta, $nombre);
+        }
+
         $esConsumidorFinal = self::esConsumidorFinal($venta);
         $documento = self::numeroDocumentoComprador($venta);
-        $nombre = trim((string) ($venta->nombre ?: $venta->clientes?->nombre ?: ''));
 
         if (! $esConsumidorFinal) {
             return self::compradorIdentificado($venta, $documento, $nombre);
@@ -126,6 +150,51 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
                 ? '-VENTA GLOBAL DIARIA-'
                 : '-CONSUMIDOR FINAL-',
         ];
+    }
+
+    /**
+     * @return array{codigo_documento: string, numero_identificacion: string, nombre: string}
+     */
+    private static function compradorConCuitObligatorio(Venta $venta, string $nombre): array
+    {
+        $cuit = self::cuitComprador($venta);
+        $nombreMostrar = $nombre !== '' && stripos($nombre, 'CONSUMIDOR FINAL') === false
+            ? $nombre
+            : trim((string) ($venta->nombre ?? ''));
+        if ($nombreMostrar === '' || stripos($nombreMostrar, 'CONSUMIDOR FINAL') !== false) {
+            $nombreMostrar = 'SIN DENOMINACION';
+        }
+
+        $id = LibroIvaDigitalIdentificacionSupport::asegurar(
+            LibroIvaDigitalIdentificacionSupport::CODIGO_CUIT,
+            $cuit,
+        );
+
+        return [
+            'codigo_documento' => $id['codigo_documento'],
+            'numero_identificacion' => $id['numero_identificacion'],
+            'nombre' => $nombreMostrar,
+        ];
+    }
+
+    public static function cuitComprador(Venta $venta): string
+    {
+        $candidatos = [
+            (string) ($venta->nroinscripcion ?? ''),
+            LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda((string) ($venta->leyenda ?? '')),
+            (string) ($venta->clientes?->numerodocumento ?? ''),
+        ];
+
+        foreach ($candidatos as $raw) {
+            $digits = LibroIvaDigitalIdentificacionSupport::cuitOnceDigitos(
+                LibroIvaDigitalComprasCuitSupport::soloDigitos($raw),
+            );
+            if (strlen($digits) === 11 && LibroIvaDigitalComprasCuitSupport::esCuitValido($digits)) {
+                return $digits;
+            }
+        }
+
+        return '';
     }
 
     /**

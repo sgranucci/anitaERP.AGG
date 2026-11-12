@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Contable;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\LibroIvaDigitalService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -128,13 +129,20 @@ class LibroIvaDigitalController extends Controller
 
     /**
      * @param  array<string, mixed>  $filtros
-     * @return array{por_fecha_jornada: bool, prorrateo_cf_global: bool, completar_compras_anita: bool, completar_fsl_anita: bool}
+     * @return array{
+     *     por_fecha_jornada: bool,
+     *     prorrateo_cf_global: bool,
+     *     coeficiente_iva_indirecto: float,
+     *     completar_compras_anita: bool,
+     *     completar_fsl_anita: bool
+     * }
      */
     private function opcionesDesdeFiltros(array $filtros): array
     {
         return [
             'por_fecha_jornada' => (bool) ($filtros['por_fecha_jornada'] ?? false),
             'prorrateo_cf_global' => (bool) ($filtros['prorrateo_cf_global'] ?? false),
+            'coeficiente_iva_indirecto' => (float) ($filtros['coeficiente_iva_indirecto'] ?? 1.0),
             'completar_compras_anita' => (bool) ($filtros['completar_compras_anita'] ?? true),
             'completar_fsl_anita' => (bool) ($filtros['completar_fsl_anita'] ?? true),
         ];
@@ -156,11 +164,18 @@ class LibroIvaDigitalController extends Controller
                 (bool) $filtros[$campo],
             );
         }
+        if (EntornoEmpresaSupport::esCrown()) {
+            ReportePreferenciasUsuario::persistirFloat(
+                self::PREFERENCIAS_CLAVE,
+                'coeficiente_iva_indirecto',
+                (float) ($filtros['coeficiente_iva_indirecto'] ?? 1.0),
+            );
+        }
     }
 
     /**
      * @param  array<string, mixed>  $filtros
-     * @return array<string, int|string>
+     * @return array<string, int|string|float>
      */
     private function queryFiltros(array $filtros, bool $mostrado): array
     {
@@ -173,6 +188,14 @@ class LibroIvaDigitalController extends Controller
             'completar_compras_anita' => (int) ($filtros['completar_compras_anita'] ?? 0),
             'completar_fsl_anita' => (int) ($filtros['completar_fsl_anita'] ?? 0),
         ];
+        if (EntornoEmpresaSupport::esCrown()) {
+            $query['coeficiente_iva_indirecto'] = number_format(
+                (float) ($filtros['coeficiente_iva_indirecto'] ?? 1.0),
+                4,
+                '.',
+                '',
+            );
+        }
         if ($mostrado) {
             $query['mostrado'] = 1;
         }
@@ -202,7 +225,9 @@ class LibroIvaDigitalController extends Controller
      *     mes:?int,
      *     por_fecha_jornada:int,
      *     prorrateo_cf_global:int,
-     *     completar_compras_anita:int
+     *     coeficiente_iva_indirecto:float,
+     *     completar_compras_anita:int,
+     *     completar_fsl_anita:int
      * }
      */
     private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
@@ -262,9 +287,35 @@ class LibroIvaDigitalController extends Controller
             'mes' => $mes,
             'por_fecha_jornada' => $this->boolFiltro($request, 'por_fecha_jornada', true) ? 1 : 0,
             'prorrateo_cf_global' => $this->boolFiltro($request, 'prorrateo_cf_global', false) ? 1 : 0,
+            'coeficiente_iva_indirecto' => $this->coeficienteIvaIndirectoDesdeRequest($request),
             'completar_compras_anita' => $this->boolFiltro($request, 'completar_compras_anita', true) ? 1 : 0,
             'completar_fsl_anita' => $this->boolFiltro($request, 'completar_fsl_anita', true) ? 1 : 0,
         ];
+    }
+
+    private function coeficienteIvaIndirectoDesdeRequest(Request $request): float
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return 1.0;
+        }
+
+        if ($request->exists('coeficiente_iva_indirecto')) {
+            $crudo = str_replace(',', '.', trim((string) $request->input('coeficiente_iva_indirecto')));
+            if ($crudo === '' || ! is_numeric($crudo)) {
+                return 1.0;
+            }
+
+            return max(0.0, min(100.0, (float) $crudo));
+        }
+
+        return max(
+            0.0,
+            min(100.0, ReportePreferenciasUsuario::leerFloat(
+                self::PREFERENCIAS_CLAVE,
+                'coeficiente_iva_indirecto',
+                1.0,
+            )),
+        );
     }
 
     private function boolFiltro(Request $request, string $campo, bool $default): bool

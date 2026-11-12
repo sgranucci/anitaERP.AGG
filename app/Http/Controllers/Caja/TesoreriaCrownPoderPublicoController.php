@@ -50,7 +50,7 @@ class TesoreriaCrownPoderPublicoController extends Controller
     private function poderDelDia(Request $request, TesoreriaCrownJornada $jornada): array
     {
         $fecha = $jornada->fecha->format('Y-m-d');
-        $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fecha);
+        $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fecha, (int) $jornada->sala_id);
         try {
             $persistido = TesoreriaCrownPoderPublicoGenerador::obtenerOGenerar(
                 (int) $jornada->sala_id,

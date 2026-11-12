@@ -16,12 +16,16 @@ final class IngresosBrutosListadoFiltros
 
     public const TIPO_PERCEPCIONES_CABA = 'percepciones_caba';
 
+    /** Retenciones compras — aplicativo Rentas Río Negro (p-ingbruto Crown). */
+    public const TIPO_RETENCIONES_RIO_NEGRO = 'retenciones_rio_negro';
+
     /** @var array<string, string> */
     public const TIPOS = [
         self::TIPO_RETENCIONES => 'Retenciones ARBA',
         self::TIPO_PERCEPCIONES => 'Percepciones ARBA',
         self::TIPO_RETENCIONES_CABA => 'Retenciones CABA (AGIP)',
         self::TIPO_PERCEPCIONES_CABA => 'Percepciones CABA (AGIP)',
+        self::TIPO_RETENCIONES_RIO_NEGRO => 'Retenciones Río Negro (Rentas)',
     ];
 
     /** Liquidación: 0=rango libre, 1=1ra quincena, 2=2da quincena, 3=mes completo. */
@@ -119,9 +123,18 @@ final class IngresosBrutosListadoFiltros
         return in_array($tipo, [self::TIPO_RETENCIONES_CABA, self::TIPO_PERCEPCIONES_CABA], true);
     }
 
+    public static function esPresentacionRioNegro(string $tipo): bool
+    {
+        return $tipo === self::TIPO_RETENCIONES_RIO_NEGRO;
+    }
+
     public static function esRetencion(string $tipo): bool
     {
-        return in_array($tipo, [self::TIPO_RETENCIONES, self::TIPO_RETENCIONES_CABA], true);
+        return in_array($tipo, [
+            self::TIPO_RETENCIONES,
+            self::TIPO_RETENCIONES_CABA,
+            self::TIPO_RETENCIONES_RIO_NEGRO,
+        ], true);
     }
 
     /**
@@ -133,7 +146,9 @@ final class IngresosBrutosListadoFiltros
     }
 
     /**
-     * CABA (AGIP) es una DDJJ mensual. Buenos Aires queda en la provincia 902.
+     * Fija la provincia del fisco según el tipo:
+     * CABA 901, Río Negro 916, resto Buenos Aires 902.
+     * AGIP y Rentas RN son DDJJ mensuales.
      *
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
@@ -145,13 +160,17 @@ final class IngresosBrutosListadoFiltros
             return $filtros;
         }
 
-        $jurisdiccion = self::esPresentacionAgip($tipo) ? 901 : 902;
+        $jurisdiccion = match (true) {
+            self::esPresentacionAgip($tipo) => 901,
+            self::esPresentacionRioNegro($tipo) => IngresosBrutosAgenteOpcionesSupport::JURISDICCION_RIO_NEGRO,
+            default => 902,
+        };
         $provincia = IngresosBrutosAgenteOpcionesSupport::datosProvincia($jurisdiccion);
         if ($provincia !== null) {
             $filtros['provincia_id'] = $provincia['id'];
         }
 
-        if (self::esPresentacionAgip($tipo)) {
+        if (self::esPresentacionAgip($tipo) || self::esPresentacionRioNegro($tipo)) {
             $filtros['liquidacion'] = 3;
             $periodo = (string) ($filtros['periodo'] ?? date('Ym'));
             [$desde, $hasta] = self::rangoDesdeLiquidacion($periodo, 3);

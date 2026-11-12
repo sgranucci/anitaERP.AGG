@@ -7,11 +7,15 @@ namespace App\Support\Contable\PercepcionSufrida;
 /**
  * Archivos de importación.
  *
- * SIFERE (formato predeterminado de percepciones sufridas): jurisdicción 3,
- * CUIT con guiones 13, fecha dd/mm/aaaa 10, sucursal 4, número 8, tipo 1, letra 1,
- * importe 11 con coma decimal. Terminador LF, como p-sifere.c.
- * Nota de crédito (tipo C, en el archivo «CA» si la letra es A): el importe
- * va en negativo y ocupa las mismas 11 posiciones (-0000699,47).
+ * SIFERE Web (COMARB) — diseños vigentes:
+ * - Percepciones sufridas: 51 posiciones (p-sifere.c PERCEPCIONES / psif).
+ * - Retenciones sufridas: 79 posiciones (p-sifere.c RETENCIONES / rsif).
+ *
+ * Percepciones: jurisdicción 3, CUIT con guiones 13, fecha dd/mm/aaaa 10,
+ * PV 4, número 8, tipo 1, letra 1, importe 11 con coma. NC: signo en la 1.ª posición.
+ *
+ * Retenciones: jurisdicción 3, CUIT 13, fecha 10, sucursal constancia 4,
+ * nro. constancia 16, tipo 1, letra 1, nro. comprobante original 20, importe 11.
  *
  * Percepciones de IVA: CSV de IVA Simple (F.2051), separador `;`.
  * Tipos vigentes: 1 factura, 2 recibo, 3 nota de crédito, 4 nota de débito, 5 otro.
@@ -54,6 +58,56 @@ final class PercepcionSufridaArchivoSupport
                 max(0, (int) ($linea['nro'] ?? 0)) % 100000000,
                 $tipo,
                 $letra,
+                $importeTxt,
+            ).self::EOL;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Retenciones sufridas (79 chars). Como p-sifere.c case RETENCIONES.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    public static function sifereRetenciones(array $lineas, ?int $jurisdiccion = null): string
+    {
+        $out = '';
+        foreach ($lineas as $linea) {
+            $jur = (int) ($linea['jurisdiccion'] ?? 0);
+            if ($jur < 901 || $jur > 924) {
+                continue;
+            }
+            if ($jurisdiccion !== null && $jur !== $jurisdiccion) {
+                continue;
+            }
+            $cuit = self::cuitConGuiones((string) ($linea['cuit'] ?? ''));
+            if ($cuit === '') {
+                continue;
+            }
+            $importe = round((float) ($linea['importe'] ?? 0), 2);
+            if (abs($importe) < 0.009) {
+                continue;
+            }
+            $tipo = strtoupper(substr(trim((string) ($linea['tipo_documento'] ?? $linea['tipo'] ?? 'R')).'R', 0, 1));
+            if ($tipo === '') {
+                $tipo = 'R';
+            }
+            $letra = strtoupper(substr(trim((string) ($linea['letra'] ?? '')).' ', 0, 1));
+            if (trim($letra) === '') {
+                $letra = ' ';
+            }
+            $importeTxt = self::importeSifere($importe, $tipo === 'C' ? 'C' : 'F');
+            $out .= sprintf(
+                '%03d%13s%10s%04d%016d%1s%1s%020d%s',
+                $jur,
+                $cuit,
+                self::fechaDma((string) ($linea['fecha'] ?? '')),
+                max(0, (int) ($linea['sucursal'] ?? 0)) % 10000,
+                max(0, (int) ($linea['nro_retencion'] ?? $linea['nro_ret'] ?? 0)) % 10000000000000000,
+                $tipo,
+                $letra,
+                max(0, (int) ($linea['nro_comprobante'] ?? $linea['nro'] ?? 0)) % 100000000000000000000,
                 $importeTxt,
             ).self::EOL;
         }

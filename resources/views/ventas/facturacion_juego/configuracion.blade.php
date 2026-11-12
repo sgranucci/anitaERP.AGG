@@ -53,10 +53,10 @@
                         </div>
                     </div>
 
-                    <h5 class="mt-3 mb-2">Puntos de venta on-line / Betsur (FOL/COL)</h5>
+                    <h5 class="mt-3 mb-2">Puntos de venta online (FOL/COL) — una factura por d&iacute;a</h5>
                     <p class="text-muted small mb-2">
-                        Se eligen con el modal est&aacute;ndar (F1 / lupa). Al emitir FOL/COL se usa el c&oacute;digo del PV
-                        (67 Del R&iacute;o, 68 Betsur).
+                        Del R&iacute;o, Betsur y Apuestas deportivas son globales: se emite <strong>una sola factura por d&iacute;a</strong>
+                        por cada rubro (no por sala). F1 / lupa para elegir el PV.
                     </p>
                     @include('ventas.partials.campo_consulta_puntoventa', [
                         'prefix' => 'fj_del_rio',
@@ -84,12 +84,24 @@
                         'col_input' => 'col-lg-6',
                         'required' => true,
                     ])
+                    @include('ventas.partials.campo_consulta_puntoventa', [
+                        'prefix' => 'fj_apuestas',
+                        'label' => 'PV Apuestas deportivas',
+                        'layout' => 'form_row',
+                        'inputName' => 'puntoventa_apuestas_id',
+                        'inputId' => 'puntoventa_apuestas_id',
+                        'puntoventaId' => $pvApuestas['id'] ?? '',
+                        'codigo' => $pvApuestas['codigo'] ?? '',
+                        'nombre' => $pvApuestas['nombre'] ?? '',
+                        'col_label' => 'col-lg-3 control-label text-right pr-2',
+                        'col_input' => 'col-lg-6',
+                        'required' => true,
+                    ])
 
                     <h5 class="mt-4 mb-2">Salas — PV Anita + c&oacute;digos de cuenta</h5>
                     <p class="text-muted small">
-                        C&oacute;digos de cuenta de caja y contables (como en Anita). Se resuelven al guardar.
-                        Impcont: mesas 500+suc, slots 700+suc, ruleta 800+suc.
-                        Del R&iacute;o online y Betsur usan FOL/COL con PV 67/68 y las cuentas configuradas aqu&iacute;.
+                        C&oacute;digos de cuenta de caja y contables. Mesas/slots/ruleta por sala.
+                        Online (Del R&iacute;o / Betsur / Apuestas): se usa la primera sala activa con cuenta cargada.
                     </p>
 
                     <div class="table-responsive">
@@ -105,6 +117,7 @@
                                     <th>Cta. ruleta</th>
                                     <th>Cta. Del R&iacute;o</th>
                                     <th>Cta. Betsur</th>
+                                    <th>Cta. Apuestas</th>
                                     <th>Centro costo</th>
                                 </tr>
                             </thead>
@@ -166,6 +179,13 @@
                                                 value="{{ old("salas.$sid.cuentacontable_betsur_codigo", $cfg->cuentacontableBetsur->codigo ?? '') }}"
                                                 placeholder="C&oacute;d.">
                                             <div class="small text-muted">{{ \Illuminate\Support\Str::limit($cfg->cuentacontableBetsur->nombre ?? '', 28) }}</div>
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm"
+                                                name="salas[{{ $sid }}][cuentacontable_apuestas_codigo]"
+                                                value="{{ old("salas.$sid.cuentacontable_apuestas_codigo", $cfg->cuentacontableApuestas->codigo ?? '') }}"
+                                                placeholder="C&oacute;d.">
+                                            <div class="small text-muted">{{ \Illuminate\Support\Str::limit($cfg->cuentacontableApuestas->nombre ?? '', 28) }}</div>
                                         </td>
                                         <td>
                                             <input type="text" class="form-control form-control-sm"

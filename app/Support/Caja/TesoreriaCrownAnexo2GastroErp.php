@@ -45,7 +45,10 @@ final class TesoreriaCrownAnexo2GastroErp
             ->get();
 
         foreach ($comps as $comp) {
-            $origen = strtoupper((string) ($comp->cajero->tipo_tarea ?? $comp->asignacion->tipo_tarea ?? 'G'));
+            $origen = strtoupper((string) (
+                ($comp->asignacion ? $comp->asignacion->tipoTareaEfectiva() : '')
+                ?: ($comp->cajero->tipo_tarea ?? 'G')
+            ));
             $sucursal = self::sucursalDeComprobante($comp, $origen);
             $clave = $sucursal.'|'.$origen;
             $bucket = self::bucket($buckets, $clave, $sucursal, $origen);

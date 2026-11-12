@@ -22,6 +22,9 @@ use RuntimeException;
 
 /**
  * Generación de comprobantes de resultado de juego (paridad p-resultado.c).
+ *
+ * Rubros de sala (mesa/slot/ruleta): una factura por sala/día.
+ * Rubros online (Del Río / Betsur / Apuestas): una sola factura por día (dato global).
  */
 class FacturacionJuegoService
 {
@@ -37,16 +40,62 @@ class FacturacionJuegoService
      */
     public function preview(string $fechaDesde, string $fechaHasta, ?int $salaId = null): array
     {
+        $flashes = $this->flashesEnRango($fechaDesde, $fechaHasta, $salaId);
         $filas = [];
-        foreach ($this->flashesPendientes($fechaDesde, $fechaHasta, $salaId) as $flash) {
+
+        foreach ($flashes as $flash) {
             $cfg = FacturacionJuegoConfigSupport::salaPorSalaId((int) $flash->sala_id);
-            foreach ($this->rubros() as $rubro) {
+            foreach (FacturacionJuegoTipoSupport::rubrosSala() as $rubro) {
                 $item = $this->armarItemPreview($flash, $rubro, $cfg);
                 if ($item !== null) {
                     $filas[] = $item;
                 }
             }
         }
+
+        foreach ($this->fechasOnlinePendientes($flashes) as $fecha => $flashRep) {
+            foreach (FacturacionJuegoTipoSupport::rubrosOnline() as $rubro) {
+                if ($this->onlineYaProcesadoEnFecha($flashes, $fecha, $rubro)) {
+                    continue;
+                }
+                $resultado = FacturacionJuegoTotalesSupport::resultadoRubro($flashRep, $rubro);
+                if (FacturacionJuegoTotalesSupport::esCero($resultado)) {
+                    continue;
+                }
+                $cfg = FacturacionJuegoConfigSupport::salaParaRubroOnline($rubro)
+                    ?? FacturacionJuegoConfigSupport::salaPorSalaId((int) $flashRep->sala_id);
+                $abrev = FacturacionJuegoTipoSupport::abreviaturaParaResultado($rubro, $resultado);
+                $faltantes = $cfg
+                    ? FacturacionJuegoConfigSupport::faltantesSala($cfg, $rubro)
+                    : ['Sin configuración de sala'];
+                $filas[] = [
+                    'flash_id' => (int) $flashRep->id,
+                    'fecha' => $fecha,
+                    'sala_id' => 0,
+                    'sala_codigo' => 'GLOBAL',
+                    'sala_nombre' => 'Online (todas las salas)',
+                    'empresa_id' => (int) $flashRep->empresa_id,
+                    'rubro' => $rubro,
+                    'rubro_label' => FacturacionJuegoTipoSupport::nombreCliente($rubro),
+                    'resultado' => $resultado,
+                    'monto' => abs($resultado),
+                    'tipo' => $abrev,
+                    'letra' => FacturacionJuegoTipoSupport::letra(),
+                    'sucursal_anita' => FacturacionJuegoTipoSupport::sucursalAnitaParaRubro(
+                        $rubro,
+                        (int) ($cfg->sucursal_anita ?? 0),
+                    ),
+                    'faltantes' => $faltantes,
+                    'listo' => $faltantes === [],
+                    'global_online' => true,
+                ];
+            }
+        }
+
+        usort($filas, static function (array $a, array $b): int {
+            return [$a['fecha'], $a['sala_codigo'], $a['rubro']]
+                <=> [$b['fecha'], $b['sala_codigo'], $b['rubro']];
+        });
 
         return $filas;
     }
@@ -60,7 +109,50 @@ class FacturacionJuegoService
         $omitidos = [];
         $errores = [];
 
-        $flashes = $this->flashesPendientes($fechaDesde, $fechaHasta, $salaId);
+        $flashes = $this->flashesEnRango($fechaDesde, $fechaHasta, $salaId);
+
+        // 1) Online global: una factura por día y rubro.
+        foreach ($this->fechasOnlinePendientes($flashes) as $fecha => $flashRep) {
+            try {
+                $resultadoDia = DB::transaction(function () use ($fecha, $fechaDesde, $fechaHasta, $salaId) {
+                    $delDia = FlashCrown::query()
+                        ->with(['sala:id,codigo,nombre'])
+                        ->whereDate('fecha', $fecha)
+                        ->when($salaId !== null && $salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+                        ->whereDate('fecha', '>=', $fechaDesde)
+                        ->whereDate('fecha', '<=', $fechaHasta)
+                        ->lockForUpdate()
+                        ->orderBy('sala_id')
+                        ->get();
+
+                    $out = ['generados' => [], 'omitidos' => []];
+                    $rep = $delDia->first();
+                    if ($rep === null) {
+                        return $out;
+                    }
+
+                    foreach (FacturacionJuegoTipoSupport::rubrosOnline() as $rubro) {
+                        $item = $this->emitirOnlineGlobalSiCorresponde($delDia, $rep, $rubro);
+                        if ($item === null) {
+                            continue;
+                        }
+                        if (! empty($item['omitido'])) {
+                            $out['omitidos'][] = $item;
+                        } else {
+                            $out['generados'][] = $item;
+                        }
+                    }
+
+                    return $out;
+                });
+                $generados = array_merge($generados, $resultadoDia['generados']);
+                $omitidos = array_merge($omitidos, $resultadoDia['omitidos']);
+            } catch (\Throwable $e) {
+                $errores[] = 'Online '.$fecha.': '.$e->getMessage();
+            }
+        }
+
+        // 2) Rubros de sala: por flash.
         foreach ($flashes as $flash) {
             try {
                 $resultadoDia = DB::transaction(function () use ($flash) {
@@ -75,7 +167,7 @@ class FacturacionJuegoService
                     }
 
                     $out = ['generados' => [], 'omitidos' => []];
-                    foreach ($this->rubros() as $rubro) {
+                    foreach (FacturacionJuegoTipoSupport::rubrosSala() as $rubro) {
                         $item = $this->emitirRubroSiCorresponde($bloqueado, $cfg, $rubro);
                         if ($item === null) {
                             continue;
@@ -104,7 +196,7 @@ class FacturacionJuegoService
     /**
      * @return Collection<int, FlashCrown>
      */
-    private function flashesPendientes(string $fechaDesde, string $fechaHasta, ?int $salaId): Collection
+    private function flashesEnRango(string $fechaDesde, string $fechaHasta, ?int $salaId): Collection
     {
         $q = FlashCrown::query()
             ->with(['sala:id,codigo,nombre', 'empresa:id,nombre'])
@@ -117,27 +209,44 @@ class FacturacionJuegoService
             $q->where('sala_id', $salaId);
         }
 
-        return $q->get()->filter(function (FlashCrown $flash) {
-            foreach ($this->rubros() as $rubro) {
-                if (! FacturacionJuegoTotalesSupport::procesado($flash, $rubro)
-                    && ! FacturacionJuegoTotalesSupport::esCero(
-                        FacturacionJuegoTotalesSupport::resultadoRubro($flash, $rubro)
-                    )
-                ) {
-                    return true;
-                }
-            }
-
-            return false;
-        })->values();
+        return $q->get();
     }
 
     /**
-     * @return list<string>
+     * Primer flash de cada fecha (para montos online globales).
+     *
+     * @param  Collection<int, FlashCrown>  $flashes
+     * @return array<string, FlashCrown>
      */
-    private function rubros(): array
+    private function fechasOnlinePendientes(Collection $flashes): array
     {
-        return FacturacionJuegoTipoSupport::rubros();
+        $porFecha = [];
+        foreach ($flashes as $flash) {
+            $fecha = Carbon::parse((string) $flash->fecha)->toDateString();
+            if (! isset($porFecha[$fecha])) {
+                $porFecha[$fecha] = $flash;
+            }
+        }
+        ksort($porFecha);
+
+        return $porFecha;
+    }
+
+    /**
+     * @param  Collection<int, FlashCrown>  $flashes
+     */
+    private function onlineYaProcesadoEnFecha(Collection $flashes, string $fecha, string $rubro): bool
+    {
+        foreach ($flashes as $flash) {
+            if (Carbon::parse((string) $flash->fecha)->toDateString() !== $fecha) {
+                continue;
+            }
+            if (FacturacionJuegoTotalesSupport::procesado($flash, $rubro)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -175,6 +284,97 @@ class FacturacionJuegoService
             ),
             'faltantes' => $faltantes,
             'listo' => $faltantes === [],
+        ];
+    }
+
+    /**
+     * @param  Collection<int, FlashCrown>  $delDia
+     * @return array<string, mixed>|null
+     */
+    private function emitirOnlineGlobalSiCorresponde(Collection $delDia, FlashCrown $rep, string $rubro): ?array
+    {
+        if ($this->onlineYaProcesadoEnFecha($delDia, Carbon::parse((string) $rep->fecha)->toDateString(), $rubro)) {
+            return null;
+        }
+
+        $resultado = FacturacionJuegoTotalesSupport::resultadoRubro($rep, $rubro);
+        if (FacturacionJuegoTotalesSupport::esCero($resultado)) {
+            return [
+                'omitido' => true,
+                'flash_id' => (int) $rep->id,
+                'rubro' => $rubro,
+                'motivo' => 'Monto en cero',
+                'global_online' => true,
+            ];
+        }
+
+        $cfg = FacturacionJuegoConfigSupport::salaParaRubroOnline($rubro);
+        if ($cfg === null || ! $cfg->activo) {
+            throw new InvalidArgumentException(
+                FacturacionJuegoTipoSupport::nombreCliente($rubro).': no hay sala activa con configuración.',
+            );
+        }
+        $faltantes = FacturacionJuegoConfigSupport::faltantesSala($cfg, $rubro);
+        if ($faltantes !== []) {
+            throw new InvalidArgumentException(
+                FacturacionJuegoTipoSupport::nombreCliente($rubro).': falta '.implode(', ', $faltantes),
+            );
+        }
+
+        $abrev = FacturacionJuegoTipoSupport::abreviaturaParaResultado($rubro, $resultado);
+        $tipo = FacturacionJuegoTipoSupport::tipo($abrev);
+        $monto = abs($resultado);
+        $fechaDia = Carbon::parse((string) $rep->fecha)->toDateString();
+        $nombreCliente = FacturacionJuegoTipoSupport::nombreCliente($rubro);
+        $sucursalAnita = FacturacionJuegoTipoSupport::sucursalAnitaParaRubro(
+            $rubro,
+            (int) $cfg->sucursal_anita,
+        );
+        $leyenda = $nombreCliente.' '.$fechaDia.' — PV '.$sucursalAnita.' (global)';
+
+        $venta = $this->exentaEmisionService->emitir(
+            $tipo,
+            FacturacionJuegoTipoSupport::letra(),
+            $nombreCliente,
+            (int) $rep->empresa_id,
+            $fechaDia,
+            $monto,
+            $sucursalAnita,
+            $leyenda,
+        );
+
+        $conceptoMayor = FacturacionJuegoTipoSupport::conceptoMayor(
+            (string) $venta['codigo'],
+            $nombreCliente,
+        );
+        $asientoId = $this->grabarAsiento(
+            $rep,
+            $cfg,
+            $rubro,
+            $tipo,
+            $monto,
+            $fechaDia,
+            $conceptoMayor,
+            (int) $venta['venta_id'],
+        );
+
+        foreach ($delDia as $flash) {
+            $this->marcarProcesado($flash, $rubro, (int) $venta['venta_id'], $asientoId);
+        }
+
+        return [
+            'omitido' => false,
+            'flash_id' => (int) $rep->id,
+            'fecha' => $fechaDia,
+            'sala_id' => 0,
+            'sala_codigo' => 'GLOBAL',
+            'rubro' => $rubro,
+            'tipo' => $abrev,
+            'monto' => $monto,
+            'venta_id' => (int) $venta['venta_id'],
+            'codigo' => (string) $venta['codigo'],
+            'asiento_id' => $asientoId,
+            'global_online' => true,
         ];
     }
 
@@ -279,7 +479,6 @@ class FacturacionJuegoService
         );
         $payload['venta_id'] = $ventaId;
 
-        // Crown: asiento solo en ERP (venta ya no va a Anita; no duplicar en ctamov).
         if (EntornoEmpresaSupport::esCrown()) {
             $payload['omitir_anita'] = true;
         }
@@ -320,6 +519,11 @@ class FacturacionJuegoService
                 'proc_betsur' => '*',
                 'venta_betsur_id' => $ventaId,
                 'asiento_betsur_id' => $asientoId,
+            ],
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => [
+                'proc_apuestas' => '*',
+                'venta_apuestas_id' => $ventaId,
+                'asiento_apuestas_id' => $asientoId,
             ],
             default => throw new InvalidArgumentException('Rubro inválido'),
         };

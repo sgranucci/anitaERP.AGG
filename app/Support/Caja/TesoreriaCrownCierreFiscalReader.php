@@ -19,6 +19,24 @@ use RuntimeException;
 final class TesoreriaCrownCierreFiscalReader
 {
     /**
+     * Solo cierres ya vinculados al comprobante (rendición gastro: tarjetita informativa).
+     *
+     * @return array{error: ?string, filas: list<array<string, mixed>>}
+     */
+    public static function vinculadosDe(TesoreriaCrownComprobante $comprobante): array
+    {
+        $filas = [];
+        foreach ($comprobante->cierresFiscales as $fila) {
+            $filas[] = self::desdeGuardado($fila);
+        }
+        usort($filas, function (array $a, array $b): int {
+            return [$a['sucursal'], $a['hora'], $a['tipo']] <=> [$b['sucursal'], $b['hora'], $b['tipo']];
+        });
+
+        return ['error' => null, 'filas' => $filas];
+    }
+
+    /**
      * @return array{error: ?string, filas: list<array<string, mixed>>}
      */
     public static function paraRendicion(TesoreriaCrownComprobante $comprobante): array

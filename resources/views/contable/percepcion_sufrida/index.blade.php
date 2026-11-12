@@ -60,6 +60,20 @@
                                 value="{{ $filtros['fecha_hasta'] ?? date('Y-m-d') }}" required>
                         </div>
                     </div>
+                    @if (($es_iibb ?? '0') === '1')
+                        <div class="form-group row">
+                            <label for="exporta" class="{{ $colLabel }} requerido">Qué exporta</label>
+                            <div class="{{ $colInput }}">
+                                <select name="exporta" id="exporta" class="form-control" required>
+                                    @foreach (($opciones_exporta ?? []) as $valor => $etiqueta)
+                                        <option value="{{ $valor }}" @selected(($filtros['exporta'] ?? 'percepciones') === $valor)>
+                                            {{ $etiqueta }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    @endif
                     <div class="form-group row mb-0">
                         <label class="{{ $colLabel }}">Anita hasta</label>
                         <div class="{{ $colInput }}">
@@ -67,7 +81,11 @@
                         </div>
                         <div class="col-lg-6">
                             <p class="form-control-plaintext text-muted small mb-0">
-                                Hasta esa fecha el mayor se lee de Anita. Desde el día siguiente, solo del ERP.
+                                @if (($es_retenciones ?? '0') === '1')
+                                    Retenciones: prioriza cobranzas del ERP y completa con Anita (RIC / R01 / R02).
+                                @else
+                                    Hasta esa fecha el mayor se lee de Anita. Desde el día siguiente, solo del ERP.
+                                @endif
                             </p>
                         </div>
                     </div>
@@ -79,11 +97,12 @@
                     </button>
                     @if ($consultado && can($permiso_exportar, false))
                         @if (($es_iibb ?? '0') === '1')
+                            @php $prefijoArchivo = ($es_retenciones ?? '0') === '1' ? 'rsif' : 'psif'; @endphp
                             <a href="{{ route($ruta_exportar, array_merge($filtrosQuery, ['jurisdiccion' => 901])) }}" class="btn btn-success js-percepcion-descarga">
-                                <i class="fa fa-download"></i> Descargar 901
+                                <i class="fa fa-download"></i> Descargar {{ $prefijoArchivo }}-901
                             </a>
                             <a href="{{ route($ruta_exportar, array_merge($filtrosQuery, ['jurisdiccion' => 902])) }}" class="btn btn-success js-percepcion-descarga">
-                                <i class="fa fa-download"></i> Descargar 902
+                                <i class="fa fa-download"></i> Descargar {{ $prefijoArchivo }}-902
                             </a>
                             <a href="{{ route('exportar_sifere_reporte', array_merge($filtrosQuery, ['jurisdiccion' => 901])) }}" class="btn btn-outline-success js-percepcion-descarga">
                                 <i class="fa fa-file-excel-o"></i> Excel 901
@@ -124,7 +143,11 @@
                 $desvioSaldo = round((float) ($tot['desvio_saldo'] ?? 0), 2);
                 $desvioCierre = round((float) ($tot['desvio_cierre'] ?? 0), 2);
             @endphp
-            @if (abs($desvioSaldo) > 0.05 || abs($desvioCierre) > 0.05)
+            @php
+                $esRetenciones = ($es_retenciones ?? '0') === '1';
+                $filasRetencion = $esRetenciones ? ($resultado['cruzados'] ?? []) : [];
+            @endphp
+            @if (! $esRetenciones && (abs($desvioSaldo) > 0.05 || abs($desvioCierre) > 0.05))
                 <div class="alert alert-danger">
                     El cruce no cierra.
                     @if (abs($desvioSaldo) > 0.05)
@@ -146,55 +169,126 @@
                 <div class="card-body p-0">
                     <table class="table table-sm mb-0">
                         <tbody>
-                            <tr>
-                                <th style="width:28%;">Total mayor</th>
-                                <td class="text-right">{{ number_format((float) ($tot['mayor'] ?? 0), 2, ',', '.') }}</td>
-                                <td class="text-muted small">{{ (int) ($tot['lineas_mayor'] ?? 0) }} líneas</td>
-                            </tr>
-                            @if (($es_iibb ?? '0') === '1')
+                            @if ($esRetenciones)
                                 <tr>
-                                    <th>Cruzado 901 (CABA)</th>
+                                    <th style="width:28%;">Total retenciones</th>
+                                    <td class="text-right">{{ number_format((float) ($tot['cruzado'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-muted small">{{ (int) ($tot['lineas_cruzadas'] ?? 0) }} líneas (ERP {{ (int) ($tot['lineas_erp'] ?? 0) }} / Anita {{ (int) ($tot['lineas_anita'] ?? 0) }})</td>
+                                </tr>
+                                <tr>
+                                    <th>901 (CABA)</th>
                                     <td class="text-right">{{ number_format((float) ($tot['cruzado_901'] ?? 0), 2, ',', '.') }}</td>
                                     <td class="text-muted small">Importe a liquidar</td>
                                 </tr>
                                 <tr>
-                                    <th>Cruzado 902 (Buenos Aires)</th>
+                                    <th>902 (Buenos Aires)</th>
                                     <td class="text-right">{{ number_format((float) ($tot['cruzado_902'] ?? 0), 2, ',', '.') }}</td>
                                     <td class="text-muted small">Importe a liquidar</td>
                                 </tr>
                             @else
                                 <tr>
-                                    <th>Total cruzado</th>
-                                    <td class="text-right">{{ number_format((float) ($tot['cruzado'] ?? 0), 2, ',', '.') }}</td>
-                                    <td class="text-muted small">{{ (int) ($tot['lineas_cruzadas'] ?? 0) }} líneas en el archivo</td>
+                                    <th style="width:28%;">Total mayor</th>
+                                    <td class="text-right">{{ number_format((float) ($tot['mayor'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-muted small">{{ (int) ($tot['lineas_mayor'] ?? 0) }} líneas</td>
+                                </tr>
+                                @if (($es_iibb ?? '0') === '1')
+                                    <tr>
+                                        <th>Cruzado 901 (CABA)</th>
+                                        <td class="text-right">{{ number_format((float) ($tot['cruzado_901'] ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-muted small">Importe a liquidar</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Cruzado 902 (Buenos Aires)</th>
+                                        <td class="text-right">{{ number_format((float) ($tot['cruzado_902'] ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-muted small">Importe a liquidar</td>
+                                    </tr>
+                                @else
+                                    <tr>
+                                        <th>Total cruzado</th>
+                                        <td class="text-right">{{ number_format((float) ($tot['cruzado'] ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-muted small">{{ (int) ($tot['lineas_cruzadas'] ?? 0) }} líneas en el archivo</td>
+                                    </tr>
+                                @endif
+                                <tr>
+                                    <th>Diferencias</th>
+                                    <td class="text-right">{{ number_format((float) ($tot['diferencias'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-muted small">{{ (int) ($tot['lineas_diferencia'] ?? 0) }} líneas</td>
+                                </tr>
+                                <tr>
+                                    <th>Saldo del período</th>
+                                    <td class="text-right">{{ number_format((float) ($tot['saldo_periodo'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-muted small">Cuenta en pesos, como Sumas y saldos</td>
+                                </tr>
+                                <tr>
+                                    <th>Mayor − saldo</th>
+                                    <td class="text-right">{{ number_format((float) ($tot['desvio_saldo'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-muted small">Tiene que dar cero</td>
+                                </tr>
+                                <tr>
+                                    <th>{{ ($es_iibb ?? '0') === '1' ? 'Mayor − 901 − 902 − diferencias' : 'Mayor − cruzado − diferencias' }}</th>
+                                    <td class="text-right">{{ number_format((float) ($tot['desvio_cierre'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-muted small">Tiene que dar cero</td>
                                 </tr>
                             @endif
-                            <tr>
-                                <th>Diferencias</th>
-                                <td class="text-right">{{ number_format((float) ($tot['diferencias'] ?? 0), 2, ',', '.') }}</td>
-                                <td class="text-muted small">{{ (int) ($tot['lineas_diferencia'] ?? 0) }} líneas</td>
-                            </tr>
-                            <tr>
-                                <th>Saldo del período</th>
-                                <td class="text-right">{{ number_format((float) ($tot['saldo_periodo'] ?? 0), 2, ',', '.') }}</td>
-                                <td class="text-muted small">Cuenta en pesos, como Sumas y saldos</td>
-                            </tr>
-                            <tr>
-                                <th>Mayor − saldo</th>
-                                <td class="text-right">{{ number_format((float) ($tot['desvio_saldo'] ?? 0), 2, ',', '.') }}</td>
-                                <td class="text-muted small">Tiene que dar cero</td>
-                            </tr>
-                            <tr>
-                                <th>{{ ($es_iibb ?? '0') === '1' ? 'Mayor − 901 − 902 − diferencias' : 'Mayor − cruzado − diferencias' }}</th>
-                                <td class="text-right">{{ number_format((float) ($tot['desvio_cierre'] ?? 0), 2, ',', '.') }}</td>
-                                <td class="text-muted small">Tiene que dar cero</td>
-                            </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            @if ($hayDiferencias)
+            @if ($esRetenciones)
+                @if (count($filasRetencion) > 0)
+                    @if (can($permiso_exportar, false))
+                        <div class="mb-2 mt-3">
+                            @include('includes.exportar-tabla-queryparams', [
+                                'ruta' => $ruta_listar,
+                                'queryparams' => $filtrosQuery,
+                            ])
+                        </div>
+                    @endif
+                    <div class="card card-outline card-secondary mt-3">
+                        <div class="card-header">
+                            <h3 class="card-title">
+                                Retenciones
+                                <span class="badge badge-info ml-2">{{ count($filasRetencion) }}</span>
+                            </h3>
+                        </div>
+                        <div class="card-body p-0 table-responsive">
+                            <table class="table table-sm table-striped mb-0" id="tabla-percepcion-sufrida">
+                                <thead style="background-color:#85C1E9;color:#17202A;">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Constancia</th>
+                                        <th>Recibo</th>
+                                        <th>Cliente</th>
+                                        <th>CUIT</th>
+                                        <th>Jur.</th>
+                                        <th>Origen</th>
+                                        <th class="text-right">Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($filasRetencion as $fila)
+                                        <tr>
+                                            <td class="text-nowrap">{{ ($fila['fecha'] ?? '') !== '' ? date('d/m/Y', strtotime($fila['fecha'])) : '' }}</td>
+                                            <td class="text-nowrap">{{ (int) ($fila['nro_retencion'] ?? 0) }}</td>
+                                            <td class="text-nowrap">{{ trim(($fila['tipo'] ?? '').' '.($fila['comprobante'] ?? '')) }}</td>
+                                            <td>{{ ($fila['emisor_nombre'] ?? '') !== '' ? $fila['emisor_nombre'] : ($fila['emisor'] ?? '') }}</td>
+                                            <td class="text-nowrap">{{ \App\Support\Contable\PercepcionSufrida\PercepcionSufridaArchivoSupport::cuitConGuiones((string) ($fila['cuit'] ?? '')) }}</td>
+                                            <td>{{ (int) ($fila['jurisdiccion'] ?? 0) }}</td>
+                                            <td>{{ ($fila['origen'] ?? '') === 'erp' ? 'ERP' : 'Anita' }}</td>
+                                            <td class="text-right">{{ number_format((float) ($fila['importe'] ?? 0), 2, ',', '.') }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                @else
+                    <div class="alert alert-warning mt-3 mb-0">
+                        No hay retenciones IIBB de clientes en el período.
+                    </div>
+                @endif
+            @elseif ($hayDiferencias)
                 @if (can($permiso_exportar, false))
                     <div class="mb-2 mt-3">
                         @include('includes.exportar-tabla-queryparams', [

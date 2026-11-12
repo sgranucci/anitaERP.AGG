@@ -51,6 +51,11 @@ final class FacturacionJuegoTotalesSupport
         return round((float) $flash->bs_win, 2);
     }
 
+    public static function resultadoApuestas(FlashCrown $flash): float
+    {
+        return round((float) ($flash->ad_win ?? 0), 2);
+    }
+
     public static function resultadoRubro(FlashCrown $flash, string $rubro): float
     {
         return match ($rubro) {
@@ -59,6 +64,7 @@ final class FacturacionJuegoTotalesSupport
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => self::resultadoRuletaEl($flash),
             FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => self::resultadoDelRio($flash),
             FacturacionJuegoTipoSupport::RUBRO_BETSUR => self::resultadoBetsur($flash),
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => self::resultadoApuestas($flash),
             default => 0.0,
         };
     }
@@ -76,6 +82,7 @@ final class FacturacionJuegoTotalesSupport
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => (string) ($flash->proc_ruleta_el ?? ' '),
             FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => (string) ($flash->proc_del_rio ?? ' '),
             FacturacionJuegoTipoSupport::RUBRO_BETSUR => (string) ($flash->proc_betsur ?? ' '),
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => (string) ($flash->proc_apuestas ?? ' '),
             default => '*',
         };
 

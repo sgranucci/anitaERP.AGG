@@ -5,7 +5,9 @@
 
 @section('contenido')
 @php
+    use App\Support\Configuracion\EntornoEmpresaSupport;
     use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalArchivosSupport;
+    $esCrown = EntornoEmpresaSupport::esCrown();
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -102,6 +104,24 @@
                                 computable en cero y el CF se carga en la solapa <em>CF Computable Global</em>.
                             </small>
 
+                            @if ($esCrown)
+                                <label for="coeficiente_iva_indirecto" class="d-block mb-1">
+                                    Coef. IVA indirecto
+                                </label>
+                                <input type="number" name="coeficiente_iva_indirecto"
+                                       id="coeficiente_iva_indirecto"
+                                       class="form-control form-control-sm mb-1"
+                                       style="max-width: 9rem;"
+                                       step="0.0001" min="0" max="100"
+                                       value="{{ old('coeficiente_iva_indirecto', number_format((float) ($filtros['coeficiente_iva_indirecto'] ?? 1), 4, '.', '')) }}">
+                                <small class="form-text text-muted mb-2 d-block">
+                                    Crown (Anita <code>p-ivasimple</code>): multiplica el IVA de tipos
+                                    <code>FI*</code>/<code>DI*</code> e <code>ICO</code>/<code>IDO</code>
+                                    para el cr&eacute;dito fiscal computable del CSV IVA Simple.
+                                    <code>FN*</code>/<code>DN*</code> quedan en 0. Con prorrateo CF global manda ese tilde.
+                                </small>
+                            @endif
+
                             <input type="hidden" name="completar_compras_anita" value="0">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="completar_compras_anita"
@@ -169,6 +189,10 @@
                         Compras:
                         @if (! empty($resultado['opciones']['prorrateo_cf_global']) || ! empty($resultado['compras']['resumen']['prorrateo_cf_global']))
                             prorrateo CF global (computable = 0)
+                        @elseif ($esCrown && abs((float) ($resultado['opciones']['coeficiente_iva_indirecto'] ?? 1) - 1.0) > 0.000001)
+                            CF computable = IVA &times; coef. indirecto
+                            {{ number_format((float) $resultado['opciones']['coeficiente_iva_indirecto'], 4, ',', '.') }}
+                            (FI/DI/ICO/IDO)
                         @else
                             CF computable = IVA del comprobante
                         @endif

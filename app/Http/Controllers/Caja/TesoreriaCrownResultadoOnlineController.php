@@ -8,7 +8,6 @@ use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownPoderPublicoGenerador;
-use App\Support\Caja\TesoreriaCrownResultadoOnlineCalculo;
 use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas;
 use App\Support\Caja\TesoreriaCrownResultadoOnlineListadoFiltros;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -470,31 +469,12 @@ class TesoreriaCrownResultadoOnlineController extends Controller
         $coinOut = $this->importe($request->input('coin_out'));
         $pagoManual = $this->importe($request->input('pago_manual'));
         $slot = round($coinIn - $coinOut - $pagoManual, 2);
-        $apostado = $this->importe($request->input('apostado'));
-        $pagado = $this->importe($request->input('pagado'));
-        $delRio = TesoreriaCrownResultadoOnlineCalculo::desdeApostadoPagado($apostado, $pagado);
-        $betsurApostado = $this->importe($request->input('betsur_apostado'));
-        $betsurPagado = $this->importe($request->input('betsur_pagado'));
-        $betsur = TesoreriaCrownResultadoOnlineCalculo::desdeApostadoPagado($betsurApostado, $betsurPagado);
 
+        // Solo slots por sala. Del Río / Betsur / Apuestas: carga diaria global.
         return [
             'empresa_id' => (int) $sala->empresa_id,
             'sala_id' => (int) $sala->id,
             'fecha' => $request->input('fecha'),
-            'attendance' => (int) $request->input('attendance', 0),
-            'apostado' => $apostado,
-            'pagado' => $pagado,
-            'drop' => $this->importe($request->input('drop')),
-            'resultado' => $delRio['resultado'],
-            'porcentaje' => $delRio['porcentaje'],
-            'poder_publico' => $this->importe($request->input('poder_publico')),
-            'betsur_attendance' => (int) $request->input('betsur_attendance', 0),
-            'betsur_apostado' => $betsurApostado,
-            'betsur_pagado' => $betsurPagado,
-            'betsur_drop' => $this->importe($request->input('betsur_drop')),
-            'betsur_resultado' => $betsur['resultado'],
-            'betsur_porcentaje' => $betsur['porcentaje'],
-            'betsur_poder_publico' => $this->importe($request->input('betsur_poder_publico')),
             'coin_in' => $coinIn,
             'coin_out' => $coinOut,
             'pago_manual' => $pagoManual,

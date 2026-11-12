@@ -19,15 +19,27 @@
         return campo.querySelector('.tc-cajero-nombre');
     }
 
+    function idDe(campo) {
+        return campo.querySelector('.tc-cajero-id');
+    }
+
     function aplicar(campo, fila) {
         var codigo = codigoDe(campo);
         codigo.value = fila.codigo;
         codigo.removeAttribute('data-invalido');
         nombreDe(campo).value = fila.nombre;
+        var id = idDe(campo);
+        if (id) {
+            id.value = fila.id || '';
+        }
     }
 
     function limpiarNombre(campo) {
         nombreDe(campo).value = '';
+        var id = idDe(campo);
+        if (id) {
+            id.value = '';
+        }
     }
 
     function url(campo, base, extra) {
@@ -207,6 +219,27 @@
         }
         if (codigo.value.trim() !== '' && nombreDe(campo).value.trim() === '') {
             resolver(campo, false);
+        }
+        if (formulario && idDe(campo) && !formulario.getAttribute('data-tc-cajero-submit')) {
+            formulario.setAttribute('data-tc-cajero-submit', '1');
+            formulario.addEventListener('submit', function (evento) {
+                var id = idDe(campo);
+                if (!id || id.value) {
+                    return;
+                }
+                if (codigoDe(campo).value.trim() === '') {
+                    evento.preventDefault();
+                    avisar('Elegí un cajero de esta sala.');
+                    codigoDe(campo).focus();
+                    return;
+                }
+                evento.preventDefault();
+                resolver(campo, true).then(function (ok) {
+                    if (ok && id.value) {
+                        HTMLFormElement.prototype.submit.call(formulario);
+                    }
+                });
+            });
         }
     });
 

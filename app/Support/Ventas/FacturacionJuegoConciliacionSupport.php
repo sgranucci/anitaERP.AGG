@@ -243,6 +243,7 @@ final class FacturacionJuegoConciliacionSupport
                 'cuentacontableRuletaEl',
                 'cuentacontableDelRio',
                 'cuentacontableBetsur',
+                'cuentacontableApuestas',
                 'centrocosto',
             ]);
             $caja = $cfg->cuentacaja;
@@ -256,6 +257,7 @@ final class FacturacionJuegoConciliacionSupport
                 'sucursal_anita' => (int) $cfg->sucursal_anita,
                 'sucursal_del_rio' => (int) ($param->sucursal_del_rio ?? 67),
                 'sucursal_betsur' => (int) ($param->sucursal_betsur ?? 68),
+                'sucursal_apuestas' => (int) ($param->sucursal_apuestas ?? 0),
                 'cuentacaja_codigo' => (string) ($caja->codigo ?? ''),
                 'cuentacaja_nombre' => (string) ($caja->nombre ?? ''),
                 'cuenta_caja_contable_codigo' => (string) ($cuentaCajaContable->codigo ?? ''),
@@ -270,6 +272,8 @@ final class FacturacionJuegoConciliacionSupport
                 'cuenta_del_rio_nombre' => (string) ($cfg->cuentacontableDelRio->nombre ?? ''),
                 'cuenta_betsur_codigo' => (string) ($cfg->cuentacontableBetsur->codigo ?? ''),
                 'cuenta_betsur_nombre' => (string) ($cfg->cuentacontableBetsur->nombre ?? ''),
+                'cuenta_apuestas_codigo' => (string) ($cfg->cuentacontableApuestas->codigo ?? ''),
+                'cuenta_apuestas_nombre' => (string) ($cfg->cuentacontableApuestas->nombre ?? ''),
                 'centrocosto_codigo' => (string) ($cfg->centrocosto->codigo ?? ''),
                 'centrocosto_nombre' => (string) ($cfg->centrocosto->nombre ?? ''),
             ];
@@ -317,6 +321,7 @@ final class FacturacionJuegoConciliacionSupport
                 'cuentacontableRuletaEl',
                 'cuentacontableDelRio',
                 'cuentacontableBetsur',
+                'cuentacontableApuestas',
             ]);
             $out[(int) $cfg->sala_id] = [
                 FacturacionJuegoTipoSupport::RUBRO_MESA => [
@@ -339,6 +344,10 @@ final class FacturacionJuegoConciliacionSupport
                     'id' => (int) ($cfg->cuentacontable_betsur_id ?? 0),
                     'codigo' => (string) ($cfg->cuentacontableBetsur->codigo ?? ''),
                 ],
+                FacturacionJuegoTipoSupport::RUBRO_APUESTAS => [
+                    'id' => (int) ($cfg->cuentacontable_apuestas_id ?? 0),
+                    'codigo' => (string) ($cfg->cuentacontableApuestas->codigo ?? ''),
+                ],
             ];
         }
 
@@ -360,6 +369,7 @@ final class FacturacionJuegoConciliacionSupport
                 'cuentacontableRuletaEl',
                 'cuentacontableDelRio',
                 'cuentacontableBetsur',
+                'cuentacontableApuestas',
             ]);
             $pares = [
                 FacturacionJuegoTipoSupport::RUBRO_MESA => $cfg->cuentacontableMesa,
@@ -367,6 +377,7 @@ final class FacturacionJuegoConciliacionSupport
                 FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => $cfg->cuentacontableRuletaEl,
                 FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => $cfg->cuentacontableDelRio,
                 FacturacionJuegoTipoSupport::RUBRO_BETSUR => $cfg->cuentacontableBetsur,
+                FacturacionJuegoTipoSupport::RUBRO_APUESTAS => $cfg->cuentacontableApuestas,
             ];
             foreach ($pares as $rubro => $cuenta) {
                 $codigoStr = (string) ($cuenta->codigo ?? '');
@@ -519,6 +530,7 @@ final class FacturacionJuegoConciliacionSupport
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => $flash->venta_ruleta_el_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => $flash->venta_del_rio_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_BETSUR => $flash->venta_betsur_id ?? 0,
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => $flash->venta_apuestas_id ?? 0,
             default => 0,
         };
     }
@@ -531,6 +543,7 @@ final class FacturacionJuegoConciliacionSupport
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => $flash->asiento_ruleta_el_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => $flash->asiento_del_rio_id ?? 0,
             FacturacionJuegoTipoSupport::RUBRO_BETSUR => $flash->asiento_betsur_id ?? 0,
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => $flash->asiento_apuestas_id ?? 0,
             default => 0,
         };
     }

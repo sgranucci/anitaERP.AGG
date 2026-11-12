@@ -13,6 +13,27 @@
 @section('scripts')
     <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/jornada.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/jornada.js')) }}"></script>
+    <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/cajero.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/cajero.js')) }}"></script>
+    <script>
+    (function () {
+        var panel = document.getElementById('panel-abrir-caja');
+        var campo = document.querySelector('#form-nuevo-mov-cajero .tc-cajero-codigo');
+        if (!panel || !campo) {
+            return;
+        }
+        function enfocar() {
+            if (panel.classList.contains('show')) {
+                campo.focus();
+            }
+        }
+        enfocar();
+        if (window.jQuery) {
+            window.jQuery(panel).on('shown.bs.collapse', function () {
+                campo.focus();
+            });
+        }
+    })();
+    </script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-orden.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-agrupar.js')) }}"></script>
@@ -48,8 +69,6 @@
         'navBoveda' => $navBoveda ?? ($boveda['movimientos'] ?? collect())->count(),
         'puedeSlots' => $puedeSlots ?? false,
         'navSlots' => $navSlots ?? 0,
-        'puedeBingo' => $puedeBingo ?? false,
-        'navBingo' => $navBingo ?? false,
     ])
 @endif
 <div class="row">
@@ -75,7 +94,6 @@
                     $exportDeskRuta = match ($panel ?? '') {
                         'mesas' => 'listar_mesas_tesoreria_crown_jornada',
                         'slots' => 'listar_slots_tesoreria_crown_jornada',
-                        'bingo' => 'listar_bingo_tesoreria_crown_jornada',
                         'poder' => 'listar_poder_publico_tesoreria_crown_jornada',
                         'anexo' => 'listar_anexo1_tesoreria_crown_jornada',
                         'anexo2' => 'listar_anexo2_tesoreria_crown_jornada',
@@ -173,18 +191,17 @@
                         @csrf
                         <input type="hidden" name="jornada_id" value="{{ $jornada->id }}">
                         <div class="form-row align-items-end">
-                            <div class="form-group col-md-5 mb-2">
-                                <label>Cajero</label>
-                                <div class="input-group">
-                                    <input type="hidden" name="cajero_crown_id" id="cajero_crown_id" value="{{ old('cajero_crown_id') }}">
-                                    <input type="text" class="form-control" id="cajero_codigo" placeholder="Código" autocomplete="off">
-                                    <input type="text" class="form-control" id="cajero_nombre" readonly placeholder="Nombre" tabindex="-1">
-                                    <div class="input-group-append">
-                                        <button type="button" class="btn-accion-tabla tooltipsC" id="btn-consulta-cajero" title="Buscar cajero"><i class="fa fa-search"></i></button>
-                                    </div>
-                                </div>
-                                <small class="text-muted">La tarea sale del maestro del cajero. El día arranca con el primer movimiento.</small>
-                            </div>
+                            @include('caja.tesoreria_crown.partials.campo_cajero', [
+                                'salaId' => $jornada->sala_id,
+                                'codigo' => old('cajero_codigo'),
+                                'nombre' => '',
+                                'cajeroId' => old('cajero_crown_id'),
+                                'inputId' => 'cajero_codigo',
+                                'inputNameId' => 'cajero_crown_id',
+                                'codigoName' => '',
+                                'colClass' => 'col-md-5',
+                                'ayuda' => 'Código o legajo. La tarea sale del maestro del cajero. El día arranca con el primer movimiento.',
+                            ])
                             <div class="form-group col-md-3 mb-2">
                                 <label for="tipo_mov_nuevo">Movimiento</label>
                                 <select name="tipo" id="tipo_mov_nuevo" class="form-control" required>
@@ -222,8 +239,6 @@
                         @include('caja.tesoreria_crown.jornada.partials.mesa')
                     @elseif ($panel === 'slots')
                         @include('caja.tesoreria_crown.jornada.partials.slots')
-                    @elseif ($panel === 'bingo')
-                        @include('caja.tesoreria_crown.jornada.partials.bingo')
                     @elseif ($panel === 'poder')
                         @include('caja.tesoreria_crown.jornada.partials.poder_publico')
                     @elseif ($panel === 'anexo')
@@ -341,31 +356,5 @@
     </div>
 </div>
 
-<div class="modal fade" id="modal-consulta-jornada" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="modal-consulta-jornada-titulo">Buscar</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
-            </div>
-            <div class="modal-body">
-                <div class="input-group mb-2">
-                    <input type="text" class="form-control" id="modal-consulta-jornada-q" placeholder="Código o nombre">
-                    <div class="input-group-append">
-                        <button type="button" class="btn btn-info" id="modal-consulta-jornada-buscar">Buscar</button>
-                    </div>
-                </div>
-                <p class="small text-muted mb-2" id="modal-consulta-jornada-total"></p>
-                <div class="table-responsive" style="max-height:60vh;overflow-y:auto;">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead style="background:#85C1E9;color:#17202A;position:sticky;top:0;">
-                            <tr id="modal-consulta-jornada-cabecera"><th>Código</th><th>Nombre</th><th></th></tr>
-                        </thead>
-                        <tbody id="modal-consulta-jornada-filas"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+@include('caja.tesoreria_crown.partials.modal_consulta_cajero')
 @endsection

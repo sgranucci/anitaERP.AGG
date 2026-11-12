@@ -34,6 +34,16 @@ final class FlashCrownService
         }
 
         $calculado = FlashCrownCalculoSupport::deSalaFecha($salaId, $fecha);
+        // Sin jornada gastro/hotel (salas que solo traen resultado Anita): no pisar AyB/Hotel ya cargados.
+        $fuentes = $calculado['detalle']['fuentes'] ?? [];
+        if ($existente && ! in_array('gastro_hotel', $fuentes, true)) {
+            if (abs((float) ($calculado['ayb'] ?? 0)) < 0.001) {
+                $calculado['ayb'] = round((float) $existente->ayb, 2);
+            }
+            if (abs((float) ($calculado['hotel'] ?? 0)) < 0.001) {
+                $calculado['hotel'] = round((float) $existente->hotel, 2);
+            }
+        }
         $overridesPrevios = is_array($existente?->overrides_json) ? $existente->overrides_json : [];
         $overridesMerged = $reemplazarOverrides
             ? $overrides
@@ -124,12 +134,21 @@ final class FlashCrownService
     public function consolidar(array $filas): array
     {
         $tot = [];
+        $globales = array_flip(FlashCrown::camposOnlineGlobal());
         foreach (FlashCrown::camposNumericos() as $campo) {
             $tot[$campo] = 0;
         }
         foreach ($filas as $fila) {
             foreach (FlashCrown::camposNumericos() as $campo) {
-                $tot[$campo] = round((float) $tot[$campo] + (float) ($fila->{$campo} ?? 0), 2);
+                $valor = (float) ($fila->{$campo} ?? 0);
+                if (isset($globales[$campo])) {
+                    // Misma cifra en todas las salas: no sumar (tomar el de mayor abs).
+                    if (abs($valor) > abs((float) $tot[$campo])) {
+                        $tot[$campo] = round($valor, 2);
+                    }
+                } else {
+                    $tot[$campo] = round((float) $tot[$campo] + $valor, 2);
+                }
             }
         }
         $tot['att'] = (int) round($tot['att']);
@@ -138,6 +157,7 @@ final class FlashCrownService
         $tot['cant_rul_el'] = (int) round($tot['cant_rul_el']);
         $tot['ol_att'] = (int) round($tot['ol_att'] ?? 0);
         $tot['bs_att'] = (int) round($tot['bs_att'] ?? 0);
+        $tot['ad_att'] = (int) round($tot['ad_att'] ?? 0);
 
         return $tot;
     }

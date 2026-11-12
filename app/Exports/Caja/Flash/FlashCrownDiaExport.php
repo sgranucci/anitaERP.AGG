@@ -5,6 +5,7 @@ namespace App\Exports\Caja\Flash;
 use App\Models\Caja\Flash\FlashCrown;
 use App\Support\Caja\Flash\FlashCrownCalculoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelNumericCellsSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -84,6 +85,7 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
                         'size' => 11,
                     ],
                 ]);
+                ExcelNumericCellsSupport::forzarRangoDatos($sheet, $headerRow + 1, 2, [], '#,##0.00');
             },
         ];
     }

@@ -242,6 +242,7 @@ class LibroIvaDigitalVentasGenerador
             'venta.codigo',
             'venta.nombre',
             'venta.nroinscripcion',
+            'venta.leyenda',
             'venta.condicioniva_id',
             'venta.cae',
         ];
@@ -313,6 +314,7 @@ class LibroIvaDigitalVentasGenerador
             : LibroIvaDigitalVentasConsumidorFinalSupport::resolverComprador(
                 $venta,
                 (float) $totales['importe_total'],
+                $letra,
             );
 
         $codigoOperacion = $letra === 'C'

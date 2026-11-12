@@ -34,6 +34,11 @@
             <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
                 <h3 class="card-title mb-0">Resultado online</h3>
                 <div class="card-tools ml-auto d-flex flex-wrap align-items-center" style="gap:.4rem;">
+                    @if (can('listar-tesoreria-crown-casino-online', false) || can('crear-tesoreria-crown-casino-online', false))
+                        <a href="{{ route('tesoreria_crown_casino_online') }}" class="btn btn-sm" style="background:linear-gradient(135deg,#8e44ad 0%,#2980b9 55%,#16a085 100%);border:0;color:#fff;font-weight:600;" title="Carga global Del Río / Betsur / Apuestas (una vez por día)">
+                            <i class="fa fa-globe"></i> Casino online diario
+                        </a>
+                    @endif
                     @if ($sala && can('crear-tesoreria-crown-resultado-online', false))
                         <a href="{{ route('crear_tesoreria_crown_resultado_online', ['sala_id' => $sala->id]) }}" class="btn btn-light btn-sm">
                             <i class="fa fa-plus-circle"></i> Nuevo resultado

@@ -4,6 +4,7 @@ namespace App\Exports\Caja\Flash;
 
 use App\Repositories\Caja\Flash\FlashCajaRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelNumericCellsSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -154,6 +155,14 @@ class FlashCajaListadoExport implements FromView, ShouldAutoSize, WithColumnForm
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
                 ]);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                // D–K importes (A fecha, B id, C empresa texto).
+                ExcelNumericCellsSupport::forzarColumnas(
+                    $sheet,
+                    ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'],
+                    $this->filaPrimeraDatosExcel,
+                    null,
+                    '#,##0.00',
+                );
             },
         ];
     }

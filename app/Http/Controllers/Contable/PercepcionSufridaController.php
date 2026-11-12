@@ -81,10 +81,12 @@ class PercepcionSufridaController extends Controller
             ->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0));
         $nombreEmpresa = (string) ($empresa->nombre ?? '');
         $periodo = PercepcionSufridaListadoFiltros::formatearPeriodoTexto($filtros);
+        $esRetenciones = ($filtros['exporta'] ?? '') === PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES;
         $titulo = $jurisdiccion === 901
-            ? 'SiFeRe 901 — CABA'
-            : 'SiFeRe 902 — Buenos Aires';
+            ? ($esRetenciones ? 'SiFeRe retenciones 901 — CABA' : 'SiFeRe 901 — CABA')
+            : ($esRetenciones ? 'SiFeRe retenciones 902 — Buenos Aires' : 'SiFeRe 902 — Buenos Aires');
         $subtitulo = trim($nombreEmpresa.($periodo !== '' ? ' — '.$periodo : ''));
+        $prefijo = $esRetenciones ? 'sifere_retenciones_' : 'sifere_';
 
         return (new PercepcionSufridaReporteExport(
             [(object) ['nombreempresa' => $nombreEmpresa]],
@@ -92,7 +94,7 @@ class PercepcionSufridaController extends Controller
             $titulo,
             $subtitulo,
             $jurisdiccion,
-        ))->download('sifere_'.$jurisdiccion.'.xlsx');
+        ))->download($prefijo.$jurisdiccion.'.xlsx');
     }
 
     public function exportarReportePercepcionIva(Request $request)
@@ -184,8 +186,9 @@ class PercepcionSufridaController extends Controller
 
         $resultado = $this->proceso->generar($tipo, $filtros);
         $jurisdiccion = (int) $request->query('jurisdiccion');
+        $esRetenciones = ($filtros['exporta'] ?? '') === PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES;
         if ($tipo === PercepcionSufridaCorteSupport::TIPO_IIBB && in_array($jurisdiccion, [901, 902], true)) {
-            $nombre = 'psif-'.$jurisdiccion.'.txt';
+            $nombre = ($esRetenciones ? 'rsif-' : 'psif-').$jurisdiccion.'.txt';
             $contenido = (string) ($resultado['archivo_'.$jurisdiccion] ?? '');
         } else {
             $nombre = (string) ($resultado['nombre_archivo'] ?? 'archivo.txt');
@@ -218,11 +221,28 @@ class PercepcionSufridaController extends Controller
             ->firstWhere('id', (int) ($filtros['empresa_id'] ?? 0));
         $nombreEmpresa = (string) ($empresa->nombre ?? '');
         $filasParaLogo = [(object) ['nombreempresa' => $nombreEmpresa]];
-        $meta = $this->meta($tipo);
+        $exporta = (string) ($filtros['exporta'] ?? PercepcionSufridaListadoFiltros::EXPORTA_PERCEPCIONES);
+        $meta = $this->meta($tipo, $exporta);
         $periodo = PercepcionSufridaListadoFiltros::formatearPeriodoTexto($filtros);
         $titulo = $meta['titulo_listado'];
         $subtitulo = trim($nombreEmpresa.($periodo !== '' ? ' — '.$periodo : ''));
         $diferencias = $resultado['diferencias'] ?? [];
+        if (($meta['es_retenciones'] ?? '0') === '1' && $diferencias === []) {
+            $diferencias = array_map(static function (array $fila): array {
+                $importe = round((float) ($fila['importe'] ?? 0), 2);
+
+                return array_merge($fila, [
+                    'importe_mayor' => $importe,
+                    'importe_reporte' => $importe,
+                    'diferencia' => 0.0,
+                    'descripcion' => trim(
+                        (string) ($fila['descripcion'] ?? '')
+                        .' Jur.'.(int) ($fila['jurisdiccion'] ?? 0)
+                        .' #'.(int) ($fila['nro_retencion'] ?? 0)
+                    ),
+                ]);
+            }, $resultado['cruzados'] ?? []);
+        }
         $totales = $resultado['totales'] ?? [];
         $esIibb = $tipo === PercepcionSufridaCorteSupport::TIPO_IIBB;
 
@@ -235,6 +255,7 @@ class PercepcionSufridaController extends Controller
                     'titulo' => $titulo,
                     'subtitulo' => $subtitulo,
                     'esIibb' => $esIibb,
+                    'esRetenciones' => ($meta['es_retenciones'] ?? '0') === '1',
                 ])->render();
                 $ruta = storage_path('pdf/listados/listado_percepcion_sufrida_'.date('Ymd_His').'.pdf');
                 DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
@@ -297,16 +318,19 @@ class PercepcionSufridaController extends Controller
      */
     private function presentacion(string $tipo, array $datos): array
     {
-        return array_merge($datos, $this->meta($tipo), [
+        $exporta = (string) (($datos['filtros']['exporta'] ?? PercepcionSufridaListadoFiltros::EXPORTA_PERCEPCIONES));
+
+        return array_merge($datos, $this->meta($tipo, $exporta), [
             'fecha_limite' => PercepcionSufridaCorteSupport::fechaLimiteDma(),
             'cuenta_texto' => $this->cuentaTexto(PercepcionSufridaCorteSupport::cuentaDeTipo($tipo)),
+            'opciones_exporta' => PercepcionSufridaListadoFiltros::opcionesExporta(),
         ]);
     }
 
     /**
      * @return array<string, string>
      */
-    private function meta(string $tipo): array
+    private function meta(string $tipo, string $exporta = PercepcionSufridaListadoFiltros::EXPORTA_PERCEPCIONES): array
     {
         if ($tipo === PercepcionSufridaCorteSupport::TIPO_IVA) {
             return [
@@ -320,6 +344,23 @@ class PercepcionSufridaController extends Controller
                 'ruta_listar' => 'listar_percepciones_iva',
                 'permiso_exportar' => 'exportar-percepcion-iva',
                 'es_iibb' => '0',
+                'es_retenciones' => '0',
+            ];
+        }
+
+        if ($exporta === PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES) {
+            return [
+                'titulo' => 'SiFeRe — retenciones de IIBB sufridas',
+                'titulo_listado' => 'Retenciones de IIBB sufridas (clientes)',
+                'ayuda' => 'Retenciones que los clientes practicaron a la empresa al cobrar. Lee cobranzas del ERP y completa con Anita (RIC / R01 / R02). Archivo SIFERE Web de 79 posiciones (rsif), separado por jurisdicción.',
+                'archivo_boton' => 'Descargar rsif.txt',
+                'archivo_listado' => 'retenciones_sifere',
+                'ruta_index' => 'sifere',
+                'ruta_exportar' => 'exportar_sifere',
+                'ruta_listar' => 'listar_sifere',
+                'permiso_exportar' => 'exportar-sifere',
+                'es_iibb' => '1',
+                'es_retenciones' => '1',
             ];
         }
 
@@ -334,6 +375,7 @@ class PercepcionSufridaController extends Controller
             'ruta_listar' => 'listar_sifere',
             'permiso_exportar' => 'exportar-sifere',
             'es_iibb' => '1',
+            'es_retenciones' => '0',
         ];
     }
 

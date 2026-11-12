@@ -37,6 +37,7 @@ final class FacturacionJuegoConfigSupport
                 'tipo_per_online' => (string) config('facturacion_juego.tipos.per_online', 'COL'),
                 'sucursal_del_rio' => (int) config('caja_anita.sucursal_del_rio_online', 67),
                 'sucursal_betsur' => (int) config('caja_anita.sucursal_betsur_online', 68),
+                'sucursal_apuestas' => 0,
                 'letra' => (string) config('facturacion_juego.letra', 'B'),
                 'tipoasiento_abreviatura' => (string) config('facturacion_juego.tipoasiento_abreviatura', 'VTA'),
             ]);
@@ -65,6 +66,7 @@ final class FacturacionJuegoConfigSupport
                 'cuentacontableRuletaEl',
                 'cuentacontableDelRio',
                 'cuentacontableBetsur',
+                'cuentacontableApuestas',
                 'centrocosto',
             ])
             ->where('sala_id', $salaId)
@@ -89,11 +91,26 @@ final class FacturacionJuegoConfigSupport
                 'cuentacontableRuletaEl',
                 'cuentacontableDelRio',
                 'cuentacontableBetsur',
+                'cuentacontableApuestas',
                 'centrocosto',
             ])
             ->where('activo', true)
             ->orderBy('sala_id')
             ->get();
+    }
+
+    /**
+     * Config de sala a usar para emitir un rubro online global (1ª activa con cuenta).
+     */
+    public static function salaParaRubroOnline(string $rubro): ?FacturacionJuegoSala
+    {
+        foreach (self::salasActivas() as $cfg) {
+            if (self::faltantesSala($cfg, $rubro) === []) {
+                return $cfg;
+            }
+        }
+
+        return self::salasActivas()->first();
     }
 
     /**
@@ -108,7 +125,7 @@ final class FacturacionJuegoConfigSupport
         );
         if ($sucursal <= 0) {
             $faltan[] = FacturacionJuegoTipoSupport::esOnline($rubro)
-                ? 'Sucursal Anita on-line / Betsur'
+                ? 'Punto de venta '.FacturacionJuegoTipoSupport::nombreCliente($rubro)
                 : 'Sucursal / PV Anita';
         }
         if ((int) ($cfg->cuentacaja_id ?? 0) <= 0) {
@@ -120,6 +137,7 @@ final class FacturacionJuegoConfigSupport
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => (int) ($cfg->cuentacontable_ruleta_el_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => (int) ($cfg->cuentacontable_del_rio_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_BETSUR => (int) ($cfg->cuentacontable_betsur_id ?? 0),
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => (int) ($cfg->cuentacontable_apuestas_id ?? 0),
             default => 0,
         };
         if ($cuentaId <= 0) {

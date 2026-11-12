@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Models\Configuracion\Sala;
 use App\Services\Caja\Flash\FlashCrownService;
+use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -38,13 +38,16 @@ class FlashCrownCalcularDiario extends Command
         $forzar = (bool) $this->option('forzar');
         $salaOpt = $this->option('sala');
 
-        $salas = Sala::query()
-            ->where(function ($q) {
-                $q->whereNull('codigo')->orWhere('codigo', '!=', 'AC');
-            })
-            ->when($salaOpt, fn ($q) => $q->whereKey((int) $salaOpt))
-            ->orderBy('codigo')
-            ->get();
+        $salas = TesoreriaCrownSalaSupport::salas();
+        if ($salaOpt) {
+            $salaId = (int) $salaOpt;
+            $salas = $salas->where('id', $salaId)->values();
+            if ($salas->isEmpty()) {
+                $this->error('Sala '.$salaId.' no es operativa (cerrada o inexistente).');
+
+                return self::FAILURE;
+            }
+        }
 
         $this->line(sprintf('Flash Crown diario %s | %d sala(s)%s', $fecha, $salas->count(), $dry ? ' (dry-run)' : ''));
 

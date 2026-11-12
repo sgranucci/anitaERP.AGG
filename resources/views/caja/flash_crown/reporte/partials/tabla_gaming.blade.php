@@ -1,11 +1,9 @@
 @php
-    $fmt = function ($valor, bool $entero): string {
-        if ($entero) {
-            return number_format((int) round((float) $valor), 0, '.', ',');
-        }
+    use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport as F;
+    use App\Support\Export\ExcelFormatoNumero;
 
-        return number_format((float) round((float) $valor), 0, '.', ',');
-    };
+    $excel = ! empty($modo_excel);
+    $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
 @endphp
 <table cellspacing="0" cellpadding="4" style="border-collapse:collapse; font-family:Arial, sans-serif; font-size:13px; color:#17202A;">
     <thead>
@@ -34,8 +32,14 @@
                         {{ $fila['etiqueta'] }}
                     </td>
                     @foreach ($informe['columnas'] as $columna)
+                        @php
+                            $dec = ! empty($fila['entero']) ? 0 : 2;
+                            $texto = $excel
+                                ? F::nExcelFormato($fila[$columna['clave']] ?? 0, $formatoNumero, $dec)
+                                : F::n($fila[$columna['clave']] ?? 0, $dec);
+                        @endphp
                         <td style="text-align:right; padding:2px 10px; white-space:nowrap; {{ ! empty($fila['es_total']) ? 'font-weight:700;' : '' }}">
-                            {{ $fmt($fila[$columna['clave']] ?? 0, ! empty($fila['entero'])) }}
+                            {{ $texto }}
                         </td>
                     @endforeach
                 </tr>

@@ -11,14 +11,17 @@ use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
  * Opciones del reporte de Ingresos Brutos según los tildes de
  * Configuración general → Agentes IIBB por empresa.
  *
- * CABA (jurisdicción 901) y Buenos Aires (902) solo aparecen si la empresa
+ * CABA (901), Buenos Aires (902) y Río Negro (916) solo aparecen si la empresa
  * está nominada como agente de percepción o de retención en esa jurisdicción.
+ * Río Negro: solo retenciones compras (Rentas RN / p-ingbruto Crown).
  */
 final class IngresosBrutosAgenteOpcionesSupport
 {
     public const JURISDICCION_CABA = 901;
 
     public const JURISDICCION_BUENOS_AIRES = 902;
+
+    public const JURISDICCION_RIO_NEGRO = 916;
 
     /**
      * @return array<string, string>
@@ -44,6 +47,9 @@ final class IngresosBrutosAgenteOpcionesSupport
         }
         if (in_array(self::JURISDICCION_CABA, $percibe, true)) {
             $out[IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES_CABA] = IngresosBrutosListadoFiltros::TIPOS[IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES_CABA];
+        }
+        if (in_array(self::JURISDICCION_RIO_NEGRO, $retiene, true)) {
+            $out[IngresosBrutosListadoFiltros::TIPO_RETENCIONES_RIO_NEGRO] = IngresosBrutosListadoFiltros::TIPOS[IngresosBrutosListadoFiltros::TIPO_RETENCIONES_RIO_NEGRO];
         }
 
         if ($out === [] && self::sinNominacion()) {

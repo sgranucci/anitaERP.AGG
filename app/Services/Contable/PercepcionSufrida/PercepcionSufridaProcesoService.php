@@ -10,12 +10,15 @@ use App\Support\Contable\PercepcionSufrida\PercepcionSufridaArchivoSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaCorteSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaCruceSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport;
+use App\Support\Contable\PercepcionSufrida\PercepcionSufridaListadoFiltros;
 
 final class PercepcionSufridaProcesoService
 {
     public function __construct(
         private readonly PercepcionSufridaMayorAnitaReader $mayorAnita,
         private readonly PercepcionSufridaErpReader $erp,
+        private readonly SifereRetencionErpReader $retencionErp,
+        private readonly SifereRetencionAnitaReader $retencionAnita,
     ) {
     }
 
@@ -25,6 +28,12 @@ final class PercepcionSufridaProcesoService
      */
     public function generar(string $tipo, array $filtros): array
     {
+        $exporta = (string) ($filtros['exporta'] ?? PercepcionSufridaListadoFiltros::EXPORTA_PERCEPCIONES);
+        if ($tipo === PercepcionSufridaCorteSupport::TIPO_IIBB
+            && $exporta === PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES) {
+            return $this->generarRetenciones($filtros);
+        }
+
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
         $desde = (string) ($filtros['fecha_desde'] ?? '');
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
@@ -89,7 +98,114 @@ final class PercepcionSufridaProcesoService
             'archivo_901' => $esIibb ? PercepcionSufridaArchivoSupport::sifere($cruce['cruzados'], 901) : '',
             'archivo_902' => $esIibb ? PercepcionSufridaArchivoSupport::sifere($cruce['cruzados'], 902) : '',
             'nombre_archivo' => $esIibb ? 'psif.txt' : 'perciva.csv',
+            'exporta' => PercepcionSufridaListadoFiltros::EXPORTA_PERCEPCIONES,
+            'es_retenciones' => false,
         ];
+    }
+
+    /**
+     * Retenciones IIBB sufridas: cobranzas ERP primero; Anita completa lo que falta.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function generarRetenciones(array $filtros): array
+    {
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+
+        $erp = $this->retencionErp->leer($empresaId, $desde, $hasta);
+        $anita = $this->retencionAnita->leer($desde, $hasta);
+        $cruzados = $this->fusionarPreferirErp($erp, $anita);
+
+        usort($cruzados, static function (array $a, array $b): int {
+            return [$a['fecha'] ?? '', $a['cuit'] ?? '', (int) ($a['nro_retencion'] ?? 0)]
+                <=> [$b['fecha'] ?? '', $b['cuit'] ?? '', (int) ($b['nro_retencion'] ?? 0)];
+        });
+
+        $total = 0.0;
+        $total901 = 0.0;
+        $total902 = 0.0;
+        $lineasErp = 0;
+        $lineasAnita = 0;
+        foreach ($cruzados as $linea) {
+            $importe = round((float) ($linea['importe'] ?? 0), 2);
+            $total += $importe;
+            $jur = (int) ($linea['jurisdiccion'] ?? 0);
+            if ($jur === 901) {
+                $total901 += $importe;
+            } elseif ($jur === 902) {
+                $total902 += $importe;
+            }
+            if (($linea['origen'] ?? '') === 'erp') {
+                $lineasErp++;
+            } else {
+                $lineasAnita++;
+            }
+        }
+
+        return [
+            'tipo' => PercepcionSufridaCorteSupport::TIPO_IIBB,
+            'exporta' => PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES,
+            'es_retenciones' => true,
+            'cuenta' => 0,
+            'fecha_limite' => PercepcionSufridaCorteSupport::fechaLimiteIso(),
+            'tramos' => ['anita_desde' => $desde, 'anita_hasta' => $hasta, 'erp_desde' => '', 'erp_hasta' => ''],
+            'totales' => [
+                'mayor' => round($total, 2),
+                'cruzado' => round($total, 2),
+                'cruzado_901' => round($total901, 2),
+                'cruzado_902' => round($total902, 2),
+                'diferencias' => 0.0,
+                'lineas_mayor' => count($cruzados),
+                'lineas_cruzadas' => count($cruzados),
+                'lineas_diferencia' => 0,
+                'lineas_erp' => $lineasErp,
+                'lineas_anita' => $lineasAnita,
+                'saldo_periodo' => round($total, 2),
+                'desvio_saldo' => 0.0,
+                'desvio_cierre' => 0.0,
+            ],
+            'diferencias' => [],
+            'cruzados' => $cruzados,
+            'archivo' => PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados),
+            'archivo_901' => PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados, 901),
+            'archivo_902' => PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados, 902),
+            'nombre_archivo' => 'rsif.txt',
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $erp
+     * @param  list<array<string, mixed>>  $anita
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarPreferirErp(array $erp, array $anita): array
+    {
+        $porClave = [];
+        foreach ($anita as $linea) {
+            $porClave[$this->claveRetencion($linea)] = $linea;
+        }
+        foreach ($erp as $linea) {
+            $porClave[$this->claveRetencion($linea)] = $linea;
+        }
+
+        return array_values($porClave);
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     */
+    private function claveRetencion(array $linea): string
+    {
+        return implode('|', [
+            (string) ($linea['fecha'] ?? ''),
+            (string) ($linea['cuit'] ?? ''),
+            (string) ((int) ($linea['nro_retencion'] ?? 0)),
+            number_format((float) ($linea['importe'] ?? 0), 2, '.', ''),
+            (string) ((int) ($linea['jurisdiccion'] ?? 0)),
+        ]);
     }
 
     /**

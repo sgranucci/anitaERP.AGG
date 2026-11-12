@@ -47,19 +47,25 @@
         return tipo === 'retenciones_caba' || tipo === 'percepciones_caba';
     }
 
+    function esRioNegro(tipo) {
+        return tipo === 'retenciones_rio_negro';
+    }
+
     function aplicarFisco() {
         var tipo = String($('#tipo').val() || '');
         var caba = esCaba(tipo);
+        var rioNegro = esRioNegro(tipo);
+        var mensual = caba || rioNegro;
         $('#liquidacion option').each(function () {
             var valor = parseInt(this.value, 10);
-            this.disabled = caba && (valor === 1 || valor === 2);
+            this.disabled = mensual && (valor === 1 || valor === 2);
         });
-        if (caba && parseInt($('#liquidacion').val(), 10) !== 3) {
+        if (mensual && parseInt($('#liquidacion').val(), 10) !== 3) {
             $('#liquidacion').val('3');
         }
 
         var fiscos = window.iibbProvinciasFisco || {};
-        var fisco = caba ? fiscos.caba : fiscos.arba;
+        var fisco = caba ? fiscos.caba : (rioNegro ? fiscos.rio_negro : fiscos.arba);
         if (fisco && fisco.id) {
             $('#provincia_id').val(fisco.id);
             $('#codigoprovincia').val(fisco.codigo || '');

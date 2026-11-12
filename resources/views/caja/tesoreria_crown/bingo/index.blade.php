@@ -61,7 +61,7 @@
                             <button type="submit" class="btn btn-sm btn-primary">Aplicar filtros</button>
                         </div>
                     </div>
-                    <p class="text-muted small mb-0">Cartones − premios − RSE = resultado. La carga del día también se hace en la jornada (panel Bingo).</p>
+                    <p class="text-muted small mb-0">Cartones − premios − RSE = resultado. La carga del día se hace en este módulo.</p>
                 </div>
                 </div>
             </form>
@@ -81,12 +81,8 @@
                         @forelse ($filas as $fila)
                             <tr>
                                 <td>
-                                    @php
-                                        $claveJ = (int) $fila->sala_id.'|'.$fila->fecha->format('Y-m-d');
-                                        $jornadaId = $jornadasPorFecha[$claveJ] ?? null;
-                                    @endphp
-                                    @if ($jornadaId)
-                                        <a class="text-primary" href="{{ route('ver_tesoreria_crown_jornada', $jornadaId) }}?panel=bingo" target="_blank" rel="noopener">
+                                    @if (can('editar-tesoreria-crown-bingo', false))
+                                        <a class="text-primary" href="{{ route('editar_tesoreria_crown_bingo', ['id' => $fila->id]) }}">
                                             {{ $fila->fecha?->format('d/m/Y') }}
                                         </a>
                                     @else

@@ -80,9 +80,11 @@ class IngresosBrutosReporteController extends Controller
             'provincias_fisco' => [
                 'caba' => IngresosBrutosAgenteOpcionesSupport::datosProvincia(IngresosBrutosAgenteOpcionesSupport::JURISDICCION_CABA),
                 'arba' => IngresosBrutosAgenteOpcionesSupport::datosProvincia(IngresosBrutosAgenteOpcionesSupport::JURISDICCION_BUENOS_AIRES),
+                'rio_negro' => IngresosBrutosAgenteOpcionesSupport::datosProvincia(IngresosBrutosAgenteOpcionesSupport::JURISDICCION_RIO_NEGRO),
             ],
             'sin_agente' => $empresaId > 0 && $tiposEnum === [],
             'es_agip' => IngresosBrutosListadoFiltros::esPresentacionAgip((string) ($filtros['tipo'] ?? '')),
+            'es_rio_negro' => IngresosBrutosListadoFiltros::esPresentacionRioNegro((string) ($filtros['tipo'] ?? '')),
             'liquidaciones_enum' => IngresosBrutosListadoFiltros::LIQUIDACIONES,
             'provincia' => $provincia,
             'consultado' => $consultado,

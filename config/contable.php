@@ -137,5 +137,10 @@ return [
         'cuenta_iva' => (int) preg_replace('/\D/', '', (string) env('PERCEPCION_SUFRIDA_CUENTA_IVA', '114010009')),
         // Régimen del CSV F.2051 (percepciones impositivas sufridas). 493 = RG 2408, impuesto 767.
         'regimen_percepcion_iva' => (int) env('PERCEPCION_IVA_REGIMEN', 493),
+        // auxpag.axp_tipo_ap de retenciones IIBB a clientes (Crown: RIC; sync ERP: R01/R02…).
+        'tipos_retencion_anita' => array_values(array_filter(array_map(
+            static fn ($v) => strtoupper(substr(trim((string) $v), 0, 3)),
+            explode(',', (string) env('SIFERE_TIPOS_RETENCION_ANITA', 'RIC,R01,R02')),
+        ))),
     ],
 ];

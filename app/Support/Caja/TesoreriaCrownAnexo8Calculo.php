@@ -288,7 +288,7 @@ final class TesoreriaCrownAnexo8Calculo
             ? $pesosArqueo
             : round($pesosStock - $slotsMonto - $dropsMonto, 2);
 
-        $fichas = self::stockFichas($fecha, $avisos);
+        $fichas = self::stockFichas($fecha, (int) $jornada->sala_id, $avisos);
 
         self::persistirTotal($jornada, $total);
         $difBoveda = self::difFinalBoveda($jornada, $total);
@@ -340,34 +340,43 @@ final class TesoreriaCrownAnexo8Calculo
      *     origen: string
      * }|null
      */
-    private static function stockFichas(string $fechaYmd, array &$avisos): ?array
+    private static function stockFichas(string $fechaYmd, int $salaId, array &$avisos): ?array
     {
         try {
-            $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fechaYmd);
+            $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fechaYmd, $salaId);
         } catch (Throwable $e) {
             $avisos[] = 'No se pudo armar el stock de fichas: '.$e->getMessage();
 
             return null;
         }
         $filas = [];
-        $cantFichas = 0;
-        $montoFichas = 0.0;
         foreach ($armado['filas'] ?? [] as $fila) {
             $cantidad = (int) ($fila['final'] ?? 0);
             $valor = (float) ($fila['valor'] ?? 0);
-            $monto = round($cantidad * $valor, 2);
             $filas[] = [
                 'serie' => (string) ($fila['serie'] ?? ''),
                 'descripcion' => (string) ($fila['descripcion'] ?? ''),
                 'valor' => $valor,
                 'cantidad' => $cantidad,
-                'monto' => $monto,
+                'monto' => round($cantidad * $valor, 2),
                 // Compat: ya no hay placas / no negociable; todo es ficha de valor.
                 'canje' => false,
             ];
-            $cantFichas += $cantidad;
-            $montoFichas += $monto;
         }
+        $filas = TesoreriaCrownFichaValorUnificacionSupport::unificarFilas(
+            $salaId,
+            $filas,
+            ['cantidad', 'monto']
+        );
+        $cantFichas = 0;
+        $montoFichas = 0.0;
+        foreach ($filas as &$fila) {
+            $fila['cantidad'] = (int) ($fila['cantidad'] ?? 0);
+            $fila['monto'] = round((float) ($fila['monto'] ?? 0), 2);
+            $cantFichas += $fila['cantidad'];
+            $montoFichas += $fila['monto'];
+        }
+        unset($fila);
 
         return [
             'filas' => $filas,

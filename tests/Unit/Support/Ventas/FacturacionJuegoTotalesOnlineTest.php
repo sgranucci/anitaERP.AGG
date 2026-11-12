@@ -17,8 +17,10 @@ final class FacturacionJuegoTotalesOnlineTest extends TestCase
         $flash->forceFill([
             'ol_win' => 1250.50,
             'bs_win' => -320.10,
+            'ad_win' => 88.25,
             'proc_del_rio' => ' ',
             'proc_betsur' => '*',
+            'proc_apuestas' => ' ',
         ]);
 
         self::assertSame(
@@ -29,20 +31,37 @@ final class FacturacionJuegoTotalesOnlineTest extends TestCase
             -320.10,
             FacturacionJuegoTotalesSupport::resultadoRubro($flash, FacturacionJuegoTipoSupport::RUBRO_BETSUR),
         );
+        self::assertSame(
+            88.25,
+            FacturacionJuegoTotalesSupport::resultadoRubro($flash, FacturacionJuegoTipoSupport::RUBRO_APUESTAS),
+        );
         self::assertFalse(
             FacturacionJuegoTotalesSupport::procesado($flash, FacturacionJuegoTipoSupport::RUBRO_DEL_RIO),
         );
         self::assertTrue(
             FacturacionJuegoTotalesSupport::procesado($flash, FacturacionJuegoTipoSupport::RUBRO_BETSUR),
         );
+        self::assertFalse(
+            FacturacionJuegoTotalesSupport::procesado($flash, FacturacionJuegoTipoSupport::RUBRO_APUESTAS),
+        );
     }
 
-    public function test_rubros_incluye_online_y_betsur(): void
+    public function test_rubros_incluye_online_betsur_y_apuestas(): void
     {
         $rubros = FacturacionJuegoTipoSupport::rubros();
         self::assertContains(FacturacionJuegoTipoSupport::RUBRO_DEL_RIO, $rubros);
         self::assertContains(FacturacionJuegoTipoSupport::RUBRO_BETSUR, $rubros);
+        self::assertContains(FacturacionJuegoTipoSupport::RUBRO_APUESTAS, $rubros);
         self::assertTrue(FacturacionJuegoTipoSupport::esOnline(FacturacionJuegoTipoSupport::RUBRO_DEL_RIO));
+        self::assertTrue(FacturacionJuegoTipoSupport::esOnline(FacturacionJuegoTipoSupport::RUBRO_APUESTAS));
         self::assertFalse(FacturacionJuegoTipoSupport::esOnline(FacturacionJuegoTipoSupport::RUBRO_SLOT));
+        self::assertSame(
+            FacturacionJuegoTipoSupport::rubrosOnline(),
+            [
+                FacturacionJuegoTipoSupport::RUBRO_DEL_RIO,
+                FacturacionJuegoTipoSupport::RUBRO_BETSUR,
+                FacturacionJuegoTipoSupport::RUBRO_APUESTAS,
+            ],
+        );
     }
 }

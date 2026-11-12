@@ -2954,6 +2954,7 @@ Route::post('ventas/factura/preferencias', 'Ventas\FacturacionController@prefere
 Route::post('ventas/factura', 'Ventas\FacturacionController@guardar')->name('guardar_factura');
 Route::get('ventas/factura/{id}/editar', 'Ventas\FacturacionController@editar')->name('editar_factura');
 Route::put('ventas/factura/grabacomprobante', 'Ventas\FacturacionController@grabaComprobante')->name('grabar_comprobante');
+Route::put('ventas/factura/{id}/asiento', 'Ventas\FacturacionController@actualizarAsiento')->name('actualizar_asiento_factura');
 Route::put('ventas/factura/{id}', 'Ventas\FacturacionController@actualizar')->name('actualizar_factura');
 Route::delete('ventas/factura/{id}', 'Ventas\FacturacionController@eliminar')->name('eliminar_factura');
 Route::get('ventas/listafactura/{formato?}/{busqueda?}', 'Ventas\FacturacionController@listar')->name('listar_factura');
@@ -3286,6 +3287,9 @@ Route::delete('caja/tesoreria-crown/deposito/{id}', 'Caja\TesoreriaCrownDeposito
 Route::get('caja/tesoreria-crown/aviso', 'Caja\TesoreriaCrownAvisoController@index')->name('tesoreria_crown_aviso');
 Route::get('caja/tesoreria-crown/aviso/listar/{formato?}', 'Caja\TesoreriaCrownAvisoController@listar')->name('listar_tesoreria_crown_aviso');
 Route::post('caja/tesoreria-crown/aviso/{id}/resolver', 'Caja\TesoreriaCrownAvisoController@resolver')->name('resolver_tesoreria_crown_aviso');
+Route::get('caja/tesoreria-crown/propina-casino', 'Caja\TesoreriaCrownPropinaCasinoController@index')->name('tesoreria_crown_propina_casino');
+Route::get('caja/listar-tesoreria-crown-propina-casino/{formato}', 'Caja\TesoreriaCrownPropinaCasinoController@exportar')
+    ->name('listar_tesoreria_crown_propina_casino');
 Route::get('caja/tesoreria-crown/cajero', 'Caja\TesoreriaCrownCajeroController@index')->name('tesoreria_crown_cajero');
 Route::get('caja/tesoreria-crown/cajero/crear', 'Caja\TesoreriaCrownCajeroController@crear')->name('crear_tesoreria_crown_cajero');
 Route::post('caja/tesoreria-crown/cajero', 'Caja\TesoreriaCrownCajeroController@guardar')->name('guardar_tesoreria_crown_cajero');
@@ -3311,6 +3315,12 @@ Route::get('caja/tesoreria-crown/resultado-online/editar', 'Caja\TesoreriaCrownR
 Route::get('caja/tesoreria-crown/resultado-online/listar/{formato?}/{busqueda?}', 'Caja\TesoreriaCrownResultadoOnlineController@listar')->name('listar_tesoreria_crown_resultado_online');
 Route::post('caja/tesoreria-crown/resultado-online', 'Caja\TesoreriaCrownResultadoOnlineController@guardar')->name('guardar_tesoreria_crown_resultado_online');
 Route::delete('caja/tesoreria-crown/resultado-online/{id}', 'Caja\TesoreriaCrownResultadoOnlineController@eliminar')->name('eliminar_tesoreria_crown_resultado_online');
+
+Route::get('caja/tesoreria-crown/casino-online', 'Caja\TesoreriaCrownCasinoOnlineController@index')->name('tesoreria_crown_casino_online');
+Route::get('caja/tesoreria-crown/casino-online/crear', 'Caja\TesoreriaCrownCasinoOnlineController@crear')->name('crear_tesoreria_crown_casino_online');
+Route::get('caja/tesoreria-crown/casino-online/editar', 'Caja\TesoreriaCrownCasinoOnlineController@editar')->name('editar_tesoreria_crown_casino_online');
+Route::post('caja/tesoreria-crown/casino-online', 'Caja\TesoreriaCrownCasinoOnlineController@guardar')->name('guardar_tesoreria_crown_casino_online');
+Route::delete('caja/tesoreria-crown/casino-online/{id}', 'Caja\TesoreriaCrownCasinoOnlineController@eliminar')->name('eliminar_tesoreria_crown_casino_online');
 Route::get('caja/tesoreria-crown/bingo', 'Caja\TesoreriaCrownBingoController@index')->name('tesoreria_crown_bingo');
 Route::get('caja/tesoreria-crown/bingo/crear', 'Caja\TesoreriaCrownBingoController@crear')->name('crear_tesoreria_crown_bingo');
 Route::get('caja/tesoreria-crown/bingo/editar', 'Caja\TesoreriaCrownBingoController@editar')->name('editar_tesoreria_crown_bingo');
@@ -3651,6 +3661,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/flash-crown/reporte', 'Caja\Flash\FlashCrownReporteController@index')->name('flash_reporte_crown');
     Route::post('caja/flash-crown/reporte/enviar', 'Caja\Flash\FlashCrownReporteController@enviar')->name('enviar_flash_reporte_crown');
     Route::post('caja/flash-crown/reporte/destinatarios', 'Caja\Flash\FlashCrownReporteController@guardarDestinatarios')->name('guardar_destinatarios_flash_reporte_crown');
+    Route::get('caja/flash-crown/reporte/excel', 'Caja\Flash\FlashCrownReporteController@exportarInforme')->name('exportar_informe_flash_reporte_crown');
     Route::get('caja/flash-crown/reporte/exportar', 'Caja\Flash\FlashCrownReporteController@exportar')->name('exportar_flash_reporte_crown');
     Route::post('caja/flash-crown/reporte/suscripciones', 'Caja\Flash\FlashCrownReporteController@guardarSuscripcion')->name('guardar_suscripcion_flash_reporte_crown');
     Route::put('caja/flash-crown/reporte/suscripciones/{id}', 'Caja\Flash\FlashCrownReporteController@actualizarSuscripcion')->name('actualizar_suscripcion_flash_reporte_crown');
@@ -4075,6 +4086,13 @@ Route::get('caja/interbanking/archivo-pago/descargar', 'Caja\InterbankingArchivo
 Route::get('caja/interbanking/archivo-pago/{formato}', 'Caja\InterbankingArchivoPagoController@exportar')
     ->name('lista_interbanking_archivo_pago')
     ->where('formato', 'PDF|EXCEL|CSV');
+
+Route::get('caja/interbanking/envio-transferencias', 'Caja\InterbankingEnvioTransferenciaController@index')
+    ->name('interbanking_envio_transferencias');
+Route::post('caja/interbanking/envio-transferencias/preview-retiro', 'Caja\InterbankingEnvioTransferenciaController@previewRetiro')
+    ->name('interbanking_envio_transferencias_preview_retiro');
+Route::post('caja/interbanking/envio-transferencias/enviar', 'Caja\InterbankingEnvioTransferenciaController@enviar')
+    ->name('interbanking_envio_transferencias_enviar');
 
 // Banco Macro — exportación pagos por archivo (diskette); WS premium vía config macro.canal
 Route::get('caja/frances/archivo-pago', 'Caja\FrancesArchivoPagoController@index')->name('frances_archivo_pago');
@@ -5601,6 +5619,20 @@ Route::put('sueldos/sindicato/{id}', 'Sueldos\Sindicato_SueldosController@actual
 Route::delete('sueldos/sindicato/{id}', 'Sueldos\Sindicato_SueldosController@eliminar')->name('eliminar_sindicato_sueldos');
 
 /*
+ * Plantillas Word y reglas de asignación para emisión de contratos / certificados.
+ * Menú canónico: Configuración → por módulo → Sueldos.
+ */
+Route::get('sueldos/contrato-plantilla', 'Sueldos\Contrato_Plantilla_SueldosController@index')->name('consultar_contrato_plantilla_sueldos');
+Route::get('sueldos/contrato-plantilla/crear', 'Sueldos\Contrato_Plantilla_SueldosController@crear')->name('crear_contrato_plantilla_sueldos');
+Route::post('sueldos/contrato-plantilla', 'Sueldos\Contrato_Plantilla_SueldosController@guardar')->name('guardar_contrato_plantilla_sueldos');
+Route::get('sueldos/contrato-plantilla/{id}/editar', 'Sueldos\Contrato_Plantilla_SueldosController@editar')->name('editar_contrato_plantilla_sueldos');
+Route::put('sueldos/contrato-plantilla/{id}', 'Sueldos\Contrato_Plantilla_SueldosController@actualizar')->name('actualizar_contrato_plantilla_sueldos');
+Route::delete('sueldos/contrato-plantilla/{id}', 'Sueldos\Contrato_Plantilla_SueldosController@eliminar')->name('eliminar_contrato_plantilla_sueldos');
+Route::get('sueldos/contrato-plantilla/{id}/descargar', 'Sueldos\Contrato_Plantilla_SueldosController@descargar')->name('descargar_contrato_plantilla_sueldos');
+Route::post('sueldos/contrato-plantilla-asignacion', 'Sueldos\Contrato_Plantilla_SueldosController@guardarAsignacion')->name('guardar_asignacion_contrato_plantilla_sueldos');
+Route::delete('sueldos/contrato-plantilla-asignacion/{id}', 'Sueldos\Contrato_Plantilla_SueldosController@eliminarAsignacion')->name('eliminar_asignacion_contrato_plantilla_sueldos');
+
+/*
  * Fallos de caja de sueldos (Anita sueldos / tblfallo). Sync solo llenado inicial; CRUD vive en el ERP.
  */
 Route::get('sueldos/fallocaja', 'Sueldos\Fallocaja_SueldosController@index')->name('consultar_fallocaja_sueldos');
@@ -6028,6 +6060,16 @@ Route::get('sueldos/empleado/{empleado}/familiares', 'Sueldos\Empleado_FamiliarS
 Route::post('sueldos/empleado/{empleado}/familiares', 'Sueldos\Empleado_FamiliarSueldosController@guardar')->name('guardar_familiar_empleado_sueldos');
 Route::put('sueldos/familiar/{id}', 'Sueldos\Empleado_FamiliarSueldosController@actualizar')->name('actualizar_familiar_empleado_sueldos');
 Route::delete('sueldos/familiar/{id}', 'Sueldos\Empleado_FamiliarSueldosController@eliminar')->name('eliminar_familiar_empleado_sueldos');
+
+/*
+ * Contratos del legajo (Anita empcontrato) + emisión Word (l-empcontr / certificados).
+ */
+Route::get('sueldos/empleado/{empleado}/contratos', 'Sueldos\Empleado_ContratoSueldosController@panel')->name('contratos_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/contratos', 'Sueldos\Empleado_ContratoSueldosController@guardar')->name('guardar_contrato_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/contratos/emitir', 'Sueldos\Empleado_ContratoSueldosController@emitir')->name('emitir_contrato_empleado_sueldos');
+Route::put('sueldos/contrato-empleado/{id}', 'Sueldos\Empleado_ContratoSueldosController@actualizar')->name('actualizar_contrato_empleado_sueldos');
+Route::delete('sueldos/contrato-empleado/{id}', 'Sueldos\Empleado_ContratoSueldosController@eliminar')->name('eliminar_contrato_empleado_sueldos');
+Route::get('sueldos/contrato-emision/{id}/descargar', 'Sueldos\Empleado_ContratoSueldosController@descargarEmision')->name('descargar_emision_contrato_empleado_sueldos');
 
 /*
  * Préstamos / planes de cuotas del empleado (solapa): un concepto que se liquida

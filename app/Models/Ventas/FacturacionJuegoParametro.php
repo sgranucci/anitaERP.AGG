@@ -24,6 +24,7 @@ class FacturacionJuegoParametro extends Model implements Auditable
         'tipo_per_online',
         'sucursal_del_rio',
         'sucursal_betsur',
+        'sucursal_apuestas',
         'letra',
         'tipoasiento_abreviatura',
     ];
@@ -31,5 +32,6 @@ class FacturacionJuegoParametro extends Model implements Auditable
     protected $casts = [
         'sucursal_del_rio' => 'integer',
         'sucursal_betsur' => 'integer',
+        'sucursal_apuestas' => 'integer',
     ];
 }

@@ -28,13 +28,6 @@
                     Slots <span class="tc-count">{{ $navSlots ?? 0 }}</span>
                 </a>
             @endif
-            @if ($puedeBingo ?? false)
-                <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=bingo"
-                   class="tc-nav-bingo {{ ($navActivo ?? '') === 'bingo' ? 'is-on' : '' }}">
-                    <i class="fa fa-ticket" aria-hidden="true"></i>
-                    Bingo <span class="tc-count">{{ ($navBingo ?? false) ? 1 : 0 }}</span>
-                </a>
-            @endif
         </div>
         @if (($puedePoder ?? false) || ($puedeAnexo ?? false) || ($puedeKardex ?? false))
             <div class="tc-desk-nav-reportes" aria-label="Informes del día">

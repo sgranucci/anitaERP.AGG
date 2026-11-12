@@ -49,12 +49,13 @@ final class TesoreriaCrownPoderPublicoCalculo
      *     avisos: list<string>
      * }
      */
-    public static function delDia(string $fechaYmd): array
+    public static function delDia(string $fechaYmd, ?int $salaId = null): array
     {
         $avisos = [];
         if (self::erpDisponible($fechaYmd, $avisos)) {
             $armado = self::delDiaErp($fechaYmd, $avisos);
             $armado['origen'] = 'erp';
+            $armado['filas'] = self::unificarFilasFval((int) ($salaId ?? 0), $armado['filas'] ?? []);
 
             return $armado;
         }
@@ -76,6 +77,35 @@ final class TesoreriaCrownPoderPublicoCalculo
             'origen' => 'erp',
             'avisos' => array_values(array_unique($avisos)),
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private static function unificarFilasFval(int $salaId, array $filas): array
+    {
+        if ($salaId <= 0 || $filas === []) {
+            return $filas;
+        }
+
+        return TesoreriaCrownFichaValorUnificacionSupport::unificarFilas(
+            $salaId,
+            $filas,
+            [
+                'reserva',
+                'reserva_inicial',
+                'otros',
+                'inicial',
+                'final',
+                'habilitacion',
+                'pagos_caja',
+                'pp_diario',
+                'poder',
+                'mesas',
+                'total',
+            ]
+        );
     }
 
     /**

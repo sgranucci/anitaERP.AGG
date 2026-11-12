@@ -9,6 +9,7 @@ use App\Models\Configuracion\Provincia;
 use App\Repositories\Contable\Iibb_Presentacion_ConfigRepositoryInterface;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoAgipSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
+use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoRioNegroSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosListadoFiltros;
 use Illuminate\Support\Facades\Cache;
 
@@ -132,6 +133,9 @@ final class IngresosBrutosReporteService
         if (IngresosBrutosListadoFiltros::esPresentacionAgip($tipo)) {
             $nombre = IngresosBrutosFormatoAgipSupport::nombreArchivo($cuitAgente, $periodo, $esRetencion);
             $nombreNc = IngresosBrutosFormatoAgipSupport::nombreArchivo($cuitAgente, $periodo, $esRetencion, true);
+        } elseif (IngresosBrutosListadoFiltros::esPresentacionRioNegro($tipo)) {
+            $nombre = IngresosBrutosFormatoRioNegroSupport::nombreArchivo($cuitAgente, $periodo);
+            $nombreNc = '';
         } else {
             $actividad = (int) ($config->codigo_actividad_arba
                 ?? ($tipoConfig === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES
@@ -165,6 +169,14 @@ final class IngresosBrutosReporteService
     {
         if (IngresosBrutosListadoFiltros::esPresentacionAgip($tipo)) {
             return IngresosBrutosFormatoAgipSupport::generar($registros, $esRetencion);
+        }
+
+        if (IngresosBrutosListadoFiltros::esPresentacionRioNegro($tipo)) {
+            return [
+                'principal' => IngresosBrutosFormatoRioNegroSupport::generarArchivo($registros),
+                'notas_credito' => '',
+                'cantidad_nc' => 0,
+            ];
         }
 
         return [

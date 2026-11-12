@@ -8,6 +8,7 @@
     $helpPrimera = collect($helpSalas)->first() ?? [];
     $helpPvDelRio = (int) (($helpPrimera['sucursal_del_rio'] ?? 67) ?: 67);
     $helpPvBetsur = (int) (($helpPrimera['sucursal_betsur'] ?? 68) ?: 68);
+    $helpPvApuestas = (int) (($helpPrimera['sucursal_apuestas'] ?? 0) ?: 0);
 @endphp
 @if (! $soloModal)
 <button type="button" class="{{ $helpBtnClass }}" data-toggle="modal" data-target="#{{ $helpModalId }}"
@@ -52,6 +53,7 @@
                                     <th>Ruleta el.</th>
                                     <th>Del R&iacute;o (PV {{ $helpPvDelRio }})</th>
                                     <th>Betsur (PV {{ $helpPvBetsur }})</th>
+                                    <th>Apuestas (PV {{ $helpPvApuestas ?: '—' }})</th>
                                     <th>Centro de costo</th>
                                 </tr>
                             </thead>
@@ -108,6 +110,13 @@
                                         <td>
                                             @if (($h['cuenta_betsur_codigo'] ?? '') !== '')
                                                 {{ $h['cuenta_betsur_codigo'] }} — {{ $h['cuenta_betsur_nombre'] }}
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if (($h['cuenta_apuestas_codigo'] ?? '') !== '')
+                                                {{ $h['cuenta_apuestas_codigo'] }} — {{ $h['cuenta_apuestas_nombre'] }}
                                             @else
                                                 —
                                             @endif

@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja\Flash;
 
+use App\Models\Caja\TesoreriaCrownCasinoOnline;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Configuracion\Sala;
@@ -12,7 +13,7 @@ use Throwable;
 
 /**
  * Arma el flash Crown desde Tesorería (mesas, gastro/hotel, clientes)
- * + resultado online (slots + Del Río 67 + Betsur 68).
+ * + resultado online (slots por sala) + casino online diario (Del Río / Betsur / Apuestas).
  * Réplica de fuentes de a-resultado / l-consolida (formato Completo).
  */
 final class FlashCrownCalculoSupport
@@ -67,6 +68,10 @@ final class FlashCrownCalculoSupport
             'bs_coin_in' => 0.0,
             'bs_cage_bal' => 0.0,
             'bs_win' => 0.0,
+            'ad_att' => 0,
+            'ad_coin_in' => 0.0,
+            'ad_cage_bal' => 0.0,
+            'ad_win' => 0.0,
             'ayb' => 0.0,
             'hotel' => 0.0,
             'comentario' => null,
@@ -267,48 +272,80 @@ final class FlashCrownCalculoSupport
     private static function aplicarResultadoOnline(array &$flash, int $salaId, string $fecha): void
     {
         $online = TesoreriaCrownResultadoOnline::deSalaFecha($salaId, $fecha);
-        if (! $online) {
-            $flash['avisos'][] = 'Sin resultado online para la sala/fecha.';
+        if ($online) {
+            $coinIn = (float) $online->coin_in;
+            $coinOut = (float) $online->coin_out;
+            $pagoManual = (float) $online->pago_manual;
+            $slotR = (float) ($online->slot_resultado ?? 0);
+            if (abs($slotR) < 0.0001) {
+                $slotR = round($coinIn - $coinOut - $pagoManual, 2);
+            }
 
-            return;
+            $flash['coin_in'] = round($coinIn, 2);
+            $flash['coin_out'] = round($coinOut, 2);
+            $flash['pago_manual'] = round($pagoManual, 2);
+            $flash['slot_r'] = round($slotR, 2);
+            $flash['cant_slots'] = (int) ($online->cantidad_slots ?? 0);
+            $flash['soft_count'] = round((float) ($online->subtotal_slot ?? 0), 2);
+            $flash['slot_d'] = round((float) ($online->subtotal_slot ?: 0), 2);
+            $flash['detalle']['fuentes'][] = 'resultado_online';
+        } else {
+            $flash['avisos'][] = 'Sin resultado online (slots) para la sala/fecha.';
         }
 
-        $coinIn = (float) $online->coin_in;
-        $coinOut = (float) $online->coin_out;
-        $pagoManual = (float) $online->pago_manual;
-        $slotR = (float) ($online->slot_resultado ?? 0);
-        if (abs($slotR) < 0.0001) {
-            $slotR = round($coinIn - $coinOut - $pagoManual, 2);
+        self::aplicarCasinoOnlineGlobal($flash, $fecha, $online);
+    }
+
+    /**
+     * Del Río / Betsur / Apuestas: carga diaria global. Fallback legacy desde resultado_online.
+     *
+     * @param  array<string, mixed>  $flash
+     */
+    private static function aplicarCasinoOnlineGlobal(array &$flash, string $fecha, ?TesoreriaCrownResultadoOnline $legacy): void
+    {
+        $global = TesoreriaCrownCasinoOnline::deFecha($fecha);
+        if ($global) {
+            $flash['ol_att'] = (int) ($global->attendance ?? 0);
+            $flash['ol_drop'] = round((float) ($global->drop ?? 0), 2);
+            $flash['ol_coin_in'] = round((float) ($global->apostado ?? 0), 2);
+            $flash['ol_cage_bal'] = round((float) ($global->pagado ?? 0), 2);
+            $flash['ol_win'] = round((float) ($global->resultado ?? 0), 2);
+
+            $flash['bs_att'] = (int) ($global->betsur_attendance ?? 0);
+            $flash['bs_coin_in'] = round((float) ($global->betsur_apostado ?? 0), 2);
+            $flash['bs_cage_bal'] = round((float) ($global->betsur_pagado ?? 0), 2);
+            $flash['bs_win'] = round((float) ($global->betsur_resultado ?? 0), 2);
+
+            $flash['ad_att'] = (int) ($global->ad_attendance ?? 0);
+            $flash['ad_coin_in'] = round((float) ($global->ad_apostado ?? 0), 2);
+            $flash['ad_cage_bal'] = round((float) ($global->ad_pagado ?? 0), 2);
+            $flash['ad_win'] = round((float) ($global->ad_resultado ?? 0), 2);
+            $flash['detalle']['fuentes'][] = 'casino_online_diario';
+        } elseif ($legacy) {
+            // Compatibilidad con cargas anteriores cargados por sala.
+            $flash['ol_att'] = (int) ($legacy->attendance ?? 0);
+            $flash['ol_drop'] = round((float) ($legacy->drop ?? 0), 2);
+            $flash['ol_coin_in'] = round((float) ($legacy->apostado ?? 0), 2);
+            $flash['ol_cage_bal'] = round((float) ($legacy->pagado ?? 0), 2);
+            $flash['ol_win'] = round((float) ($legacy->resultado ?? 0), 2);
+
+            $flash['bs_att'] = (int) ($legacy->betsur_attendance ?? 0);
+            $flash['bs_coin_in'] = round((float) ($legacy->betsur_apostado ?? 0), 2);
+            $flash['bs_cage_bal'] = round((float) ($legacy->betsur_pagado ?? 0), 2);
+            $flash['bs_win'] = round((float) ($legacy->betsur_resultado ?? 0), 2);
         }
 
-        $flash['coin_in'] = round($coinIn, 2);
-        $flash['coin_out'] = round($coinOut, 2);
-        $flash['pago_manual'] = round($pagoManual, 2);
-        $flash['slot_r'] = round($slotR, 2);
-        $flash['cant_slots'] = (int) ($online->cantidad_slots ?? 0);
-        $flash['soft_count'] = round((float) ($online->subtotal_slot ?? 0), 2);
-        // Drop financiero slots ≈ soft count cuando no hay slot_d aparte.
-        $flash['slot_d'] = round((float) ($online->subtotal_slot ?: 0), 2);
-
-        // l-consolida COMPLETO: suc. 67 Del Río → ON-LINE; suc. 68 → BETSUR.
-        // Coin in = apostado, Cage bal. = pagado, Win = resultado.
-        $flash['ol_att'] = (int) ($online->attendance ?? 0);
-        $flash['ol_drop'] = round((float) ($online->drop ?? 0), 2);
-        $flash['ol_coin_in'] = round((float) ($online->apostado ?? 0), 2);
-        $flash['ol_cage_bal'] = round((float) ($online->pagado ?? 0), 2);
-        $flash['ol_win'] = round((float) ($online->resultado ?? 0), 2);
-
-        $flash['bs_att'] = (int) ($online->betsur_attendance ?? 0);
-        $flash['bs_coin_in'] = round((float) ($online->betsur_apostado ?? 0), 2);
-        $flash['bs_cage_bal'] = round((float) ($online->betsur_pagado ?? 0), 2);
-        $flash['bs_win'] = round((float) ($online->betsur_resultado ?? 0), 2);
-
-        $flash['detalle']['fuentes'][] = 'resultado_online';
         if (abs((float) $flash['ol_win']) > 0.001 || abs((float) $flash['ol_coin_in']) > 0.001) {
             $flash['detalle']['fuentes'][] = 'del_rio_online';
         }
         if (abs((float) $flash['bs_win']) > 0.001 || abs((float) $flash['bs_coin_in']) > 0.001) {
             $flash['detalle']['fuentes'][] = 'betsur_online';
+        }
+        if (abs((float) $flash['ad_win']) > 0.001 || abs((float) $flash['ad_coin_in']) > 0.001) {
+            $flash['detalle']['fuentes'][] = 'apuestas_deportivas';
+        }
+        if (! $global && ! $legacy) {
+            $flash['avisos'][] = 'Sin carga de casino online diario para la fecha.';
         }
     }
 
@@ -333,7 +370,7 @@ final class FlashCrownCalculoSupport
                 $aplicados[] = $campo;
                 continue;
             }
-            if (in_array($campo, ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el', 'ol_att', 'bs_att'], true)) {
+            if (in_array($campo, ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el', 'ol_att', 'bs_att', 'ad_att'], true)) {
                 $calculado[$campo] = (int) $valor;
             } else {
                 $calculado[$campo] = round((float) $valor, 2);
@@ -356,7 +393,8 @@ final class FlashCrownCalculoSupport
             + (float) $calc['multi_r'] + (float) $calc['crap_r'] + (float) $calc['caribbean_r']
             + (float) $calc['poker_r'] + (float) $calc['seven_r'] + (float) $calc['super_peek_r']
             + (float) $calc['slot_r'] - (float) $calc['cash_less'] + (float) $calc['ruleta_el_r']
-            + (float) ($calc['ol_win'] ?? 0) + (float) ($calc['bs_win'] ?? 0);
+            + (float) ($calc['ol_win'] ?? 0) + (float) ($calc['bs_win'] ?? 0)
+            + (float) ($calc['ad_win'] ?? 0);
 
         return round($gaming + (float) $calc['ayb'] + (float) $calc['hotel'], 2);
     }
@@ -374,23 +412,24 @@ final class FlashCrownCalculoSupport
         );
         $olWin = (float) ($flash['ol_win'] ?? 0);
         $bsWin = (float) ($flash['bs_win'] ?? 0);
-        $gaming = round(
-            $winMesas
-            + (float) $flash['slot_r']
+        $adWin = (float) ($flash['ad_win'] ?? 0);
+        $slotsFisicos = round(
+            (float) $flash['slot_r']
             - (float) $flash['cash_less']
-            + (float) $flash['ruleta_el_r']
-            + $olWin
-            + $bsWin,
+            + (float) $flash['ruleta_el_r'],
             2
         );
+        $gaming = round($winMesas + $slotsFisicos + $olWin + $bsWin + $adWin, 2);
         $combined = round($gaming + (float) $flash['ayb'] + (float) $flash['hotel'], 2);
         $att = (int) ($flash['att'] ?? 0);
         $olDrop = (float) ($flash['ol_drop'] ?? 0);
 
         return [
             'win_mesas' => $winMesas,
+            'slots_fisicos' => $slotsFisicos,
             'ol_win' => round($olWin, 2),
             'bs_win' => round($bsWin, 2),
+            'ad_win' => round($adWin, 2),
             'gaming' => $gaming,
             'combined' => $combined,
             'win_torneos' => round((float) $flash['torneo_poker'] + (float) $flash['master_cup'], 2),
@@ -405,6 +444,9 @@ final class FlashCrownCalculoSupport
                 : 0.0,
             'bs_porcentaje' => abs((float) ($flash['bs_coin_in'] ?? 0)) > 0.001
                 ? round($bsWin / (float) $flash['bs_coin_in'] * 100, 2)
+                : 0.0,
+            'ad_porcentaje' => abs((float) ($flash['ad_coin_in'] ?? 0)) > 0.001
+                ? round($adWin / (float) $flash['ad_coin_in'] * 100, 2)
                 : 0.0,
         ];
     }

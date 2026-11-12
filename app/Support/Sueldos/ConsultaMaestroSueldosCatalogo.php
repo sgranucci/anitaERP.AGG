@@ -8,6 +8,7 @@ use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Art_Sueldos;
 use App\Models\Sueldos\Categoria_Sueldos;
 use App\Models\Sueldos\Lugartrabajo_Sueldos;
+use App\Models\Sueldos\Sindicato_Sueldos;
 use App\Models\Sueldos\Vacacion_Sueldos;
 
 /**
@@ -81,6 +82,16 @@ final class ConsultaMaestroSueldosCatalogo
                 'permiso_listar' => 'listar-art-sueldos',
                 'permiso_editar' => 'editar-art-sueldos',
                 'ruta_editar' => 'editar_art_sueldos',
+            ],
+            'sindicato' => [
+                'model' => Sindicato_Sueldos::class,
+                'titulo' => 'Sindicatos',
+                'label' => 'Sindicato',
+                'campo_nombre' => 'descripcion',
+                'extras' => ['numero'],
+                'permiso_listar' => 'listar-sindicato-sueldos',
+                'permiso_editar' => 'editar-sindicato-sueldos',
+                'ruta_editar' => 'editar_sindicato_sueldos',
             ],
         ];
     }

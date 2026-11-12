@@ -54,6 +54,62 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         $this->assertSame(0.0, $armado['detalle'][0]['iva_computable']);
     }
 
+    public function test_iva_computable_por_tipo_compra_aplica_coeficiente_indirecto(): void
+    {
+        $this->assertSame(
+            10.5,
+            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('FIB', 21.0, 0.5),
+        );
+        $this->assertSame(
+            8.4,
+            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('ICO', 21.0, 0.4),
+        );
+        $this->assertSame(
+            0.0,
+            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('FIN', 21.0, 0.5),
+        );
+        $this->assertSame(
+            21.0,
+            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('FDB', 21.0, 0.5),
+        );
+        $this->assertSame(
+            0.0,
+            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('FIB', 21.0, 0.5, true),
+        );
+    }
+
+    public function test_credito_desde_libro_aplica_coeficiente_a_fi(): void
+    {
+        $armado = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro([
+            [
+                'iva_simple' => [
+                    'restitucion' => false,
+                    'abreviatura_tipo' => 'FIS',
+                ],
+                'cabecera' => [
+                    'tipo_comprobante' => '001',
+                    'operaciones_exentas' => 0.0,
+                    'no_integra_neto' => 0.0,
+                    'importe_total' => 121.0,
+                ],
+                'alicuotas' => [[
+                    'neto_gravado' => 100.0,
+                    'impuesto_liquidado' => 21.0,
+                    'alicuota_iva' => '0005',
+                    'concepto_iva_simple' => 3,
+                ]],
+            ],
+        ], false, 0.8);
+
+        $this->assertCount(1, $armado['detalle']);
+        $this->assertSame(21.0, $armado['detalle'][0]['iva']);
+        $this->assertSame(16.8, $armado['detalle'][0]['iva_computable']);
+        $this->assertSame(
+            '3;5;100,00;21,00;16,80;',
+            LibroIvaDigitalIvaSimpleSupport::lineaCreditoFiscal($armado['detalle'][0]),
+        );
+    }
+
     public function test_resumen_por_concepto_separa_restitucion(): void
     {
         $credito = [[

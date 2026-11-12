@@ -235,7 +235,7 @@ final class TesoreriaCrownResumenCajeroCalculo
         $detalle = self::detalleRendiciones($conforme);
 
         $egresos = (float) $calc['habilitado'];
-        $tarea = (string) ($asignacion->cajero->tipo_tarea ?? $asignacion->tipo_tarea);
+        $tarea = $asignacion->tipoTareaEfectiva();
         // Anita: ingresos = efectivo rendido (con medios). En gastro/hotel también
         // suma fallo de mozo + transferencia/cta cte (rescajero.fc).
         $ingresos = round(
@@ -280,7 +280,7 @@ final class TesoreriaCrownResumenCajeroCalculo
             'cajero' => (string) ($asignacion->cajero->nombre ?? ''),
             'legajo' => (int) ($asignacion->cajero->legajo ?? 0),
             'turno' => (string) $asignacion->turno,
-            'tarea' => (string) ($asignacion->cajero->tipo_tarea ?? $asignacion->tipo_tarea),
+            'tarea' => $tarea,
             'cierre_x' => $detalle['cierre_x'],
             'egresos' => $egresos,
             'efectivo' => $detalle['efectivo'],

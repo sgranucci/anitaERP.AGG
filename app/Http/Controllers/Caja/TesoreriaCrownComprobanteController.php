@@ -338,7 +338,8 @@ class TesoreriaCrownComprobanteController extends Controller
                 $reglas['medio.'.$clave] = $regla;
             }
         }
-        if ($camposMedio !== [] && TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
+        // Panel de cierres fiscales interactivo: solo hotel (gastro ya trae el X del cierre de mozo).
+        if ($camposMedio !== [] && TesoreriaCrownRendicionCampos::esCajaHotel($comprobante->tipoTareaOperativa())) {
             $reglas['cierre_fiscal'] = ['array'];
             $reglas['cierre_fiscal.*'] = ['string', 'max:40'];
             $reglas['pxsol_aplicado'] = ['nullable', 'in:1'];
@@ -364,9 +365,10 @@ class TesoreriaCrownComprobanteController extends Controller
             ->all();
 
         $pedirFirmas = $request->input('accion') === 'pedir-firmas';
+        $sincronizaCierresFiscales = array_key_exists('cierre_fiscal', $reglas);
 
         try {
-            DB::transaction(function () use ($comprobante, $datos, $idsSala, $camposMedio, $cierresElegidos) {
+            DB::transaction(function () use ($comprobante, $datos, $idsSala, $camposMedio, $cierresElegidos, $sincronizaCierresFiscales) {
             if (array_key_exists('mozo_aplicacion', $datos)
                 && $comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION) {
                 $mozoId = (int) ($comprobante->cajeroOperativo()->mozo_gastronomia_id ?? 0);
@@ -413,7 +415,9 @@ class TesoreriaCrownComprobanteController extends Controller
                 }
                 $comprobante->save();
             }
-            if ($cierresElegidos !== [] || $comprobante->cierresFiscales()->exists()) {
+            // Solo hotel sincroniza el panel; gastro conserva el X creado con el cierre de mozo.
+            if ($sincronizaCierresFiscales
+                && ($cierresElegidos !== [] || $comprobante->cierresFiscales()->exists())) {
                 $this->sincronizarCierresFiscales($comprobante, $cierresElegidos);
             }
             $comprobante->refresh();
@@ -536,8 +540,8 @@ class TesoreriaCrownComprobanteController extends Controller
 
         $comprobante = $this->comprobanteEnAlcance($id);
         if ($comprobante->tipo !== TesoreriaCrownComprobanteSupport::RENDICION
-            || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
-            return back()->with('mensaje-error', 'Solo una rendición de gastronomía o hotel carga cierres de ventas.');
+            || ! TesoreriaCrownRendicionCampos::esCajaHotel($comprobante->tipoTareaOperativa())) {
+            return back()->with('mensaje-error', 'Solo una rendición de hotel carga cierres de ventas a mano.');
         }
         if ($error = $this->errorBorradorAbierto($comprobante)) {
             return back()->with('mensaje-error', $error);
@@ -899,6 +903,11 @@ class TesoreriaCrownComprobanteController extends Controller
         if ($comprobante->tipo !== TesoreriaCrownComprobanteSupport::RENDICION
             || ! TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa())) {
             return ['error' => null, 'filas' => []];
+        }
+
+        // Gastro: solo el X ya vinculado al crear la rendición (tarjetita informativa).
+        if (TesoreriaCrownRendicionCampos::esCajaGastronomia($comprobante->tipoTareaOperativa())) {
+            return TesoreriaCrownCierreFiscalReader::vinculadosDe($comprobante);
         }
 
         $jornada = $comprobante->jornada;

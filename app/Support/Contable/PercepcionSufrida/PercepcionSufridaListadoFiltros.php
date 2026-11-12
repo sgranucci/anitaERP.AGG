@@ -8,15 +8,36 @@ use Illuminate\Http\Request;
 
 final class PercepcionSufridaListadoFiltros
 {
+    public const EXPORTA_PERCEPCIONES = 'percepciones';
+
+    public const EXPORTA_RETENCIONES = 'retenciones';
+
+    /**
+     * @return array<string, string>
+     */
+    public static function opcionesExporta(): array
+    {
+        return [
+            self::EXPORTA_PERCEPCIONES => 'Percepciones (proveedores)',
+            self::EXPORTA_RETENCIONES => 'Retenciones (clientes)',
+        ];
+    }
+
     /**
      * @return array<string, mixed>
      */
     public static function resolverDesdeRequest(Request $request): array
     {
+        $exporta = strtolower(trim((string) $request->input('exporta', self::EXPORTA_PERCEPCIONES)));
+        if (! array_key_exists($exporta, self::opcionesExporta())) {
+            $exporta = self::EXPORTA_PERCEPCIONES;
+        }
+
         return [
             'empresa_id' => max(0, (int) $request->input('empresa_id', 0)),
             'fecha_desde' => (string) $request->input('fecha_desde', date('Y-m-01')),
             'fecha_hasta' => (string) $request->input('fecha_hasta', date('Y-m-d')),
+            'exporta' => $exporta,
         ];
     }
 
@@ -30,6 +51,7 @@ final class PercepcionSufridaListadoFiltros
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),
+            'exporta' => (string) ($filtros['exporta'] ?? self::EXPORTA_PERCEPCIONES),
         ];
     }
 

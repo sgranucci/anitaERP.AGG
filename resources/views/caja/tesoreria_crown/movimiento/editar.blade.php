@@ -351,6 +351,12 @@
                     </div>
                 @endif
 
+                @if ($editable && ! $esHabilitacion && \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa()))
+                    {{-- Hermano de form-cantidades-crown: los campos de «Cargar un cierre a mano» apuntan acá con form= (no anidar). --}}
+                    <form id="form-cierre-fiscal-manual" method="POST" action="{{ route('cierre_fiscal_manual_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1" class="d-none">
+                        @csrf
+                    </form>
+                @endif
                 <form method="POST" action="{{ route('guardar_tesoreria_crown_movimiento', $comprobante->id) }}" id="form-cantidades-crown" data-enter-campos="1">
                     @csrf
                     @if ($editable)

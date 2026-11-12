@@ -60,7 +60,12 @@ use App\Models\Stock\Lote;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
+use App\Support\Contable\CuentacontableInhabilitadaSupport;
 use App\Support\Contable\NotaCreditoIvaCuentaSupport;
+use App\Support\Ventas\FacturaAsientoCuentasEdicionSupport;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Support\Ventas\Ferli\FacturaDespachoFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
@@ -11144,6 +11149,20 @@ class FacturacionService
 			}
 		}
 
+		$asientoCuentasEstado = FacturaAsientoCuentasEdicionSupport::estadoParaVista($data);
+		$esNcNd = ! empty($flGeneraNotaDeCredito) || $flGeneraNotaDeDebito;
+		// NC/ND: la solapa queda editable para armar el nuevo comprobante.
+		// Edición de factura: solo si el período contable lo permite.
+		$asientoCuentasEditables = $esNcNd
+			? true
+			: ! empty($asientoCuentasEstado['puede_editar']);
+		$asientoCuentasMensaje = $esNcNd ? null : ($asientoCuentasEstado['mensaje'] ?? null);
+		$asientoCuentasUrl = null;
+		if (! $esNcNd && ! empty($asientoCuentasEstado['asiento']?->id) && can('editar-asiento', false)) {
+			$asientoCuentasUrl = route('editar_asiento', ['id' => (int) $asientoCuentasEstado['asiento']->id]);
+		}
+		$asientoCuentasPuedeGuardar = ! $esNcNd && ! empty($asientoCuentasEstado['puede_editar']);
+
         return view('ventas.factura.editar', compact('data', 
 			'mventa_query', 'modulo_query', 
 			'listaprecio_query', 
@@ -11155,7 +11174,73 @@ class FacturacionService
 			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
 			'ncOrigenEsFce', 'fceComprobanteReferenciado', 'fceAnulacion',
 			'ncPendientesPorEmision', 'articuloNcFiltro', 'articuloNcCodigo', 'articuloNcDescripcion',
-			'flGeneraNotaDeDebito', 'tipoNd', 'conceptoPrecioNeto')); 
+			'flGeneraNotaDeDebito', 'tipoNd', 'conceptoPrecioNeto',
+			'asientoCuentasEditables', 'asientoCuentasMensaje', 'asientoCuentasUrl',
+			'asientoCuentasPuedeGuardar', 'asientoCuentasEstado')); 
+	}
+
+	/**
+	 * Actualiza solo las cuentas del asiento de la factura (período contable abierto).
+	 *
+	 * @param  array<string, mixed>  $request
+	 * @return array{mensaje?: string, errores?: string}
+	 */
+	public function actualizarAsientoCuentasFactura(int $ventaId, array $request): array
+	{
+		can('actualizar-asiento');
+
+		$venta = $this->ventaRepository->find($ventaId);
+		if (! $venta) {
+			return ['errores' => 'No se encontró la factura.'];
+		}
+
+		$estado = FacturaAsientoCuentasEdicionSupport::estadoParaVista($venta);
+		if (empty($estado['puede_editar']) || empty($estado['asiento'])) {
+			return ['errores' => $estado['mensaje'] ?? 'No se pueden modificar las cuentas del asiento.'];
+		}
+
+		$asiento = $estado['asiento'];
+		$payload = FacturaAsientoCuentasEdicionSupport::payloadDesdeFormularioExterno($asiento, $request);
+
+		try {
+			FacturaAsientoCuentasEdicionSupport::assertBalance($payload);
+			AsientoCentrocostoObligatorioSupport::assertDesdePayload($payload);
+			CuentaCentrocostoHabilitadoSupport::assertPayload($payload, 'No se puede guardar el asiento.');
+			$idsPrevios = Asiento_Movimiento::query()
+				->where('asiento_id', $asiento->id)
+				->pluck('cuentacontable_id')
+				->all();
+			CuentacontableInhabilitadaSupport::assertImputacionNueva(
+				is_array($payload['cuentacontable_ids'] ?? null) ? $payload['cuentacontable_ids'] : [],
+				$idsPrevios
+			);
+		} catch (\InvalidArgumentException $e) {
+			return ['errores' => $e->getMessage()];
+		}
+
+		$payload['omitir_anita'] = true;
+
+		DB::beginTransaction();
+		try {
+			$ok = $this->asientoRepository->update($payload, $asiento->id);
+			if ($ok === 'Error') {
+				throw new Exception('Error en grabación Anita del asiento.');
+			}
+			$this->asiento_movimientoRepository->update($payload, $asiento->id);
+
+			$fresh = $this->asientoRepository->find($asiento->id);
+			$this->asientoRepository->sincronizarCtamovAnita(
+				$this->asientoRepository->armarPayloadAnitaDesdeModelo($fresh)
+			);
+
+			DB::commit();
+		} catch (\Throwable $e) {
+			DB::rollBack();
+
+			return ['errores' => $e->getMessage()];
+		}
+
+		return ['mensaje' => 'Asiento contable actualizado con éxito'];
 	}
 
 	/*

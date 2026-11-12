@@ -41,6 +41,7 @@ final class FacturacionJuegoAsientoSupport
             FacturacionJuegoTipoSupport::RUBRO_RULETA_EL => (int) ($cfg->cuentacontable_ruleta_el_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_DEL_RIO => (int) ($cfg->cuentacontable_del_rio_id ?? 0),
             FacturacionJuegoTipoSupport::RUBRO_BETSUR => (int) ($cfg->cuentacontable_betsur_id ?? 0),
+            FacturacionJuegoTipoSupport::RUBRO_APUESTAS => (int) ($cfg->cuentacontable_apuestas_id ?? 0),
             default => 0,
         };
         if ($cuentaVentaId <= 0) {

@@ -28,7 +28,7 @@
                 @if ((float) $comprobante->iva_facturas != 0.0 || (float) $comprobante->iva_nc != 0.0)
                     IVA facturas {{ number_format((float) $comprobante->iva_facturas, 2, ',', '.') }} · IVA notas de crédito {{ number_format((float) $comprobante->iva_nc, 2, ',', '.') }}
                 @else
-                    Si este cajero es de hotel, Traer de PXSol completa el X, el Z y las notas de crédito desde la primera habilitación hasta ahora.
+                    Traer de PXSol completa el X, el Z y las notas de crédito desde la primera habilitación hasta ahora.
                 @endif
             </p>
         @endif
@@ -36,50 +36,50 @@
             <div class="alert alert-warning">No se pudieron leer los cierres de ventas. {{ $errorFiscal }}</div>
         @endif
         @if ($cargaManual)
+            {{-- Sin <form> anidado: el </form> del hijo cierra form-cantidades-crown y deja Guardar/Pedir firmas afuera. --}}
             <details class="mb-3 border rounded p-2">
                 <summary class="text-primary" style="cursor:pointer;">Cargar un cierre a mano</summary>
                 <p class="small text-muted mt-2 mb-2">Queda pendiente del día para tildarlo y aplicar a la rendición. Sirve cuando Anita no responde o el cierre no llegó.</p>
-                <form method="POST" action="{{ route('cierre_fiscal_manual_tesoreria_crown_movimiento', $comprobante->id) }}" autocomplete="off" data-enter-campos="1" class="form-row align-items-end">
-                    @csrf
+                <div class="form-row align-items-end">
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-sucursal">Sucursal</label>
-                        <input type="number" name="sucursal" id="cf-sucursal" class="form-control form-control-sm" min="1" required value="{{ old('sucursal') }}">
+                        <input type="number" name="sucursal" id="cf-sucursal" form="form-cierre-fiscal-manual" class="form-control form-control-sm" min="1" required value="{{ old('sucursal') }}">
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-nombre">Nombre</label>
-                        <input type="text" name="nombre" id="cf-nombre" class="form-control form-control-sm" maxlength="80" value="{{ old('nombre') }}" placeholder="Opcional">
+                        <input type="text" name="nombre" id="cf-nombre" form="form-cierre-fiscal-manual" class="form-control form-control-sm" maxlength="80" value="{{ old('nombre') }}" placeholder="Opcional">
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-hora">Hora</label>
-                        <input type="text" name="hora" id="cf-hora" class="form-control form-control-sm" maxlength="8" required value="{{ old('hora', now()->format('H:i:s')) }}" placeholder="HH:MM:SS">
+                        <input type="text" name="hora" id="cf-hora" form="form-cierre-fiscal-manual" class="form-control form-control-sm" maxlength="8" required value="{{ old('hora', now()->format('H:i:s')) }}" placeholder="HH:MM:SS">
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-tipo">Tipo</label>
-                        <select name="tipo" id="cf-tipo" class="form-control form-control-sm" required>
+                        <select name="tipo" id="cf-tipo" form="form-cierre-fiscal-manual" class="form-control form-control-sm" required>
                             <option value="Z" @selected(old('tipo', 'Z') === 'Z')>Z</option>
                             <option value="X" @selected(old('tipo') === 'X')>X</option>
                         </select>
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-numero">Número</label>
-                        <input type="number" name="numero" id="cf-numero" class="form-control form-control-sm" min="1" required value="{{ old('numero') }}">
+                        <input type="number" name="numero" id="cf-numero" form="form-cierre-fiscal-manual" class="form-control form-control-sm" min="1" required value="{{ old('numero') }}">
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-venta">Venta</label>
-                        <input type="number" name="venta" id="cf-venta" class="form-control form-control-sm" step="0.01" required value="{{ old('venta', '0') }}">
+                        <input type="number" name="venta" id="cf-venta" form="form-cierre-fiscal-manual" class="form-control form-control-sm" step="0.01" required value="{{ old('venta', '0') }}">
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-credito">Notas de crédito</label>
-                        <input type="number" name="credito" id="cf-credito" class="form-control form-control-sm" step="0.01" value="{{ old('credito', '0') }}">
+                        <input type="number" name="credito" id="cf-credito" form="form-cierre-fiscal-manual" class="form-control form-control-sm" step="0.01" value="{{ old('credito', '0') }}">
                     </div>
                     <div class="col-auto mb-2">
                         <label class="small mb-0" for="cf-ticket">Último ticket</label>
-                        <input type="number" name="ult_ticket" id="cf-ticket" class="form-control form-control-sm" min="0" value="{{ old('ult_ticket', '0') }}">
+                        <input type="number" name="ult_ticket" id="cf-ticket" form="form-cierre-fiscal-manual" class="form-control form-control-sm" min="0" value="{{ old('ult_ticket', '0') }}">
                     </div>
                     <div class="col-auto mb-2">
-                        <button type="submit" class="btn btn-outline-primary btn-sm">Agregar</button>
+                        <button type="submit" form="form-cierre-fiscal-manual" class="btn btn-outline-primary btn-sm">Agregar</button>
                     </div>
-                </form>
+                </div>
             </details>
         @endif
         @if ($filasFiscales === [])

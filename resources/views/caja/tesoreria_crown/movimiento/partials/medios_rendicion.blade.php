@@ -1,12 +1,18 @@
 @php
-    $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($comprobante->tipoTareaOperativa());
-    $calculaRecargo = ! \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa());
+    $tipoTareaMedio = $comprobante->tipoTareaOperativa();
+    $gruposMedio = \App\Support\Caja\TesoreriaCrownRendicionCampos::gruposParaTarea($tipoTareaMedio);
+    $calculaRecargo = ! \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($tipoTareaMedio);
     $divisorRecargo = \App\Support\Caja\TesoreriaCrownCierreCalculo::divisorRecargo($comprobante->jornada->fecha->format('Y-m-d'));
-    $esGastroHotel = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($comprobante->tipoTareaOperativa());
+    $esGastroHotel = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastroHotel($tipoTareaMedio);
+    $esCajaHotel = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaHotel($tipoTareaMedio);
+    $esCajaGastro = \App\Support\Caja\TesoreriaCrownRendicionCampos::esCajaGastronomia($tipoTareaMedio);
 @endphp
-@if ($comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::RENDICION
-    && $esGastroHotel)
-    @include('caja.tesoreria_crown.movimiento.partials.cierres_fiscales')
+@if ($comprobante->tipo === \App\Support\Caja\TesoreriaCrownComprobanteSupport::RENDICION)
+    @if ($esCajaHotel)
+        @include('caja.tesoreria_crown.movimiento.partials.cierres_fiscales')
+    @elseif ($esCajaGastro)
+        @include('caja.tesoreria_crown.movimiento.partials.cierres_fiscales_gastro_info')
+    @endif
 @endif
 @foreach ($gruposMedio as $grupoMedio)
     <div class="card card-outline card-info mt-2 mb-0">

@@ -5,6 +5,7 @@ namespace App\Exports\Contable;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Contable\FlashContableReporteSupport;
 use App\Support\Export\ExcelFormatoNumero;
+use App\Support\Export\ExcelNumericCellsSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -202,6 +203,16 @@ class FlashContableExport implements FromView, ShouldAutoSize, WithColumnFormatt
                         ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                     $sheet->getStyle('A'.$ultimaFila.':'.$colUltima.$ultimaFila)
                         ->getFont()->setBold(true);
+                    if (ExcelFormatoNumero::esAuto($this->formatoNumero) && ! $this->esCsv) {
+                        ExcelNumericCellsSupport::forzarRangoDatos(
+                            $sheet,
+                            $this->filaPrimeraDatosExcel,
+                            2,
+                            [],
+                            ExcelFormatoNumero::mascara(2),
+                            $ultimaFila,
+                        );
+                    }
                 }
             },
         ];

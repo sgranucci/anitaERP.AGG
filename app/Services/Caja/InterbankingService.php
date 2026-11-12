@@ -127,6 +127,33 @@ class InterbankingService
      */
     private function ejecutarGetAutenticado(int $empresaId, callable $construirUrl, string $operacion): array
     {
+        return $this->ejecutarRequestAutenticado($empresaId, 'GET', $construirUrl, null, $operacion);
+    }
+
+    /**
+     * Request autenticado (GET/POST) con renovación de token y un reintento ante HTTP 401.
+     *
+     * @param  callable(array{ok: true, access_token: string, client_id: string, customer_id: string}): string  $construirUrl
+     * @param  array<string, mixed>|null  $bodyJson  body JSON para POST; null en GET
+     * @return array{ok: bool, http_code: int, data: array|null, error: string|null}
+     */
+    private function ejecutarRequestAutenticado(
+        int $empresaId,
+        string $method,
+        callable $construirUrl,
+        ?array $bodyJson,
+        string $operacion
+    ): array {
+        $method = strtoupper($method);
+        if (! in_array($method, ['GET', 'POST'], true)) {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'Método HTTP no soportado para Interbanking: '.$method,
+            ];
+        }
+
         try {
             $ctx = $this->contextoApiInterbanking($empresaId);
             if (! $ctx['ok']) {
@@ -153,13 +180,20 @@ class InterbankingService
                 }
 
                 $url = $construirUrl($ctx);
-                $headers = $this->cabecerasApiInterbanking($ctx);
+                $headers = $this->cabecerasApiInterbanking($ctx, $method === 'POST');
 
                 $ch = curl_init();
                 curl_setopt($ch, CURLOPT_URL, $url);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+                curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+                $this->aplicarProxyCurl($ch);
+                if ($method === 'POST') {
+                    curl_setopt($ch, CURLOPT_POST, true);
+                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($bodyJson ?? new \stdClass));
+                } else {
+                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
+                }
 
                 $response = curl_exec($ch);
                 $errno = curl_errno($ch);
@@ -191,6 +225,17 @@ class InterbankingService
                     ]);
 
                     continue;
+                }
+
+                if ($response === '' || $response === false) {
+                    if ($httpCode >= 200 && $httpCode < 300) {
+                        return [
+                            'ok' => true,
+                            'http_code' => $httpCode,
+                            'data' => [],
+                            'error' => null,
+                        ];
+                    }
                 }
 
                 if (! is_array($data)) {
@@ -257,18 +302,48 @@ class InterbankingService
      * @param  array{ok: true, access_token: string, client_id: string, customer_id: string}  $ctx
      * @return list<string>
      */
-    private function cabecerasApiInterbanking(array $ctx): array
+    private function cabecerasApiInterbanking(array $ctx, bool $conJsonBody = false): array
     {
-        return [
+        $headers = [
             'Authorization: Bearer '.$ctx['access_token'],
             'accept: application/json',
             'client_id: '.$ctx['client_id'],
         ];
+        if ($conJsonBody) {
+            $headers[] = 'Content-Type: application/json';
+        }
+
+        return $headers;
+    }
+
+    /**
+     * Salida HTTPS vía proxy corporativo (mismo patrón que ARCA / feriados / cotización).
+     *
+     * @param  \CurlHandle|resource  $ch
+     */
+    private function aplicarProxyCurl($ch): void
+    {
+        $host = trim((string) config('interbanking.proxy_host', ''));
+        if ($host === '') {
+            return;
+        }
+
+        $port = max(1, (int) config('interbanking.proxy_port', 3128));
+        curl_setopt($ch, CURLOPT_PROXY, $host.':'.$port);
+        curl_setopt($ch, CURLOPT_PROXYTYPE, CURLPROXY_HTTP);
+
+        $user = trim((string) config('interbanking.proxy_user', ''));
+        $password = (string) config('interbanking.proxy_password', '');
+        if ($user !== '') {
+            curl_setopt($ch, CURLOPT_PROXYUSERPWD, $user.':'.$password);
+        }
     }
 
     private function mensajeErrorHttpInterbanking(array $data, int $httpCode): string
     {
         $msg = $data['message']
+            ?? $data['moreInformation']
+            ?? $data['httpMessage']
             ?? $data['error']
             ?? $data['error_description']
             ?? ($data['code'] ?? null)
@@ -277,7 +352,12 @@ class InterbankingService
             $msg = json_encode($msg);
         }
 
-        return (string) $msg;
+        $texto = (string) $msg;
+        if ($httpCode === 403 && stripos($texto, 'Not registered to plan') !== false) {
+            return 'La aplicación OAuth no está suscripta al producto/plan de esta API en el portal Interbanking (Not registered to plan).';
+        }
+
+        return $texto;
     }
 
     /**
@@ -596,6 +676,211 @@ class InterbankingService
         ];
     }
 
+    /**
+     * Pre-confección de transferencia a CBU (API transaccional Confección de Transferencias).
+     *
+     * Confección de Transferencias (portal):
+     * - supplier / third-party / own-account / salary → `POST …/v2/transfers/confection/{tipo}`
+     * - query `customer-id` (+ opcionales `resend-validated`, `consolidated-check`, `unified-send`)
+     *
+     * Enganche: OP/I-E → `supplier`; solicitud retiro juego → `third-party`.
+     * No persiste proceso de negocio: solo proxy HTTP.
+     *
+     * @param  array{
+     *     debit_account_number: string,
+     *     debit_bank_number: string,
+     *     credit_cbu: string,
+     *     amount: float|int|string,
+     *     confection_type?: string,
+     *     debit_account_type?: string,
+     *     debit_currency?: string,
+     *     concept?: string|null,
+     *     description?: string|null,
+     *     email?: string|null,
+     *     resend_validated?: bool|null,
+     *     consolidated_check?: bool|null,
+     *     unified_send?: bool|null
+     * }  $payload
+     * @return array{ok: bool, http_code: int, data: array|null, error: string|null}
+     */
+    public function crearTransferenciaACbu(int $empresaId, array $payload): array
+    {
+        $debitAccount = trim((string) ($payload['debit_account_number'] ?? ''));
+        $debitBank = trim((string) ($payload['debit_bank_number'] ?? ''));
+        $creditCbu = preg_replace('/\D/', '', (string) ($payload['credit_cbu'] ?? '')) ?? '';
+        $amountRaw = $payload['amount'] ?? null;
+
+        if ($debitAccount === '') {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'debit_account_number es obligatorio.',
+            ];
+        }
+        if (! preg_match('/^[0-9]{3}$/', $debitBank)) {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'debit_bank_number debe ser un código de 3 dígitos.',
+            ];
+        }
+        if (! preg_match('/^[0-9]{22}$/', $creditCbu)) {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'credit_cbu debe ser un CBU de 22 dígitos.',
+            ];
+        }
+        if ($amountRaw === null || $amountRaw === '' || ! is_numeric($amountRaw) || (float) $amountRaw <= 0) {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'amount debe ser un importe numérico mayor a cero.',
+            ];
+        }
+
+        $debitAccountType = strtoupper((string) ($payload['debit_account_type'] ?? 'CC'));
+        if (! in_array($debitAccountType, ['CC', 'CA'], true)) {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'debit_account_type debe ser CC o CA.',
+            ];
+        }
+
+        $debitCurrency = strtoupper((string) ($payload['debit_currency'] ?? 'ARS'));
+        if (! in_array($debitCurrency, ['ARS', 'USD'], true)) {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'debit_currency debe ser ARS o USD.',
+            ];
+        }
+
+        $body = [
+            'debit-account-number' => $debitAccount,
+            'debit-bank-number' => $debitBank,
+            'debit-account-type' => $debitAccountType,
+            'debit-currency' => $debitCurrency,
+            'credit-cbu' => $creditCbu,
+            'amount' => round((float) $amountRaw, 2),
+        ];
+
+        $concept = trim((string) ($payload['concept'] ?? $payload['description'] ?? ''));
+        if ($concept !== '') {
+            $body['concept'] = $concept;
+            $body['description'] = $concept;
+        }
+
+        $email = trim((string) ($payload['email'] ?? ''));
+        if ($email !== '') {
+            $body['email'] = $email;
+        }
+
+        $queryExtra = [];
+        foreach (
+            [
+                'resend_validated' => 'resend-validated',
+                'consolidated_check' => 'consolidated-check',
+                'unified_send' => 'unified-send',
+            ] as $inputKey => $apiKey
+        ) {
+            if (! array_key_exists($inputKey, $payload) || $payload[$inputKey] === null) {
+                continue;
+            }
+            $queryExtra[$apiKey] = ! empty($payload[$inputKey]) ? 'true' : 'false';
+        }
+
+        $confectionType = strtolower(trim((string) ($payload['confection_type'] ?? 'supplier')));
+        $baseUrl = $this->urlConfeccionTransferencia($confectionType);
+        if ($baseUrl === '') {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'Sin URL de confección Interbanking para tipo '.$confectionType.'.',
+            ];
+        }
+
+        return $this->ejecutarRequestAutenticado(
+            $empresaId,
+            'POST',
+            function (array $ctx) use ($baseUrl, $queryExtra): string {
+                $query = array_merge($queryExtra, [
+                    'customer-id' => $ctx['customer_id'],
+                ]);
+                $sep = str_contains($baseUrl, '?') ? '&' : '?';
+
+                return $baseUrl.$sep.http_build_query($query);
+            },
+            $body,
+            'crear-transferencia-cbu-'.$confectionType
+        );
+    }
+
+    /**
+     * URL POST Confección según tipo (supplier, third-party, own-account, salary).
+     * Si `transferencia_cbu_url` está seteada, manda siempre esa (override legacy).
+     */
+    private function urlConfeccionTransferencia(string $tipo): string
+    {
+        $override = trim((string) config('interbanking.transferencia_cbu_url', ''));
+        if ($override !== '') {
+            return $override;
+        }
+
+        $map = config('interbanking.transferencia_confection_urls');
+        if (! is_array($map)) {
+            return '';
+        }
+
+        $url = trim((string) ($map[$tipo] ?? ''));
+        if ($url !== '') {
+            return $url;
+        }
+
+        return trim((string) ($map['supplier'] ?? ''));
+    }
+
+    /**
+     * Consulta estado de proceso asíncrono de confección.
+     *
+     * @return array{ok: bool, http_code: int, data: array|null, error: string|null}
+     */
+    public function leeProcesoAsincronoTransferencia(int $empresaId, string $idProceso): array
+    {
+        $idProceso = trim($idProceso);
+        if ($idProceso === '') {
+            return [
+                'ok' => false,
+                'http_code' => 0,
+                'data' => null,
+                'error' => 'idProceso obligatorio.',
+            ];
+        }
+
+        $base = rtrim((string) config(
+            'interbanking.transferencia_proceso_async_url',
+            'https://api-gw.interbanking.com.ar/api/prod/v1/transfers/asynchronous-process'
+        ), '/');
+
+        return $this->ejecutarRequestAutenticado(
+            $empresaId,
+            'GET',
+            fn (array $ctx): string => $base.'/'.rawurlencode($idProceso).'?'.http_build_query([
+                'customer-id' => $ctx['customer_id'],
+            ]),
+            null,
+            'proceso-async-transferencia'
+        );
+    }
+
     private function ensureTokenInterbanking(int $empresaId): void
     {
         $path = $this->tokenStoragePath($empresaId);
@@ -656,28 +941,31 @@ class InterbankingService
         curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($curl, CURLOPT_HTTPHEADER, $header);
         curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
-        // curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0 );
+        curl_setopt($curl, CURLOPT_TIMEOUT, 45);
+        $this->aplicarProxyCurl($curl);
 
         $response = curl_exec($curl);
 
-        // 5. Manejar errores
         if (curl_errno($curl)) {
-            Log::info('Error en cURL: '.curl_error($curl));
+            Log::warning('Interbanking: error cURL al pedir token', [
+                'empresa_id' => $empresaId,
+                'errno' => curl_errno($curl),
+                'error' => curl_error($curl),
+            ]);
         } else {
-            // 6. Decodificar la respuesta
             $result = json_decode($response, true);
 
             if (isset($result['access_token'])) {
-
                 Storage::put($this->tokenStoragePath($empresaId), json_encode($result));
-
             } else {
-                Log::info('Error al obtener token: '.$response);
+                Log::warning('Interbanking: error al obtener token', [
+                    'empresa_id' => $empresaId,
+                    'http' => (int) curl_getinfo($curl, CURLINFO_HTTP_CODE),
+                    'fragmento' => is_string($response) ? substr($response, 0, 500) : null,
+                ]);
             }
         }
 
-        // 7. Cerrar sesi┬ón cURL
         curl_close($curl);
-
     }
 }

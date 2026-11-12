@@ -44,16 +44,27 @@
 
         return $valor ?? $default;
     };
+    $asientoCuentasEditables = $asientoCuentasEditables ?? true;
+    $asientoCuentasMensaje = $asientoCuentasMensaje ?? null;
+    $asientoCuentasUrl = $asientoCuentasUrl ?? null;
 @endphp
 <div class="card card-outline card-info formasientoexterno" style="display: none">
     <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{ $valorOldEscalarAsiento('tipoasiento_id', $asientoEdicion?->tipoasiento_id ?? '') }}">
     <input type="hidden" name="fechaasiento" id="fechasiento" value="{{ $valorOldEscalarAsiento('fecha', $asientoEdicion?->fecha ?? date('Y-m-d')) }}">
     <input type="hidden" name="observacionasiento" id="observacionasiento" value="{{ $valorOldEscalarAsiento('observacion', $asientoEdicion?->observacion ?? '') }}">
     <input type="hidden" name="numeroasiento" value="{{ $asientoEdicion?->numeroasiento ?? '' }}" />
-    <input type="hidden" name="idasiento" value="{{ $asientoEdicion?->idasiento ?? '' }}" />
-        <div class="card-header py-2">
+    <input type="hidden" name="idasiento" id="idasiento" value="{{ $asientoEdicion?->id ?? '' }}" />
+        <div class="card-header py-2 d-flex flex-wrap align-items-center" style="gap:.5rem 1rem;">
             <h3 class="card-title mb-0">Cuentas</h3>
+            @if (! empty($asientoCuentasUrl))
+                <a href="{{ $asientoCuentasUrl }}" class="btn btn-outline-primary btn-sm ml-auto" target="_blank" rel="noopener">
+                    <i class="fa fa-external-link-alt"></i> Abrir asiento contable
+                </a>
+            @endif
         </div>
+        @if (! empty($asientoCuentasMensaje))
+            <div class="alert alert-warning py-2 mb-0 mx-3 mt-2">{{ $asientoCuentasMensaje }}</div>
+        @endif
     <style>
         #cuenta-asiento-table tfoot.asiento-totales-pie td {
             background-color: #e9ecef;
@@ -92,10 +103,12 @@
                                 <input type="hidden" name="cuentacontable[]" class="form-control iicuentacontable" readonly value="{{ $loop->index+1 }}" />
                                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
                                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
+                                @if ($asientoCuentasEditables)
                                 <button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
                                         <i class="fa fa-search text-primary"></i>
                                 </button>
-                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off">
+                                @endif
+                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off" @if (! $asientoCuentasEditables) readonly @endif>
                                 <input type="hidden" class="codigo_previo_cuentacontable" name="codigo_previo_cuentacontables[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
                                 <input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="{{ $valorOldIndiceAsiento('carga_cuentacontable_manuales', (int) $loop->index, 'S') }}" >
                             </div>
@@ -104,12 +117,12 @@
                             <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombrecuentacontables[]" value="{{$cuenta->cuentacontables->nombre ?? ''}}" readonly>
                         </td>
                         <td>
-                            <select name="centrocostoasiento_ids[]" data-placeholder="Centro de costo" class="centrocostoasiento form-control" data-fouc>
+                            <select name="centrocostoasiento_ids[]" data-placeholder="Centro de costo" class="centrocostoasiento form-control" data-fouc @if (! $asientoCuentasEditables) disabled @endif>
                             </select>
                             <input type="hidden" class="centrocostoasiento_id_previo" name="centrocostoasiento_id_previo[]" value="{{ $valorOldIndiceAsiento('centrocostoasiento_ids', (int) $loop->index, $cuenta->centrocosto_id ?? '') }}" >
                         </td>
                         <td>
-                            <select name="monedaasiento_ids[]" data-placeholder="Moneda" class="monedaasiento form-control required" required data-fouc>
+                            <select name="monedaasiento_ids[]" data-placeholder="Moneda" class="monedaasiento form-control required" required data-fouc @if (! $asientoCuentasEditables) disabled @endif>
                                 <option value="">-- Seleccionar --</option>
                                 @foreach($moneda_query as $key => $value)
                                     @if( (int) $value->id == (int) $valorOldIndiceAsiento('monedaasiento_ids', (int) $loop->index, $cuenta->moneda_id ?? ''))
@@ -130,7 +143,7 @@
                                     $montoAsientoLin > 0 ? number_format($montoAsientoLin, 2, ',', '.') : ''
                                 );
                             @endphp
-                            <input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="{{ $debeAsientoValor }}">
+                            <input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="{{ $debeAsientoValor }}" @if (! $asientoCuentasEditables) readonly @endif>
                         </td>
                         <td>
                             @php
@@ -140,7 +153,7 @@
                                     $montoAsientoLin < 0 ? number_format(abs($montoAsientoLin), 2, ',', '.') : ''
                                 );
                             @endphp
-                            <input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="{{ $haberAsientoValor }}">
+                            <input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="{{ $haberAsientoValor }}" @if (! $asientoCuentasEditables) readonly @endif>
                         </td>
                         <td>
                             @php
@@ -150,15 +163,17 @@
                                     isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00'
                                 );
                             @endphp
-                            <input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="{{ $cotizAsientoValor }}">
+                            <input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="{{ $cotizAsientoValor }}" @if (! $asientoCuentasEditables) readonly @endif>
                         </td>
                         <td>
-                            <input type="text" name="observacionasientos[]" style="text-align: right;" class="form-control observacionasiento" value="{{ $valorOldIndiceAsiento('observacionasientos', (int) $loop->index, $cuenta->observacion ?? '') }}">
+                            <input type="text" name="observacionasientos[]" style="text-align: right;" class="form-control observacionasiento" value="{{ $valorOldIndiceAsiento('observacionasientos', (int) $loop->index, $cuenta->observacion ?? '') }}" @if (! $asientoCuentasEditables) readonly @endif>
                         </td>
                         <td>
+                            @if ($asientoCuentasEditables)
                             <button type="button" title="Elimina esta linea" style="text-align: right;" class="btn-accion-tabla eliminar_cuenta_asiento tooltipsC">
                                 <i class="fa fa-times-circle text-danger"></i>
                             </button>
+                            @endif
                         </td>
                     </tr>
                 @endforeach
@@ -177,12 +192,14 @@
                 </tr>
             </tfoot>
         </table>
+        @if ($asientoCuentasEditables)
         @include('includes.contable.templateasientoexterno')
         <div class="row mt-2">
             <div class="col-sm-12">
                 <button id="agrega_renglon_asiento" type="button" class="btn btn-danger">+ Agrega rengl&oacute;n</button>
             </div>
         </div>
+        @endif
     </div>
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />

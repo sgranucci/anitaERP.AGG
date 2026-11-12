@@ -4,6 +4,7 @@ namespace App\Exports\Caja\Flash;
 
 use App\Support\Caja\Flash\FlashCrownCalculoSupport;
 use App\Support\Caja\Flash\FlashCrownPerfilVistaSupport;
+use App\Support\Export\ExcelNumericCellsSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
@@ -64,6 +65,8 @@ class FlashCrownPeriodoExport implements FromView, WithEvents
                         'color' => ['rgb' => '17202A'],
                     ],
                 ]);
+                // A fecha, B sala — texto; resto numérico.
+                ExcelNumericCellsSupport::forzarRangoDatos($sheet, 3, 3, [], '#,##0.00');
             },
         ];
     }

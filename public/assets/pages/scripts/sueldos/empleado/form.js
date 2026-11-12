@@ -12,6 +12,7 @@
         '#tab-leyendas': '#leyendas',
         '#tab-foto': '#foto_archivo',
         '#tab-archivos': '#empleado-tbody-tabla-archivo input[type=file]',
+        '#tab-contratos': '#form-contrato-nuevo input[name=desde_fecha], #form-contrato-nuevo select[name=modalidad]',
         '#tab-ausencias': '#ausencia_tipo, #ausencia_desde',
         '#tab-indumentaria': '#form-talles-indumentaria input:not([type=hidden]), #form-entrega-indumentaria input:not([type=hidden])',
         '#tab-historia': '#host-historia input[type=date], #host-historia select',

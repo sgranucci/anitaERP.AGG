@@ -56,7 +56,7 @@ final class TesoreriaCrownPoderPublicoGenerador
         $avisos = [];
         $origenes = [];
 
-        $ficha = self::calcularFichas($fechaYmd, $avisos, $origenes);
+        $ficha = self::calcularFichas($salaId, $fechaYmd, $avisos, $origenes);
         $slotPiezas = self::piezasSlot($salaId, $fechaYmd, $avisos, $origenes);
         $slotDia = self::slotDiaDesdePiezas($slotPiezas);
         $fichaDia = (float) $ficha['dia'];
@@ -125,10 +125,10 @@ final class TesoreriaCrownPoderPublicoGenerador
      * @param  list<string>  $origenes
      * @return array{dia: float, filas?: list<array<string, mixed>>, anita_dia?: int|null}
      */
-    private static function calcularFichas(string $fechaYmd, array &$avisos, array &$origenes): array
+    private static function calcularFichas(int $salaId, string $fechaYmd, array &$avisos, array &$origenes): array
     {
         try {
-            $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fechaYmd);
+            $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fechaYmd, $salaId);
             $origenFichas = (string) ($armado['origen'] ?? 'erp');
             $origenes[] = TesoreriaCrownPoderPublico::ORIGEN_ERP;
             foreach ($armado['avisos'] as $aviso) {

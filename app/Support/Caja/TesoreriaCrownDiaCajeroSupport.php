@@ -120,13 +120,13 @@ final class TesoreriaCrownDiaCajeroSupport
 
     public static function tipoTareaDeComprobante(TesoreriaCrownComprobante $comprobante): string
     {
-        $cajero = self::cajeroDeComprobante($comprobante);
-        if ($cajero && $cajero->tipo_tarea) {
-            return (string) $cajero->tipo_tarea;
+        $comprobante->loadMissing('asignacion.cajero');
+        if ($comprobante->asignacion) {
+            return $comprobante->asignacion->tipoTareaEfectiva();
         }
-        $comprobante->loadMissing('asignacion');
+        $cajero = self::cajeroDeComprobante($comprobante);
 
-        return (string) ($comprobante->asignacion->tipo_tarea ?? '');
+        return trim((string) ($cajero->tipo_tarea ?? ''));
     }
 
     public static function permiteRendirSinHab(TesoreriaCrownComprobante $comprobante): bool

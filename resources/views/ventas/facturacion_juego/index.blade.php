@@ -40,7 +40,7 @@
 
                 <p class="text-muted mb-3">
                     Genera comprobantes internos (letra B) de mesas, tragamonedas, ruleta electr&oacute;nica,
-                    Del R&iacute;o online (FOL/COL, PV 67) y Betsur (FOL/COL, PV 68)
+                    Online global (1 factura/d&iacute;a): Del R&iacute;o, Betsur y Apuestas deportivas (FOL/COL, cada uno con su PV)
                     a partir del Flash Crown, con asiento contable. Paridad Anita <code>p-resultado</code>.
                 </p>
 

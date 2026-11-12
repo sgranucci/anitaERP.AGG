@@ -52,13 +52,57 @@
  *   - Diario 07:30, ventana configurable (`INTERBANKING_MOVIMIENTOS_SYNC_DIAS`, default 14).
  *   - Por cada cuenta de caja con `cuenta_interbanking` en empresas con `customer_id` configurado.
  *   - Consulta API `anteriores` (rango) + `dia` (movimientos del día).
+ *
+ * Transferencia a CBU (Confección de Transferencias):
+ * - PHP: `app(InterbankingService::class)->crearTransferenciaACbu($empresaId, […])`.
+ * - OP / I-E → `POST …/v2/transfers/confection/supplier`
+ * - Retiro juego / terceros → `POST …/v2/transfers/confection/third-party`
+ * - Seguimiento: `GET …/v1/transfers/asynchronous-process/{idProceso}`
  */
 
-// Constantes de arbol de aprobacion
+// Salida HTTPS (Crown/AGG sin internet directo: mismo proxy que padrón ARCA).
+$proxy = [
+    'proxy_host' => (string) env('INTERBANKING_PROXY_HOST', env('ARCA_PADRON_PROXY_HOST', '')),
+    'proxy_port' => (int) env('INTERBANKING_PROXY_PORT', env('ARCA_PADRON_PROXY_PORT', 3128)),
+    'proxy_user' => (string) env('INTERBANKING_PROXY_USER', env('ARCA_PADRON_PROXY_USER', '')),
+    'proxy_password' => (string) env('INTERBANKING_PROXY_PASSWORD', env('ARCA_PADRON_PROXY_PASSWORD', '')),
+];
+
+// Confección de Transferencias (portal Interbanking).
+$apiProdBase = rtrim((string) env(
+    'INTERBANKING_API_BASE',
+    'https://api-gw.interbanking.com.ar/api/prod'
+), '/');
+$transferenciaCbu = [
+    // Compat: URL única (si está seteada pisa el mapa por tipo).
+    'transferencia_cbu_url' => (string) env('INTERBANKING_TRANSFERENCIA_CBU_URL', ''),
+    'transferencia_confection_urls' => [
+        'supplier' => (string) env(
+            'INTERBANKING_TRANSFERENCIA_SUPPLIER_URL',
+            $apiProdBase.'/v2/transfers/confection/supplier'
+        ),
+        'third-party' => (string) env(
+            'INTERBANKING_TRANSFERENCIA_THIRD_PARTY_URL',
+            $apiProdBase.'/v2/transfers/confection/third-party'
+        ),
+        'own-account' => (string) env(
+            'INTERBANKING_TRANSFERENCIA_OWN_ACCOUNT_URL',
+            $apiProdBase.'/v2/transfers/confection/own-account'
+        ),
+        'salary' => (string) env(
+            'INTERBANKING_TRANSFERENCIA_SALARY_URL',
+            $apiProdBase.'/v2/transfers/confection/salary'
+        ),
+    ],
+    'transferencia_proceso_async_url' => (string) env(
+        'INTERBANKING_TRANSFERENCIA_PROCESO_ASYNC_URL',
+        $apiProdBase.'/v1/transfers/asynchronous-process'
+    ),
+];
 
 switch (strtoupper(config('app.empresa'))) {
     case 'AGG':
-        return [
+        return array_merge([
             'client_id' => ['Qvj6P92Oi9Oyq1GGrCRftf4yXcheLmiigHUB', '6UyawCF9sxlI07NIjbUJded2333ULKtGiDUW', 'ohLciTIWzAgaNui7XbRH1wznR50PqepBYfhp'],
             'client_secret' => ['IKIybgzcoOIteljkZJBvl9YER2ihPBeq06ms', 'Rf13czG6uDolPtN60dSZHZUldaPk7MGICL36', 'QCOOkdzAzwUgLB1esv5XmDCrlG7DSrjJVoMF'],
             'customer_id' => ['X36888A', 'X36688A', 'C25656A'],
@@ -68,6 +112,26 @@ switch (strtoupper(config('app.empresa'))) {
                 'INTERBANKING_ARCHIVO_PAGO_CBU_ORIGEN',
                 '2850651330094012507151'
             ),
-        ];
-        break;
+        ], $proxy, $transferenciaCbu);
+    case 'CROWN':
+        // Solo empresa_id=1 (Emprendimientos Crown SA). Índice 0 en los arrays.
+        return array_merge([
+            'client_id' => ['xvkR97tiIclCRO9efVqDcfv35KXkKt4MSLp2'],
+            'client_secret' => ['wZWvhSDFk57doHFmfOuodguA9rqX96E6Dgln'],
+            'customer_id' => ['X23148A'],
+            'movimientos_sync_dias_ventana' => (int) env('INTERBANKING_MOVIMIENTOS_SYNC_DIAS', 14),
+            // Macro CTA.CTE. 071080/1 (empresa 1)
+            'archivo_pago_cbu_origen' => (string) env(
+                'INTERBANKING_ARCHIVO_PAGO_CBU_ORIGEN',
+                '2850665030049487108019'
+            ),
+        ], $proxy, $transferenciaCbu);
 }
+
+return array_merge([
+    'client_id' => [],
+    'client_secret' => [],
+    'customer_id' => [],
+    'movimientos_sync_dias_ventana' => (int) env('INTERBANKING_MOVIMIENTOS_SYNC_DIAS', 14),
+    'archivo_pago_cbu_origen' => (string) env('INTERBANKING_ARCHIVO_PAGO_CBU_ORIGEN', ''),
+], $proxy, $transferenciaCbu);

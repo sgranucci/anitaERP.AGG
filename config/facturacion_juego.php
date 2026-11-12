@@ -23,6 +23,7 @@ return [
         'ruleta_el' => 'Ruleta El.',
         'del_rio' => 'Del Río online',
         'betsur' => 'Betsur',
+        'apuestas' => 'Apuestas deportivas',
     ],
     // Tolerancia de conciliación Flash / Ventas / ERP / Anita (importe firmado)
     'conciliacion_tolerancia' => (float) env('FACTURACION_JUEGO_CONCILIACION_TOLERANCIA', 0.02),

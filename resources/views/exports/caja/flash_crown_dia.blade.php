@@ -30,6 +30,8 @@
         <th>OL Win</th>
         <th>BS Coin in</th>
         <th>BS Win</th>
+        <th>AD Coin in</th>
+        <th>AD Win</th>
         <th>Gaming</th>
         <th>F&amp;B</th>
         <th>Hotel</th>
@@ -60,6 +62,8 @@
             <td>{{ (float) ($fila['ol_win'] ?? 0) }}</td>
             <td>{{ (float) ($fila['bs_coin_in'] ?? 0) }}</td>
             <td>{{ (float) ($fila['bs_win'] ?? 0) }}</td>
+            <td>{{ (float) ($fila['ad_coin_in'] ?? 0) }}</td>
+            <td>{{ (float) ($fila['ad_win'] ?? 0) }}</td>
             <td>{{ (float) ($m['gaming'] ?? 0) }}</td>
             <td>{{ (float) ($fila['ayb'] ?? 0) }}</td>
             <td>{{ (float) ($fila['hotel'] ?? 0) }}</td>

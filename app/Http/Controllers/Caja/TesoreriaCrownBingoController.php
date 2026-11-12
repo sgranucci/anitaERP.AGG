@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
 use App\Models\Caja\TesoreriaCrownBingo;
-use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownBingoListadoFiltros;
@@ -31,28 +30,11 @@ class TesoreriaCrownBingoController extends Controller
         $query = TesoreriaCrownBingo::query()->with(['sala', 'empresa'])->orderByDesc('fecha');
         TesoreriaCrownBingoListadoFiltros::aplicar($query, $filtros);
         $filas = $query->paginate(20)->appends($filtrosQuery);
-        $jornadasPorFecha = [];
-        if ($filas->isNotEmpty()) {
-            $pares = $filas->map(fn (TesoreriaCrownBingo $f) => [
-                'sala_id' => (int) $f->sala_id,
-                'fecha' => $f->fecha->format('Y-m-d'),
-            ]);
-            $q = TesoreriaCrownJornada::query();
-            foreach ($pares as $i => $par) {
-                $q->{$i === 0 ? 'where' : 'orWhere'}(function ($sub) use ($par) {
-                    $sub->where('sala_id', $par['sala_id'])->whereDate('fecha', $par['fecha']);
-                });
-            }
-            foreach ($q->get(['id', 'sala_id', 'fecha']) as $j) {
-                $jornadasPorFecha[(int) $j->sala_id.'|'.$j->fecha->format('Y-m-d')] = (int) $j->id;
-            }
-        }
 
         return view('caja.tesoreria_crown.bingo.index', [
             'salas' => $salas,
             'sala' => $sala,
             'filas' => $filas,
-            'jornadasPorFecha' => $jornadasPorFecha,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'tieneCriterios' => TesoreriaCrownBingoListadoFiltros::tieneCriteriosAplicados($filtros),

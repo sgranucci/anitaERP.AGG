@@ -49,7 +49,12 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title mb-0">Flash diario</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center" style="gap:.35rem;">
+                    @if (can('listar-tesoreria-crown-casino-online', false) || can('crear-tesoreria-crown-casino-online', false))
+                        <a href="{{ route('tesoreria_crown_casino_online') }}" class="btn btn-sm" style="background:linear-gradient(135deg,#8e44ad 0%,#2980b9 55%,#16a085 100%);border:0;color:#fff;font-weight:600;" title="Carga global Del Río / Betsur / Apuestas (una vez por día)">
+                            <i class="fa fa-globe"></i> Casino online diario
+                        </a>
+                    @endif
                     @if (can('listar-flash-reporte-crown', false))
                         <a href="{{ route('flash_reporte_crown') }}" class="btn btn-outline-success btn-sm">
                             <i class="fa fa-envelope"></i> Informe flash
@@ -124,6 +129,7 @@
                                     <th class="text-right">Win slots</th>
                                     <th class="text-right">OL Win</th>
                                     <th class="text-right">BS Win</th>
+                                    <th class="text-right">AD Win</th>
                                     <th class="text-right">Gaming</th>
                                     <th class="text-right">F&amp;B</th>
                                     <th class="text-right">Hotel</th>
@@ -146,6 +152,7 @@
                                         <td class="text-right">{{ number_format((float) $fila->slot_r, 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($fila->ol_win ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($fila->bs_win ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) ($fila->ad_win ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $m['gaming'], 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->ayb, 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->hotel, 2, ',', '.') }}</td>
@@ -191,6 +198,7 @@
                                         <td class="text-right">{{ number_format((float) ($consolidado['slot_r'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['ol_win'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['bs_win'] ?? 0), 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format((float) ($consolidado['ad_win'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($cm['gaming'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['ayb'] ?? 0), 2, ',', '.') }}</td>
                                         <td class="text-right">{{ number_format((float) ($consolidado['hotel'] ?? 0), 2, ',', '.') }}</td>

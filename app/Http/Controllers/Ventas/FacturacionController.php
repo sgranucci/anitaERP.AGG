@@ -372,6 +372,25 @@ class FacturacionController extends Controller
     }
 
     /**
+     * Actualiza las cuentas del asiento vinculado a la factura (período contable abierto).
+     */
+    public function actualizarAsiento(Request $request, $id)
+    {
+        can('editar-factura');
+
+        $resultado = $this->facturacionService->actualizarAsientoCuentasFactura((int) $id, $request->all());
+        if (! empty($resultado['errores'])) {
+            return redirect()
+                ->route('editar_factura', ['id' => (int) $id])
+                ->with('errores', [$resultado['errores']]);
+        }
+
+        return redirect()
+            ->route('editar_factura', ['id' => (int) $id])
+            ->with('mensaje', $resultado['mensaje'] ?? 'Asiento actualizado');
+    }
+
+    /**
      * Remove the specified resource from storage.
      *
      * @param  int  $id

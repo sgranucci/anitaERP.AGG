@@ -19,6 +19,8 @@
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/ausencias.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/ausencias.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/indumentaria.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/indumentaria.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/familiares.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/familiares.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/contratos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/contratos.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/concepto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/planes_cuota.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/planes_cuota.js')) ?: time() }}"></script>
 @if (($soloVisualizacion ?? false) || can('listar-novedad-sueldos', false) || can('editar-empleado-sueldos', false))
@@ -84,6 +86,7 @@
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-leyendas" role="tab"><i class="fa fa-comment"></i> Leyendas</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-foto" role="tab"><i class="fa fa-camera"></i> Foto</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-archivos" role="tab"><i class="fa fa-paperclip"></i> Archivos</a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-contratos" role="tab"><i class="fa fa-file-contract"></i> Contratos</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-ausencias" role="tab"><i class="fa fa-umbrella-beach"></i> Vacaciones / Ausencias</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-indumentaria" role="tab"><i class="fa fa-tshirt"></i> Indumentaria</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-historia" role="tab"><i class="fa fa-history"></i> Baja / reingreso</a></li>
@@ -127,6 +130,7 @@
                     <div class="tab-pane fade" id="tab-archivos" role="tabpanel" data-form-general="1">
                         @include('sueldos.empleado.partials.form_archivos')
                     </div>
+                    <div class="tab-pane fade" id="tab-contratos" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-ausencias" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-indumentaria" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-historia" role="tabpanel"></div>
@@ -153,6 +157,11 @@
                 <div id="host-indumentaria" class="pt-3 d-none"
                      data-url="{{ route('indumentaria_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando indumentaria…</div>
+                </div>
+                <div id="host-contratos" class="pt-3 d-none"
+                     data-url="{{ route('contratos_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}"
+                     data-emitir-url="{{ route('emitir_contrato_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
+                    <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando contratos…</div>
                 </div>
                 <div id="host-familiares" class="pt-3 d-none"
                      data-url="{{ route('familiares_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
@@ -254,12 +263,20 @@
 @include('includes.configuracion.modalconsultalocalidad')
 @include('includes.caja.modalconsultabanco')
 @include('includes.sueldos.modalconsulta_maestro_sueldos')
+@include('includes.sueldos.modalconsultaempleado_sueldos')
 @include('includes.contable.modalconsultacentrocosto')
 @include('includes.sueldos.modalconsultaconcepto_sueldos')
 @include('includes.sueldos.modalconsultatipo_sancion')
 @include('includes.sueldos.modalconsultamotivo_sancion')
 @include('compras.proveedor.arca-cuit-entry-modal')
 @include('compras.proveedor.arca-padron-modals')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'contrato-emision-overlay',
+    'tituloId' => 'contrato-emision-titulo',
+    'subtituloId' => 'contrato-emision-subtitulo',
+    'titulo' => 'Generando documento…',
+    'subtitulo' => 'Espere mientras se arma el Word. No cierre la página.',
+])
 
 <script>
 (function () {
@@ -283,6 +300,7 @@
         var map = [
             ['tab-bases', 'host-bases'],
             ['tab-historia', 'host-historia'],
+            ['tab-contratos', 'host-contratos'],
             ['tab-ausencias', 'host-ausencias'],
             ['tab-indumentaria', 'host-indumentaria'],
             ['tab-familiares', 'host-familiares'],

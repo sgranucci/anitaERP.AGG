@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Contable\IngresosBrutos;
 
 use App\Models\Configuracion\Provincia;
+use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 
 /**
  * Códigos Anita (zonamult / venibr / retibrmov) asociados a una provincia ERP.
@@ -12,6 +13,28 @@ use App\Models\Configuracion\Provincia;
  */
 final class IngresosBrutosProvinciaAnitaSupport
 {
+    /**
+     * Crown / agente solo RN: hasta ~28/10/2026 las retenciones se grabaron en
+     * retibrmov con retibr_provincia = 0 y en ERP con provincia_id NULL.
+     * Sin incluirlas, el mes queda incompleto (solo aparecen las ya marcadas con 3).
+     *
+     * Solo aplica a Río Negro y cuando la empresa retiene únicamente en 916.
+     */
+    public static function incluirSinCodigoProvincia(?Provincia $provincia, int $empresaId): bool
+    {
+        if ($empresaId <= 0 || ! self::esRioNegro($provincia)) {
+            return false;
+        }
+
+        $jurs = array_values(array_unique(array_map(
+            static fn ($j) => (int) $j,
+            EmpresaJurisdiccionIibbSupport::jurisdiccionesRetencion($empresaId),
+        )));
+        sort($jurs);
+
+        return $jurs === [IngresosBrutosAgenteOpcionesSupport::JURISDICCION_RIO_NEGRO];
+    }
+
     /**
      * @return list<int>
      */
@@ -37,6 +60,10 @@ final class IngresosBrutosProvinciaAnitaSupport
         if (self::esBuenosAires($provincia)) {
             $codigos[2] = 2;
             $codigos[902] = 902;
+        }
+        if (self::esRioNegro($provincia)) {
+            $codigos[3] = 3;
+            $codigos[916] = 916;
         }
 
         return array_values($codigos);
@@ -72,5 +99,20 @@ final class IngresosBrutosProvinciaAnitaSupport
 
         return in_array((int) ($provincia->jurisdiccion ?? 0), [901], true)
             || in_array((int) ($provincia->codigo ?? 0), [901], true);
+    }
+
+    public static function esRioNegro(?Provincia $provincia): bool
+    {
+        if ($provincia === null) {
+            return false;
+        }
+        $nombre = mb_strtolower(trim((string) $provincia->nombre));
+        if (str_contains($nombre, 'rio negro') || str_contains($nombre, 'río negro')) {
+            return true;
+        }
+
+        return in_array((int) ($provincia->jurisdiccion ?? 0), [916], true)
+            || in_array((int) ($provincia->codigoexterno ?? 0), [3], true)
+            || in_array((int) ($provincia->codigo ?? 0), [3], true);
     }
 }

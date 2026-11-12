@@ -31,6 +31,10 @@
             <th>BS Coin in</th>
             <th>BS Cage</th>
             <th>BS Win</th>
+            <th>AD Att</th>
+            <th>AD Coin in</th>
+            <th>AD Cage</th>
+            <th>AD Win</th>
         @endif
         <th>Gaming</th>
         <th>F&amp;B</th>
@@ -66,6 +70,10 @@
                 <td>{{ (float) ($fila['bs_coin_in'] ?? 0) }}</td>
                 <td>{{ (float) ($fila['bs_cage_bal'] ?? 0) }}</td>
                 <td>{{ (float) ($fila['bs_win'] ?? 0) }}</td>
+                <td>{{ (int) ($fila['ad_att'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['ad_coin_in'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['ad_cage_bal'] ?? 0) }}</td>
+                <td>{{ (float) ($fila['ad_win'] ?? 0) }}</td>
             @endif
             <td>{{ (float) ($m['gaming'] ?? 0) }}</td>
             <td>{{ (float) ($fila['ayb'] ?? 0) }}</td>

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Caja;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAsignacion;
-use App\Models\Caja\TesoreriaCrownBingo;
 use App\Models\Caja\TesoreriaCrownBoveda;
 use App\Models\Caja\TesoreriaCrownCierre;
 use App\Models\Caja\TesoreriaCrownCierreEvento;
@@ -494,96 +493,27 @@ class TesoreriaCrownJornadaController extends Controller
         can('listar-tesoreria-crown-bingo');
 
         $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
-        if ($formato === null || $formato === '') {
-            return redirect()->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'bingo']);
-        }
 
-        ini_set('memory_limit', '-1');
-        ini_set('max_execution_time', '0');
-
-        $jornada->loadMissing('empresa');
-        $bingo = TesoreriaCrownBingo::deSalaFecha((int) $jornada->sala_id, $jornada->fecha->format('Y-m-d'));
-        $filas = [];
-        if ($bingo) {
-            $filas[] = [
-                $jornada->fecha->format('d/m/Y'),
-                (string) ($bingo->hora ?? ''),
-                (float) $bingo->tot_carton,
-                (float) $bingo->tot_premio,
-                (float) $bingo->tot_rse,
-                (float) $bingo->resultado,
-            ];
-        }
-
-        return $this->documentoListado((string) $formato, [
-            'titulo' => 'Bingo '.$jornada->fecha->format('d/m/Y'),
-            'subtitulo' => 'Jornada '.$jornada->fecha->format('d/m/Y').' · a-movbingo',
-            'archivo' => 'bingo_tesoreria_'.$jornada->fecha->format('Ymd'),
-            'titulo_corto' => 'Bingo',
-            'columnas' => [
-                ['label' => 'Fecha', 'ancho' => 12, 'texto' => true],
-                ['label' => 'Hora', 'ancho' => 10, 'texto' => true],
-                ['label' => 'Cartones', 'ancho' => 16, 'numero' => true],
-                ['label' => 'Premios', 'ancho' => 16, 'numero' => true],
-                ['label' => 'RSE', 'ancho' => 16, 'numero' => true],
-                ['label' => 'Resultado', 'ancho' => 16, 'numero' => true],
-            ],
-            'filas' => $filas,
-            'coleccion' => collect([(object) ['nombreempresa' => (string) ($jornada->empresa->nombre ?? '')]]),
-        ], 'ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'bingo']);
+        return redirect()->route('tesoreria_crown_bingo', [
+            'sala_id' => $jornada->sala_id,
+            'formato' => $formato,
+        ]);
     }
 
     public function guardarBingo(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         $jornada = $this->jornadaEnAlcance($id);
-        $existente = TesoreriaCrownBingo::deSalaFecha((int) $jornada->sala_id, $jornada->fecha->format('Y-m-d'));
-        can($existente ? 'actualizar-tesoreria-crown-bingo' : 'crear-tesoreria-crown-bingo');
 
-        $datos = $request->validate([
-            'hora' => ['nullable', 'string', 'max:5'],
-            'tot_carton' => ['required'],
-            'tot_premio' => ['required'],
-            'tot_rse' => ['required'],
-        ]);
-        $carton = $this->decimalBingo($datos['tot_carton']);
-        $premio = $this->decimalBingo($datos['tot_premio']);
-        $rse = $this->decimalBingo($datos['tot_rse']);
-        $payload = [
-            'empresa_id' => (int) $jornada->empresa_id,
-            'sala_id' => (int) $jornada->sala_id,
-            'fecha' => $jornada->fecha->format('Y-m-d'),
-            'hora' => $datos['hora'] ?? null,
-            'tot_carton' => $carton,
-            'tot_premio' => $premio,
-            'tot_rse' => $rse,
-            'resultado' => TesoreriaCrownBingo::calcularResultado($carton, $premio, $rse),
-            'usuario_id' => auth()->id(),
-        ];
-        if ($existente) {
-            $existente->update($payload);
-        } else {
-            TesoreriaCrownBingo::query()->create($payload);
-        }
-
-        return redirect()
-            ->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'bingo'])
-            ->with('mensaje', 'Bingo del '.$jornada->fecha->format('d/m/Y').' guardado.');
+        return redirect()->route('tesoreria_crown_bingo', ['sala_id' => $jornada->sala_id]);
     }
 
     public function eliminarBingo(int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
-        can('eliminar-tesoreria-crown-bingo');
         $jornada = $this->jornadaEnAlcance($id);
-        $bingo = TesoreriaCrownBingo::deSalaFecha((int) $jornada->sala_id, $jornada->fecha->format('Y-m-d'));
-        if ($bingo) {
-            $bingo->delete();
-        }
 
-        return redirect()
-            ->route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'panel' => 'bingo'])
-            ->with('mensaje', 'Bingo del '.$jornada->fecha->format('d/m/Y').' eliminado.');
+        return redirect()->route('tesoreria_crown_bingo', ['sala_id' => $jornada->sala_id]);
     }
 
     public function listarPoderPublico(Request $request, $formato = null)
@@ -744,13 +674,16 @@ class TesoreriaCrownJornadaController extends Controller
         $puedeMesas = can('listar-tesoreria-crown-mesa', false);
         $puedeBoveda = can('listar-tesoreria-crown-boveda', false);
         $puedeSlots = can('listar-tesoreria-crown-slot', false);
-        $puedeBingo = can('listar-tesoreria-crown-bingo', false);
         $puedePoder = can('listar-tesoreria-crown-poder-publico', false);
         $puedeAnexo = can('listar-tesoreria-crown-anexo', false);
         $puedeKardex = can('listar-tesoreria-crown-kardex-valores', false);
         $panel = (string) $request->query('panel', 'cajeros');
         $panelesAnexo = ['anexo', 'anexo2', 'rescajero', 'anexo3', 'anexo7', 'anexo8'];
-        if (! in_array($panel, array_merge(['cajeros', 'mesas', 'boveda', 'slots', 'bingo', 'poder'], $panelesAnexo), true)) {
+        // Bingo y resultado online viven en su propio módulo; no se abren desde la jornada.
+        if ($panel === 'bingo') {
+            return redirect()->route('tesoreria_crown_bingo', ['sala_id' => $jornada->sala_id]);
+        }
+        if (! in_array($panel, array_merge(['cajeros', 'mesas', 'boveda', 'slots', 'poder'], $panelesAnexo), true)) {
             $panel = 'cajeros';
         }
         $mesaCodigo = strtoupper(trim((string) $request->query('mesa', '')));
@@ -760,7 +693,7 @@ class TesoreriaCrownJornadaController extends Controller
         if ($puedeMesas && $mesaCodigo !== '') {
             $panel = 'mesas';
         }
-        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda) || ($panel === 'slots' && ! $puedeSlots) || ($panel === 'bingo' && ! $puedeBingo) || ($panel === 'poder' && ! $puedePoder) || (in_array($panel, $panelesAnexo, true) && ! $puedeAnexo)) {
+        if (($panel === 'mesas' && ! $puedeMesas) || ($panel === 'boveda' && ! $puedeBoveda) || ($panel === 'slots' && ! $puedeSlots) || ($panel === 'poder' && ! $puedePoder) || (in_array($panel, $panelesAnexo, true) && ! $puedeAnexo)) {
             $panel = 'cajeros';
         }
         // Tablero completo solo en panel mesas: al abrir anexos no hace falta.
@@ -773,9 +706,6 @@ class TesoreriaCrownJornadaController extends Controller
                 fn (array $fila) => strtoupper((string) $fila['mesa']->codigo) === $mesaCodigo
             );
         }
-        $bingo = $puedeBingo
-            ? TesoreriaCrownBingo::deSalaFecha((int) $jornada->sala_id, $jornada->fecha->format('Y-m-d'))
-            : null;
         $poderPublico = null;
         $poderError = null;
         if ($panel === 'poder') {
@@ -918,12 +848,9 @@ class TesoreriaCrownJornadaController extends Controller
             'puedeMesas' => $puedeMesas,
             'puedeBoveda' => $puedeBoveda,
             'puedeSlots' => $puedeSlots,
-            'puedeBingo' => $puedeBingo,
             'puedePoder' => $puedePoder,
             'puedeAnexo' => $puedeAnexo,
             'puedeKardex' => $puedeKardex,
-            'bingo' => $bingo,
-            'navBingo' => $bingo !== null,
             'poderPublico' => $poderPublico,
             'poderError' => $poderError,
             'anexo' => $anexo,
@@ -1423,19 +1350,6 @@ class TesoreriaCrownJornadaController extends Controller
             ->first();
     }
 
-    private function decimalBingo(mixed $valor): float
-    {
-        $texto = trim((string) $valor);
-        if (str_contains($texto, ',') && str_contains($texto, '.')) {
-            $texto = str_replace('.', '', $texto);
-            $texto = str_replace(',', '.', $texto);
-        } else {
-            $texto = str_replace(',', '.', $texto);
-        }
-
-        return round((float) $texto, 2);
-    }
-
     private function jornadaEnAlcance(int $id): TesoreriaCrownJornada
     {
         $jornada = TesoreriaCrownJornada::query()->findOrFail($id);
@@ -1480,7 +1394,7 @@ class TesoreriaCrownJornadaController extends Controller
     private function poderDelDia(Request $request, TesoreriaCrownJornada $jornada): array
     {
         $fecha = $jornada->fecha->format('Y-m-d');
-        $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fecha);
+        $armado = TesoreriaCrownPoderPublicoCalculo::delDia($fecha, (int) $jornada->sala_id);
         try {
             $persistido = TesoreriaCrownPoderPublicoGenerador::obtenerOGenerar(
                 (int) $jornada->sala_id,
@@ -1539,7 +1453,9 @@ class TesoreriaCrownJornadaController extends Controller
     {
         if (can('listar-tesoreria-crown-jornada', false)
             || can('listar-tesoreria-crown-mesa', false)
-            || can('crear-tesoreria-crown-mesa', false)) {
+            || can('crear-tesoreria-crown-mesa', false)
+            || can('crear-tesoreria-crown-movimiento', false)
+            || can('listar-tesoreria-crown-movimiento', false)) {
             return;
         }
 

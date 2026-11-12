@@ -11,11 +11,34 @@ final class LibroIvaDigitalIdentificacionSupport
 {
     public const CODIGO_SIN_IDENTIFICAR = '99';
 
+    public const CODIGO_CUIT = '80';
+
     public static function numeroEsCero(string $numero): bool
     {
         $digits = preg_replace('/\D+/', '', $numero) ?? '';
 
         return $digits === '' || ltrim($digits, '0') === '';
+    }
+
+    /**
+     * Import Pxsol/ARCA deja el CUIT en leyenda («… CUIT 30715375482»)
+     * cuando la venta quedó con cliente CONSUMIDOR FINAL y nroinscripcion vacío.
+     */
+    public static function cuitDesdeLeyenda(?string $leyenda): string
+    {
+        $texto = (string) $leyenda;
+        if ($texto === '' || stripos($texto, 'CUIT') === false) {
+            return '';
+        }
+        if (! preg_match('/\bCUIT\b[:\s#-]*([0-9\-\.\/\s]{8,20})/i', $texto, $m)) {
+            return '';
+        }
+        $digits = self::cuitOnceDigitos(LibroIvaDigitalComprasCuitSupport::soloDigitos($m[1]));
+        if (strlen($digits) !== 11 || ! LibroIvaDigitalComprasCuitSupport::esCuitValido($digits)) {
+            return '';
+        }
+
+        return $digits;
     }
 
     /**

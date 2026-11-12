@@ -66,21 +66,28 @@ class FlashCrown extends Model implements Auditable
         'bs_coin_in',
         'bs_cage_bal',
         'bs_win',
+        'ad_att',
+        'ad_coin_in',
+        'ad_cage_bal',
+        'ad_win',
         'proc_mesa',
         'proc_slot',
         'proc_ruleta_el',
         'proc_del_rio',
         'proc_betsur',
+        'proc_apuestas',
         'venta_mesa_id',
         'venta_slot_id',
         'venta_ruleta_el_id',
         'venta_del_rio_id',
         'venta_betsur_id',
+        'venta_apuestas_id',
         'asiento_mesa_id',
         'asiento_slot_id',
         'asiento_ruleta_el_id',
         'asiento_del_rio_id',
         'asiento_betsur_id',
+        'asiento_apuestas_id',
         'ayb',
         'hotel',
         'comentario',
@@ -103,6 +110,7 @@ class FlashCrown extends Model implements Auditable
         'cant_rul_el' => 'integer',
         'ol_att' => 'integer',
         'bs_att' => 'integer',
+        'ad_att' => 'integer',
         'cashdrop' => 'float',
         'soft_mesas' => 'float',
         'caja_empleado' => 'float',
@@ -138,6 +146,9 @@ class FlashCrown extends Model implements Auditable
         'bs_coin_in' => 'float',
         'bs_cage_bal' => 'float',
         'bs_win' => 'float',
+        'ad_coin_in' => 'float',
+        'ad_cage_bal' => 'float',
+        'ad_win' => 'float',
         'ayb' => 'float',
         'hotel' => 'float',
         'overrides_json' => 'array',
@@ -194,7 +205,7 @@ class FlashCrown extends Model implements Auditable
         );
     }
 
-    /** Gaming = mesas + slots − cashless + ruleta el. + Del Río online + Betsur (l-consolida). */
+    /** Gaming = mesas + slots − cashless + ruleta el. + Del Río + Betsur + Apuestas deportivas. */
     public function getGamingAttribute(): float
     {
         return round(
@@ -203,9 +214,24 @@ class FlashCrown extends Model implements Auditable
             - (float) $this->cash_less
             + (float) $this->ruleta_el_r
             + (float) $this->ol_win
-            + (float) $this->bs_win,
+            + (float) $this->bs_win
+            + (float) $this->ad_win,
             2
         );
+    }
+
+    /**
+     * Campos globales (misma cifra en todas las salas): no se suman al consolidar.
+     *
+     * @return list<string>
+     */
+    public static function camposOnlineGlobal(): array
+    {
+        return [
+            'ol_att', 'ol_drop', 'ol_coin_in', 'ol_cage_bal', 'ol_win',
+            'bs_att', 'bs_coin_in', 'bs_cage_bal', 'bs_win',
+            'ad_att', 'ad_coin_in', 'ad_cage_bal', 'ad_win',
+        ];
     }
 
     /** Combined = gaming + F&B + hotel. */
@@ -234,6 +260,7 @@ class FlashCrown extends Model implements Auditable
             'ruleta_el_d', 'ruleta_el_r', 'soft_rul_el', 'cant_rul_el', 'coin_in_rul',
             'ol_att', 'ol_drop', 'ol_coin_in', 'ol_cage_bal', 'ol_win',
             'bs_att', 'bs_coin_in', 'bs_cage_bal', 'bs_win',
+            'ad_att', 'ad_coin_in', 'ad_cage_bal', 'ad_win',
             'ayb', 'hotel',
         ];
     }

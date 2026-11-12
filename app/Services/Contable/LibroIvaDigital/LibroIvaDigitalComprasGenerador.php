@@ -111,6 +111,7 @@ class LibroIvaDigitalComprasGenerador
                     'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo)
                         || LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura($tipoAbrev)
                         || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte),
+                    'abreviatura_tipo' => LibroIvaDigitalComprasAnitaArmadoSupport::normalizarAbreviaturaTipo($tipoAbrev),
                 ];
                 $this->adjuntarConceptoIvaSimple($registro, $fila['conceptos'], (string) ($compra['com_letra'] ?? 'A'));
                 if (! LibroIvaDigitalComprasCuitSupport::tieneCuitVendedor($registro)) {
@@ -471,6 +472,9 @@ class LibroIvaDigitalComprasGenerador
         ]);
         $registro['iva_simple'] = [
             'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras),
+            'abreviatura_tipo' => LibroIvaDigitalComprasAnitaArmadoSupport::normalizarAbreviaturaTipo(
+                (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+            ),
         ];
 
         return $registro;

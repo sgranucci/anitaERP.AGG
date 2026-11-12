@@ -117,6 +117,7 @@ final class IngresosBrutosRetencionesDatosService
         $hastaAnita = (int) str_replace('-', '', $fechaHasta);
         $provIn = implode(',', array_map('intval', $codigosProv));
         $tieneEmpresa = AnitaRetencionEsquemaSupport::movimientosTienenColumnaEmpresa();
+        $incluirSinCodigo = IngresosBrutosProvinciaAnitaSupport::incluirSinCodigoProvincia($provincia, $empresaId);
 
         // Columnas reales Informix (retibrmov.sql): retibr_nro_ret / retibr_porc_ret
         // (el C usa alias retibr_nro_retencion / retibr_porc_retencion vía .def).
@@ -132,7 +133,12 @@ final class IngresosBrutosRetencionesDatosService
             .' AND retibr_retencion <> 0';
         if ($tieneProvincia) {
             $campos[] = 'retibr_provincia';
-            $where .= ' AND retibr_provincia IN ('.$provIn.')';
+            // Crown: históricas con provincia 0 = RN (agente único 916).
+            if ($incluirSinCodigo) {
+                $where .= ' AND (retibr_provincia IN ('.$provIn.') OR retibr_provincia = 0)';
+            } else {
+                $where .= ' AND retibr_provincia IN ('.$provIn.')';
+            }
         }
         if ($tieneEmpresa) {
             $campos[] = 'retibr_empresa';
@@ -298,9 +304,17 @@ final class IngresosBrutosRetencionesDatosService
             return [];
         }
 
+        $provinciaId = (int) $provincia->id;
+        $incluirSinProvincia = IngresosBrutosProvinciaAnitaSupport::incluirSinCodigoProvincia($provincia, $empresaId);
+
         $filas = Pagoproveedor_Retencion::query()
             ->where('tiporetencion', Pagoproveedor_Retencion::TIPO_IIBB)
-            ->where('provincia_id', (int) $provincia->id)
+            ->where(function ($q) use ($provinciaId, $incluirSinProvincia) {
+                $q->where('provincia_id', $provinciaId);
+                if ($incluirSinProvincia) {
+                    $q->orWhereNull('provincia_id');
+                }
+            })
             ->where('importe', '!=', 0)
             ->whereHas('pagoproveedores', function ($q) use ($empresaId, $fechaDesde, $fechaHasta) {
                 $q->where('empresa_id', $empresaId)
@@ -598,7 +612,9 @@ final class IngresosBrutosRetencionesDatosService
 
         $fila = Pagoproveedor_Retencion::query()
             ->where('tiporetencion', Pagoproveedor_Retencion::TIPO_IIBB)
-            ->where('provincia_id', $provinciaId)
+            ->where(function ($q) use ($provinciaId) {
+                $q->where('provincia_id', $provinciaId)->orWhereNull('provincia_id');
+            })
             ->where('importe', '>', 0)
             ->whereRaw('ABS(importe - ?) < 0.02', [$importeAbs])
             ->whereHas('pagoproveedores', function ($q) use ($proveedorId, $fechaIsoHasta) {

@@ -471,6 +471,8 @@ class InterbankingArchivoPagoService
 
         return [
             'origen' => 'ERP',
+            'pagoproveedor_id' => (int) $op->id,
+            'caja_movimiento_id' => null,
             'proveedor_codigo' => $codigo,
             'proveedor_nombre' => (string) ($prov->nombre ?? ''),
             'tipo' => strtoupper(substr(trim((string) $op->tipocomprobante), 0, 3)),
@@ -519,6 +521,8 @@ class InterbankingArchivoPagoService
 
         return [
             'origen' => 'ERP-IE',
+            'pagoproveedor_id' => null,
+            'caja_movimiento_id' => (int) $mov->id,
             'proveedor_codigo' => $codigo,
             'proveedor_nombre' => (string) ($prov->nombre ?? ''),
             'tipo' => 'OPP',
@@ -529,6 +533,79 @@ class InterbankingArchivoPagoService
             'importe' => $monto,
             'referencia' => 'OPP-'.str_pad((string) $mov->numerotransaccion, 8, '0', STR_PAD_LEFT),
             'solicitudpago_id' => (int) ($mov->solicitudpago_id ?? 0) ?: null,
+        ];
+    }
+
+    /**
+     * Solo ERP (OP + I/E), sin Anita. Para envío on-line de transferencias.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{
+     *   ok:bool,
+     *   mensaje:string,
+     *   filas:list<array<string,mixed>>,
+     *   omitidas:list<array<string,mixed>>,
+     *   total_importe:float,
+     *   cantidad:int,
+     *   cuenta:?Cuentacaja
+     * }
+     */
+    public function listarFilasErpParaEnvio(array $filtros): array
+    {
+        if (! InterbankingArchivoPagoFiltros::tieneCriteriosAplicados($filtros)) {
+            return [
+                'ok' => false,
+                'mensaje' => 'Indique empresa y rango de fechas.',
+                'filas' => [],
+                'omitidas' => [],
+                'total_importe' => 0.0,
+                'cantidad' => 0,
+                'cuenta' => null,
+            ];
+        }
+
+        $empresaId = (int) $filtros['empresa_id'];
+        $cuenta = $this->resolverCuentaOrigen(
+            $empresaId,
+            (int) ($filtros['cuentacaja_id'] ?? 0),
+            (string) ($filtros['cbu_origen'] ?? '')
+        );
+        $valCbu = CbuSupport::validarConMensaje($cuenta ? (string) $cuenta->cbu : '');
+        if ($cuenta === null || ! $valCbu['ok']) {
+            return [
+                'ok' => false,
+                'mensaje' => 'Seleccione una cuenta de caja con CBU válido. '.($valCbu['mensaje'] ?? ''),
+                'filas' => [],
+                'omitidas' => [],
+                'total_importe' => 0.0,
+                'cantidad' => 0,
+                'cuenta' => null,
+            ];
+        }
+
+        [$filas, $omitidas] = $this->recolectarErp(
+            $empresaId,
+            (string) $filtros['fecha_desde'],
+            (string) $filtros['fecha_hasta'],
+            (string) ($filtros['tipo_op'] ?? 'OPP'),
+            (int) ($filtros['op_desde'] ?? 0),
+            (int) ($filtros['op_hasta'] ?? 99999999),
+            (int) $cuenta->id
+        );
+
+        $total = 0.0;
+        foreach ($filas as $f) {
+            $total += (float) ($f['importe'] ?? 0);
+        }
+
+        return [
+            'ok' => true,
+            'mensaje' => '',
+            'filas' => array_values($filas),
+            'omitidas' => $omitidas,
+            'total_importe' => round($total, 2),
+            'cantidad' => count($filas),
+            'cuenta' => $cuenta,
         ];
     }
 

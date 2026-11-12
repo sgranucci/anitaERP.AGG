@@ -49,6 +49,23 @@ class TesoreriaCrownAsignacion extends Model implements Auditable
         return $this->belongsTo(CajeroCrown::class, 'cajero_crown_id');
     }
 
+    /**
+     * Tarea operativa de la caja del día: manda la asignación.
+     * El tipo del cajero es solo fallback (un mismo cajero puede rendir
+     * empleados un día y venta otro; si se mira el maestro primero, el
+     * Anexo I mete la propina en 0 y el residual de empleados en excedente).
+     */
+    public function tipoTareaEfectiva(): string
+    {
+        $deAsignacion = trim((string) ($this->tipo_tarea ?? ''));
+        if ($deAsignacion !== '') {
+            return $deAsignacion;
+        }
+        $this->loadMissing('cajero');
+
+        return trim((string) ($this->cajero->tipo_tarea ?? ''));
+    }
+
     public function comprobantes(): HasMany
     {
         return $this->hasMany(TesoreriaCrownComprobante::class, 'asignacion_id');

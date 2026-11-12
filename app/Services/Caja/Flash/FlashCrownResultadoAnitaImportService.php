@@ -29,7 +29,7 @@ final class FlashCrownResultadoAnitaImportService
      */
     private const CAMPOS_LIST = 'resul_sucursal,resul_fecha,resul_att,resul_blackjack_r,resul_wheel_r,'
         .'resul_baccarat_r,resul_caribbean_r,resul_poker_r,resul_crap_r,resul_seven_r,'
-        .'resul_cashdrop,resul_cant_mesas,resul_ayb,resul_slot_d,resul_slot_r,resul_cant_slots,'
+        .'resul_cashdrop,resul_cant_mesas,resul_ayb,resul_tot_hotel,resul_slot_d,resul_slot_r,resul_cant_slots,'
         .'resul_ruleta_el_d,resul_ruleta_el_r,resul_proc_mesa,resul_proc_slot,resul_soft_count,'
         .'resul_super_peek_r,resul_multi_r';
 
@@ -94,6 +94,7 @@ final class FlashCrownResultadoAnitaImportService
             ];
 
             $ifxUsado = (string) $meta['ifx_server'];
+            $fallback = trim((string) ($meta['ifx_fallback'] ?? ''));
             try {
                 $filasAnita = $this->leerResultado(
                     $ifxUsado,
@@ -102,7 +103,6 @@ final class FlashCrownResultadoAnitaImportService
                     $hastaInt,
                 );
             } catch (Throwable $e) {
-                $fallback = trim((string) ($meta['ifx_fallback'] ?? ''));
                 if ($fallback === '') {
                     $bloque['error'] = $e->getMessage();
                     $resumen['errores'][] = $meta['codigo'].': '.$e->getMessage();
@@ -123,6 +123,25 @@ final class FlashCrownResultadoAnitaImportService
                     $resumen['errores'][] = $meta['codigo'].': '.$bloque['error'];
                     $resumen['salas'][] = $bloque;
                     continue;
+                }
+            }
+
+            // LGR (y similares): la fila local puede existir con hotel=0 mientras AC ya tiene
+            // resul_tot_hotel (l-consolida lee el consolidado). Completar hotel/ayb desde fallback.
+            if ($fallback !== '' && $fallback !== $ifxUsado && $filasAnita !== []) {
+                try {
+                    $filasFallback = $this->leerResultado(
+                        $fallback,
+                        (int) $meta['sucursal'],
+                        $desdeInt,
+                        $hastaInt,
+                    );
+                    $enriquecidas = $this->completarHotelAybDesdeFallback($filasAnita, $filasFallback);
+                    if ($enriquecidas > 0) {
+                        $bloque['ifx_server'] = $ifxUsado.' + hotel/ayb@'.$fallback.' ('.$enriquecidas.')';
+                    }
+                } catch (Throwable) {
+                    // Sin fallback usable: se mantiene lo del IFX primario.
                 }
             }
 
@@ -175,7 +194,7 @@ final class FlashCrownResultadoAnitaImportService
                 ];
                 if ($decision['accion'] === 'crear') {
                     $bloque['crear']++;
-                } elseif ($decision['accion'] === 'actualizar') {
+                } elseif (in_array($decision['accion'], ['actualizar', 'actualizar_revenue'], true)) {
                     $bloque['actualizar']++;
                 } else {
                     $bloque['omitir']++;
@@ -224,18 +243,44 @@ final class FlashCrownResultadoAnitaImportService
 
                         return;
                     }
-                    // Conserva proc/ventas/asientos/validación y Del Río/Betsur ya cargados.
+                    if ($fila['accion'] === 'actualizar_revenue') {
+                        $detallePrev = is_array($flash->detalle_json) ? $flash->detalle_json : [];
+                        $detallePrev['anita_revenue'] = [
+                            'ayb' => $payload['ayb'],
+                            'hotel' => $payload['hotel'],
+                            'fuente' => 'resultado.resul_ayb/resul_tot_hotel',
+                        ];
+                        $flash->fill([
+                            'ayb' => $payload['ayb'],
+                            'hotel' => $payload['hotel'],
+                            'detalle_json' => $detallePrev,
+                        ]);
+                        $flash->save();
+                        $cambios++;
+
+                        return;
+                    }
+                    // Conserva proc/ventas/asientos/validación y online (Del Río/Betsur/Apuestas) ya cargados.
                     // coin_in/out/pago_manual/slot_r sí se actualizan (vienen de resulol).
                     unset(
                         $payload['proc_mesa'],
                         $payload['proc_slot'],
                         $payload['proc_ruleta_el'],
+                        $payload['proc_del_rio'],
+                        $payload['proc_betsur'],
+                        $payload['proc_apuestas'],
                         $payload['venta_mesa_id'],
                         $payload['venta_slot_id'],
                         $payload['venta_ruleta_el_id'],
+                        $payload['venta_del_rio_id'],
+                        $payload['venta_betsur_id'],
+                        $payload['venta_apuestas_id'],
                         $payload['asiento_mesa_id'],
                         $payload['asiento_slot_id'],
                         $payload['asiento_ruleta_el_id'],
+                        $payload['asiento_del_rio_id'],
+                        $payload['asiento_betsur_id'],
+                        $payload['asiento_apuestas_id'],
                         $payload['validado'],
                         $payload['validado_en'],
                         $payload['validado_usuario_id'],
@@ -248,6 +293,10 @@ final class FlashCrownResultadoAnitaImportService
                         $payload['bs_coin_in'],
                         $payload['bs_cage_bal'],
                         $payload['bs_win'],
+                        $payload['ad_att'],
+                        $payload['ad_coin_in'],
+                        $payload['ad_cage_bal'],
+                        $payload['ad_win'],
                     );
                     $detallePrev = is_array($flash->detalle_json) ? $flash->detalle_json : [];
                     $detalleNuevo = is_array($payload['detalle_json'] ?? null) ? $payload['detalle_json'] : [];
@@ -327,6 +376,46 @@ final class FlashCrownResultadoAnitaImportService
         usort($out, static fn ($a, $b) => (int) $a->resul_fecha <=> (int) $b->resul_fecha);
 
         return $out;
+    }
+
+    /**
+     * Si el IFX local trae hotel en cero y el fallback (p. ej. acncadmin) tiene valor,
+     * completa resul_tot_hotel / resul_ayb para alinear con l-consolida.
+     *
+     * @param  list<object>  $primarias
+     * @param  list<object>  $fallback
+     */
+    private function completarHotelAybDesdeFallback(array $primarias, array $fallback): int
+    {
+        $porFecha = [];
+        foreach ($fallback as $fila) {
+            $f = (int) ($fila->resul_fecha ?? 0);
+            if ($f > 0) {
+                $porFecha[$f] = $fila;
+            }
+        }
+
+        $n = 0;
+        foreach ($primarias as $fila) {
+            $f = (int) ($fila->resul_fecha ?? 0);
+            $alt = $porFecha[$f] ?? null;
+            if ($alt === null) {
+                continue;
+            }
+            $hotelLocal = $this->num($fila, 'resul_tot_hotel');
+            $hotelAlt = $this->num($alt, 'resul_tot_hotel');
+            if (abs($hotelLocal) >= 0.02 || abs($hotelAlt) < 0.02) {
+                continue;
+            }
+            $fila->resul_tot_hotel = $alt->resul_tot_hotel;
+            // Ayb del consolidado solo si el local está vacío y el fallback no.
+            if (abs($this->num($fila, 'resul_ayb')) < 0.02 && abs($this->num($alt, 'resul_ayb')) >= 0.02) {
+                $fila->resul_ayb = $alt->resul_ayb;
+            }
+            $n++;
+        }
+
+        return $n;
     }
 
     /**
@@ -470,7 +559,8 @@ final class FlashCrownResultadoAnitaImportService
             'cant_rul_el' => 0,
             'coin_in_rul' => 0.0,
             'ayb' => $this->num($anita, 'resul_ayb'),
-            'hotel' => 0.0,
+            // l-flashcasino / a-resultado: Hotel = resul_tot_hotel (todas las salas, no solo CIP).
+            'hotel' => $this->num($anita, 'resul_tot_hotel'),
             'proc_mesa' => ' ',
             'proc_slot' => ' ',
             'proc_ruleta_el' => ' ',
@@ -500,11 +590,17 @@ final class FlashCrownResultadoAnitaImportService
         if ($erp === null) {
             return ['accion' => 'crear', 'motivo' => 'sin flash'];
         }
-        if ($erp->estaValidado()) {
-            return ['accion' => 'omitir', 'motivo' => 'validado'];
-        }
-        if ($this->yaFacturado($erp)) {
-            return ['accion' => 'omitir', 'motivo' => 'ya facturado'];
+
+        $diffHotel = abs((float) $erp->hotel - (float) $payload['hotel']) >= 0.02;
+        $diffAyb = abs((float) $erp->ayb - (float) $payload['ayb']) >= 0.02;
+
+        // Validado / ya facturado: igual se puede alinear Hotel/F&B (no tocan proc_*/ventas de juego).
+        if ($erp->estaValidado() || $this->yaFacturado($erp)) {
+            if ($diffHotel || $diffAyb) {
+                return ['accion' => 'actualizar_revenue', 'motivo' => $erp->estaValidado() ? 'validado+hotel/ayb' : 'facturado+hotel/ayb'];
+            }
+
+            return ['accion' => 'omitir', 'motivo' => $erp->estaValidado() ? 'validado' : 'ya facturado'];
         }
 
         $mesaErp = round(
@@ -515,12 +611,15 @@ final class FlashCrownResultadoAnitaImportService
         );
         // Misma base de facturación: solo slot_r (online), no soft_count.
         $slotErp = round((float) $erp->slot_r, 2);
-        $igual = abs($mesaErp - (float) $payload['_mesa']) < 0.02
+        $igualJuego = abs($mesaErp - (float) $payload['_mesa']) < 0.02
             && abs($slotErp - (float) $payload['_slot']) < 0.02
             && abs((float) $erp->ruleta_el_r - (float) $payload['ruleta_el_r']) < 0.02;
 
-        if ($igual) {
+        if ($igualJuego && ! $diffHotel && ! $diffAyb) {
             return ['accion' => 'omitir', 'motivo' => 'igual'];
+        }
+        if ($igualJuego && ($diffHotel || $diffAyb)) {
+            return ['accion' => 'actualizar_revenue', 'motivo' => 'hotel/ayb'];
         }
 
         return ['accion' => 'actualizar', 'motivo' => 'diff'];
@@ -528,14 +627,16 @@ final class FlashCrownResultadoAnitaImportService
 
     private function yaFacturado(FlashCrown $flash): bool
     {
-        foreach (['proc_mesa', 'proc_slot', 'proc_ruleta_el', 'proc_del_rio', 'proc_betsur'] as $flag) {
+        foreach (['proc_mesa', 'proc_slot', 'proc_ruleta_el', 'proc_del_rio', 'proc_betsur', 'proc_apuestas'] as $flag) {
             if (trim((string) ($flash->{$flag} ?? '')) === '*') {
                 return true;
             }
         }
         foreach ([
             'venta_mesa_id', 'venta_slot_id', 'venta_ruleta_el_id',
-            'venta_del_rio_id', 'venta_betsur_id',
+            'venta_del_rio_id', 'venta_betsur_id', 'venta_apuestas_id',
+            'asiento_mesa_id', 'asiento_slot_id', 'asiento_ruleta_el_id',
+            'asiento_del_rio_id', 'asiento_betsur_id', 'asiento_apuestas_id',
         ] as $campo) {
             if ((int) ($flash->{$campo} ?? 0) > 0) {
                 return true;

@@ -34,6 +34,7 @@ class LibroIvaDigitalIvaSimpleGenerador
      * @param  array{
      *     por_fecha_jornada?: bool,
      *     prorrateo_cf_global?: bool,
+     *     coeficiente_iva_indirecto?: float,
      *     completar_compras_anita?: bool,
      *     completar_fsl_anita?: bool,
      *     ventas_registros?: list<array<string, mixed>>,
@@ -61,6 +62,7 @@ class LibroIvaDigitalIvaSimpleGenerador
         $completarAnita = (bool) ($opciones['completar_compras_anita'] ?? true);
         $completarFslAnita = (bool) ($opciones['completar_fsl_anita'] ?? true);
         $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
+        $coeficienteIvaIndirecto = max(0.0, (float) ($opciones['coeficiente_iva_indirecto'] ?? 1.0));
 
         $ventasRegistros = $opciones['ventas_registros'] ?? null;
         $comprasRegistros = $opciones['compras_registros'] ?? null;
@@ -90,6 +92,7 @@ class LibroIvaDigitalIvaSimpleGenerador
             $compras = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro(
                 $comprasRegistros,
                 $prorrateoGlobal,
+                $coeficienteIvaIndirecto,
             );
         } else {
             $compras = $this->comprasCreditoFiscal(
@@ -98,6 +101,7 @@ class LibroIvaDigitalIvaSimpleGenerador
                 $hasta,
                 $completarAnita,
                 $prorrateoGlobal,
+                $coeficienteIvaIndirecto,
             );
         }
 
@@ -428,6 +432,7 @@ class LibroIvaDigitalIvaSimpleGenerador
         string $hasta,
         bool $completarAnita,
         bool $prorrateoGlobal,
+        float $coeficienteIvaIndirecto = 1.0,
     ): array {
         $acumCredito = [];
         $acumRestitucion = [];
@@ -497,7 +502,15 @@ class LibroIvaDigitalIvaSimpleGenerador
                     $coeficiente,
                 );
                 foreach ($alicuotas as $row) {
-                    $this->acumularFilaCredito($acumCredito, $acumRestitucion, $row, $prorrateoGlobal, $esNc);
+                    $this->acumularFilaCredito(
+                        $acumCredito,
+                        $acumRestitucion,
+                        $row,
+                        $prorrateoGlobal,
+                        $esNc,
+                        $tipoAbrev,
+                        $coeficienteIvaIndirecto,
+                    );
                 }
             }
         }
@@ -522,6 +535,7 @@ class LibroIvaDigitalIvaSimpleGenerador
                 &$clavesUsadas,
                 &$nrosInternosUsados,
                 $prorrateoGlobal,
+                $coeficienteIvaIndirecto,
             ): void {
                 $nroInterno = (int) ($cp->anita_nro_interno ?? 0);
                 if ($nroInterno > 0 && isset($nrosInternosUsados[$nroInterno])) {
@@ -558,8 +572,17 @@ class LibroIvaDigitalIvaSimpleGenerador
                 $tipoCbte = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra);
                 $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras)
                     || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte);
+                $tipoAbrevErp = (string) ($cp->tipotransaccion_compras->abreviatura ?? '');
                 foreach ($totales['alicuotas'] as $row) {
-                    $this->acumularFilaCredito($acumCredito, $acumRestitucion, $row, $prorrateoGlobal, $esNc);
+                    $this->acumularFilaCredito(
+                        $acumCredito,
+                        $acumRestitucion,
+                        $row,
+                        $prorrateoGlobal,
+                        $esNc,
+                        $tipoAbrevErp,
+                        $coeficienteIvaIndirecto,
+                    );
                 }
 
                 if ($clave !== '') {
@@ -590,7 +613,16 @@ class LibroIvaDigitalIvaSimpleGenerador
         array $row,
         bool $prorrateoGlobal,
         bool $esNc,
+        string $abreviaturaTipo = '',
+        float $coeficienteIvaIndirecto = 1.0,
     ): void {
+        $iva = (float) ($row['iva'] ?? 0);
+        $row['iva_computable'] = LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra(
+            $abreviaturaTipo,
+            $iva,
+            $coeficienteIvaIndirecto,
+            $prorrateoGlobal,
+        );
         if ($esNc) {
             LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumRestitucion, $row, $prorrateoGlobal, true);
         } else {

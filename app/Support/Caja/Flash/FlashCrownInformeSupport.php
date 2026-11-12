@@ -4,6 +4,7 @@ namespace App\Support\Caja\Flash;
 
 use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\TesoreriaCrownJornada;
+use App\Models\Caja\TesoreriaCrownCasinoOnline;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -22,9 +23,6 @@ final class FlashCrownInformeSupport
 
     /** Daily Flash Report (Resumen + por sala, mes hasta el día pedido). */
     public const FORMATO_DAILY = 'daily';
-
-    /** Orden del mail de casinos (el resto de las salas va al final). */
-    private const ORDEN_SALA = ['CIP', 'GRO', 'VIE', 'CAT', 'CHO', 'VRE', 'LGR', 'EFA', 'CSA'];
 
     /** @var array<string, FlashCrown|null> */
     private array $flashPorClave = [];
@@ -93,6 +91,7 @@ final class FlashCrownInformeSupport
                 'slot_r' => (float) ($base['slot_r'] ?? 0),
                 'ol_win' => (float) ($base['ol_win'] ?? 0),
                 'bs_win' => (float) ($base['bs_win'] ?? 0),
+                'ad_win' => (float) ($base['ad_win'] ?? 0),
                 'ayb' => (float) ($base['ayb'] ?? 0),
                 'hotel' => (float) ($base['hotel'] ?? 0),
                 'metricas' => FlashCrownCalculoSupport::metricasDerivadas($base),
@@ -134,6 +133,15 @@ final class FlashCrownInformeSupport
                 'filas' => $this->filasJuego($dia, $anterior, $mtd, $mtdAnterior),
             ];
         }
+
+        $onlineDia = $this->juegoOnlineGlobal($fecha->toDateString());
+        $onlineAnt = $this->juegoOnlineGlobal($comparable->toDateString());
+        $onlineMtd = $this->sumarOnlineGlobal($mtdDesde, $fecha);
+        $onlineMtdAnt = $this->sumarOnlineGlobal($mtdAnteriorDesde, $mtdAnteriorHasta);
+        $casinos[] = [
+            'titulo' => 'ONLINE GLOBAL',
+            'filas' => $this->filasOnlineGlobal($onlineDia, $onlineAnt, $onlineMtd, $onlineMtdAnt),
+        ];
 
         return [
             'formato' => self::FORMATO_GAMING,
@@ -246,6 +254,9 @@ final class FlashCrownInformeSupport
             ['clave' => 'bs_att', 'titulo' => 'Att.', 'grupo' => 'BETSUR', 'entero' => true],
             ['clave' => 'bs_coin_in', 'titulo' => 'Coin In', 'grupo' => 'BETSUR'],
             ['clave' => 'bs_win', 'titulo' => 'Win', 'grupo' => 'BETSUR'],
+            ['clave' => 'ad_att', 'titulo' => 'Att.', 'grupo' => 'APUESTAS', 'entero' => true],
+            ['clave' => 'ad_coin_in', 'titulo' => 'Coin In', 'grupo' => 'APUESTAS'],
+            ['clave' => 'ad_win', 'titulo' => 'Win', 'grupo' => 'APUESTAS'],
             ['clave' => 'gaming', 'titulo' => 'Gaming Win', 'grupo' => 'REVENUE'],
             ['clave' => 'ayb', 'titulo' => 'F & B', 'grupo' => 'REVENUE'],
             ['clave' => 'hotel', 'titulo' => 'Hotel', 'grupo' => 'REVENUE'],
@@ -319,6 +330,9 @@ final class FlashCrownInformeSupport
             'bs_att' => (int) ($base['bs_att'] ?? 0),
             'bs_coin_in' => round((float) ($base['bs_coin_in'] ?? 0), 2),
             'bs_win' => round((float) ($base['bs_win'] ?? 0), 2),
+            'ad_att' => (int) ($base['ad_att'] ?? 0),
+            'ad_coin_in' => round((float) ($base['ad_coin_in'] ?? 0), 2),
+            'ad_win' => round((float) ($base['ad_win'] ?? 0), 2),
             'gaming' => $gaming,
             'ayb' => $ayb,
             'hotel' => $hotel,
@@ -354,9 +368,9 @@ final class FlashCrownInformeSupport
                 $ymd = (string) $fila['fecha_ymd'];
                 if (! isset($porFecha[$ymd])) {
                     $porFecha[$ymd] = $this->filaDailyCero($fila);
-                } else {
-                    $porFecha[$ymd] = $this->sumarFilasDaily($porFecha[$ymd], $fila);
                 }
+                // Siempre sumar (antes el 1er casino solo armaba la plantilla en cero y se perdía).
+                $porFecha[$ymd] = $this->sumarFilasDaily($porFecha[$ymd], $fila, true);
             }
         }
 
@@ -370,7 +384,7 @@ final class FlashCrownInformeSupport
                 'fecha' => $cursor->format('d/m/Y'),
                 'fecha_ymd' => $ymd,
             ]);
-            $out[] = $this->recalcularDerivedDaily($fila);
+            $out[] = $this->recalcularDerivedDaily($fila, true);
             $cursor->addDay();
         }
 
@@ -404,16 +418,42 @@ final class FlashCrownInformeSupport
     /**
      * @param  array<string, mixed>  $a
      * @param  array<string, mixed>  $b
+     * @param  bool  $entreSalas  true = mismo día entre casinos (online global una sola vez);
+     *                           false = sumar días (online se suma día a día, como Anita).
      * @return array<string, mixed>
      */
-    private function sumarFilasDaily(array $a, array $b): array
+    private function sumarFilasDaily(array $a, array $b, bool $entreSalas = false): array
     {
+        $globales = [
+            'ol_att' => true, 'ol_coin_in' => true, 'ol_win' => true,
+            'bs_att' => true, 'bs_coin_in' => true, 'bs_win' => true,
+            'ad_att' => true, 'ad_coin_in' => true, 'ad_win' => true,
+        ];
         foreach (self::columnasDaily() as $col) {
             $clave = $col['clave'];
             if (in_array($clave, ['day', 'fecha', 'pct_drop', 'win_pct', 'por_cust', 'var_pct'], true)) {
                 continue;
             }
-            $a[$clave] = round((float) ($a[$clave] ?? 0) + (float) ($b[$clave] ?? 0), 2);
+            // Entre salas: gaming/total_rev se reconstruyen luego (online no debe multiplicarse).
+            if ($entreSalas && in_array($clave, ['gaming', 'total_rev'], true)) {
+                if ($clave === 'gaming') {
+                    $localB = (float) ($b['gaming'] ?? 0)
+                        - (float) ($b['ol_win'] ?? 0)
+                        - (float) ($b['bs_win'] ?? 0)
+                        - (float) ($b['ad_win'] ?? 0);
+                    $a['gaming'] = round((float) ($a['gaming'] ?? 0) + $localB, 2);
+                }
+
+                continue;
+            }
+            $vb = (float) ($b[$clave] ?? 0);
+            if ($entreSalas && isset($globales[$clave])) {
+                if (abs($vb) > abs((float) ($a[$clave] ?? 0))) {
+                    $a[$clave] = round($vb, 2);
+                }
+            } else {
+                $a[$clave] = round((float) ($a[$clave] ?? 0) + $vb, 2);
+            }
         }
         if (($a['day'] ?? '') === '') {
             $a['day'] = $b['day'] ?? '';
@@ -428,10 +468,27 @@ final class FlashCrownInformeSupport
 
     /**
      * @param  array<string, mixed>  $fila
+     * @param  bool  $gamingEsSoloLocal  true tras consolidar salas: gaming aún sin online global.
      * @return array<string, mixed>
      */
-    private function recalcularDerivedDaily(array $fila): array
+    private function recalcularDerivedDaily(array $fila, bool $gamingEsSoloLocal = false): array
     {
+        if ($gamingEsSoloLocal) {
+            $fila['gaming'] = round(
+                (float) ($fila['gaming'] ?? 0)
+                + (float) ($fila['ol_win'] ?? 0)
+                + (float) ($fila['bs_win'] ?? 0)
+                + (float) ($fila['ad_win'] ?? 0),
+                2
+            );
+        }
+        $fila['total_rev'] = round(
+            (float) ($fila['gaming'] ?? 0)
+            + (float) ($fila['ayb'] ?? 0)
+            + (float) ($fila['hotel'] ?? 0),
+            2
+        );
+
         $drop = (float) ($fila['drop'] ?? 0);
         $caja = (float) ($fila['caja_empleado'] ?? 0);
         $coinIn = (float) ($fila['coin_in'] ?? 0);
@@ -462,12 +519,13 @@ final class FlashCrownInformeSupport
         ]);
         $total['es_total'] = true;
         foreach ($filas as $fila) {
-            $total = $this->sumarFilasDaily($total, $fila);
+            // Entre días: sumar online (no max). Coincide con Anita / l-flashcasino.
+            $total = $this->sumarFilasDaily($total, $fila, false);
         }
         $total['day'] = 'Total final';
         $total['fecha'] = '';
 
-        return $this->recalcularDerivedDaily($total);
+        return $this->recalcularDerivedDaily($total, false);
     }
 
     /**
@@ -550,15 +608,65 @@ final class FlashCrownInformeSupport
     private function juego(array $base): array
     {
         $m = FlashCrownCalculoSupport::metricasDerivadas($base);
-        $mesas = (float) $m['win_mesas'];
-        $slots = round((float) $m['gaming'] - $mesas, 2);
 
         return [
-            'mesas' => $mesas,
-            'slots' => $slots,
+            'mesas' => (float) $m['win_mesas'],
+            // Solo slots físicos / ruleta el.; online va en sección aparte.
+            'slots' => (float) ($m['slots_fisicos'] ?? 0),
             'ayb' => round((float) ($base['ayb'] ?? 0), 2),
             'att' => (int) ($base['att'] ?? 0),
         ];
+    }
+
+    /**
+     * @return array{ol: float, bs: float, ad: float, att: int}
+     */
+    private function juegoOnlineGlobal(string $fechaYmd): array
+    {
+        $global = TesoreriaCrownCasinoOnline::deFecha($fechaYmd);
+        if ($global) {
+            return [
+                'ol' => round((float) $global->resultado, 2),
+                'bs' => round((float) $global->betsur_resultado, 2),
+                'ad' => round((float) $global->ad_resultado, 2),
+                'att' => (int) $global->attendance
+                    + (int) $global->betsur_attendance
+                    + (int) $global->ad_attendance,
+            ];
+        }
+
+        // Fallback: tomar de cualquier flash del día (valores globales repetidos).
+        $flash = FlashCrown::query()->whereDate('fecha', $fechaYmd)->first();
+        if ($flash) {
+            return [
+                'ol' => round((float) $flash->ol_win, 2),
+                'bs' => round((float) $flash->bs_win, 2),
+                'ad' => round((float) ($flash->ad_win ?? 0), 2),
+                'att' => (int) $flash->ol_att + (int) $flash->bs_att + (int) ($flash->ad_att ?? 0),
+            ];
+        }
+
+        return ['ol' => 0.0, 'bs' => 0.0, 'ad' => 0.0, 'att' => 0];
+    }
+
+    /**
+     * @return array{ol: float, bs: float, ad: float, att: int}
+     */
+    private function sumarOnlineGlobal(Carbon $desde, Carbon $hasta): array
+    {
+        $total = ['ol' => 0.0, 'bs' => 0.0, 'ad' => 0.0, 'att' => 0];
+        $cursor = $desde->copy()->startOfDay();
+        $fin = $hasta->copy()->startOfDay();
+        while ($cursor->lte($fin)) {
+            $dia = $this->juegoOnlineGlobal($cursor->toDateString());
+            $total['ol'] += $dia['ol'];
+            $total['bs'] += $dia['bs'];
+            $total['ad'] += $dia['ad'];
+            $total['att'] += $dia['att'];
+            $cursor->addDay();
+        }
+
+        return $total;
     }
 
     /**
@@ -600,6 +708,44 @@ final class FlashCrownInformeSupport
     }
 
     /**
+     * @param  array{ol: float, bs: float, ad: float, att: int}  $dia
+     * @param  array{ol: float, bs: float, ad: float, att: int}  $anterior
+     * @param  array{ol: float, bs: float, ad: float, att: int}  $mtd
+     * @param  array{ol: float, bs: float, ad: float, att: int}  $mtdAnterior
+     * @return list<array<string, mixed>>
+     */
+    private function filasOnlineGlobal(array $dia, array $anterior, array $mtd, array $mtdAnterior): array
+    {
+        $linea = static function (string $etiqueta, string $campo, bool $entero) use ($dia, $anterior, $mtd, $mtdAnterior): array {
+            return [
+                'etiqueta' => $etiqueta,
+                'dia' => $dia[$campo],
+                'anterior' => $anterior[$campo],
+                'mtd' => $mtd[$campo],
+                'mtd_anterior' => $mtdAnterior[$campo],
+                'entero' => $entero,
+                'es_total' => false,
+            ];
+        };
+
+        return [
+            [
+                'etiqueta' => 'TOTAL',
+                'dia' => round($dia['ol'] + $dia['bs'] + $dia['ad'], 2),
+                'anterior' => round($anterior['ol'] + $anterior['bs'] + $anterior['ad'], 2),
+                'mtd' => round($mtd['ol'] + $mtd['bs'] + $mtd['ad'], 2),
+                'mtd_anterior' => round($mtdAnterior['ol'] + $mtdAnterior['bs'] + $mtdAnterior['ad'], 2),
+                'entero' => false,
+                'es_total' => true,
+            ],
+            $linea('Casinos del Río', 'ol', false),
+            $linea('Betsur', 'bs', false),
+            $linea('Apuestas deportivas', 'ad', false),
+            $linea('Att', 'att', true),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function baseSalaFecha(int $salaId, string $fechaYmd): array
@@ -618,6 +764,16 @@ final class FlashCrownInformeSupport
         }
 
         $calc = FlashCrownCalculoSupport::deSalaFecha($salaId, $fechaYmd);
+        // Recálculo sin gastro: conservar AyB/Hotel del flash (Anita / carga previa).
+        $fuentes = $calc['detalle']['fuentes'] ?? [];
+        if ($stored instanceof FlashCrown && ! in_array('gastro_hotel', $fuentes, true)) {
+            if (abs((float) ($calc['ayb'] ?? 0)) < 0.001) {
+                $calc['ayb'] = round((float) $stored->ayb, 2);
+            }
+            if (abs((float) ($calc['hotel'] ?? 0)) < 0.001) {
+                $calc['hotel'] = round((float) $stored->hotel, 2);
+            }
+        }
         $overrides = $stored instanceof FlashCrown && is_array($stored->overrides_json)
             ? $stored->overrides_json
             : [];
@@ -683,15 +839,7 @@ final class FlashCrownInformeSupport
      */
     private function salasEnOrden(): Collection
     {
-        $orden = array_flip(self::ORDEN_SALA);
-
-        return TesoreriaCrownSalaSupport::salas()
-            ->sortBy(function (Sala $sala) use ($orden): array {
-                $codigo = strtoupper((string) $sala->codigo);
-
-                return [$orden[$codigo] ?? 1000, (string) $sala->nombre];
-            })
-            ->values();
+        return TesoreriaCrownSalaSupport::salas();
     }
 
     private function rotuloSala(Sala $sala): string

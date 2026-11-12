@@ -6,9 +6,9 @@ use App\Exports\Caja\Flash\FlashCrownPeriodoExport;
 use App\Mail\Caja\Flash\FlashCrownDistribucion;
 use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\Flash\FlashCrownSuscripcion;
-use App\Models\Configuracion\Sala;
 use App\Support\Caja\Flash\FlashCrownPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashCrownSuscripcionSupport;
+use App\Support\Caja\TesoreriaCrownSalaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -37,10 +37,10 @@ class FlashCrownDistribucionService
             ->whereDate('fecha', '>=', $periodo['desde']->toDateString())
             ->whereDate('fecha', '<=', $periodo['hasta']->toDateString())
             ->when($suscripcion->solo_validados, fn ($q) => $q->where('validado', true))
-            ->whereIn('sala_id', Sala::query()->where('codigo', '!=', 'AC')->pluck('id'))
+            ->whereIn('sala_id', TesoreriaCrownSalaSupport::idsOperativos())
             ->orderBy('fecha')
-            ->orderBy('sala_id')
             ->get();
+        $filas = TesoreriaCrownSalaSupport::ordenarColeccionPorFechaYSala($filas);
 
         $dias = $filas->pluck('fecha')->map(fn ($f) => $f->format('Y-m-d'))->unique()->count();
         if ($dias === 0) {

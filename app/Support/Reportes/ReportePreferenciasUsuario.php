@@ -78,6 +78,26 @@ class ReportePreferenciasUsuario
         return $texto !== '' ? $texto : $default;
     }
 
+    public static function leerFloat(string $reporte, string $campo, float $default = 0.0): float
+    {
+        $valor = cache()->get(generaKey(self::clave($reporte, $campo)));
+        if ($valor === null || $valor === '') {
+            return $default;
+        }
+        if (is_int($valor) || is_float($valor)) {
+            return (float) $valor;
+        }
+        if (! is_string($valor)) {
+            return $default;
+        }
+        $texto = str_replace(',', '.', trim($valor));
+        if ($texto === '' || ! is_numeric($texto)) {
+            return $default;
+        }
+
+        return (float) $texto;
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -124,6 +144,11 @@ class ReportePreferenciasUsuario
     }
 
     public static function persistirBool(string $reporte, string $campo, bool $valor): void
+    {
+        Cache::forever(generaKey(self::clave($reporte, $campo)), $valor);
+    }
+
+    public static function persistirFloat(string $reporte, string $campo, float $valor): void
     {
         Cache::forever(generaKey(self::clave($reporte, $campo)), $valor);
     }

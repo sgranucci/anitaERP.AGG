@@ -1,6 +1,6 @@
 # Tesorería Crown — circuito de caja
 
-Manual de operación de **Tesorería Crown** en anitaERP. Vale para Crown y para cada sala de juego por separado: Cipolletti, Catriel, General Roca, Choele Choel, Villa Regina, Viedma, Las Grutas, El Faro y Cinco Saltos. Cada sala tiene su propia jornada, sus cajeros, sus cotizaciones y su numeración. Una sala no mezcla comprobantes con otra.
+Manual de operación de **Tesorería Crown** en anitaERP. Vale para Crown y para cada sala de juego por separado (orden de reportes): Cipolletti, Gral. Roca, Viedma, Las Grutas, Catriel, Choele Choel, Villa Regina y Cinco Saltos. El Faro está cerrado y no opera en tesorería ni Flash. Cada sala tiene su propia jornada, sus cajeros, sus cotizaciones y su numeración. Una sala no mezcla comprobantes con otra.
 
 El menú es **Tesorería Crown**. La operación del día está en **Jornada**. El listado de habilitaciones y rendiciones está en **Habilitaciones**.
 

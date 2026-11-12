@@ -5,6 +5,7 @@ namespace App\Exports\Caja\Flash;
 use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
+use App\Support\Export\ExcelNumericCellsSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -173,6 +174,16 @@ class FlashCajaHistoricoDiarioExport implements FromView, ShouldAutoSize, WithCo
                 $sheet->getRowDimension($this->filaCabecerasExcel)->setRowHeight(32);
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+
+                if (ExcelFormatoNumero::esAuto($this->formatoNumero)) {
+                    ExcelNumericCellsSupport::forzarRangoDatos(
+                        $sheet,
+                        $this->filaPrimeraDatosExcel,
+                        3,
+                        ['AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV', 'AW', 'AX'],
+                        ExcelFormatoNumero::mascara(2),
+                    );
+                }
             },
         ];
     }

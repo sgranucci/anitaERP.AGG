@@ -225,6 +225,7 @@ class FacturacionJuegoController extends Controller
                 'cuentacontableRuletaEl',
                 'cuentacontableDelRio',
                 'cuentacontableBetsur',
+                'cuentacontableApuestas',
                 'centrocosto',
             ])
             ->orderBy('sala_id')
@@ -232,8 +233,10 @@ class FacturacionJuegoController extends Controller
 
         $sucDelRio = (int) old('sucursal_del_rio', $parametro->sucursal_del_rio ?? 67);
         $sucBetsur = (int) old('sucursal_betsur', $parametro->sucursal_betsur ?? 68);
+        $sucApuestas = (int) old('sucursal_apuestas', $parametro->sucursal_apuestas ?? 0);
         $pvDelRioIdOld = (int) old('puntoventa_del_rio_id', 0);
         $pvBetsurIdOld = (int) old('puntoventa_betsur_id', 0);
+        $pvApuestasIdOld = (int) old('puntoventa_apuestas_id', 0);
 
         return view('ventas.facturacion_juego.configuracion', [
             'parametro' => $parametro,
@@ -244,6 +247,9 @@ class FacturacionJuegoController extends Controller
             'pvBetsur' => $pvBetsurIdOld > 0
                 ? $this->puntoventaParaFormularioPorId($pvBetsurIdOld)
                 : $this->puntoventaParaFormularioPorSucursal($sucBetsur),
+            'pvApuestas' => $pvApuestasIdOld > 0
+                ? $this->puntoventaParaFormularioPorId($pvApuestasIdOld)
+                : $this->puntoventaParaFormularioPorSucursal($sucApuestas),
         ]);
     }
 
@@ -254,11 +260,12 @@ class FacturacionJuegoController extends Controller
         $parametro = FacturacionJuegoConfigSupport::parametro();
         $sucDelRio = $this->sucursalDesdePuntoventaId((int) $request->input('puntoventa_del_rio_id', 0));
         $sucBetsur = $this->sucursalDesdePuntoventaId((int) $request->input('puntoventa_betsur_id', 0));
-        if ($sucDelRio <= 0 || $sucBetsur <= 0) {
+        $sucApuestas = $this->sucursalDesdePuntoventaId((int) $request->input('puntoventa_apuestas_id', 0));
+        if ($sucDelRio <= 0 || $sucBetsur <= 0 || $sucApuestas <= 0) {
             return redirect()
                 ->route('facturacion_juego_configuracion')
                 ->withInput()
-                ->with('mensaje_error', 'Indique los puntos de venta Del Río online y Betsur.');
+                ->with('mensaje_error', 'Indique los puntos de venta Del Río, Betsur y Apuestas deportivas.');
         }
 
         $parametro->fill([
@@ -272,6 +279,7 @@ class FacturacionJuegoController extends Controller
             'tipo_per_online' => strtoupper(trim((string) $request->input('tipo_per_online', 'COL'))),
             'sucursal_del_rio' => $sucDelRio,
             'sucursal_betsur' => $sucBetsur,
+            'sucursal_apuestas' => $sucApuestas,
             'letra' => strtoupper(substr(trim((string) $request->input('letra', 'B')), 0, 1)) ?: 'B',
             'tipoasiento_abreviatura' => strtoupper(trim((string) $request->input('tipoasiento_abreviatura', 'VTA'))),
         ]);
@@ -292,6 +300,7 @@ class FacturacionJuegoController extends Controller
                 'cuentacontable_ruleta_el_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_ruleta_el_codigo'] ?? '')),
                 'cuentacontable_del_rio_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_del_rio_codigo'] ?? '')),
                 'cuentacontable_betsur_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_betsur_codigo'] ?? '')),
+                'cuentacontable_apuestas_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_apuestas_codigo'] ?? '')),
                 'centrocosto_id' => $this->resolverIdPorCodigo(Centrocosto::class, (string) ($datos['centrocosto_codigo'] ?? '')),
                 'activo' => ! empty($datos['activo']),
             ]);

@@ -28,6 +28,7 @@ class LibroIvaDigitalService
      * @param  array{
      *     por_fecha_jornada?: bool,
      *     prorrateo_cf_global?: bool,
+     *     coeficiente_iva_indirecto?: float,
      *     completar_compras_anita?: bool,
      *     completar_fsl_anita?: bool
      * }  $opciones
@@ -85,6 +86,7 @@ class LibroIvaDigitalService
             'opciones' => [
                 'por_fecha_jornada' => (bool) ($opciones['por_fecha_jornada'] ?? false),
                 'prorrateo_cf_global' => (bool) ($opciones['prorrateo_cf_global'] ?? false),
+                'coeficiente_iva_indirecto' => max(0.0, (float) ($opciones['coeficiente_iva_indirecto'] ?? 1.0)),
                 'completar_compras_anita' => (bool) ($opciones['completar_compras_anita'] ?? true),
                 'completar_fsl_anita' => (bool) ($opciones['completar_fsl_anita'] ?? true),
             ],

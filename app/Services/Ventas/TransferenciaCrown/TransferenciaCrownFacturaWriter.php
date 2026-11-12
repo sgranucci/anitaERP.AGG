@@ -176,7 +176,7 @@ final class TransferenciaCrownFacturaWriter
             $nombre = (string) $cliente->nombre;
         }
         $codigo = TransferenciaCrownComprobante::codigoVisible($fila);
-        $cuit = trim((string) ($fila['cuit'] ?? ''));
+        $cuit = preg_replace('/\D+/', '', (string) ($fila['cuit'] ?? '')) ?? '';
         if ($cuit !== '') {
             $leyenda .= ' CUIT '.$cuit;
         }
@@ -187,7 +187,7 @@ final class TransferenciaCrownFacturaWriter
 
         return DB::transaction(function () use (
             $fila, $usuarioId, $leyenda, $lineas, $tipo, $puntoventa, $empresaId,
-            $fecha, $jornada, $cliente, $signo, $total, $monedaId, $cotizacion, $nombre, $codigo, $neto
+            $fecha, $jornada, $cliente, $signo, $total, $monedaId, $cotizacion, $nombre, $codigo, $neto, $cuit
         ): array {
             $venta = Venta::query()->create([
                 'fecha' => $fecha,
@@ -205,6 +205,7 @@ final class TransferenciaCrownFacturaWriter
                 'leyenda' => mb_substr($leyenda, 0, 240),
                 'codigo' => $codigo,
                 'nombre' => mb_substr($nombre, 0, 120),
+                'nroinscripcion' => $cuit !== '' ? $cuit : null,
                 'domicilio' => trim((string) ($fila['domicilio'] ?? '')) !== '' ? (string) $fila['domicilio'] : ' ',
                 'pais_id' => (int) ($cliente->pais_id ?? 0) > 0 ? (int) $cliente->pais_id : 1,
                 'condicioniva_id' => $cliente->condicioniva_id,

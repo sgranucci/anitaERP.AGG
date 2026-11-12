@@ -22,6 +22,8 @@ final class FacturacionJuegoTipoSupport
 
     public const RUBRO_BETSUR = 'betsur';
 
+    public const RUBRO_APUESTAS = 'apuestas';
+
     /**
      * @return list<string>
      */
@@ -33,12 +35,41 @@ final class FacturacionJuegoTipoSupport
             self::RUBRO_RULETA_EL,
             self::RUBRO_DEL_RIO,
             self::RUBRO_BETSUR,
+            self::RUBRO_APUESTAS,
+        ];
+    }
+
+    /**
+     * Rubros de sala física (una factura por sala/día).
+     *
+     * @return list<string>
+     */
+    public static function rubrosSala(): array
+    {
+        return [
+            self::RUBRO_MESA,
+            self::RUBRO_SLOT,
+            self::RUBRO_RULETA_EL,
+        ];
+    }
+
+    /**
+     * Rubros globales online (una sola factura por día, no por sala).
+     *
+     * @return list<string>
+     */
+    public static function rubrosOnline(): array
+    {
+        return [
+            self::RUBRO_DEL_RIO,
+            self::RUBRO_BETSUR,
+            self::RUBRO_APUESTAS,
         ];
     }
 
     public static function esOnline(string $rubro): bool
     {
-        return in_array($rubro, [self::RUBRO_DEL_RIO, self::RUBRO_BETSUR], true);
+        return in_array($rubro, self::rubrosOnline(), true);
     }
 
     public static function letra(): string
@@ -58,6 +89,7 @@ final class FacturacionJuegoTipoSupport
             self::RUBRO_RULETA_EL => 'Ruleta El.',
             self::RUBRO_DEL_RIO => 'Del Río online',
             self::RUBRO_BETSUR => 'Betsur',
+            self::RUBRO_APUESTAS => 'Apuestas deportivas',
             default => 'Juego',
         });
     }
@@ -73,7 +105,7 @@ final class FacturacionJuegoTipoSupport
             self::RUBRO_RULETA_EL => $ganancia
                 ? (string) $p->tipo_gan_ruleta_el
                 : (string) $p->tipo_per_ruleta_el,
-            self::RUBRO_DEL_RIO, self::RUBRO_BETSUR => $ganancia
+            self::RUBRO_DEL_RIO, self::RUBRO_BETSUR, self::RUBRO_APUESTAS => $ganancia
                 ? (string) ($p->tipo_gan_online ?: 'FOL')
                 : (string) ($p->tipo_per_online ?: 'COL'),
             default => throw new InvalidArgumentException('Rubro de juego inválido: '.$rubro),
@@ -81,7 +113,7 @@ final class FacturacionJuegoTipoSupport
     }
 
     /**
-     * PV Anita del comprobante: sala física o sucursal on-line / Betsur.
+     * PV Anita del comprobante: sala física o sucursal Del Río / Betsur / Apuestas.
      */
     public static function sucursalAnitaParaRubro(string $rubro, int $sucursalSala): int
     {
@@ -92,6 +124,7 @@ final class FacturacionJuegoTipoSupport
                 ?: config('caja_anita.sucursal_del_rio_online', 67)),
             self::RUBRO_BETSUR => (int) ($p->sucursal_betsur
                 ?: config('caja_anita.sucursal_betsur_online', 68)),
+            self::RUBRO_APUESTAS => (int) ($p->sucursal_apuestas ?? 0),
             default => $sucursalSala,
         };
     }

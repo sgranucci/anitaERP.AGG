@@ -12,6 +12,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalValidacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasConsumidorFinalSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use PHPUnit\Framework\TestCase;
@@ -190,6 +191,27 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertFalse(LibroIvaDigitalMapeosSupport::esCodigoVentaTuriva('FAC B 00001-00000001'));
         $this->assertFalse(LibroIvaDigitalMapeosSupport::esTipoTuriva('001'));
         $this->assertFalse(LibroIvaDigitalMapeosSupport::esLetraTuriva('B'));
+    }
+
+    public function test_cuit_desde_leyenda_import_pxsol(): void
+    {
+        $this->assertSame(
+            '30715375482',
+            LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda(
+                'Importación ARCA FAC A 00127-00001107 CUIT 30715375482',
+            ),
+        );
+        $this->assertSame(
+            '30660806977',
+            LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda(
+                'Importación ARCA FAC A 00127-00001106 CUIT 30660806977',
+            ),
+        );
+        $this->assertSame('', LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda('Sin dato fiscal'));
+        $this->assertSame('', LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda('CUIT 123'));
+        $this->assertTrue(LibroIvaDigitalVentasConsumidorFinalSupport::letraExigeCuit('A'));
+        $this->assertTrue(LibroIvaDigitalVentasConsumidorFinalSupport::letraExigeCuit('M'));
+        $this->assertFalse(LibroIvaDigitalVentasConsumidorFinalSupport::letraExigeCuit('B'));
     }
 
     public function test_fbi_fsl_mapean_factura_b_sin_cae_informables(): void

@@ -185,13 +185,58 @@
                         <button type="button" onclick="sub()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
                             <i class="fa fa-undo"></i> Generar nota de cr&eacute;dito
                         </button>
+                    @elseif (! empty($asientoCuentasPuedeGuardar))
+                        <button type="submit" form="form-asiento-factura" class="btn btn-success">
+                            <i class="fa fa-save"></i> Actualizar asiento contable
+                        </button>
+                        <span class="text-muted small ml-2">Solo cuentas del asiento. Requiere per&iacute;odo contable abierto (o permiso de per&iacute;odo cerrado).</span>
                     @endif
                 </div>
             </form>
+            @if (! empty($asientoCuentasPuedeGuardar))
+            <form id="form-asiento-factura" action="{{ route('actualizar_asiento_factura', ['id' => $data->id]) }}" method="POST" class="d-none">
+                @csrf @method('put')
+            </form>
+            <script>
+                (function () {
+                    var formAsiento = document.getElementById('form-asiento-factura');
+                    var formGeneral = document.getElementById('formgeneral');
+                    if (!formAsiento || !formGeneral) {
+                        return;
+                    }
+                    formAsiento.addEventListener('submit', function () {
+                        formAsiento.querySelectorAll('[data-asiento-clone="1"]').forEach(function (n) {
+                            n.parentNode.removeChild(n);
+                        });
+                        var names = [
+                            'tipoasiento_id', 'fechaasiento', 'observacionasiento', 'numeroasiento', 'idasiento',
+                            'cuentacontable_ids[]', 'codigoasientos[]', 'nombrecuentacontables[]',
+                            'carga_cuentacontable_manuales[]', 'centrocostoasiento_ids[]', 'monedaasiento_ids[]',
+                            'debeasientos[]', 'haberasientos[]', 'cotizacionasientos[]', 'observacionasientos[]'
+                        ];
+                        names.forEach(function (name) {
+                            formGeneral.querySelectorAll('[name="' + name + '"]').forEach(function (el) {
+                                var clone = el.cloneNode(true);
+                                clone.removeAttribute('id');
+                                clone.setAttribute('data-asiento-clone', '1');
+                                if (clone.disabled) {
+                                    clone.disabled = false;
+                                }
+                                if (el.tagName === 'SELECT') {
+                                    clone.value = el.value;
+                                }
+                                formAsiento.appendChild(clone);
+                            });
+                        });
+                    });
+                })();
+            </script>
+            @endif
         </div>
     </div>
 </div>
 @include('includes.compras.arca_apoc_validacion_modal')
 @include('includes.ventas.modalconsultatipotransaccion')
+@include('includes.contable.modalconsultacuentacontable')
 @include('includes.proceso-overlay-factura')
 @endsection

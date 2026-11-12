@@ -99,6 +99,16 @@ final class TesoreriaCrownRendicionCampos
         return in_array($tipoTarea, ['G', 'H'], true);
     }
 
+    public static function esCajaGastronomia(?string $tipoTarea): bool
+    {
+        return $tipoTarea === 'G';
+    }
+
+    public static function esCajaHotel(?string $tipoTarea): bool
+    {
+        return $tipoTarea === 'H';
+    }
+
     /**
      * @return array<string, array{titulo: string, ayuda: string, campos: array<string, array{label: string, tipo: string, negativo: bool}>}>
      */
@@ -109,6 +119,13 @@ final class TesoreriaCrownRendicionCampos
             unset($grupos['gastro']);
         } else {
             $grupos['medios'] = self::valoresCompactosGastroHotel($tipoTarea);
+            if (self::esCajaGastronomia($tipoTarea)) {
+                $grupos['gastro']['titulo'] = 'Gastronomía';
+                $grupos['gastro']['ayuda'] = 'X del cierre de mozo (automático). Completá invitaciones, Z, notas de crédito y fallo si aplica.';
+            } else {
+                $grupos['gastro']['titulo'] = 'Hotel';
+                $grupos['gastro']['ayuda'] = 'X y Z: elegí cierres en el panel o Traer de PXSol, y «Aplicar a la rendición».';
+            }
         }
         foreach ($grupos as $clave => $grupo) {
             $grupos[$clave]['campos'] = array_filter(

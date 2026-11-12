@@ -85,6 +85,16 @@
                 'bs_win' => 'Win',
             ],
         ],
+        'apuestas' => [
+            'titulo' => 'Apuestas deportivas',
+            'icono' => 'fa-futbol-o',
+            'campos' => [
+                'ad_att' => 'Attendance',
+                'ad_coin_in' => 'Coin in (apostado)',
+                'ad_cage_bal' => 'Cage bal. (pagado)',
+                'ad_win' => 'Win',
+            ],
+        ],
         'otros' => [
             'titulo' => 'Torneos / Hospitality',
             'icono' => 'fa-cutlery',
@@ -98,7 +108,7 @@
             ],
         ],
     ];
-    $enteros = ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el', 'ol_att', 'bs_att'];
+    $enteros = ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el', 'ol_att', 'bs_att', 'ad_att'];
 @endphp
 <div class="row fc-edit">
     <div class="col-12">

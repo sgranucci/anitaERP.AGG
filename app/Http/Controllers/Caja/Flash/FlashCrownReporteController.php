@@ -2,23 +2,25 @@
 
 namespace App\Http\Controllers\Caja\Flash;
 
+use App\Exports\Caja\Flash\FlashCrownInformeExport;
 use App\Exports\Caja\Flash\FlashCrownPeriodoExport;
 use App\Http\Controllers\Controller;
 use App\Mail\Caja\Flash\FlashCrownInforme;
 use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\Flash\FlashCrownSuscripcion;
-use App\Models\Configuracion\Sala;
 use App\Services\Caja\Flash\FlashCrownDistribucionService;
 use App\Support\Caja\Flash\FlashCrownInformeDestinatariosSupport;
 use App\Support\Caja\Flash\FlashCrownInformeSupport;
 use App\Support\Caja\Flash\FlashCrownPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashCrownSuscripcionSupport;
+use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FlashCrownReporteController extends Controller
 {
@@ -107,6 +109,26 @@ class FlashCrownReporteController extends Controller
             ->with('mensaje', 'Destinatarios guardados.');
     }
 
+    public function exportarInforme(Request $request): BinaryFileResponse
+    {
+        $this->assertCrown();
+        can('exportar-flash-reporte-crown');
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '300');
+
+        $fecha = $this->fechaPedida($request);
+        $formato = FlashCrownInformeSupport::normalizarFormato($request->input('formato'));
+        $informe = $this->informeSupport->armar($formato, $fecha);
+
+        $nombre = match ($formato) {
+            FlashCrownInformeSupport::FORMATO_GAMING => 'gaming_revenues_'.$fecha->format('Ymd').'.xlsx',
+            FlashCrownInformeSupport::FORMATO_DAILY => 'daily_flash_'.$fecha->format('Ymd').'.xlsx',
+            default => 'flash_crown_'.$fecha->format('Ymd').'.xlsx',
+        };
+
+        return Excel::download(new FlashCrownInformeExport($informe, $formato), $nombre);
+    }
+
     public function exportar(Request $request)
     {
         $this->assertCrown();
@@ -123,10 +145,10 @@ class FlashCrownReporteController extends Controller
             ->whereDate('fecha', '>=', $desde->toDateString())
             ->whereDate('fecha', '<=', $hasta->toDateString())
             ->when($soloValidados, fn ($q) => $q->where('validado', true))
-            ->whereIn('sala_id', Sala::query()->where('codigo', '!=', 'AC')->pluck('id'))
+            ->whereIn('sala_id', TesoreriaCrownSalaSupport::idsOperativos())
             ->orderBy('fecha')
-            ->orderBy('sala_id')
             ->get();
+        $filas = TesoreriaCrownSalaSupport::ordenarColeccionPorFechaYSala($filas);
 
         $nombre = sprintf('flash_crown_%s_%s.xlsx', $desde->format('Ymd'), $hasta->format('Ymd'));
 

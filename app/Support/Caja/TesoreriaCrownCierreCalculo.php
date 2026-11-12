@@ -51,7 +51,7 @@ final class TesoreriaCrownCierreCalculo
     public static function de(TesoreriaCrownAsignacion $asignacion, bool $conPiezas = true): array
     {
         self::cargarRelaciones($asignacion);
-        $tarea = (string) ($asignacion->cajero->tipo_tarea ?? $asignacion->tipo_tarea);
+        $tarea = $asignacion->tipoTareaEfectiva();
 
         return self::calcular(
             $tarea,

@@ -3,6 +3,7 @@
 namespace App\Services\Caja;
 
 use App\ApiAnita;
+use App\Models\Caja\TesoreriaCrownCasinoOnline;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Caja\TesoreriaCrownSlot;
@@ -154,19 +155,78 @@ class TesoreriaCrownResultadoOnlineAnitaImportService
             if ($usuarioId) {
                 $datos['usuario_id'] = $usuarioId;
             }
+            // Slots por sala: sin pisar Del Río/Betsur (viven en carga diaria global).
+            $slots = [
+                'empresa_id' => $datos['empresa_id'],
+                'sala_id' => $datos['sala_id'],
+                'fecha' => $datos['fecha'],
+                'coin_in' => $datos['coin_in'],
+                'coin_out' => $datos['coin_out'],
+                'pago_manual' => $datos['pago_manual'],
+                'cantidad_slots' => $datos['cantidad_slots'],
+                'slot_resultado' => $datos['slot_resultado'],
+                'subtotal_slot' => $datos['subtotal_slot'],
+                'usuario_id' => $datos['usuario_id'] ?? null,
+            ];
             if ($fila['accion'] === 'crear') {
-                TesoreriaCrownResultadoOnline::query()->create($datos);
+                TesoreriaCrownResultadoOnline::query()->create($slots);
                 $altas++;
             } elseif ($fila['accion'] === 'actualizar' && $fila['id']) {
                 $row = TesoreriaCrownResultadoOnline::query()->find($fila['id']);
                 if ($row) {
-                    $row->fill($datos)->save();
+                    $row->fill($slots)->save();
                     $cambios++;
                 }
             }
+            $this->upsertCasinoOnlineDiario($datos, $usuarioId);
         }
 
         return ['altas' => $altas, 'cambios' => $cambios];
+    }
+
+    /**
+     * @param  array<string, mixed>  $datos
+     */
+    private function upsertCasinoOnlineDiario(array $datos, ?int $usuarioId): void
+    {
+        $fecha = (string) ($datos['fecha'] ?? '');
+        if ($fecha === '') {
+            return;
+        }
+        $payload = [
+            'empresa_id' => $datos['empresa_id'] ?? null,
+            'fecha' => $fecha,
+            'attendance' => (int) ($datos['attendance'] ?? 0),
+            'apostado' => (float) ($datos['apostado'] ?? 0),
+            'pagado' => (float) ($datos['pagado'] ?? 0),
+            'drop' => (float) ($datos['drop'] ?? 0),
+            'resultado' => (float) ($datos['resultado'] ?? 0),
+            'porcentaje' => (float) ($datos['porcentaje'] ?? 0),
+            'poder_publico' => (float) ($datos['poder_publico'] ?? 0),
+            'betsur_attendance' => (int) ($datos['betsur_attendance'] ?? 0),
+            'betsur_apostado' => (float) ($datos['betsur_apostado'] ?? 0),
+            'betsur_pagado' => (float) ($datos['betsur_pagado'] ?? 0),
+            'betsur_drop' => (float) ($datos['betsur_drop'] ?? 0),
+            'betsur_resultado' => (float) ($datos['betsur_resultado'] ?? 0),
+            'betsur_porcentaje' => (float) ($datos['betsur_porcentaje'] ?? 0),
+            'betsur_poder_publico' => (float) ($datos['betsur_poder_publico'] ?? 0),
+            'usuario_id' => $usuarioId,
+        ];
+        $actual = TesoreriaCrownCasinoOnline::deFecha($fecha);
+        if ($actual) {
+            // Conserva apuestas deportivas ya cargadas a mano.
+            $actual->fill($payload)->save();
+
+            return;
+        }
+        $payload['ad_attendance'] = 0;
+        $payload['ad_apostado'] = 0;
+        $payload['ad_pagado'] = 0;
+        $payload['ad_drop'] = 0;
+        $payload['ad_resultado'] = 0;
+        $payload['ad_porcentaje'] = 0;
+        $payload['ad_poder_publico'] = 0;
+        TesoreriaCrownCasinoOnline::query()->create($payload);
     }
 
     /**

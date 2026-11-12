@@ -95,6 +95,41 @@ final class LibroIvaDigitalIvaSimpleSupport
     }
 
     /**
+     * CF computable por tipo Anita (p-ivasimple.c procesa_compra).
+     * FN/DN → 0; FI/DI e ICO/IDO → IVA × coeficiente; resto → IVA.
+     * Con prorrateo CF global → 0 (se carga en solapa CF Computable Global).
+     */
+    public static function ivaComputablePorTipoCompra(
+        string $abreviaturaTipo,
+        float $iva,
+        float $coeficienteIvaIndirecto = 1.0,
+        bool $prorrateoGlobal = false,
+    ): float {
+        if ($prorrateoGlobal) {
+            return 0.0;
+        }
+
+        $abrev = LibroIvaDigitalComprasAnitaArmadoSupport::normalizarAbreviaturaTipo($abreviaturaTipo);
+        if ($abrev === '') {
+            return round($iva, 2);
+        }
+
+        if (str_starts_with($abrev, 'FN') || str_starts_with($abrev, 'DN')) {
+            return 0.0;
+        }
+
+        $coef = max(0.0, $coeficienteIvaIndirecto);
+        if (str_starts_with($abrev, 'FI')
+            || str_starts_with($abrev, 'DI')
+            || in_array($abrev, ['ICO', 'IDO'], true)
+        ) {
+            return round($iva * $coef, 2);
+        }
+
+        return round($iva, 2);
+    }
+
+    /**
      * Agrupa neto + IVA de la misma alícuota/concepto (G e I van en el mismo renglón ARCA).
      *
      * @param  array<string, array<string, mixed>>  $acumulado
@@ -134,7 +169,10 @@ final class LibroIvaDigitalIvaSimpleSupport
         $acumulado[$key]['neto'] += $neto;
         $acumulado[$key]['iva'] += $iva;
         if (! $prorrateoGlobal) {
-            $acumulado[$key]['iva_computable'] += $iva;
+            $computable = array_key_exists('iva_computable', $fila)
+                ? (float) $fila['iva_computable']
+                : $iva;
+            $acumulado[$key]['iva_computable'] += $computable;
         }
         if ($tasa > 0 && (float) ($acumulado[$key]['tasa'] ?? 0) <= 0) {
             $acumulado[$key]['tasa'] = $tasa;
@@ -277,8 +315,11 @@ final class LibroIvaDigitalIvaSimpleSupport
      *     total_monotributo: float
      * }
      */
-    public static function creditoDesdeRegistrosLibro(array $registros, bool $prorrateoGlobal = false): array
-    {
+    public static function creditoDesdeRegistrosLibro(
+        array $registros,
+        bool $prorrateoGlobal = false,
+        float $coeficienteIvaIndirecto = 1.0,
+    ): array {
         $acum = [];
         $acumRest = [];
         $totalExento = 0.0;
@@ -289,6 +330,7 @@ final class LibroIvaDigitalIvaSimpleSupport
             $meta = is_array($registro['iva_simple'] ?? null) ? $registro['iva_simple'] : [];
             $cabecera = is_array($registro['cabecera'] ?? null) ? $registro['cabecera'] : [];
             $tipo = str_pad((string) ($cabecera['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
+            $abreviaturaTipo = (string) ($meta['abreviatura_tipo'] ?? '');
             $restitucion = (bool) ($meta['restitucion'] ?? false)
                 || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipo);
             $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
@@ -321,6 +363,12 @@ final class LibroIvaDigitalIvaSimpleSupport
                         ),
                     'neto' => $neto,
                     'iva' => $iva,
+                    'iva_computable' => self::ivaComputablePorTipoCompra(
+                        $abreviaturaTipo,
+                        $iva,
+                        $coeficienteIvaIndirecto,
+                        $prorrateoGlobal,
+                    ),
                 ];
                 if ($restitucion) {
                     self::acumularCredito($acumRest, $fila, $prorrateoGlobal, true);

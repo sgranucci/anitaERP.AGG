@@ -44,16 +44,24 @@
                     <div class="form-group row">
                         <label class="col-lg-2 control-label text-right pr-2" for="destinatarios">Destinatarios</label>
                         <div class="col-lg-8">
-                            <textarea name="destinatarios" id="destinatarios" class="form-control form-control-sm" rows="6" required>{{ $destinatarios }}</textarea>
-                            <small class="text-muted">Un mail por línea. El envío lo dispara esta pantalla: no sale solo.</small>
+                            <textarea name="destinatarios" id="destinatarios" class="form-control form-control-sm" rows="6">{{ $destinatarios }}</textarea>
+                            <small class="text-muted">Un mail por línea. Solo hace falta para Enviar / Guardar destinatarios.</small>
                         </div>
                     </div>
                     <div class="form-group row mb-0">
                         <div class="col-lg-8 offset-lg-2">
                             <button type="submit" class="btn btn-primary btn-sm">Vista previa</button>
-                            @if ($puedeEnviar)
+                            @if (can('exportar-flash-reporte-crown', false))
                                 <button type="submit"
                                         class="btn btn-success btn-sm"
+                                        id="btn-informe-flash-excel"
+                                        formaction="{{ route('exportar_informe_flash_reporte_crown') }}">
+                                    <i class="fa fa-file-excel-o"></i> Generar Excel
+                                </button>
+                            @endif
+                            @if ($puedeEnviar)
+                                <button type="submit"
+                                        class="btn btn-outline-success btn-sm"
                                         form="form-informe-flash"
                                         formaction="{{ route('enviar_flash_reporte_crown') }}"
                                         formmethod="post"
@@ -99,7 +107,10 @@
                         @if ($formato === 'gaming')
                             @include('caja.flash_crown.reporte.partials.tabla_gaming', ['informe' => $informe])
                         @elseif ($formato === 'daily')
-                            @include('caja.flash_crown.reporte.partials.tabla_daily', ['informe' => $informe])
+                            @include('caja.flash_crown.reporte.partials.tabla_daily', [
+                                'informe' => $informe,
+                                'con_solapas' => true,
+                            ])
                         @else
                             @include('caja.flash_crown.reporte.partials.tabla_completo', ['informe' => $informe])
                         @endif
@@ -116,13 +127,18 @@
 (function () {
     var form = document.getElementById('form-informe-flash');
     var overlay = document.getElementById('informe-flash-overlay');
+    var exportAbort = null;
     if (!form || !overlay) {
         return;
     }
-    function mostrar(titulo) {
+    function mostrar(titulo, subtitulo) {
         var nodo = document.getElementById('informe-flash-titulo');
         if (nodo && titulo) {
             nodo.textContent = titulo;
+        }
+        var sub = document.getElementById('informe-flash-subtitulo');
+        if (sub && subtitulo) {
+            sub.textContent = subtitulo;
         }
         overlay.classList.remove('d-none');
         overlay.style.display = 'flex';
@@ -133,16 +149,98 @@
         overlay.style.display = '';
         overlay.setAttribute('aria-hidden', 'true');
     }
+    function nombreDesdeDisposition(disposition, fallback) {
+        if (!disposition) {
+            return fallback;
+        }
+        var match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(disposition);
+        if (!match) {
+            return fallback;
+        }
+        var raw = (match[1] || match[2] || match[3] || '').trim();
+        try {
+            return decodeURIComponent(raw.replace(/['"]/g, ''));
+        } catch (e) {
+            return raw.replace(/['"]/g, '') || fallback;
+        }
+    }
+    function dispararDescargaBlob(blob, filename) {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'informe_flash.xlsx';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(function () {
+            window.URL.revokeObjectURL(url);
+        }, 1500);
+    }
+    function descargarExcel(url) {
+        if (exportAbort) {
+            exportAbort.abort();
+        }
+        exportAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        mostrar('Generando Excel…', 'Armando el informe. Pulse Esc para cerrar este aviso.');
+        fetch(url, {
+            credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            signal: exportAbort ? exportAbort.signal : undefined
+        })
+            .then(function (res) {
+                if (!res.ok) {
+                    throw new Error('HTTP ' + res.status);
+                }
+                return res.blob().then(function (blob) {
+                    return {
+                        blob: blob,
+                        filename: nombreDesdeDisposition(res.headers.get('Content-Disposition'), 'informe_flash.xlsx')
+                    };
+                });
+            })
+            .then(function (pack) {
+                dispararDescargaBlob(pack.blob, pack.filename);
+                ocultar();
+            })
+            .catch(function (err) {
+                ocultar();
+                if (err && err.name === 'AbortError') {
+                    return;
+                }
+                alert((err && err.message) || 'No se pudo generar el Excel');
+            });
+    }
     form.addEventListener('submit', function (e) {
         if (!form.checkValidity()) {
             return;
         }
         var boton = e.submitter;
-        var accion = boton && boton.getAttribute('formaction') ? boton.textContent.trim() : 'Vista previa';
+        var formaction = boton && boton.getAttribute('formaction') ? boton.getAttribute('formaction') : '';
+        if (formaction.indexOf('/excel') !== -1 || (boton && boton.id === 'btn-informe-flash-excel')) {
+            e.preventDefault();
+            var params = new URLSearchParams(new FormData(form));
+            params.delete('_token');
+            params.delete('consultar');
+            params.delete('destinatarios');
+            var sep = formaction.indexOf('?') === -1 ? '?' : '&';
+            descargarExcel(formaction + sep + params.toString());
+            return;
+        }
+        var accion = formaction ? (boton.textContent || '').trim() : 'Vista previa';
         if (accion.indexOf('Guardar') === 0) {
             return;
         }
-        mostrar(accion.indexOf('Enviar') === 0 ? 'Enviando el informe…' : 'Armando la vista previa…');
+        mostrar(
+            accion.indexOf('Enviar') === 0 ? 'Enviando el informe…' : 'Armando la vista previa…',
+            'El mes acumulado recorre cada día. No cierre la página.'
+        );
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && exportAbort) {
+            exportAbort.abort();
+            ocultar();
+        }
     });
     window.addEventListener('pageshow', ocultar);
 })();
