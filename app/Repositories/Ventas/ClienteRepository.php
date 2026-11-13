@@ -42,6 +42,7 @@ use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaGeoSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteDocumentoAnitaSupport;
+use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
@@ -1438,7 +1439,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
-	 * Fechas históricas en cliente (Anita). Nunca leer el request ni la solapa nueva.
+	 * Fechas IVA para Anita: solapa cliente_exclusion_percepcion; fallback columnas legacy.
 	 *
 	 * @return array{0: string, 1: string}
 	 */
@@ -1453,6 +1454,17 @@ class ClienteRepository implements ClienteRepositoryInterface
 			if ($codigo !== '') {
 				$cliente = $this->queryClientePorCodigo($codigo)->first();
 			}
+		}
+
+		$clienteId = $cliente !== null ? (int) $cliente->id : 0;
+		[$desdeSolapa, $hastaSolapa] = ClienteExclusionPercepcionSupport::fechasIvaParaCabeceraAnita(
+			$clienteId > 0 ? $clienteId : null
+		);
+		if ($desdeSolapa !== null || $hastaSolapa !== null) {
+			return [
+				$this->fechaExclusionPivaParaAnita($desdeSolapa),
+				$this->fechaExclusionPivaParaAnita($hastaSolapa),
+			];
 		}
 
 		return [

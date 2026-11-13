@@ -6,8 +6,9 @@ use App\Models\Ventas\Cliente_Exclusion_Percepcion;
 use Carbon\Carbon;
 
 /**
- * Exclusiones / atenuaciones de percepción cargadas en el cliente (solo ERP).
+ * Exclusiones / atenuaciones de percepción cargadas en el cliente.
  * El porcentaje es la alícuota que se cobra durante la vigencia (0 = no percibe).
+ * IVA: un par de fechas va a Anita (clim_dfexcl_piva / clim_hfexcl_piva) en El Bierzo.
  */
 final class ClienteExclusionPercepcionSupport
 {
@@ -26,6 +27,84 @@ final class ClienteExclusionPercepcionSupport
         }
 
         return self::tasa($clienteId, 'IIBB', $provinciaId, $fecha);
+    }
+
+    /**
+     * Par de fechas IVA para cabecera Anita / columnas legacy del cliente.
+     * Anita solo tiene un slot: vigente hoy, si no la próxima futura, si no la más reciente.
+     *
+     * @return array{0: ?string, 1: ?string} Y-m-d o null
+     */
+    public static function fechasIvaParaCabeceraAnita(?int $clienteId, mixed $fechaReferencia = null): array
+    {
+        if ($clienteId === null || $clienteId <= 0) {
+            return [null, null];
+        }
+
+        return self::elegirFechasIvaParaCabecera(self::filasDelCliente($clienteId), $fechaReferencia);
+    }
+
+    /**
+     * @param  list<array{tipo: string, provincia_id: int|null, porcentaje: float, desde: string, hasta: string}>  $filas
+     * @return array{0: ?string, 1: ?string}
+     */
+    public static function elegirFechasIvaParaCabecera(array $filas, mixed $fechaReferencia = null): array
+    {
+        $hoy = self::normalizarFecha($fechaReferencia) ?? Carbon::today()->format('Y-m-d');
+        $iva = [];
+        foreach ($filas as $fila) {
+            if (($fila['tipo'] ?? '') !== 'IVA') {
+                continue;
+            }
+            if (($fila['provincia_id'] ?? null) !== null) {
+                continue;
+            }
+            $iva[] = $fila;
+        }
+        if ($iva === []) {
+            return [null, null];
+        }
+
+        $vigentes = [];
+        $futuras = [];
+        $pasadas = [];
+        foreach ($iva as $fila) {
+            $desde = (string) ($fila['desde'] ?? '');
+            $hasta = (string) ($fila['hasta'] ?? '');
+            if ($desde !== '' && $desde > $hoy) {
+                $futuras[] = $fila;
+                continue;
+            }
+            if ($hasta !== '' && $hasta < $hoy) {
+                $pasadas[] = $fila;
+                continue;
+            }
+            $vigentes[] = $fila;
+        }
+
+        if ($vigentes !== []) {
+            usort($vigentes, static fn (array $a, array $b): int => strcmp((string) $b['desde'], (string) $a['desde']));
+            $elegida = $vigentes[0];
+        } elseif ($futuras !== []) {
+            usort($futuras, static fn (array $a, array $b): int => strcmp((string) $a['desde'], (string) $b['desde']));
+            $elegida = $futuras[0];
+        } else {
+            usort($pasadas, static function (array $a, array $b): int {
+                $ha = (string) (($a['hasta'] !== '' ? $a['hasta'] : $a['desde']) ?? '');
+                $hb = (string) (($b['hasta'] !== '' ? $b['hasta'] : $b['desde']) ?? '');
+
+                return strcmp($hb, $ha);
+            });
+            $elegida = $pasadas[0];
+        }
+
+        $desde = (string) ($elegida['desde'] ?? '');
+        $hasta = (string) ($elegida['hasta'] ?? '');
+
+        return [
+            $desde !== '' ? $desde : null,
+            $hasta !== '' ? $hasta : null,
+        ];
     }
 
     public static function resetCache(): void

@@ -271,6 +271,54 @@ final class ArticuloStkmaeAnitaBridgeSupport
 				stkm_alerta_stock';
     }
 
+    /**
+     * Anita Bierzo usa stkm_cod_nomencl; FRASLE/legacy stkm_cod_nomenc; COT menciona stkm_cod_nomenclador.
+     */
+    public static function codigoNomencladorDesdeFila(object $data): string
+    {
+        foreach (['stkm_cod_nomencl', 'stkm_cod_nomenc', 'stkm_cod_nomenclador'] as $campo) {
+            if (! isset($data->{$campo})) {
+                continue;
+            }
+            $valor = trim((string) $data->{$campo});
+            if ($valor !== '' && strtoupper($valor) !== 'NULL') {
+                return $valor;
+            }
+        }
+
+        return '';
+    }
+
+    public static function unidadMedidaNomencladorDesdeFila(object $data): string
+    {
+        $valor = trim((string) ($data->stkm_umd_nomenc ?? ''));
+        if ($valor !== '' && strtoupper($valor) !== 'NULL') {
+            return $valor;
+        }
+
+        return '';
+    }
+
+    /**
+     * Campos mínimos para backfill de nomenclador Anita → ERP.
+     */
+    public static function camposListadoNomenclador(): string
+    {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return 'stkm_articulo';
+        }
+
+        if (config('app.empresa') === 'FRASLE') {
+            return 'stkm_articulo,stkm_cod_nomenc';
+        }
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            return 'stkm_articulo,stkm_cod_nomencl,stkm_umd_nomenc';
+        }
+
+        return 'stkm_articulo,stkm_cod_nomenc';
+    }
+
     public static function tabla(): string
     {
         return 'stkmae';

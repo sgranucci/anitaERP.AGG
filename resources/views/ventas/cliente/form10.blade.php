@@ -2,7 +2,7 @@
     <div class="card-body">
         <p class="text-muted mb-2">
             Al&iacute;cuota que se cobra durante la vigencia (0 = no percibe). IVA no lleva provincia; IIBB s&iacute;.
-            Solo aplica en facturaci&oacute;n mostrador, pedidos y remitos; no se env&iacute;a a Anita.
+            Facturaci&oacute;n mostrador, pedidos y remitos. En El Bierzo, las fechas IVA vigentes se env&iacute;an a Anita.
         </p>
         <table class="table table-sm table-bordered" id="exclusion-percepcion-table">
             <thead style="background:#85C1E9;color:#17202A;">

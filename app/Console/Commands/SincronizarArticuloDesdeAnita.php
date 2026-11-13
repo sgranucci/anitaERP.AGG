@@ -14,11 +14,12 @@ class SincronizarArticuloDesdeAnita extends Command
                             {--resync : Re-sincroniza todos los artículos (altas nuevas + actualización de existentes, conserva id ERP)}
                             {--solo-vencimiento : Solo actualiza articulo.vencimientoendia desde stkmae.stkm_vto_en_dias}
                             {--solo-unidadmedida : Solo actualiza unidadmedida_id / alternativa desde stkmae}
-                            {--dry-run : Con --solo-unidadmedida: informe sin escribir}
-                            {--ejecutar : Con --solo-unidadmedida: persiste}
+                            {--solo-nomenclador : Solo actualiza nomenclador / unidadmedidanomenclador desde stkmae}
+                            {--dry-run : Con --solo-unidadmedida/--solo-nomenclador: informe sin escribir}
+                            {--ejecutar : Con --solo-unidadmedida/--solo-nomenclador: persiste}
                             {--usuario= : ID usuario para altas (cuentas/estado; default: primer usuario)}';
 
-    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --resync: altas + actualización de todos. Con --solo-vencimiento: solo vencimientoendia. Con --solo-unidadmedida: solo UM (default dry-run). Con --sku: importa o actualiza ese artículo.';
+    protected $description = 'Importa artículos desde Anita (stkmae) vía ApiAnita. Sin --sku: solo altas nuevas. Con --resync: altas + actualización de todos. Con --solo-vencimiento: solo vencimientoendia. Con --solo-unidadmedida/--solo-nomenclador: solo esos campos (default dry-run). Con --sku: importa o actualiza ese artículo.';
 
     public function handle(ArticuloAnitaSyncService $sync): int
     {
@@ -81,6 +82,42 @@ class SincronizarArticuloDesdeAnita extends Command
                     $this->table(
                         ['SKU', 'UM actual', 'UM Anita', 'Alt actual', 'Alt Anita'],
                         array_map(static fn (array $c) => [$c['sku'], $c['de'], $c['a'], $c['de_alt'], $c['a_alt']], $muestra)
+                    );
+                    if (count($ret['cambios']) > 40) {
+                        $this->line('… y '.(count($ret['cambios']) - 40).' más.');
+                    }
+                }
+                foreach ($ret['advertencias'] as $w) {
+                    $this->warn($w);
+                }
+
+                return self::SUCCESS;
+            }
+
+            if ($this->option('solo-nomenclador')) {
+                if ($this->option('dry-run') && $this->option('ejecutar')) {
+                    $this->error('No combine --ejecutar con --dry-run.');
+
+                    return self::FAILURE;
+                }
+                $dryRun = ! $this->option('ejecutar');
+                $this->info($dryRun
+                    ? 'Dry-run: nomenclador de artículos desde Anita (no escribe).'
+                    : 'Persistiendo nomenclador de artículos desde Anita…');
+                $ret = $sync->sincronizarNomencladorDesdeAnita($dryRun, $sku !== '' ? $sku : null);
+                $this->info(
+                    'Anita: '.$ret['en_anita']
+                    .' · a actualizar: '.$ret['actualizados']
+                    .' · iguales: '.$ret['sin_cambio']
+                    .' · no en ERP: '.$ret['no_encontrados_erp']
+                    .' · Anita sin nomenclador: '.$ret['anita_sin_nomenclador']
+                    .($ret['dry_run'] ? ' · DRY-RUN' : ' · GRABADO')
+                );
+                $muestra = array_slice($ret['cambios'], 0, 40);
+                if ($muestra !== []) {
+                    $this->table(
+                        ['SKU', 'Nom. ERP', 'Nom. Anita', 'UMD ERP', 'UMD Anita'],
+                        array_map(static fn (array $c) => [$c['sku'], $c['de'], $c['a'], $c['de_umd'], $c['a_umd']], $muestra)
                     );
                     if (count($ret['cambios']) > 40) {
                         $this->line('… y '.(count($ret['cambios']) - 40).' más.');

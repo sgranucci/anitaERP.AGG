@@ -635,7 +635,8 @@ class Articulo extends Model implements Auditable
 
                 $usoarticulo_id = 1;
             }
-            $codigoNomenclador = $data->stkm_cod_nomenc ?? null;
+            $codigoNomenclador = ArticuloStkmaeAnitaBridgeSupport::codigoNomencladorDesdeFila($data);
+            $codigoNomenclador = $codigoNomenclador !== '' ? $codigoNomenclador : null;
 
             if (config('app.empresa') == 'EL BIERZO') {
                 $tipoarticulo_id = 1;
@@ -1146,7 +1147,7 @@ class Articulo extends Model implements Auditable
                         'usuario_id' => $usuario_id,
                         'fechaultimacompra' => $fechaultimacompra,
                         'usoarticulo_id' => $usoarticulo_id > 0 ? $usoarticulo_id : null,
-                        'unidadmedidanomenclador' => $data->stkm_umd_nomenc,
+                        'unidadmedidanomenclador' => ArticuloStkmaeAnitaBridgeSupport::unidadMedidaNomencladorDesdeFila($data) ?: null,
                         'codigobarra' => $data->stkm_art_cbarra,
                         'unidadreferenciacodigobarra' => $data->stkm_uref_cbarra,
                         'enviaalarma' => $enviaAlarma,
@@ -2156,14 +2157,14 @@ class Articulo extends Model implements Auditable
 						stkm_nombre_foto = '".$request->foto."',
 						stkm_cod_umd = '".$request->unidadmedida_id."',
 						stkm_cod_umd_alter = '".($request->unidadmedidalternativa_id ? $request->unidadmedidaalternativa_id : '0')."',
-						stkm_fecha_alta = '".$fecha."',
-						stkm_cod_nomencl = '".$request->nomenclador."',
+						stkm_fecha_alta = '".$fecha."'"
+                        .$this->sqlSetAnitaSiValor('stkm_cod_nomencl', $request->nomenclador ?? null).",
 						stkm_cta_var_pre = '".$request['grupocarne']."',
 						stkm_cc_var_pre = '".$codigoSenasa."',
 						stkm_cc_compra = '".'0'."',
 						stkm_terminal = '".$divide."',
-						stkm_tipo_articulo = '".$tipoArticulo."',
-						stkm_umd_nomenc = '".$request['unidadmedidanomenclador']."',
+						stkm_tipo_articulo = '".$tipoArticulo."'"
+                        .$this->sqlSetAnitaSiValor('stkm_umd_nomenc', $request['unidadmedidanomenclador'] ?? null).",
 						stkm_iniciales = '".$request['inicialproduccion']."',
 						stkm_tipo_producto = '".$tipoProducto."',
 						stkm_dias_proceso = '".$request['diasproceso']."',
@@ -2377,8 +2378,8 @@ class Articulo extends Model implements Auditable
 					stkm_articulo_prov  = '".$request->skuproveedor."', 
 					stkm_detalle2  = '".substr($request->detalle, -40)."',
 					stkm_pos_aranc  = '".$request->posicionaracelaria."',
-					stkm_lista_vigente = '".$request->vigenteenlista."',
-					stkm_cod_nomenc    = '".$request->nomenclador."',
+					stkm_lista_vigente = '".$request->vigenteenlista."'"
+                        .$this->sqlSetAnitaSiValor('stkm_cod_nomenc', $request->nomenclador ?? null).",
 					stkm_cod_umd       = '".$request->unidadmedida_id."',
 					stkm_tipo_articulo = '".$abreviaturaTipoArticulo."',
 					stkm_cta_var_pre   = '".$codigoCuentacontableVariacionPrecio."',
@@ -2441,8 +2442,8 @@ class Articulo extends Model implements Auditable
 						stkm_nombre_foto = '".$request->foto."',
 						stkm_cod_umd = '".$request->unidadmedida_id."',
 						stkm_cod_umd_alter = '".($request->unidadmedidalternativa_id ? $request->unidadmedidaalternativa_id : '0')."',
-						stkm_fecha_alta = '".$fecha."',
-						stkm_cod_nomenc = '".$request->nomenclador."',
+						stkm_fecha_alta = '".$fecha."'"
+                        .$this->sqlSetAnitaSiValor('stkm_cod_nomenc', $request->nomenclador ?? null).",
 						stkm_tipo_articulo = '".$request->usoarticulo_id."',
 						stkm_tipo_corte = '".($request->tipocorte_id ? $request->tipocorte_id : 0)."',
 						stkm_puntera = '".($request->punteras ? str_pad($request->punteras->articulo_id, 13, '0', STR_PAD_LEFT) : '')."',
@@ -2703,5 +2704,19 @@ class Articulo extends Model implements Auditable
         } else {
             $productoTercero = 'S';
         }
+    }
+
+    /**
+     * Fragmento SET para UPDATE Anita: solo si hay valor.
+     * Evita pisar stkm_cod_nomencl / stkm_umd_nomenc con vacío cuando el ERP no lo tiene.
+     */
+    private function sqlSetAnitaSiValor(string $columna, $valor): string
+    {
+        $texto = trim((string) ($valor ?? ''));
+        if ($texto === '' || strtoupper($texto) === 'NULL') {
+            return '';
+        }
+
+        return ",\n\t\t\t\t\t\t".$columna." = '".str_replace("'", "''", $texto)."'";
     }
 }

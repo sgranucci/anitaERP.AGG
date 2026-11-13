@@ -2,8 +2,10 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Exclusion_Percepcion;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use Auth;
 
 class Cliente_Exclusion_PercepcionRepository implements Cliente_Exclusion_PercepcionRepositoryInterface
@@ -64,7 +66,31 @@ class Cliente_Exclusion_PercepcionRepository implements Cliente_Exclusion_Percep
             $idsConservar
         );
 
+        $this->alinearColumnasLegacyIva((int) $clienteId);
+
         return true;
+    }
+
+    /**
+     * Mantiene desdefecha/hastafecha_exclusionpercepcioniva alineadas al slot IVA de Anita.
+     */
+    private function alinearColumnasLegacyIva(int $clienteId): void
+    {
+        if ($clienteId <= 0) {
+            return;
+        }
+
+        ClienteExclusionPercepcionSupport::resetCache();
+        [$desde, $hasta] = ClienteExclusionPercepcionSupport::fechasIvaParaCabeceraAnita($clienteId);
+
+        $cliente = Cliente::query()->find($clienteId);
+        if ($cliente === null) {
+            return;
+        }
+
+        $cliente->desdefecha_exclusionpercepcioniva = $desde;
+        $cliente->hastafecha_exclusionpercepcioniva = $hasta;
+        $cliente->save();
     }
 
     /**

@@ -430,6 +430,191 @@ class ArticuloAnitaSyncService
     }
 
     /**
+     * Actualiza solo articulo.nomenclador / unidadmedidanomenclador desde stkmae.
+     * No borra el ERP si Anita viene vacío (evita propagar un wipe previo).
+     *
+     * @return array{
+     *   dry_run: bool,
+     *   en_anita: int,
+     *   actualizados: int,
+     *   sin_cambio: int,
+     *   no_encontrados_erp: int,
+     *   anita_sin_nomenclador: int,
+     *   cambios: list<array{sku: string, de: string, a: string, de_umd: string, a_umd: string}>,
+     *   advertencias: list<string>
+     * }
+     */
+    public function sincronizarNomencladorDesdeAnita(bool $dryRun = true, ?string $sku = null, ?int $empresaId = null): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $advertencias = [];
+        $sku = is_string($sku) ? trim($sku) : '';
+
+        if (ArticuloStkmaeAnitaBridgeSupport::camposListadoNomenclador() === 'stkm_articulo') {
+            return [
+                'dry_run' => $dryRun,
+                'en_anita' => 0,
+                'actualizados' => 0,
+                'sin_cambio' => 0,
+                'no_encontrados_erp' => 0,
+                'anita_sin_nomenclador' => 0,
+                'cambios' => [],
+                'advertencias' => ['Este entorno no tiene columna de nomenclador en stkmae (Ferli).'],
+            ];
+        }
+
+        if ($sku !== '') {
+            $codigo = $this->resolverCodigoAnitaPorSku($sku, $empresaId);
+            if ($codigo === null) {
+                throw new \RuntimeException("Artículo «{$sku}» no encontrado en Anita (stkmae).");
+            }
+            $filas = ArticuloStkmaeAnitaBridgeSupport::listarDetallePorCodigos([$codigo], $empresaId);
+        } else {
+            $apiAnita = new ApiAnita;
+            $payload = [
+                'acc' => 'list',
+                'tabla' => 'stkmae',
+                'campos' => ArticuloStkmaeAnitaBridgeSupport::camposListadoNomenclador(),
+            ];
+            if ($empresaId !== null && $empresaId > 0) {
+                $payload = StockAnitaBridgeSupport::mergePayload($payload, $empresaId);
+            }
+            $respuesta = $apiAnita->apiCall($payload);
+            $filas = ApiAnita::decodificarListaFilas(is_string($respuesta) ? $respuesta : null);
+            if ($filas === []) {
+                $decoded = json_decode((string) $respuesta);
+                $filas = is_array($decoded) ? $decoded : [];
+            }
+        }
+
+        if ($filas === []) {
+            return [
+                'dry_run' => $dryRun,
+                'en_anita' => 0,
+                'actualizados' => 0,
+                'sin_cambio' => 0,
+                'no_encontrados_erp' => 0,
+                'anita_sin_nomenclador' => 0,
+                'cambios' => [],
+                'advertencias' => ['Anita no devolvió filas de stkmae (nomenclador).'],
+            ];
+        }
+
+        return $this->aplicarNomencladorDesdeFilasAnita($filas, $dryRun, $advertencias);
+    }
+
+    /**
+     * @param  list<object>  $filas
+     * @param  list<string>  $advertencias
+     * @return array{
+     *   dry_run: bool,
+     *   en_anita: int,
+     *   actualizados: int,
+     *   sin_cambio: int,
+     *   no_encontrados_erp: int,
+     *   anita_sin_nomenclador: int,
+     *   cambios: list<array{sku: string, de: string, a: string, de_umd: string, a_umd: string}>,
+     *   advertencias: list<string>
+     * }
+     */
+    private function aplicarNomencladorDesdeFilasAnita(array $filas, bool $dryRun, array $advertencias): array
+    {
+        $articulos = Articulo::query()->get(['id', 'sku', 'nomenclador', 'unidadmedidanomenclador']);
+        $porSku = [];
+        foreach ($articulos as $articulo) {
+            $clave = strtoupper(ltrim(trim((string) $articulo->sku), '0'));
+            if ($clave === '') {
+                continue;
+            }
+            if (! isset($porSku[$clave])) {
+                $porSku[$clave] = $articulo;
+            }
+        }
+
+        $actualizados = 0;
+        $sinCambio = 0;
+        $noEncontrados = 0;
+        $anitaSinNomenclador = 0;
+        $cambios = [];
+
+        foreach ($filas as $fila) {
+            $codigo = trim((string) ($fila->stkm_articulo ?? ''));
+            if ($codigo === '' || ltrim($codigo, '0') === '') {
+                continue;
+            }
+            $skuLocal = strtoupper(ltrim($codigo, '0'));
+            $articulo = $porSku[$skuLocal] ?? ArticuloSkuMatchSupport::resolverCanonico(ltrim($codigo, '0'));
+            if ($articulo === null) {
+                $noEncontrados++;
+
+                continue;
+            }
+
+            $nomAnita = ArticuloStkmaeAnitaBridgeSupport::codigoNomencladorDesdeFila($fila);
+            $umdAnita = ArticuloStkmaeAnitaBridgeSupport::unidadMedidaNomencladorDesdeFila($fila);
+
+            if ($nomAnita === '' && $umdAnita === '') {
+                $anitaSinNomenclador++;
+
+                continue;
+            }
+
+            $nomErp = trim((string) ($articulo->nomenclador ?? ''));
+            if (strtoupper($nomErp) === 'NULL') {
+                $nomErp = '';
+            }
+            $umdErp = trim((string) ($articulo->unidadmedidanomenclador ?? ''));
+            if (strtoupper($umdErp) === 'NULL') {
+                $umdErp = '';
+            }
+
+            $payload = [];
+            $nuevoNom = $nomErp;
+            $nuevoUmd = $umdErp;
+            if ($nomAnita !== '' && $nomAnita !== $nomErp) {
+                $payload['nomenclador'] = $nomAnita;
+                $nuevoNom = $nomAnita;
+            }
+            if ($umdAnita !== '' && $umdAnita !== $umdErp) {
+                $payload['unidadmedidanomenclador'] = $umdAnita;
+                $nuevoUmd = $umdAnita;
+            }
+
+            if ($payload === []) {
+                $sinCambio++;
+
+                continue;
+            }
+
+            $cambios[] = [
+                'sku' => (string) $articulo->sku,
+                'de' => $nomErp !== '' ? $nomErp : '(vacío)',
+                'a' => $nuevoNom !== '' ? $nuevoNom : '(vacío)',
+                'de_umd' => $umdErp !== '' ? $umdErp : '(vacío)',
+                'a_umd' => $nuevoUmd !== '' ? $nuevoUmd : '(vacío)',
+            ];
+
+            if (! $dryRun) {
+                $articulo->update($payload);
+            }
+            $actualizados++;
+        }
+
+        return [
+            'dry_run' => $dryRun,
+            'en_anita' => count($filas),
+            'actualizados' => $actualizados,
+            'sin_cambio' => $sinCambio,
+            'no_encontrados_erp' => $noEncontrados,
+            'anita_sin_nomenclador' => $anitaSinNomenclador,
+            'cambios' => $cambios,
+            'advertencias' => $advertencias,
+        ];
+    }
+
+    /**
      * @param  list<object>  $filas
      * @param  list<string>  $advertencias
      * @return array{en_anita:int, actualizados:int, sin_cambio:int, no_encontrados_erp:int, advertencias:list<string>}
