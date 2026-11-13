@@ -174,21 +174,29 @@ final class ConciliacionBancariaPendienteSupport
      * @param  list<array<string, mixed>>  $pendientes
      * @return array{
      *   cheques: list<array<string,mixed>>,
+     *   anulas: list<array<string,mixed>>,
      *   otros: list<array<string,mixed>>,
      *   suma_cheques: float,
+     *   suma_anulas: float,
      *   suma_otros: float
      * }
      */
     public static function particionarContables(array $pendientes, ?Carbon $fechaDesdeCobertura = null): array
     {
         $cheques = [];
+        $anulas = [];
         $otros = [];
         $sumaCheques = 0.0;
+        $sumaAnulas = 0.0;
         $sumaOtros = 0.0;
 
         foreach ($pendientes as $mov) {
             $imp = ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
-            if (self::esChequeParaCaratula($mov, $fechaDesdeCobertura)) {
+            if (self::esAnulaChequeContable($mov)) {
+                // Contaduría las busca en “pendiente de conciliar” (cheques), no en otros.
+                $anulas[] = $mov;
+                $sumaAnulas += $imp;
+            } elseif (self::esChequeParaCaratula($mov, $fechaDesdeCobertura)) {
                 $cheques[] = $mov;
                 $sumaCheques += $imp;
             } else {
@@ -199,10 +207,70 @@ final class ConciliacionBancariaPendienteSupport
 
         return [
             'cheques' => $cheques,
+            'anulas' => $anulas,
             'otros' => $otros,
             'suma_cheques' => round($sumaCheques, 2),
+            'suma_anulas' => round($sumaAnulas, 2),
             'suma_otros' => round($sumaOtros, 2),
         ];
+    }
+
+    /**
+     * ANULA de cheque ya conciliado (sin el original pendiente): Contaduría las necesita
+     * en “pendiente de conciliar”. Si el Ch: todavía tiene el OPP/CHP pendiente, no se lista
+     * acá (el neto ya está en libros).
+     *
+     * @param  list<array<string, mixed>>  $pendientesContables
+     * @return list<array<string, mixed>>
+     */
+    public static function filasAnulasParaPendientesCheques(array $pendientesContables): array
+    {
+        /** @var array<string, list<array<string, mixed>>> $porCheque */
+        $porCheque = [];
+        foreach ($pendientesContables as $mov) {
+            if (! is_array($mov)) {
+                continue;
+            }
+            $nro = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
+            if ($nro === null) {
+                continue;
+            }
+            $porCheque[$nro][] = $mov;
+        }
+
+        $out = [];
+        foreach ($porCheque as $nro => $movs) {
+            $anulas = array_values(array_filter(
+                $movs,
+                static fn (array $m): bool => self::esAnulaChequeContable($m),
+            ));
+            if ($anulas === [] || count($movs) > count($anulas)) {
+                continue;
+            }
+            foreach ($anulas as $mov) {
+                $imp = ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
+                $fecha = self::fechaContable($mov);
+                $out[] = [
+                    'tip' => 'ANULA',
+                    'numero_cheque' => (string) $nro,
+                    'fecha_emision' => $fecha?->toDateString(),
+                    'fecha_cheque' => $fecha?->toDateString(),
+                    'fecha_entrega' => null,
+                    'fecha_conciliacion' => null,
+                    'entregado_a' => trim((string) ($mov['descripcion'] ?? '')),
+                    'importe' => round($imp, 2),
+                    'incluye_caratula' => true,
+                    'es_anula_cheque' => true,
+                    'debe' => $imp > 0.005 ? round($imp, 2) : null,
+                    'haber' => $imp < -0.005 ? round(abs($imp), 2) : null,
+                    'nro_asiento_fmt' => (string) ($mov['nro_asiento_fmt'] ?? $mov['nro_asiento'] ?? ''),
+                    'tipo_comp' => (string) ($mov['tipo_comp'] ?? 'OPP'),
+                    'hash' => (string) ($mov['hash'] ?? ''),
+                ];
+            }
+        }
+
+        return $out;
     }
 
     /**

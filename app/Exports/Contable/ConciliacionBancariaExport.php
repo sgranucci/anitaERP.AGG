@@ -349,10 +349,39 @@ class ConciliacionBancariaExport
         $ws->getTabColor()->setARGB('FFB9770E');
         $this->banda($ws, 'A1:J1', 'Pendientes de cheques', 14, self::NAVY);
         $ws->mergeCells('A2:J2');
-        $ws->setCellValue('A2', 'Cheques propios sin conciliar · hasta '.$this->txt($this->resultado['fecha_hasta'] ?? '').' · '.$this->datoCuenta('codigo').' '.$this->datoCuenta('nombre'));
+        $anulasN = count($this->resultado['pendientes_cheques_anulas'] ?? []);
+        $ws->setCellValue(
+            'A2',
+            'Cheques propios sin conciliar · hasta '.$this->txt($this->resultado['fecha_hasta'] ?? '')
+            .' · '.$this->datoCuenta('codigo').' '.$this->datoCuenta('nombre')
+            .($anulasN > 0 ? ' · ANULA ya conciliados: '.$anulasN : '')
+        );
 
         $encabezados = ['Tip', 'Número', 'F.Mov.', 'F.Dev.', 'F.Entr.', 'F.Conc.', 'Detalle', 'Débitos', 'Créditos', 'Carátula'];
         $filas = [];
+        $filasAnulaIdx = [];
+        foreach ($this->resultado['pendientes_cheques_anulas'] ?? [] as $ch) {
+            $filasAnulaIdx[] = count($filas);
+            $debe = $ch['debe'] ?? null;
+            $haber = $ch['haber'] ?? null;
+            if ($debe === null && $haber === null) {
+                $imp = (float) ($ch['importe'] ?? 0);
+                $debe = $imp > 0.005 ? abs($imp) : null;
+                $haber = $imp < -0.005 ? abs($imp) : null;
+            }
+            $filas[] = [
+                $ch['tip'] ?? 'ANULA',
+                $ch['numero_cheque'] ?? '',
+                $ch['fecha_emision'] ?? '',
+                $ch['fecha_cheque'] ?? '',
+                $ch['fecha_entrega'] ?? '',
+                $ch['fecha_conciliacion'] ?? '',
+                $ch['entregado_a'] ?? '',
+                $debe,
+                $haber,
+                ! empty($ch['incluye_caratula']) ? 'Sí' : '',
+            ];
+        }
         foreach ($this->resultado['pendientes_cheques_cpromae'] ?? [] as $ch) {
             $filas[] = [
                 $ch['tip'] ?? 'CHP',
@@ -368,6 +397,10 @@ class ConciliacionBancariaExport
             ];
         }
         $this->volcar($ws, 3, $encabezados, $filas, [8, 9]);
+        foreach ($filasAnulaIdx as $i) {
+            $row = 4 + $i;
+            $this->relleno($ws, 'A'.$row.':J'.$row, 'FFFFFF00');
+        }
         $this->anchos($ws, [
             'A' => 8, 'B' => 14, 'C' => 13, 'D' => 13, 'E' => 13, 'F' => 13,
             'G' => 40, 'H' => 18, 'I' => 18, 'J' => 12,
@@ -457,13 +490,16 @@ class ConciliacionBancariaExport
         $ws->getTabColor()->setARGB('FF6C3483');
         $this->banda($ws, 'A1:F1', 'Pendientes de otros movimientos', 14, self::NAVY);
         $ws->mergeCells('A2:F2');
-        $ws->setCellValue('A2', 'Mayor sin match que no es cheque pendiente (incluye ANULA de cheques ya conciliados).');
+        $ws->setCellValue('A2', 'Mayor sin match que no es cheque pendiente. Las ANULA de cheques ya conciliados van a «Pend. cheques» (tip ANULA).');
 
         $encabezados = ['F.Mov.', 'Tip', 'Asiento', 'Detalle', 'Débitos', 'Créditos'];
         $filas = [];
         $lista = $this->resultado['pendientes_contables_otros'] ?? [];
         if ($lista === []) {
             foreach ($this->resultado['pendientes_contables'] ?? [] as $mov) {
+                if (\App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov)) {
+                    continue;
+                }
                 if (\App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport::esChequeNoAcreditado($mov)) {
                     continue;
                 }

@@ -138,15 +138,17 @@
                             <p><strong>Pares conciliados en esta corrida:</strong> {{ count($resultado['pares_nuevos'] ?? []) }}</p>
                             <p><strong>Pendientes cheques (cpromae):</strong> {{ count($resultado['pendientes_cheques_cpromae'] ?? []) }}
                                 <span class="text-muted small">(fuente: {{ $resultado['pendientes_cheques_fuente'] ?? '—' }})</span>
+                                @if (count($resultado['pendientes_cheques_anulas'] ?? []) > 0)
+                                    · <span class="text-warning">ANULA ya conciliados: {{ count($resultado['pendientes_cheques_anulas']) }}</span>
+                                @endif
                             </p>
                             <p><strong>En carátula (F.Dev del mes):</strong> {{ count($resultado['pendientes_cheques_caratula'] ?? []) }}
                                 · {{ number_format($resultado['suma_pendientes_cheques_caratula'] ?? 0, 2, ',', '.') }}
-                            </p>
-                            <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}
                                 @if (abs((float) ($resultado['suma_anulas_cheque_caratula'] ?? 0)) > 0.005)
-                                    <span class="text-muted small">· ANULA cheque en carátula: {{ number_format($resultado['suma_anulas_cheque_caratula'] ?? 0, 2, ',', '.') }}</span>
+                                    · ANULA en carátula: {{ number_format($resultado['suma_anulas_cheque_caratula'] ?? 0, 2, ',', '.') }}
                                 @endif
                             </p>
+                            <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}</p>
                             <p><strong>Pendientes banco (soporte MAYO):</strong> {{ count($resultado['pendientes_banco_caratula'] ?? []) }}
                                 <span class="text-muted small">· sin match total: {{ count($resultado['pendientes_banco'] ?? []) }}</span>
                             </p>
@@ -166,17 +168,31 @@
                     <div class="tab-content border border-top-0 p-2">
                         <div class="tab-pane active" id="tab-pendientes">
                             <p class="text-muted small mb-2">
-                                Solapa Contaduría: cheques propios (cpromae). La carátula toma los de F.Dev en el mes
-                                (marcados). Sin semilla Excel usa el último snapshot persistido de la cuenta.
+                                Solapa Contaduría: cheques propios (cpromae). Arriba van las <strong>ANULA</strong> de cheques
+                                ya conciliados en banco (ej. Ch: 70507390): no están en cpromae y Contaduría las necesita
+                                en pendiente de conciliar. La carátula toma F.Dev del mes (marcados) + esas ANULA.
                             </p>
                             <table class="table table-sm table-striped" id="tabla-paginada">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>
                                         <th>Tip</th><th>Número</th><th>F.Mov.</th><th>F.Dev.</th><th>F.Entr.</th>
-                                        <th>Detalle</th><th class="text-right">Créditos</th><th>Carátula</th>
+                                        <th>Detalle</th><th class="text-right">Débitos</th><th class="text-right">Créditos</th><th>Carátula</th>
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    @foreach ($resultado['pendientes_cheques_anulas'] ?? [] as $ch)
+                                        <tr class="table-warning">
+                                            <td><strong>{{ $ch['tip'] ?? 'ANULA' }}</strong></td>
+                                            <td>{{ $ch['numero_cheque'] ?? '' }}</td>
+                                            <td>{{ ! empty($ch['fecha_emision']) ? \Carbon\Carbon::parse($ch['fecha_emision'])->format('d/m/Y') : '' }}</td>
+                                            <td>{{ ! empty($ch['fecha_cheque']) ? \Carbon\Carbon::parse($ch['fecha_cheque'])->format('d/m/Y') : '' }}</td>
+                                            <td></td>
+                                            <td>{{ $ch['entregado_a'] ?? '' }}</td>
+                                            <td class="text-right">{{ isset($ch['debe']) && $ch['debe'] !== null ? number_format((float) $ch['debe'], 2, ',', '.') : '' }}</td>
+                                            <td class="text-right">{{ isset($ch['haber']) && $ch['haber'] !== null ? number_format((float) $ch['haber'], 2, ',', '.') : '' }}</td>
+                                            <td>{{ ! empty($ch['incluye_caratula']) ? 'Sí' : '' }}</td>
+                                        </tr>
+                                    @endforeach
                                     @forelse ($resultado['pendientes_cheques_cpromae'] ?? [] as $ch)
                                         <tr class="{{ ! empty($ch['incluye_caratula']) ? 'table-warning' : '' }}">
                                             <td>{{ $ch['tip'] ?? 'CHP' }}</td>
@@ -185,11 +201,14 @@
                                             <td>{{ ! empty($ch['fecha_cheque']) ? \Carbon\Carbon::parse($ch['fecha_cheque'])->format('d/m/Y') : '' }}</td>
                                             <td>{{ ! empty($ch['fecha_entrega']) ? \Carbon\Carbon::parse($ch['fecha_entrega'])->format('d/m/Y') : '' }}</td>
                                             <td>{{ $ch['entregado_a'] ?? '' }}</td>
+                                            <td></td>
                                             <td class="text-right">{{ number_format(abs((float) ($ch['importe'] ?? 0)), 2, ',', '.') }}</td>
                                             <td>{{ ! empty($ch['incluye_caratula']) ? 'Sí' : '' }}</td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="8" class="text-muted">Sin pendientes de cheques. Ejecutá con semilla Excel Contaduría o un snapshot previo.</td></tr>
+                                        @if (count($resultado['pendientes_cheques_anulas'] ?? []) === 0)
+                                            <tr><td colspan="9" class="text-muted">Sin pendientes de cheques. Ejecutá con semilla Excel Contaduría o un snapshot previo.</td></tr>
+                                        @endif
                                     @endforelse
                                 </tbody>
                             </table>
@@ -250,7 +269,7 @@
                             @endif
                         </div>
                         <div class="tab-pane" id="tab-mayor">
-                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques pendientes (incluye ANULA de cheques ya conciliados). Los CHP del stock están en la solapa anterior.</p>
+                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques pendientes. Las ANULA de cheques ya conciliados están en la solapa <strong>Pendientes cheques</strong> (tip ANULA).</p>
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>

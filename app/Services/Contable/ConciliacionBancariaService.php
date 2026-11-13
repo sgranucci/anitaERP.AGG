@@ -207,6 +207,9 @@ class ConciliacionBancariaService
             $fechaMinIb?->copy()->subDays($diasCheque),
         );
         $partBanco = ConciliacionBancariaPendienteSupport::particionarBanco($pendientesBanco);
+        $filasAnulasCheque = ConciliacionBancariaPendienteSupport::filasAnulasParaPendientesCheques(
+            $pendientesContables,
+        );
 
         // Con Excel de Contaduría: esa solapa es el stock del mes cerrado.
         // Sin Excel: snapshot del mes anterior más los emitidos en el ERP desde ese cierre.
@@ -302,8 +305,10 @@ class ConciliacionBancariaService
             'pares_conciliados_total' => $paresPrevios->count() + count($nuevosPares),
             'pendientes_contables' => $pendientesContables,
             'pendientes_contables_cheques' => $partPend['cheques'],
+            'pendientes_contables_anulas' => $partPend['anulas'] ?? [],
             'pendientes_contables_otros' => $partPend['otros'],
             'pendientes_cheques_cpromae' => $armPendientes['pendientes'],
+            'pendientes_cheques_anulas' => $filasAnulasCheque,
             'pendientes_cheques_caratula' => $armPendientes['caratula'],
             'pendientes_cheques_fuente' => $armPendientes['fuente'],
             'suma_pendientes_cheques' => $armPendientes['suma_pendientes'],
