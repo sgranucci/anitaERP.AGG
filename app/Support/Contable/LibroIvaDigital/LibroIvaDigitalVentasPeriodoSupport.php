@@ -3,6 +3,7 @@
 namespace App\Support\Contable\LibroIvaDigital;
 
 use App\Models\Ventas\Venta;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
@@ -77,8 +78,9 @@ final class LibroIvaDigitalVentasPeriodoSupport
         string $aliasVenta = 'venta',
     ): void {
         $col = $aliasVenta.'.codigo';
-        // MySQL/MariaDB: palabra T aislada (no "FACTURA").
-        $query->whereRaw($col.' NOT REGEXP ?', ['[[:<:]]T[[:>:]]']);
+        // Palabra T aislada (no "FACTURA"). MySQL 8+ ICU rechaza [[:<:]]/[[:>:]] (error 3685).
+        $patron = '(^|[^A-Za-z0-9_])[Tt]([^A-Za-z0-9_]|$)';
+        $query->whereRaw('NOT ('.SqlDialectSupport::coincideRegex($col).')', [$patron]);
     }
 
     public static function fechaYmd(?string $fechajornada, ?string $fecha, bool $porFechaJornada): string
