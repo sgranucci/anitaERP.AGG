@@ -12,17 +12,53 @@ El número que se controla es el **delta conjunto** = delta proveedores + delta 
 
 | Corte | Delta proveedores | Delta anticipos | **Delta conjunto** |
 |---|---:|---:|---:|
-| **06/11/2026** | 124.695.483,51 | 1.941.669,28 | **126.637.152,79** |
+| **13/11/2026** | 137.018.079,72 | 1.941.669,28 | **138.959.749,00** |
 
-Detalle por cuenta al 06/11/2026:
+Detalle por cuenta al 13/11/2026 (tras corregir NDR cheque rechazado):
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211100001 PROVEEDORES | 150.034.829,80 | 97.067.658,51 | −52.967.171,29 |
-| 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 177.662.654,80 | 177.662.654,80 |
-| 114110001 ANTICIPO PROVEEDORES | −1.460.002,68 | 481.666,60 | 1.941.669,28 |
+| 211100001 PROVEEDORES | 156.692.942,08 | 103.725.770,79 | −52.967.171,29 |
+| 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 189.985.251,01 | 189.985.251,01 |
+| 114110001 ANTICIPO PROVEEDORES | −1.386.527,49 | 555.141,79 | 1.941.669,28 |
 
-Mismo **delta conjunto** que la base del 04/11/2026 (solo cambian deuda/mayor absolutos por la operatoria del día). A partir del 07/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+Mismo **delta conjunto** que el snapshot del 12/11/2026 (antes del hueco de la NDR sin asiento). Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+
+Base anterior documentada: **06/11/2026** = 126.637.152,79. El salto a 138.959.749,00 es el mayor de **211100002** (+12.322.596,21 entre 10/11 y 11/11); no es descuadre de ficha.
+
+---
+
+## Corregido: 13/11/2026 (NDR cheque rechazado sin asiento)
+
+| | 12/11/2026 | 13/11 cron (antes) | 13/11 (después) |
+|---|---:|---:|---:|
+| Delta proveedores | 137.018.079,72 | 136.308.579,72 | 137.018.079,72 |
+| Delta anticipos | 1.941.669,28 | 1.941.669,28 | 1.941.669,28 |
+| **Delta conjunto** | **138.959.749,00** | **138.250.249,00** | **138.959.749,00** |
+
+Variación cron 12→13: **−709.500,00** · solo **211100001**. Tras armar el asiento: variación **0,00**.
+
+### Origen
+
+Cheque rechazado **91379196** (int. 96928) entregado a **HEAL WATER S.A.** (prov. 870), usuario Adriana (12/11 ~14:05):
+
+1. ND cliente venta **33623** → asiento **184398** (deudores / cheques rechazados / gastos).
+2. NDR proveedor cp **32199** (A-0-1773) → CC por 709.500.
+3. Tipo compra **NDR** (`tipotransaccion_compra` id **112**) tenía **`asientocontable = N`**: `contabilizar` dejó CC y **no** generó asiento. Deuda +709.500 sin Haber en proveedores.
+
+### Corrección (13/11)
+
+1. `tipotransaccion_compra` id 112: `asientocontable` **N → S** (quedan NDR futuras con asiento).
+2. `descontabilizarSinPagos(32199)` + `contabilizar(32199)`.
+3. Asiento ERP **184481** (nro 428632) / Anita nro interno **118596**, `SYNC_OK`:
+
+| Cuenta | Monto |
+|---|---:|
+| 113100002 CHEQUES RECHAZADOS | +700.000,00 |
+| 515000001 GASTOS BANCARIOS | +9.500,00 |
+| 211100001 PROVEEDORES | −709.500,00 |
+
+Ficha deuda vs ficha: **cuadrada**. La alerta del mail fue solo por el delta.
 
 ---
 

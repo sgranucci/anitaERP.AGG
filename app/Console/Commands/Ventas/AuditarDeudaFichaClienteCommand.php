@@ -12,7 +12,7 @@ class AuditarDeudaFichaClienteCommand extends Command
                             {--empresa= : Solo esta empresa_id}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Auditor deuda vs ficha y delta mayor − deuda de clientes';
+    protected $description = 'Auditor deuda vs ficha y delta conjunto de clientes + anticipos';
 
     public function handle(ClienteCuentacorrienteDeudaFichaAuditorService $service): int
     {
@@ -41,7 +41,7 @@ class AuditarDeudaFichaClienteCommand extends Command
         }
 
         $this->line(sprintf(
-            'Auditor deuda vs ficha y delta clientes · corte %s · expresión %s · empresas %s%s',
+            'Auditor deuda vs ficha y delta conjunto · corte %s · expresión %s · empresas %s%s',
             $fecha !== '' ? $fecha : 'hoy',
             (string) config('ventas.deuda_ficha_auditor.expresion', 'origen'),
             $permitidasTxt,

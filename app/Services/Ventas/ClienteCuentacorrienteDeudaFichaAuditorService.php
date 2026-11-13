@@ -16,9 +16,9 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Auditor diario: deuda vs ficha y delta mayor − deuda de clientes por empresa.
+ * Auditor diario: deuda vs ficha y delta conjunto de clientes + anticipos.
  * Solo informa por mail; no graba ajustes. La deuda es la verdad.
- * El delta avisa si la suma mayor − deuda se mueve de un día al otro.
+ * El delta avisa si la suma (deudores + anticipos COA) se mueve de un día al otro.
  */
 final class ClienteCuentacorrienteDeudaFichaAuditorService
 {

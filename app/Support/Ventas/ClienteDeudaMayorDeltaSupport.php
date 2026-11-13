@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
@@ -13,13 +14,18 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Delta de deudores por ventas: mayor − deuda abierta de clientes, en pesos,
+ * Delta conjunto de clientes + anticipos: mayor − deuda abierta, en pesos,
  * con el signo del mayor (negativo = débito).
  *
- * El aviso es la suma. Un cobro que acredita la cuenta y baja la factura no
- * mueve el conjunto. Entran las cuentas de rubro Activo asignadas al cliente,
- * excepto las que son medio de cobro (`cuentacaja`): esas reciben ventas de
- * clientes varios, no la CC del cliente espejo del medio (DAFITI, VISA, …).
+ * El aviso es la suma. Un cobro que acredita deudores y baja la factura no
+ * mueve el conjunto. Un pago de más (COA) acredita anticipos y deja crédito
+ * abierto en esa misma cuenta: el conjunto tampoco se mueve.
+ *
+ * Clientes: facturas/NC/ND abiertas y créditos que no son COA. Entran las
+ * cuentas de rubro Activo del cliente, excepto medios de cobro (`cuentacaja`).
+ *
+ * Anticipos: solo deuda de COA imputada a `cliente.ANTICIPO_DE_CLIENTES` y el
+ * mayor de esa cuenta. Sin cuenta configurada, la COA sigue en deudores.
  */
 final class ClienteDeudaMayorDeltaSupport
 {
@@ -28,8 +34,11 @@ final class ClienteDeudaMayorDeltaSupport
     /** @var array<int, true>|null */
     private ?array $cuentasCliente = null;
 
+    /** @var array<int, int>|null empresa_id => cuentacontable_id de anticipos */
+    private ?array $anticipoPorEmpresa = null;
+
     /**
-     * Empresas con deuda abierta o mayor en una cuenta de clientes.
+     * Empresas con deuda abierta o mayor en una cuenta de clientes/anticipos.
      *
      * @return list<int>
      */
@@ -42,7 +51,7 @@ final class ClienteDeudaMayorDeltaSupport
             ->map(static fn ($id) => (int) $id)
             ->all();
 
-        $cuentas = array_keys($this->cuentasCliente());
+        $cuentas = array_keys($this->cuentasPermitidas());
         if ($cuentas !== []) {
             $delMayor = DB::table('asiento as a')
                 ->join('asiento_movimiento as m', 'm.asiento_id', '=', 'a.id')
@@ -72,14 +81,17 @@ final class ClienteDeudaMayorDeltaSupport
      *   hay_base_anterior: bool,
      *   tolerancia: float,
      *   variaciones: int,
+     *   variaciones_anticipos: int,
      *   delta_clientes: float,
+     *   delta_anticipos: float,
      *   delta_conjunto: float,
      *   delta_conjunto_anterior: ?float,
      *   variacion_conjunto: ?float,
      *   conjunto_movio: bool,
      *   cuentas_sin_base: int,
      *   cuentas: list<array<string, mixed>>,
-     *   cuentas_total: int
+     *   cuentas_total: int,
+     *   anticipos: list<array<string, mixed>>
      * }
      */
     public function controlar(int $empresaId, string $fecha, float $tolerancia): array
@@ -89,16 +101,19 @@ final class ClienteDeudaMayorDeltaSupport
         $hoy = $this->saldosEmpresa($empresaId, $fecha);
         $fechaAnterior = $this->fechaAnterior($empresaId, $fecha);
         $anterior = $fechaAnterior === null ? [] : $this->filasGuardadas($empresaId, $fechaAnterior);
+        $cuentaAnticipoId = (int) ($this->cuentasAnticipoPorEmpresa()[$empresaId] ?? 0);
 
-        $permitidas = $this->cuentasCliente();
+        $permitidas = $this->cuentasPermitidas();
         $ids = array_values(array_filter(
             array_unique(array_merge(array_keys($hoy), array_keys($anterior))),
             static fn ($cuentaId): bool => isset($permitidas[(int) $cuentaId])
         ));
         $nombres = $this->nombresCuenta($ids);
-        $filas = [];
+        $filasClientes = [];
+        $filasAnticipo = [];
         $aGuardar = [];
         $variaciones = 0;
+        $variacionesAnticipo = 0;
 
         foreach ($ids as $cuentaId) {
             $deuda = round((float) ($hoy[$cuentaId]['deuda'] ?? 0), 2);
@@ -108,22 +123,34 @@ final class ClienteDeudaMayorDeltaSupport
             $deltaAnterior = $tenia ? round((float) $anterior[$cuentaId], 2) : null;
             $variacion = $deltaAnterior === null ? null : round($delta - $deltaAnterior, 2);
             $movio = $variacion !== null && abs($variacion) >= $tolerancia;
+            $esAnticipo = $cuentaAnticipoId > 0 && $cuentaId === $cuentaAnticipoId;
             if ($movio) {
-                $variaciones++;
+                if ($esAnticipo) {
+                    $variacionesAnticipo++;
+                } else {
+                    $variaciones++;
+                }
             }
 
             $nombre = $nombres[$cuentaId] ?? ['codigo' => '', 'nombre' => ''];
-            $filas[] = [
+            $fila = [
                 'cuentacontable_id' => $cuentaId,
                 'codigo' => $nombre['codigo'],
                 'nombre' => $nombre['nombre'],
                 'deuda' => $deuda,
+                'coa' => round((float) ($hoy[$cuentaId]['coa'] ?? 0), 2),
                 'mayor' => $mayor,
                 'delta' => $delta,
                 'delta_anterior' => $deltaAnterior,
                 'variacion' => $variacion,
                 'movio' => $movio,
+                'es_anticipo' => $esAnticipo,
             ];
+            if ($esAnticipo) {
+                $filasAnticipo[] = $fila;
+            } else {
+                $filasClientes[] = $fila;
+            }
 
             $releva = abs($deuda) >= 0.01 || abs($mayor) >= 0.01 || abs($delta) >= 0.01 || $movio;
             if ($releva) {
@@ -140,17 +167,9 @@ final class ClienteDeudaMayorDeltaSupport
             }
         }
 
-        usort($filas, static function (array $a, array $b): int {
-            $ma = ! empty($a['movio']);
-            $mb = ! empty($b['movio']);
-            if ($ma !== $mb) {
-                return $mb <=> $ma;
-            }
-
-            return abs((float) $b['delta']) <=> abs((float) $a['delta']);
-        });
-
-        $conjunto = $this->deltaConjunto($filas, $fechaAnterior !== null, $tolerancia);
+        $filasClientes = $this->ordenarPorVariacion($filasClientes);
+        $filasAnticipo = $this->ordenarPorVariacion($filasAnticipo);
+        $conjunto = $this->deltaConjunto($filasClientes, $filasAnticipo, $fechaAnterior !== null, $tolerancia);
         $this->guardar($empresaId, $fecha, $aGuardar);
 
         return [
@@ -160,20 +179,26 @@ final class ClienteDeudaMayorDeltaSupport
             'hay_base_anterior' => $fechaAnterior !== null,
             'tolerancia' => $tolerancia,
             'variaciones' => $variaciones,
-            'delta_clientes' => $conjunto['delta_conjunto'],
+            'variaciones_anticipos' => $variacionesAnticipo,
+            'delta_clientes' => $conjunto['delta_clientes'],
+            'delta_anticipos' => $conjunto['delta_anticipos'],
             'delta_conjunto' => $conjunto['delta_conjunto'],
             'delta_conjunto_anterior' => $conjunto['delta_conjunto_anterior'],
             'variacion_conjunto' => $conjunto['variacion_conjunto'],
             'conjunto_movio' => $conjunto['conjunto_movio'],
             'cuentas_sin_base' => $conjunto['cuentas_sin_base'],
-            'cuentas' => $filas,
-            'cuentas_total' => count($filas),
+            'cuentas' => $filasClientes,
+            'cuentas_total' => count($filasClientes),
+            'anticipos' => $filasAnticipo,
         ];
     }
 
     /**
-     * @param  list<array<string, mixed>>  $filas
+     * @param  list<array<string, mixed>>  $filasClientes
+     * @param  list<array<string, mixed>>  $filasAnticipo
      * @return array{
+     *   delta_clientes: float,
+     *   delta_anticipos: float,
      *   delta_conjunto: float,
      *   delta_conjunto_anterior: ?float,
      *   variacion_conjunto: ?float,
@@ -181,11 +206,15 @@ final class ClienteDeudaMayorDeltaSupport
      *   cuentas_sin_base: int
      * }
      */
-    private function deltaConjunto(array $filas, bool $hayBase, float $tolerancia): array
+    private function deltaConjunto(array $filasClientes, array $filasAnticipo, bool $hayBase, float $tolerancia): array
     {
-        $delta = round(array_sum(array_map(
+        $deltaClientes = round(array_sum(array_map(
             static fn (array $fila): float => (float) ($fila['delta'] ?? 0),
-            $filas
+            $filasClientes
+        )), 2);
+        $deltaAnticipos = round(array_sum(array_map(
+            static fn (array $fila): float => (float) ($fila['delta'] ?? 0),
+            $filasAnticipo
         )), 2);
         $variacion = null;
         $anterior = null;
@@ -193,7 +222,7 @@ final class ClienteDeudaMayorDeltaSupport
         if ($hayBase) {
             $variacion = 0.0;
             $anterior = 0.0;
-            foreach ($filas as $fila) {
+            foreach (array_merge($filasClientes, $filasAnticipo) as $fila) {
                 if ($fila['variacion'] === null) {
                     $sinBase++;
 
@@ -207,7 +236,9 @@ final class ClienteDeudaMayorDeltaSupport
         }
 
         return [
-            'delta_conjunto' => $delta,
+            'delta_clientes' => $deltaClientes,
+            'delta_anticipos' => $deltaAnticipos,
+            'delta_conjunto' => round($deltaClientes + $deltaAnticipos, 2),
             'delta_conjunto_anterior' => $anterior,
             'variacion_conjunto' => $variacion,
             'conjunto_movio' => $variacion !== null && abs($variacion) >= $tolerancia,
@@ -216,11 +247,30 @@ final class ClienteDeudaMayorDeltaSupport
     }
 
     /**
-     * @return array<int, array{deuda: float, mayor: float}>
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function ordenarPorVariacion(array $filas): array
+    {
+        usort($filas, static function (array $a, array $b): int {
+            $ma = ! empty($a['movio']);
+            $mb = ! empty($b['movio']);
+            if ($ma !== $mb) {
+                return $mb <=> $ma;
+            }
+
+            return abs((float) $b['delta']) <=> abs((float) $a['delta']);
+        });
+
+        return $filas;
+    }
+
+    /**
+     * @return array<int, array{deuda: float, mayor: float, coa: float}>
      */
     private function saldosEmpresa(int $empresaId, string $fecha): array
     {
-        $cuentaIds = $this->cuentasCliente();
+        $cuentaIds = $this->cuentasPermitidas();
         $deuda = $this->deudaPorCuenta($empresaId, $fecha, $cuentaIds);
         $mayor = $this->mayorPorCuenta($empresaId, array_keys($cuentaIds));
 
@@ -230,7 +280,8 @@ final class ClienteDeudaMayorDeltaSupport
             if ($cuentaId <= 0 || ! isset($cuentaIds[$cuentaId])) {
                 continue;
             }
-            $deudaLocal = round((float) ($deuda[$cuentaId] ?? 0), 2);
+            $deudaLocal = round((float) ($deuda[$cuentaId]['deuda'] ?? 0), 2);
+            $coaLocal = round((float) ($deuda[$cuentaId]['coa'] ?? 0), 2);
             $mayorLocal = round((float) ($mayor[$cuentaId] ?? 0), 2);
             if (abs($deudaLocal) < 0.01 && abs($mayorLocal) < 0.01) {
                 continue;
@@ -238,6 +289,7 @@ final class ClienteDeudaMayorDeltaSupport
             $out[$cuentaId] = [
                 'deuda' => $deudaLocal,
                 'mayor' => $mayorLocal,
+                'coa' => $coaLocal,
             ];
         }
 
@@ -245,11 +297,27 @@ final class ClienteDeudaMayorDeltaSupport
     }
 
     /**
+     * Activo de clientes (sin medios de cobro) + cuenta de anticipos si está configurada.
+     *
+     * @return array<int, true>
+     */
+    private function cuentasPermitidas(): array
+    {
+        $cuentas = $this->cuentasCliente();
+        foreach ($this->cuentasAnticipoPorEmpresa() as $cuentaId) {
+            if ($cuentaId > 0) {
+                $cuentas[$cuentaId] = true;
+            }
+        }
+
+        return $cuentas;
+    }
+
+    /**
      * Cuentas de rubro Activo asignadas en el maestro de clientes.
      *
      * Se excluyen las que también son medio de cobro (`cuentacaja.cuentacontable_id`):
-     * L-PAGO NUBE, L-MERCADOLIBRE, L-VISA, etc. Ahí asientan ventas de clientes
-     * varios / contado; no son la cuenta corriente del cliente espejo del medio.
+     * L-PAGO NUBE, L-MERCADOLIBRE, L-VISA, etc.
      *
      * @return array<int, true>
      */
@@ -289,8 +357,28 @@ final class ClienteDeudaMayorDeltaSupport
     }
 
     /**
+     * @return array<int, int>
+     */
+    private function cuentasAnticipoPorEmpresa(): array
+    {
+        if ($this->anticipoPorEmpresa !== null) {
+            return $this->anticipoPorEmpresa;
+        }
+
+        $out = [];
+        foreach (Empresa::query()->orderBy('id')->pluck('id') as $empresaId) {
+            $cuentaId = (int) (ClienteAnticipoCuentaContableSupport::cuentaAnticipoId((int) $empresaId) ?? 0);
+            if ($cuentaId > 0) {
+                $out[(int) $empresaId] = $cuentaId;
+            }
+        }
+
+        return $this->anticipoPorEmpresa = $out;
+    }
+
+    /**
      * @param  array<int, true>  $cuentaIds
-     * @return array<int, float>
+     * @return array<int, array{deuda: float, coa: float}>
      */
     private function deudaPorCuenta(int $empresaId, string $fecha, array $cuentaIds): array
     {
@@ -298,6 +386,7 @@ final class ClienteDeudaMayorDeltaSupport
             return [];
         }
 
+        $cuentaAnticipoId = (int) ($this->cuentasAnticipoPorEmpresa()[$empresaId] ?? 0);
         $saldos = [];
         Cliente_Cuentacorriente::query()
             ->with([
@@ -314,7 +403,7 @@ final class ClienteDeudaMayorDeltaSupport
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
             ->orderBy('id')
-            ->chunkById(300, function ($filas) use (&$saldos, $cuentaIds, $fecha) {
+            ->chunkById(300, function ($filas) use (&$saldos, $cuentaIds, $fecha, $cuentaAnticipoId) {
                 foreach ($filas as $cc) {
                     $abreviatura = strtoupper(trim((string) ($cc->cobranzas?->tipotransaccioncajas?->abreviatura ?? '')));
                     $esCoa = $abreviatura === 'COA';
@@ -337,7 +426,14 @@ final class ClienteDeudaMayorDeltaSupport
                         continue;
                     }
 
-                    $cuentaId = (int) ($cc->clientes?->cuentacontable_id ?? 0);
+                    $cuentaAnticipo = $cuentaAnticipoId > 0
+                        ? ClienteAnticipoCuentaContableSupport::cuentaParaCreditoAbierto($cc, $abreviatura)
+                        : null;
+                    if ($cuentaAnticipo !== null && $cuentaAnticipo > 0) {
+                        $cuentaId = $cuentaAnticipo;
+                    } else {
+                        $cuentaId = (int) ($cc->clientes?->cuentacontable_id ?? 0);
+                    }
                     if ($cuentaId <= 0 || ! isset($cuentaIds[$cuentaId])) {
                         continue;
                     }
@@ -351,7 +447,13 @@ final class ClienteDeudaMayorDeltaSupport
                     if ($local === null) {
                         continue;
                     }
-                    $saldos[$cuentaId] = ($saldos[$cuentaId] ?? 0) + $local;
+                    if (! isset($saldos[$cuentaId])) {
+                        $saldos[$cuentaId] = ['deuda' => 0.0, 'coa' => 0.0];
+                    }
+                    $saldos[$cuentaId]['deuda'] += $local;
+                    if ($esCoa && $cuentaAnticipo !== null) {
+                        $saldos[$cuentaId]['coa'] += $local;
+                    }
                 }
             });
 

@@ -37,7 +37,7 @@ class ClienteCuentacorrienteDeudaFichaAuditorMail extends Mailable
 
         if ($alertaFicha && $alertaDelta) {
             $asunto = sprintf(
-                '%s — Deuda vs ficha y delta clientes — %s — ALERTA (ficha %d, delta %s)',
+                '%s — Deuda vs ficha y delta conjunto — %s — ALERTA (ficha %d, delta %s)',
                 $empresa,
                 $fecha,
                 $cantidad,
@@ -45,7 +45,7 @@ class ClienteCuentacorrienteDeudaFichaAuditorMail extends Mailable
             );
         } elseif ($alertaDelta) {
             $asunto = sprintf(
-                '%s — Delta clientes — %s — ALERTA (%s)',
+                '%s — Delta clientes + anticipos — %s — ALERTA (%s)',
                 $empresa,
                 $fecha,
                 $variacionTxt
