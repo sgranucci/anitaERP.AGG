@@ -5582,16 +5582,16 @@ Route::get('sueldos/categoria/{id}/bases', 'Sueldos\Categoria_SueldosController@
 Route::get('sueldos/categoria/{id}/historial-bases', 'Sueldos\Categoria_SueldosController@historialBases')->name('historial_bases_categoria_sueldos');
 
 /*
- * Consulta F1 de maestros de sueldos (categoría, agrupamiento, lugar, vacación, ART).
+ * Consulta F1 de maestros de sueldos (categoría, agrupamiento, lugar, vacación, ART, sindicato).
  */
 Route::post('sueldos/maestro/{maestro}/consulta', 'Sueldos\ConsultaMaestro_SueldosController@consulta')
-    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato')
     ->name('consulta_maestro_sueldos');
 Route::get('sueldos/maestro/{maestro}/leerporcodigo/{codigo}', 'Sueldos\ConsultaMaestro_SueldosController@leerPorCodigo')
-    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato')
     ->name('leer_maestro_sueldos_por_codigo');
 Route::get('sueldos/maestro/{maestro}/leer/{id}', 'Sueldos\ConsultaMaestro_SueldosController@leer')
-    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato')
     ->name('leer_maestro_sueldos');
 
 /*
@@ -5630,6 +5630,7 @@ Route::put('sueldos/contrato-plantilla/{id}', 'Sueldos\Contrato_Plantilla_Sueldo
 Route::delete('sueldos/contrato-plantilla/{id}', 'Sueldos\Contrato_Plantilla_SueldosController@eliminar')->name('eliminar_contrato_plantilla_sueldos');
 Route::get('sueldos/contrato-plantilla/{id}/descargar', 'Sueldos\Contrato_Plantilla_SueldosController@descargar')->name('descargar_contrato_plantilla_sueldos');
 Route::post('sueldos/contrato-plantilla-asignacion', 'Sueldos\Contrato_Plantilla_SueldosController@guardarAsignacion')->name('guardar_asignacion_contrato_plantilla_sueldos');
+Route::put('sueldos/contrato-plantilla-asignacion/{id}', 'Sueldos\Contrato_Plantilla_SueldosController@actualizarAsignacion')->name('actualizar_asignacion_contrato_plantilla_sueldos');
 Route::delete('sueldos/contrato-plantilla-asignacion/{id}', 'Sueldos\Contrato_Plantilla_SueldosController@eliminarAsignacion')->name('eliminar_asignacion_contrato_plantilla_sueldos');
 
 /*
@@ -6066,6 +6067,7 @@ Route::delete('sueldos/familiar/{id}', 'Sueldos\Empleado_FamiliarSueldosControll
  */
 Route::get('sueldos/empleado/{empleado}/contratos', 'Sueldos\Empleado_ContratoSueldosController@panel')->name('contratos_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/contratos', 'Sueldos\Empleado_ContratoSueldosController@guardar')->name('guardar_contrato_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/contratos/preview', 'Sueldos\Empleado_ContratoSueldosController@previsualizar')->name('preview_contrato_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/contratos/emitir', 'Sueldos\Empleado_ContratoSueldosController@emitir')->name('emitir_contrato_empleado_sueldos');
 Route::put('sueldos/contrato-empleado/{id}', 'Sueldos\Empleado_ContratoSueldosController@actualizar')->name('actualizar_contrato_empleado_sueldos');
 Route::delete('sueldos/contrato-empleado/{id}', 'Sueldos\Empleado_ContratoSueldosController@eliminar')->name('eliminar_contrato_empleado_sueldos');

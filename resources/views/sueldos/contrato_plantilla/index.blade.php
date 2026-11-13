@@ -94,16 +94,43 @@
                 <h3 class="card-title">Reglas de asignación</h3>
             </div>
             <div class="card-body">
+                @php
+                    $editando = $asignacionEditar ?? null;
+                    $editandoId = $editando?->id;
+                @endphp
                 @if (can('actualizar-contrato-plantilla-sueldos', false) && $plantillas->isNotEmpty())
-                    <form method="POST" action="{{ route('guardar_asignacion_contrato_plantilla_sueldos') }}" class="mb-4" data-enter-campos="1">
+                    <div class="mb-2 d-flex align-items-center justify-content-between">
+                        <strong>
+                            @if ($editando)
+                                Modificar regla #{{ $editando->id }}
+                            @else
+                                Nueva regla
+                            @endif
+                        </strong>
+                        @if ($editando)
+                            <a href="{{ route('consultar_contrato_plantilla_sueldos') }}" class="btn btn-outline-secondary btn-sm">
+                                Cancelar edición
+                            </a>
+                        @endif
+                    </div>
+                    <form method="POST"
+                          action="{{ $editando ? route('actualizar_asignacion_contrato_plantilla_sueldos', $editando->id) : route('guardar_asignacion_contrato_plantilla_sueldos') }}"
+                          class="mb-4"
+                          id="form-asignacion-contrato"
+                          data-enter-campos="1">
                         @csrf
+                        @if ($editando)
+                            @method('PUT')
+                        @endif
                         <div class="form-row">
                             <div class="form-group col-md-4">
                                 <label class="control-label">Plantilla</label>
                                 <select name="contrato_plantilla_id" class="form-control form-control-sm" required>
                                     <option value="">Seleccione…</option>
                                     @foreach ($plantillas as $p)
-                                        <option value="{{ $p->id }}">{{ $p->codigo }} — {{ $p->nombre }}</option>
+                                        <option value="{{ $p->id }}" @selected((int) old('contrato_plantilla_id', $editando->contrato_plantilla_id ?? 0) === (int) $p->id)>
+                                            {{ $p->codigo }} — {{ $p->nombre }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -111,7 +138,7 @@
                                 <label class="control-label">Tipo documento</label>
                                 <select name="tipo" class="form-control form-control-sm" required>
                                     @foreach ($tipos as $k => $lab)
-                                        <option value="{{ $k }}">{{ $lab }}</option>
+                                        <option value="{{ $k }}" @selected(old('tipo', $editando->tipo ?? '') === $k)>{{ $lab }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -120,7 +147,9 @@
                                 <select name="modalidad" class="form-control form-control-sm">
                                     <option value="">Cualquiera</option>
                                     @foreach ($modalidades as $cod => $lab)
-                                        <option value="{{ $cod }}">{{ $cod }} — {{ $lab }}</option>
+                                        <option value="{{ $cod }}" @selected((string) old('modalidad', $editando->modalidad ?? '') === (string) $cod)>
+                                            {{ $cod }} — {{ $lab }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -130,16 +159,16 @@
                             'label' => 'Sindicato (vacío = cualquiera)',
                             'inputName' => 'sindicato_id',
                             'inputId' => 'asig_sindicato_id',
-                            'registroId' => '',
-                            'codigo' => '',
-                            'descripcion' => '',
+                            'registroId' => old('sindicato_id', $editando->sindicato_id ?? ''),
+                            'codigo' => old('asig_sindicato_codigo', $editando->sindicato->codigo ?? ''),
+                            'descripcion' => old('asig_sindicato_nombre', $editando->sindicato->descripcion ?? ''),
                             'required' => false,
                             'col_label' => 'col-lg-3 control-label text-right pr-2',
                             'col_input' => 'col-lg-6',
                         ])
                         @include('includes.form-empresa-asignada', [
                             'empresa_query' => $empresa_query,
-                            'empresa_id' => null,
+                            'empresa_id' => old('empresa_id', $editando->empresa_id ?? null),
                             'solo_lectura' => false,
                             'required' => false,
                             'permite_vacio' => true,
@@ -152,12 +181,22 @@
                         <div class="form-group row">
                             <label class="col-lg-3 control-label text-right pr-2">Prioridad</label>
                             <div class="col-lg-2">
-                                <input type="number" name="prioridad" class="form-control form-control-sm" value="100" min="1" max="9999">
+                                <input type="number" name="prioridad" class="form-control form-control-sm"
+                                       value="{{ old('prioridad', $editando->prioridad ?? 100) }}" min="1" max="9999">
                             </div>
-                            <div class="col-lg-4">
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="fa fa-plus"></i> Agregar regla
-                                </button>
+                            <div class="col-lg-5">
+                                @if ($editando)
+                                    <button type="submit" class="btn btn-success btn-sm">
+                                        <i class="fa fa-save"></i> Actualizar regla
+                                    </button>
+                                    <a href="{{ route('consultar_contrato_plantilla_sueldos') }}" class="btn btn-outline-secondary btn-sm">
+                                        Cancelar
+                                    </a>
+                                @else
+                                    <button type="submit" class="btn btn-primary btn-sm">
+                                        <i class="fa fa-plus"></i> Agregar regla
+                                    </button>
+                                @endif
                             </div>
                         </div>
                     </form>
@@ -173,20 +212,25 @@
                                 <th>Sindicato</th>
                                 <th>Empresa</th>
                                 <th>Prioridad</th>
-                                <th></th>
+                                <th style="width:80px"></th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($asignaciones as $a)
-                                <tr>
+                                <tr class="{{ (int) $editandoId === (int) $a->id ? 'table-warning' : '' }}">
                                     <td>{{ $a->tipo_label }}</td>
                                     <td>{{ $a->plantilla->codigo ?? '—' }}</td>
                                     <td>{{ $a->modalidad ? ($a->modalidad.' — '.$a->modalidad_label) : 'Cualquiera' }}</td>
                                     <td>{{ $a->sindicato->descripcion ?? 'Cualquiera' }}</td>
                                     <td>{{ $a->empresa->nombre ?? 'Cualquiera' }}</td>
                                     <td>{{ $a->prioridad }}</td>
-                                    <td>
+                                    <td class="text-nowrap">
                                         @if (can('actualizar-contrato-plantilla-sueldos', false))
+                                            <a href="{{ route('consultar_contrato_plantilla_sueldos', ['editar_asignacion' => $a->id]) }}"
+                                               class="btn-accion-tabla tooltipsC"
+                                               title="Modificar esta regla">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
                                             <form action="{{ route('eliminar_asignacion_contrato_plantilla_sueldos', $a->id) }}" method="POST" class="d-inline"
                                                   onsubmit="return confirm('¿Eliminar esta regla?');">
                                                 @csrf
@@ -226,4 +270,14 @@
     </div>
 </div>
 @include('includes.sueldos.modalconsulta_maestro_sueldos')
+@if (! empty($asignacionEditar))
+<script>
+(function () {
+    var form = document.getElementById('form-asignacion-contrato');
+    if (form) {
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+})();
+</script>
+@endif
 @endsection

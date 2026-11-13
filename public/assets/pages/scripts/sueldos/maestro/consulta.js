@@ -10,7 +10,8 @@
         agrupamiento: 'Agrupamientos',
         lugartrabajo: 'Lugares de trabajo',
         vacacion: 'Vacaciones',
-        art: 'ART'
+        art: 'ART',
+        sindicato: 'Sindicatos'
     };
 
     function campoDesde($el) {

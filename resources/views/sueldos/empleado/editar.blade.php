@@ -159,8 +159,9 @@
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando indumentaria…</div>
                 </div>
                 <div id="host-contratos" class="pt-3 d-none"
-                     data-url="{{ route('contratos_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}"
-                     data-emitir-url="{{ route('emitir_contrato_empleado_sueldos', ['empleado' => $data->id] + $qVista) }}">
+                     data-url="{{ route('contratos_empleado_sueldos', ['empleado' => $data->id] + $qVista, false) }}"
+                     data-preview-url="{{ route('preview_contrato_empleado_sueldos', ['empleado' => $data->id] + $qVista, false) }}"
+                     data-emitir-url="{{ route('emitir_contrato_empleado_sueldos', ['empleado' => $data->id] + $qVista, false) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando contratos…</div>
                 </div>
                 <div id="host-familiares" class="pt-3 d-none"
@@ -274,9 +275,37 @@
     'overlayId' => 'contrato-emision-overlay',
     'tituloId' => 'contrato-emision-titulo',
     'subtituloId' => 'contrato-emision-subtitulo',
-    'titulo' => 'Generando documento…',
-    'subtitulo' => 'Espere mientras se arma el Word. No cierre la página.',
+    'titulo' => 'Generando PDF…',
+    'subtitulo' => 'Espere mientras se arma el documento. No cierre la página.',
 ])
+
+{{-- Preview de contrato / certificado (HTML desde plantilla Word) --}}
+<div class="modal fade" id="contrato-preview-modal" tabindex="-1" role="dialog" aria-labelledby="contrato-preview-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="contrato-preview-titulo">Vista previa</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body p-0" style="min-height:70vh;background:#f4f6f7;">
+                <iframe id="contrato-preview-frame" title="Vista previa del contrato"
+                        style="width:100%;height:70vh;border:0;background:#fff;"></iframe>
+            </div>
+            <div class="modal-footer py-2">
+                <span class="small text-muted mr-auto" id="contrato-preview-plantilla"></span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-outline-primary btn-sm d-none" id="btn-contrato-preview-emitir-word">
+                    <i class="fa fa-file-word"></i> Emitir Word
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="btn-contrato-preview-emitir">
+                    <i class="fa fa-file-pdf"></i> Emitir PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 (function () {

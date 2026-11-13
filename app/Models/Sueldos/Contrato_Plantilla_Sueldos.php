@@ -43,4 +43,12 @@ class Contrato_Plantilla_Sueldos extends Model implements Auditable
     {
         return storage_path('app/'.$this->archivo_path);
     }
+
+    /** La plantilla fuente es un Word (.doc / .docx). */
+    public function esFuenteWord(): bool
+    {
+        $nombre = strtolower((string) ($this->archivo_nombre ?: $this->archivo_path));
+
+        return str_ends_with($nombre, '.docx') || str_ends_with($nombre, '.doc');
+    }
 }
