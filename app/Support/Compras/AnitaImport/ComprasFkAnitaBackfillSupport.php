@@ -46,13 +46,26 @@ final class ComprasFkAnitaBackfillSupport
             if ($fh > $fechaHastaA) {
                 $fh = $fechaHastaA;
             }
+            $clavesMes = [];
             foreach (RecepcionProveedorAnitaImportSupport::listarRecepmae($fd, $fh) as $cab) {
                 $suc = (int) ($cab->recm_sucursal ?? 0);
                 $nro = (int) ($cab->recm_nro ?? 0);
                 $nroOc = RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab);
-                if ($suc > 0 && $nro > 0 && $nroOc > 0) {
-                    $comOcAnita[$suc.'|'.$nro] = $nroOc;
+                if ($suc > 0 && $nro > 0) {
+                    $clavesMes[] = $suc.'-'.$nro;
+                    if ($nroOc > 0) {
+                        $comOcAnita[$suc.'|'.$nro] = $nroOc;
+                    }
                 }
+            }
+            // aplicped COM→PEP: completa / corrige cuando recepmae trae com_nro espurio.
+            foreach (RecepcionProveedorAnitaImportSupport::mapaOcDesdeAplicpedPorCom($clavesMes) as $claveGuion => $meta) {
+                $nroOc = (int) ($meta['numero_oc'] ?? 0);
+                if ($nroOc <= 0) {
+                    continue;
+                }
+                $clave = str_replace('-', '|', $claveGuion);
+                $comOcAnita[$clave] = $nroOc;
             }
             $m++;
             if ($m > 12) {

@@ -136,22 +136,23 @@ class RecepcionProveedorAnitaImportSupport
     }
 
     /**
-     * Número OC Anita desde recepmae: recm_com_nro o recm_nro_fac (PEP/FIB en recm_tipo_fac).
+     * Número OC Anita desde recepmae.
+     *
+     * Histórico: el PEP vive en recm_nro_fac (mismo vínculo que aplicped COM→PEP).
+     * recm_com_nro suele ser 0 o un nro chico ajeno a la OC; solo se usa si no hay PEP.
      * Crown: sin recm_com_*; usar mapa aplicped (ver {@see mapaOcDesdeAplicpedPorCom}).
      */
     public static function numeroOrdencompraDesdeCabecera(object $cabecera): int
     {
-        $nroCom = (int) ($cabecera->recm_com_nro ?? 0);
-        if ($nroCom > 0) {
-            return $nroCom;
-        }
-
         $tipoFac = strtoupper(trim((string) ($cabecera->recm_tipo_fac ?? '')));
         if (in_array($tipoFac, ['PEP', 'OC', 'ORD'], true)) {
-            return (int) ($cabecera->recm_nro_fac ?? 0);
+            $nroFac = (int) ($cabecera->recm_nro_fac ?? 0);
+            if ($nroFac > 0) {
+                return $nroFac;
+            }
         }
 
-        return 0;
+        return (int) ($cabecera->recm_com_nro ?? 0);
     }
 
     public static function whereRecepmaePorOrdencompra(int $numeroOc): string

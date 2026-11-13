@@ -37,15 +37,26 @@ class RecepcionProveedorAnitaImportOcFallbackTest extends TestCase
         $this->assertSame(218023, RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab));
     }
 
-    public function test_numero_oc_prioriza_recm_com_nro(): void
+    public function test_numero_oc_prioriza_pep_nro_fac_sobre_com_nro(): void
     {
         $cab = (object) [
-            'recm_com_nro' => 99001,
+            'recm_com_nro' => 5164,
             'recm_tipo_fac' => 'PEP',
-            'recm_nro_fac' => 218023,
+            'recm_nro_fac' => 215752,
         ];
 
-        $this->assertSame(99001, RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab));
+        $this->assertSame(215752, RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab));
+    }
+
+    public function test_numero_oc_usa_com_nro_si_no_hay_pep(): void
+    {
+        $cab = (object) [
+            'recm_com_nro' => 218023,
+            'recm_tipo_fac' => '',
+            'recm_nro_fac' => 0,
+        ];
+
+        $this->assertSame(218023, RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab));
     }
 
     public function test_unir_claves_deduplica_recepmae_y_aplicped(): void
