@@ -234,7 +234,10 @@
 		if (datos.moneda_id) {
 			$tr.find('.moneda_id').val(datos.moneda_id);
 		}
-		$tr.find('.cantidad, .precio').prop('readonly', true);
+		// Cantidad viene del modal de talles; el precio de lista puede diferir del
+		// facturado en su momento → queda editable para ajustar la NC sin factura.
+		$tr.find('.cantidad').prop('readonly', true);
+		$tr.find('.precio').prop('readonly', false);
 		$tr.find('.factura-ot-badge').text(badgeTexto(datos.combinacion_codigo, datos.talle_nombre));
 		$tr.find('.factura-abrir-nc-sin-factura').addClass('tiene-nc-sf');
 		$tr.removeClass('item-concepto-venta');

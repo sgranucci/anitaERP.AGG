@@ -52,6 +52,7 @@
 					<input type="text" id="factura_nc_sf_tot_pares" class="form-control form-control-sm text-right font-weight-bold" style="width:5rem;" readonly value="0">
 					<small class="text-muted" id="factura_nc_sf_aviso_precio"></small>
 				</div>
+				<p class="small text-muted mb-0 mt-2">Tras confirmar, el precio de cada rengl&oacute;n queda editable para cargarlo al valor facturado en su momento (puede diferir de la lista actual).</p>
 			</div>
 			<div class="modal-footer py-2">
 				<button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
