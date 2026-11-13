@@ -379,12 +379,116 @@
             }
         });
 
+        function condicionivaBajaImpuestosIdProveedor() {
+            var $cfg = $('#proveedor-arca-validacion-config').first();
+            if (!$cfg.length) {
+                return 7;
+            }
+            return parseInt($cfg.data('condicioniva-baja-id') || $cfg.attr('data-condicioniva-baja-id') || '7', 10);
+        }
+
+        function proveedorTieneCondicionivaBajaImpuestos() {
+            var bajaId = condicionivaBajaImpuestosIdProveedor();
+            var condId = parseInt($('#condicioniva_id').val() || '0', 10);
+            return bajaId > 0 && condId === bajaId;
+        }
+
+        function $botonesRegularizarProveedor() {
+            return $('.js-btn-regularizar-proveedor, #btn-regularizar-proveedor, #btn-regularizar-suspension-proveedor');
+        }
+
+        function puedeRegularizarProveedorSegunReglas() {
+            if (proveedorTieneCondicionivaBajaImpuestos()) {
+                return false;
+            }
+            var estado = String($('#estado').val() || '');
+            if (estado === 'Regularizado') {
+                return false;
+            }
+            var padronConProblemas = window.proveedorPadronArcaConProblemas === true;
+            return padronConProblemas || estado === 'Suspendido' || estado !== 'Regularizado';
+        }
+
+        function aplicarEstadoProveedorEnFormulario(estado) {
+            estado = String(estado || 'Activo');
+            $('#estado').val(estado);
+            var $btn = $('#botonestado');
+            if ($btn.length) {
+                $btn.html("<i class='fa fa-bell'></i>&nbsp;Estado " + estado);
+            }
+            if (estado === 'Regularizado' || estado === 'Activo') {
+                $('#tiposuspension_id').val('');
+            }
+            if (typeof muestraTipoSuspension === 'function') {
+                muestraTipoSuspension();
+            }
+            sincronizarEstadoProveedorPost();
+            actualizarUiRegularizarProveedor();
+        }
+
+        function regularizarProveedorEnFormulario() {
+            if (String($('#estado').val() || '') === 'Regularizado') {
+                return;
+            }
+            if (proveedorTieneCondicionivaBajaImpuestos()) {
+                alert('No se puede regularizar un proveedor con condición IVA Baja de impuestos.');
+                return;
+            }
+            if (!confirm('¿Regularizar el proveedor? Podrá operarse pese a observaciones ARCA. Debe grabar para persistir.')) {
+                return;
+            }
+            aplicarEstadoProveedorEnFormulario('Regularizado');
+        }
+
+        function actualizarUiRegularizarProveedor() {
+            var puedeRegularizar = puedeRegularizarProveedorSegunReglas();
+            $botonesRegularizarProveedor().each(function () {
+                var $el = $(this);
+                if (puedeRegularizar) {
+                    $el.removeClass('d-none').css('display', 'inline-block');
+                } else {
+                    $el.hide();
+                }
+            });
+            var $btnModal = $('#btn-regularizar-arca-modal');
+            if ($btnModal.length && $('#proveedor-arca-validacion-config').length) {
+                if (puedeRegularizar) {
+                    $btnModal.removeClass('d-none').show()
+                        .addClass('js-btn-regularizar-proveedor')
+                        .html('<i class="fa fa-check-circle"></i> Regularizar proveedor');
+                } else if (!$('#btn-regularizar-cliente').length) {
+                    $btnModal.addClass('d-none');
+                }
+            }
+        }
+
+        window.marcarPadronArcaProveedorConProblemas = function (conProblemas) {
+            window.proveedorPadronArcaConProblemas = !!conProblemas;
+            actualizarUiRegularizarProveedor();
+        };
+        window.aplicarEstadoProveedorEnFormulario = aplicarEstadoProveedorEnFormulario;
+        window.regularizarProveedorEnFormulario = regularizarProveedorEnFormulario;
+        window.actualizarUiRegularizarProveedor = actualizarUiRegularizarProveedor;
+
+        $('#condicioniva_id, #estado').on('change.regularizarProveedor', function () {
+            actualizarUiRegularizarProveedor();
+        });
+
+        $(document).on('click', '.js-btn-regularizar-proveedor, #btn-regularizar-proveedor, #btn-regularizar-suspension-proveedor', function (e) {
+            e.preventDefault();
+            regularizarProveedorEnFormulario();
+            $('#suspensionModal').modal('hide');
+            $('#arca-impuestos-validacion-modal').modal('hide');
+        });
+
+        actualizarUiRegularizarProveedor();
+
         $("#botonestado").click(function(){
 
             var estado = $("#estado").val();
 			var descripcion = $("#botonestado").text();
 
-			if (estado == 'Activo')
+			if (estado == 'Activo' || estado == 'Regularizado')
 			{
 				estado = 'Suspendido';
 				descripcion = 'Suspendido';
@@ -407,6 +511,7 @@
             $("#estado").val(estado);
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
             sincronizarEstadoProveedorPost();
+            actualizarUiRegularizarProveedor();
         });
 
         function mostrarSolapaProveedor(n) {

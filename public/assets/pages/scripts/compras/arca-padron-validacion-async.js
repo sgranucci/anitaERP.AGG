@@ -76,16 +76,32 @@
         $('#arca-imp-validacion-nota').show();
         var esAbmCliente = $('.js-cliente-arca-validacion-config, #cliente-arca-validacion-config').length > 0
             || $('#btn-regularizar-cliente').length > 0;
+        var esAbmProveedor = $('#proveedor-arca-validacion-config').length > 0
+            || $('#btn-regularizar-proveedor').length > 0;
         if (esAbmCliente && typeof window.marcarPadronArcaClienteConProblemas === 'function') {
             window.marcarPadronArcaClienteConProblemas(true);
         } else if (esAbmCliente && typeof window.actualizarUiRegularizarCliente === 'function') {
             window.clientePadronArcaConProblemas = true;
             window.actualizarUiRegularizarCliente();
         }
+        if (esAbmProveedor && typeof window.marcarPadronArcaProveedorConProblemas === 'function') {
+            window.marcarPadronArcaProveedorConProblemas(true);
+        } else if (esAbmProveedor && typeof window.actualizarUiRegularizarProveedor === 'function') {
+            window.proveedorPadronArcaConProblemas = true;
+            window.actualizarUiRegularizarProveedor();
+        }
         var $btnReg = $('#btn-regularizar-arca-modal');
         if ($btnReg.length && esAbmCliente) {
-            $btnReg.removeClass('d-none').show();
-        } else if ($btnReg.length && !esAbmCliente) {
+            $btnReg.removeClass('d-none').show()
+                .removeClass('js-btn-regularizar-proveedor')
+                .addClass('js-btn-regularizar-cliente')
+                .html('<i class="fa fa-check-circle"></i> Regularizar cliente (R)');
+        } else if ($btnReg.length && esAbmProveedor) {
+            $btnReg.removeClass('d-none').show()
+                .removeClass('js-btn-regularizar-cliente')
+                .addClass('js-btn-regularizar-proveedor')
+                .html('<i class="fa fa-check-circle"></i> Regularizar proveedor');
+        } else if ($btnReg.length) {
             $btnReg.addClass('d-none');
         }
         $modal.modal('show');
@@ -93,6 +109,10 @@
 
     function aplicarSuspensionProveedorAbm(json) {
         if (!json || !json.suspendido) {
+            return;
+        }
+        // Si el usuario ya eligió Regularizado en el form (aún sin grabar), no pisar.
+        if (String($('#estado').val() || '') === 'Regularizado') {
             return;
         }
         var $estado = $('#estado');
@@ -261,8 +281,23 @@
                 if (json && json.skipped) {
                     return;
                 }
+                if (json && json.regularizado) {
+                    if (typeof window.marcarPadronArcaProveedorConProblemas === 'function') {
+                        window.marcarPadronArcaProveedorConProblemas(false);
+                    }
+                    if (typeof window.actualizarUiRegularizarProveedor === 'function') {
+                        window.actualizarUiRegularizarProveedor();
+                    }
+                    if (typeof opts.onResult === 'function') {
+                        opts.onResult(json);
+                    }
+                    return;
+                }
                 if (json && json.validacion && json.validacion.ok && typeof window.marcarPadronArcaClienteConProblemas === 'function') {
                     window.marcarPadronArcaClienteConProblemas(false);
+                }
+                if (json && json.validacion && json.validacion.ok && typeof window.marcarPadronArcaProveedorConProblemas === 'function') {
+                    window.marcarPadronArcaProveedorConProblemas(false);
                 }
                 if (json && json.validacion) {
                     mostrarModalValidacion(json.validacion, json.message);

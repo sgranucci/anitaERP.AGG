@@ -17,6 +17,14 @@
             <span class="text-muted">—</span>
         @endif
     </td>
+@elseif ($key === 'estado')
+    <td class="{{ $cls }} lw-col" @if ($title !== '') title="{{ $title }}" @endif>
+        @if (\App\Models\Compras\Proveedor::esRegularizado((string) ($data->estado ?? '')))
+            <span class="badge badge-warning text-dark" title="Regularizado: operativa permitida pese a ARCA">Regularizado</span>
+        @else
+            <span class="lw-celda-texto">{{ $valor }}</span>
+        @endif
+    </td>
 @else
     <td class="{{ $cls }} lw-col" @if ($title !== '') title="{{ $title }}" @endif><span class="lw-celda-texto">{{ $valor }}</span></td>
 @endif

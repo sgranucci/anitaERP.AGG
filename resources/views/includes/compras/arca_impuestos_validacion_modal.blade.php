@@ -15,12 +15,12 @@
                 <ul id="arca-imp-validacion-detalles" class="mb-0 pl-3 small text-muted" style="display: none;"></ul>
                 <p id="arca-imp-validacion-nota" class="small text-muted mb-0 mt-3" style="display: none;">
                     La consulta se realizó en segundo plano; puede seguir trabajando en la pantalla.
-                    En clientes, suspenda o regularice (estado R) manualmente si corresponde.
+                    En clientes o proveedores, suspenda o regularice manualmente si corresponde.
                 </p>
             </div>
             <div class="modal-footer">
-                <button type="button" id="btn-regularizar-arca-modal" class="btn btn-warning d-none js-btn-regularizar-cliente">
-                    <i class="fa fa-check-circle"></i> Regularizar cliente (R)
+                <button type="button" id="btn-regularizar-arca-modal" class="btn btn-warning d-none js-btn-regularizar-arca-modal">
+                    <i class="fa fa-check-circle"></i> Regularizar
                 </button>
                 <button type="button" class="btn btn-primary" data-dismiss="modal">Entendido</button>
             </div>

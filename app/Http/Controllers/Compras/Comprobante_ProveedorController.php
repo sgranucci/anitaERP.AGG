@@ -1409,6 +1409,24 @@ class Comprobante_ProveedorController extends Controller
             return response()->json(['ok' => false, 'message' => 'Proveedor inexistente.'], 404);
         }
 
+        $condicionivaId = (int) ($proveedor->condicioniva_id ?? 0);
+
+        if (Proveedor::esRegularizado((string) ($proveedor->estado ?? ''))) {
+            return response()->json([
+                'ok' => true,
+                'regularizado' => true,
+                'message' => null,
+                'validacion' => null,
+                'proveedor' => [
+                    'id' => $proveedor->id,
+                    'codigo' => $proveedor->codigo,
+                    'nombre' => $proveedor->nombre,
+                    'condicioniva_id' => $condicionivaId,
+                    'estado' => (string) $proveedor->estado,
+                ],
+            ]);
+        }
+
         $cuit = preg_replace('/\D+/', '', (string) $proveedor->nroinscripcion) ?? '';
         if (strlen($cuit) !== 11) {
             return response()->json([
@@ -1416,8 +1434,6 @@ class Comprobante_ProveedorController extends Controller
                 'message' => 'El proveedor no tiene una CUIT válida (11 dígitos) para consultar ARCA.',
             ], 422);
         }
-
-        $condicionivaId = (int) ($proveedor->condicioniva_id ?? 0);
 
         try {
             $data = app(ConstanciaInscripcionService::class)->getPersonaV2($cuit);
@@ -1437,6 +1453,7 @@ class Comprobante_ProveedorController extends Controller
                     'codigo' => $proveedor->codigo,
                     'nombre' => $proveedor->nombre,
                     'condicioniva_id' => $condicionivaId,
+                    'estado' => (string) $proveedor->estado,
                 ],
             ], $httpOk ? 200 : 422);
         } catch (\Throwable $e) {

@@ -6,6 +6,15 @@ use Illuminate\Support\Collection;
 
 trait ProveedorTrait {
 
+	public const ESTADO_ACTIVO = 'Activo';
+
+	public const ESTADO_SUSPENDIDO = 'Suspendido';
+
+	public const ESTADO_ALTA_PENDIENTE = 'Alta Pendiente';
+
+	/** Proveedor con problemas ARCA/AFIP pero habilitado para operar (Anita: prom_estado_pro = 3). */
+	public const ESTADO_REGULARIZADO = 'Regularizado';
+
 	public static $enumEstado = [
 		'0' => 'Activo',
 		'1' => 'Suspendido',
@@ -15,9 +24,25 @@ trait ProveedorTrait {
 
 	/** Estados de proveedor habilitados para elegir en compras (requisición, OC, modales). */
 	public static $estadosHabilitadosOperacion = [
-		'Activo',
-		'Regularizado',
+		self::ESTADO_ACTIVO,
+		self::ESTADO_REGULARIZADO,
 	];
+
+	/** @return list<string> */
+	public static function estadosHabilitadosOperacionCodigosYTextos(): array
+	{
+		return ['0', '3', self::ESTADO_ACTIVO, self::ESTADO_REGULARIZADO];
+	}
+
+	public static function estaHabilitadoParaOperacion(?string $estado): bool
+	{
+		return in_array((string) ($estado ?? ''), self::estadosHabilitadosOperacionCodigosYTextos(), true);
+	}
+
+	public static function esRegularizado(?string $estado): bool
+	{
+		return in_array((string) ($estado ?? ''), ['3', self::ESTADO_REGULARIZADO], true);
+	}
 
 	public static $enumTipoAlta = [
 		['id' => '1', 'valor' => 'D', 'nombre'  => 'DEFINITIVO'],

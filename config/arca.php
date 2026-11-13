@@ -104,6 +104,10 @@ return [
         'impuesto_monotributo_id' => 20,
         'condicioniva_responsable_inscripto_id' => 1,
         'condicioniva_monotributo_id' => 4,
+        'condicioniva_baja_impuestos_id' => (int) env(
+            'ARCA_PADRON_PROVEEDOR_CONDICIONIVA_BAJA_IMPUESTOS_ID',
+            env('ARCA_PADRON_CONDICIONIVA_BAJA_IMPUESTOS_ID', 7)
+        ),
         'estado_impuesto_activo' => 'AC',
     ],
 

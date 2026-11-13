@@ -407,8 +407,9 @@ final class PrecargaProveedorResolucionSupport
 
     private function proveedorEstaHabilitado(object $proveedor): bool
     {
-        return in_array((string) ($proveedor->estado ?? ''), ['0', '3'], true)
-            || in_array($proveedor->estado ?? '', ['Activo', 'Regularizado'], true);
+        return \App\Models\Compras\Proveedor::estaHabilitadoParaOperacion(
+            (string) ($proveedor->estado ?? '')
+        );
     }
 
     /**

@@ -834,7 +834,9 @@ class ApiController extends Controller
 
     private function proveedorEstaActivo(object $proveedor): bool
     {
-        return in_array($proveedor->estado, ['0', 'Activo', '3', 'Regularizado'], true);
+        return \App\Models\Compras\Proveedor::estaHabilitadoParaOperacion(
+            (string) ($proveedor->estado ?? '')
+        );
     }
 
     /**

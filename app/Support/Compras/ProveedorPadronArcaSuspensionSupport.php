@@ -35,13 +35,23 @@ final class ProveedorPadronArcaSuspensionSupport
             ];
         }
 
+        // Regularizado: opera pese a ARCA; no volver a suspender automáticamente.
+        if (Proveedor::esRegularizado((string) ($proveedor->estado ?? ''))) {
+            return [
+                'suspendido' => false,
+                'tiposuspension_id' => null,
+                'tiposuspension_nombre' => null,
+                'regularizado' => true,
+            ];
+        }
+
         $nombre = self::nombreMotivo($validacion);
         $tipoId = self::resolverTipoId($nombre);
-        $yaSuspendido = (string) $proveedor->estado === 'Suspendido';
+        $yaSuspendido = (string) $proveedor->estado === Proveedor::ESTADO_SUSPENDIDO;
         $mismoMotivo = (int) $proveedor->tiposuspension_id === $tipoId;
 
         if (! $yaSuspendido || ! $mismoMotivo) {
-            $proveedor->estado = 'Suspendido';
+            $proveedor->estado = Proveedor::ESTADO_SUSPENDIDO;
             $proveedor->tiposuspension_id = $tipoId;
             $proveedor->save();
 

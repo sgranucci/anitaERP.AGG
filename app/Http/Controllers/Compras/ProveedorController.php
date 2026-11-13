@@ -1052,10 +1052,15 @@ class ProveedorController extends Controller
                 $condicionivaId > 0 ? $condicionivaId : null,
                 $data
             );
+            $regularizado = \App\Models\Compras\Proveedor::esRegularizado((string) ($proveedor->estado ?? ''));
             $aplicacion = ProveedorPadronArcaSuspensionSupport::aplicar($proveedor, $validacion);
             $suspendido = (bool) ($aplicacion['suspendido'] ?? false);
+            $regularizado = $regularizado || (bool) ($aplicacion['regularizado'] ?? false);
 
-            $httpOk = ! ($validacion['aplica'] ?? false) || ($validacion['ok'] ?? false);
+            // Regularizado: informa el padrón pero no trata el ABM como error bloqueante.
+            $httpOk = $regularizado
+                || ! ($validacion['aplica'] ?? false)
+                || ($validacion['ok'] ?? false);
 
             return response()->json([
                 'ok' => $httpOk,
@@ -1063,9 +1068,12 @@ class ProveedorController extends Controller
                 'data' => $data,
                 'validacion' => $validacion,
                 'suspendido' => $suspendido,
+                'regularizado' => $regularizado,
                 'tiposuspension_id' => $aplicacion['tiposuspension_id'] ?? null,
                 'tiposuspension_nombre' => $aplicacion['tiposuspension_nombre'] ?? null,
-                'estado' => $suspendido ? 'Suspendido' : (string) $proveedor->estado,
+                'estado' => $suspendido
+                    ? \App\Models\Compras\Proveedor::ESTADO_SUSPENDIDO
+                    : (string) $proveedor->estado,
                 'soap' => $data['soap'] ?? null,
             ], $httpOk ? 200 : 422);
         } catch (\Throwable $e) {

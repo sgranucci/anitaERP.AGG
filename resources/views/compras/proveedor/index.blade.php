@@ -355,7 +355,7 @@ Proveedores
                                 </tr>
                             @else
                                 @php $data = $filaVista['row']; @endphp
-                                <tr @if ($data->estado == '1') class="table-danger" @endif>
+                                <tr @if (in_array((string) ($data->estado ?? ''), ['1', 'Suspendido'], true)) class="table-danger" @elseif (\App\Models\Compras\Proveedor::esRegularizado((string) ($data->estado ?? ''))) class="table-warning" @endif>
                                     @foreach ($columnasVisibles as $key)
                                         @include('compras.proveedor.partials.workbench_celda', [
                                             'key' => $key,

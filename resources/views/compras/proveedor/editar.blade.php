@@ -62,6 +62,11 @@
                             <i class="fa fa-bell"></i> Cambia a DEFINITIVO
                         </button>
                     @endif
+                    @if (\App\Support\Compras\ProveedorRegularizacionAbmSupport::usuarioPuedeRegularizar())
+                        <button type="button" id="btn-regularizar-proveedor" class="btn btn-warning btn-sm mr-1 js-btn-regularizar-proveedor" title="Regularizado: operativa permitida pese a ARCA" style="display: {{ \App\Models\Compras\Proveedor::esRegularizado((string) ($data->estado ?? '')) ? 'none' : 'inline-block' }};">
+                            <i class="fa fa-check-circle"></i> Regularizar
+                        </button>
+                    @endif
                     @if (can('listar-cuentacorriente-proveedor', false))
                         <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Cuenta Corriente (se abre en modo consulta)">
                             <i class="fa fa-folder-open"></i> Cuenta Corriente

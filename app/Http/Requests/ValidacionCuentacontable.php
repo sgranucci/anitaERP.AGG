@@ -39,13 +39,9 @@ class ValidacionCuentacontable extends FormRequest
         return [
             'empresa_id' => 'required|integer',
             'rubrocontable_id' => 'required|integer',
-            'nombre' => [
-                'required',
-                'max:100',
-                Rule::unique('cuentacontable', 'nombre')
-                    ->where(fn ($q) => $q->where('empresa_id', $empresaId))
-                    ->ignore($id),
-            ],
+            // El nombre puede repetirse en la misma empresa (título + imputable del mismo rubro).
+            // La unicidad de negocio es el código Anita.
+            'nombre' => ['required', 'max:100'],
             'codigo' => [
                 'required',
                 'max:50',
@@ -63,7 +59,6 @@ class ValidacionCuentacontable extends FormRequest
     public function messages()
     {
         return [
-            'nombre.unique' => 'El nombre ya está en uso para esta empresa.',
             'codigo.unique' => 'El código ya está en uso para esta empresa.',
         ];
     }

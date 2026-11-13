@@ -22,6 +22,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="cierrasuspensionModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
+        @if (\App\Support\Compras\ProveedorRegularizacionAbmSupport::usuarioPuedeRegularizar())
+        <button type="button" id="btn-regularizar-suspension-proveedor" class="btn btn-warning js-btn-regularizar-proveedor">Regularizar</button>
+        @endif
         <button type="button" id="aceptasuspensionModal" class="btn btn-primary">Suspende proveedor</button>
       </div>
     </div>

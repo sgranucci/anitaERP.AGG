@@ -170,6 +170,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		if (! isset($data['estado']) || $data['estado'] === '' || $data['estado'] === null) {
 			$data['estado'] = $proveedorActual->estado ?: 'Activo';
 		}
+		if (\App\Models\Compras\Proveedor::esRegularizado((string) ($data['estado'] ?? ''))) {
+			$this->assertEstadoRegularizadoPermitido($data);
+			$data['estado'] = \App\Models\Compras\Proveedor::ESTADO_REGULARIZADO;
+			$data['tiposuspension_id'] = null;
+		}
         $proveedor = $proveedorActual->update($data);
 		//
 		// Actualiza anita (si falta promae, inserta — evita UPDATE 0 filas silencioso)
@@ -1282,6 +1287,20 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			'Regularizado' => '3',
 			default => '0',
 		};
+	}
+
+	/**
+	 * No se regulariza con condición IVA Baja de impuestos (mismo criterio que clientes).
+	 */
+	private function assertEstadoRegularizadoPermitido(array $data): void
+	{
+		$bajaId = (int) config('arca.padron_validacion_proveedor.condicioniva_baja_impuestos_id', 7);
+		$condicionivaId = (int) ($data['condicioniva_id'] ?? 0);
+		if ($bajaId > 0 && $condicionivaId === $bajaId) {
+			throw new \InvalidArgumentException(
+				'No se puede regularizar un proveedor con condición IVA Baja de impuestos.'
+			);
+		}
 	}
 
 	/**
