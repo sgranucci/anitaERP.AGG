@@ -4,18 +4,21 @@ namespace App\Http\Controllers\Uif;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\Uif\Localidad_Uif;
-use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionLocalidad_Uif;
 use App\Repositories\Uif\Localidad_UifRepositoryInterface;
+use App\Repositories\Uif\Provincia_UifRepositoryInterface;
 
 class Localidad_UifController extends Controller
 {
 	private $repository;
+    private $provincia_uifRepository;
 
-    public function __construct(Localidad_UifRepositoryInterface $repository)
-    {
+    public function __construct(
+        Localidad_UifRepositoryInterface $repository,
+        Provincia_UifRepositoryInterface $provincia_uifRepository
+    ) {
         $this->repository = $repository;
+        $this->provincia_uifRepository = $provincia_uifRepository;
     }
 
     /**
@@ -35,6 +38,8 @@ class Localidad_UifController extends Controller
             $datas = $this->repository->all();
 		}
 
+        $datas = $datas->sortBy('nombre', SORT_NATURAL | SORT_FLAG_CASE)->values();
+
         return view('uif.localidad_uif.index', compact('datas'));
     }
 
@@ -47,7 +52,10 @@ class Localidad_UifController extends Controller
     {
         can('crear-localidad-uif');
 
-        return view('uif.localidad_uif.crear');
+        $provincia_uif_query = $this->provincia_uifRepository->all()->sortBy('nombre')->values();
+        $codigoSugerido = $this->repository->proximoCodigo();
+
+        return view('uif.localidad_uif.crear', compact('provincia_uif_query', 'codigoSugerido'));
     }
 
     /**
@@ -58,9 +66,12 @@ class Localidad_UifController extends Controller
      */
     public function guardar(ValidacionLocalidad_Uif $request)
     {
-		$this->repository->create($request->all());
+        $localidad = $this->repository->create($request->validated());
 
-        return redirect('uif/localidad_uif')->with('mensaje', 'Localidad creada con éxito');
+        return redirect('uif/localidad_uif')->with(
+            'mensaje',
+            'Localidad creada con éxito (código '.$localidad->codigo.')'
+        );
     }
 
 
@@ -74,8 +85,9 @@ class Localidad_UifController extends Controller
     {
         can('editar-localidad-uif');
         $data = $this->repository->findOrFail($id);
+        $provincia_uif_query = $this->provincia_uifRepository->all()->sortBy('nombre')->values();
 
-        return view('uif.localidad_uif.editar', compact('data'));
+        return view('uif.localidad_uif.editar', compact('data', 'provincia_uif_query'));
     }
 
     /**
@@ -89,7 +101,7 @@ class Localidad_UifController extends Controller
     {
         can('actualizar-localidad-uif');
 
-        $this->repository->update($request->all(), $id);
+        $this->repository->update($request->validated(), $id);
 
         return redirect('uif/localidad_uif')->with('mensaje', 'Localidad actualizada con éxito');
     }

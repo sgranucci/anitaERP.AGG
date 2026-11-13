@@ -367,6 +367,11 @@ class ConciliacionBancariaAlinearExcelService
      */
     private function contableProtegidoPorExcel(array $mov, array $cheques): bool
     {
+        // ANULA de cheque (ya conciliado o fuera del Excel) no debe cerrarse sintético.
+        if (ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov)) {
+            return true;
+        }
+
         if ($cheques === []) {
             return ConciliacionBancariaPendienteSupport::esChequeNoAcreditado($mov);
         }

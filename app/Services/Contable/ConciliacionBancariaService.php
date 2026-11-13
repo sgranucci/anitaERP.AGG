@@ -223,7 +223,14 @@ class ConciliacionBancariaService
             $fechaHasta,
         );
         // Firmado carátula (cheques restan): -neto (stock − RECLA, o F.Dev del mes hasta mayo).
-        $sumaPendContCaratula = round(-1 * (float) $armPendientes['suma_caratula'], 2);
+        // ANULA de cheque ya conciliado (solo ANULA pendiente del Ch:) suma el Debe al ajuste.
+        $sumaAnulasCheque = ConciliacionBancariaPendienteSupport::sumaAnulasChequeParaCaratula(
+            $pendientesContables,
+        );
+        $sumaPendContCaratula = round(
+            -1 * (float) $armPendientes['suma_caratula'] + $sumaAnulasCheque,
+            2,
+        );
         $filasBancoCaratula = $partBanco['caratula'];
         $sumaPendBancoCaratula = $partBanco['suma_caratula'];
         if (array_key_exists('suma_banco_excel', $armPendientes)) {
@@ -308,6 +315,7 @@ class ConciliacionBancariaService
             'saldo_contable' => $saldoContable,
             'suma_pendientes_contables' => $sumaPendContCaratula,
             'suma_pendientes_contables_otros' => $partPend['suma_otros'],
+            'suma_anulas_cheque_caratula' => $sumaAnulasCheque,
             'suma_pendientes_banco' => $sumaPendBancoCaratula,
             'suma_pendientes_banco_creditos' => $partBanco['suma_creditos'],
             'suma_pendientes_banco_debitos' => $partBanco['suma_debitos'],
@@ -1016,13 +1024,19 @@ class ConciliacionBancariaService
             $resultado['suma_pendientes_cheques'] = $arm['suma_pendientes'];
             $resultado['suma_pendientes_cheques_caratula'] = $arm['suma_caratula'];
 
-            $sumaCheques = round(-1 * (float) $arm['suma_caratula'], 2);
+            $sumaAnulasCheque = ConciliacionBancariaPendienteSupport::sumaAnulasChequeParaCaratula(
+                is_array($resultado['pendientes_contables'] ?? null)
+                    ? $resultado['pendientes_contables']
+                    : [],
+            );
+            $sumaCheques = round(-1 * (float) $arm['suma_caratula'] + $sumaAnulasCheque, 2);
             $sumaBancoCar = (float) ($resultado['suma_pendientes_banco'] ?? 0);
             $saldoBanco = (float) ($resultado['saldo_banco'] ?? 0);
             $saldoContable = (float) ($resultado['saldo_contable'] ?? 0);
             $saldoAjustado = round($saldoBanco + $sumaCheques - $sumaBancoCar, 2);
             $diferencia = round($saldoContable - $saldoAjustado, 2);
 
+            $resultado['suma_anulas_cheque_caratula'] = $sumaAnulasCheque;
             $resultado['suma_pendientes_contables'] = $sumaCheques;
             $resultado['saldo_banco_ajustado'] = $saldoAjustado;
             $resultado['diferencia'] = $diferencia;

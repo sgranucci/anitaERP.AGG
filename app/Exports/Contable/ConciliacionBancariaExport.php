@@ -381,7 +381,7 @@ class ConciliacionBancariaExport
         $ws->getTabColor()->setARGB('FF6C3483');
         $this->banda($ws, 'A1:F1', 'Pendientes de otros movimientos', 14, self::NAVY);
         $ws->mergeCells('A2:F2');
-        $ws->setCellValue('A2', 'Mayor sin match que no es cheque. No entran en la carátula de cheques.');
+        $ws->setCellValue('A2', 'Mayor sin match que no es cheque pendiente (incluye ANULA de cheques ya conciliados).');
 
         $encabezados = ['F.Mov.', 'Tip', 'Asiento', 'Detalle', 'Débitos', 'Créditos'];
         $filas = [];

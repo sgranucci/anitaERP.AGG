@@ -141,7 +141,11 @@
                             <p><strong>En carátula (F.Dev del mes):</strong> {{ count($resultado['pendientes_cheques_caratula'] ?? []) }}
                                 · {{ number_format($resultado['suma_pendientes_cheques_caratula'] ?? 0, 2, ',', '.') }}
                             </p>
-                            <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}</p>
+                            <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}
+                                @if (abs((float) ($resultado['suma_anulas_cheque_caratula'] ?? 0)) > 0.005)
+                                    <span class="text-muted small">· ANULA cheque en carátula: {{ number_format($resultado['suma_anulas_cheque_caratula'] ?? 0, 2, ',', '.') }}</span>
+                                @endif
+                            </p>
                             <p><strong>Pendientes banco (soporte MAYO):</strong> {{ count($resultado['pendientes_banco_caratula'] ?? []) }}
                                 <span class="text-muted small">· sin match total: {{ count($resultado['pendientes_banco'] ?? []) }}</span>
                             </p>
@@ -189,7 +193,7 @@
                             </table>
                         </div>
                         <div class="tab-pane" id="tab-mayor">
-                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques. Los cheques están en la solapa anterior.</p>
+                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques pendientes (incluye ANULA de cheques ya conciliados). Los CHP del stock están en la solapa anterior.</p>
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>

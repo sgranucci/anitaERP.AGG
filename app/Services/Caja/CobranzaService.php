@@ -830,11 +830,26 @@ class CobranzaService
 				if ($retencion_cobranza)
 				{
 					$cuentacontable_id = null;
-					// Busca en funcion de la empresa
+					$cuentaBaseId = null;
+					// Busca en funcion de la empresa; si no hay fila, homologa desde cualquier vínculo
 					foreach ($retencion_cobranza->retencion_cobranza_cuentacontables as $cuenta)
 					{
-						if ($cuenta->empresa_id == $empresa_id)
-							$cuentacontable_id = $cuenta->cuentacontable_id;
+						$cuentaBaseId = (int) $cuenta->cuentacontable_id;
+						if ((int) $cuenta->empresa_id === (int) $empresa_id) {
+							$cuentacontable_id = (int) $cuenta->cuentacontable_id;
+							break;
+						}
+					}
+					if (! $cuentacontable_id && $cuentaBaseId) {
+						$cuentacontable_id = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+							$cuentaBaseId,
+							(int) $empresa_id
+						);
+					} elseif ($cuentacontable_id) {
+						$cuentacontable_id = CuentacontableEmpresaHomologacionSupport::idParaEmpresa(
+							(int) $cuentacontable_id,
+							(int) $empresa_id
+						);
 					}
 					if (!$cuentacontable_id) {
 						continue;

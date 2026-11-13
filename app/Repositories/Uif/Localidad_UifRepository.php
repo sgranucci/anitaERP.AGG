@@ -42,16 +42,22 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
 
     public function create(array $data)
     {
-        $localidad_uif = $this->model->create($data);
+        $data['codigo'] = (string) $this->proximoCodigo();
 
-        return($localidad_uif);
+        return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
-        $localidad_uif = $this->model->findOrFail($id)->update($data);
+        // El código Anita no se modifica en edición.
+        unset($data['codigo']);
 
-		return $localidad_uif;
+        return $this->model->findOrFail($id)->update($data);
+    }
+
+    public function proximoCodigo(): int
+    {
+        return $this->model->proximoCodigo();
     }
 
     public function delete($id)

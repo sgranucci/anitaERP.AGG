@@ -11,12 +11,33 @@ use Carbon\Carbon;
 final class ConciliacionBancariaPendienteSupport
 {
     /**
+     * Reversa / anulación de OP con cheque (ej. "ANULA OPP … Ch: 70507390").
+     * No es un CHP pendiente de débito: el mayor tiene el Debe de la anulación.
+     *
+     * @param  array<string, mixed>  $contable
+     */
+    public static function esAnulaChequeContable(array $contable): bool
+    {
+        $desc = (string) ($contable['descripcion'] ?? '');
+        if ($desc === '' || ! preg_match('/\bANULA\b/i', $desc)) {
+            return false;
+        }
+
+        return ConciliacionBancariaReferenciaSupport::extraerChequeContable($contable) !== null;
+    }
+
+    /**
      * Solo cheques identificables (Ch: NNNNN o tip CH*).
+     * Las ANULA con Ch: van a "Pendientes otros" (no al stock cpromae).
      *
      * @param  array<string, mixed>  $contable
      */
     public static function esChequeNoAcreditado(array $contable): bool
     {
+        if (self::esAnulaChequeContable($contable)) {
+            return false;
+        }
+
         if (ConciliacionBancariaReferenciaSupport::extraerChequeContable($contable) !== null) {
             return true;
         }
@@ -24,6 +45,51 @@ final class ConciliacionBancariaPendienteSupport
         $tipo = strtoupper(trim((string) ($contable['tipo_comp'] ?? '')));
 
         return in_array($tipo, ['CHP', 'CHD', 'CHQ', 'CHE'], true);
+    }
+
+    /**
+     * Ajuste de carátula por ANULA de cheque ya conciliado (o sin contrapartida pendiente).
+     * Si el mismo Ch: sigue pendiente en el mayor (anulación antes de acreditar), no ajusta:
+     * el neto ya está en libros y el stock cpromae ya sacó el anulado.
+     *
+     * @param  list<array<string, mixed>>  $pendientesContables
+     */
+    public static function sumaAnulasChequeParaCaratula(array $pendientesContables): float
+    {
+        /** @var array<string, list<array<string, mixed>>> $porCheque */
+        $porCheque = [];
+        foreach ($pendientesContables as $mov) {
+            if (! is_array($mov)) {
+                continue;
+            }
+            $nro = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
+            if ($nro === null) {
+                continue;
+            }
+            $porCheque[$nro][] = $mov;
+        }
+
+        $suma = 0.0;
+        foreach ($porCheque as $movs) {
+            $anulas = [];
+            foreach ($movs as $mov) {
+                if (self::esAnulaChequeContable($mov)) {
+                    $anulas[] = $mov;
+                }
+            }
+            if ($anulas === []) {
+                continue;
+            }
+            // Queda el original u otro movimiento del mismo cheque → no inflar carátula.
+            if (count($movs) > count($anulas)) {
+                continue;
+            }
+            foreach ($anulas as $mov) {
+                $suma += ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
+            }
+        }
+
+        return round($suma, 2);
     }
 
     /**
