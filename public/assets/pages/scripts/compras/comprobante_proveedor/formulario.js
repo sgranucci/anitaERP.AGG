@@ -4431,17 +4431,71 @@ $(function () {
                 alCambiarLetraComprobante();
             });
 
+        function severidadProveedorSuspendido() {
+            var $cfg = $('#cp-proveedor-suspendido-config');
+            if ($cfg.length) {
+                return String($cfg.data('severidad') || window.cpProveedorSuspendidoSeveridad || 'bloquear');
+            }
+            return String(window.cpProveedorSuspendidoSeveridad || 'bloquear');
+        }
+
+        function mensajeProveedorSuspendido(severidad) {
+            var $cfg = $('#cp-proveedor-suspendido-config');
+            if (severidad === 'avisar') {
+                return $cfg.length
+                    ? String($cfg.data('mensaje-aviso') || 'El proveedor está suspendido. Se permite cargar el comprobante.')
+                    : 'El proveedor está suspendido. Se permite cargar el comprobante.';
+            }
+            return $cfg.length
+                ? String($cfg.data('mensaje-bloqueo') || 'El proveedor está suspendido. No se puede cargar el comprobante.')
+                : 'El proveedor está suspendido. No se puede cargar el comprobante.';
+        }
+
         function mostrarAvisoProveedorSuspendido(data) {
             var $aviso = $('#cp-aviso-proveedor-suspendido');
             if (!$aviso.length) {
-                return;
+                return true;
             }
             var suspendido = String((data && data.estado) || '') === 'Suspendido';
-            $aviso.toggleClass('d-none', !suspendido);
+            var severidad = severidadProveedorSuspendido();
+            if (!suspendido) {
+                $aviso.addClass('d-none');
+                return true;
+            }
+            if (severidad === 'avisar') {
+                $aviso
+                    .removeClass('alert-danger')
+                    .addClass('alert-warning')
+                    .text(mensajeProveedorSuspendido('avisar'))
+                    .removeClass('d-none');
+                return true;
+            }
+            $aviso
+                .removeClass('alert-warning')
+                .addClass('alert-danger')
+                .text(mensajeProveedorSuspendido('bloquear'))
+                .addClass('d-none');
+            if (typeof limpiarProveedorEnPantallaManteniendoCodigo === 'function') {
+                limpiarProveedorEnPantallaManteniendoCodigo();
+            } else {
+                $('#proveedor_id').val('');
+                $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val('');
+            }
+            if (typeof avisarProveedorNoCargado === 'function') {
+                avisarProveedorNoCargado(mensajeProveedorSuspendido('bloquear'));
+            } else {
+                alert(mensajeProveedorSuspendido('bloquear'));
+            }
+            return false;
         }
 
         window.afterProveedorConsultaOk = function (data, $input) {
-            mostrarAvisoProveedorSuspendido(data);
+            if (!mostrarAvisoProveedorSuspendido(data)) {
+                if (typeof window.afterProveedorConsultaFail === 'function') {
+                    window.afterProveedorConsultaFail($input);
+                }
+                return;
+            }
             aplicarLetraDesdeProveedor(data);
             var $codigo = $input && $input.length ? $input : $('#codigoproveedor');
             if (!$codigo.data('cp-avanzar-tras-ok')) {

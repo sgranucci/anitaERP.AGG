@@ -46,6 +46,7 @@ use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\ProveedorSuspendidoOperacionSupport;
 use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
@@ -392,6 +393,7 @@ class ComprobanteProveedorPersistenciaService
 
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);
+        $this->assertProveedorSuspendidoPermitido($payload);
 
         ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
             (int) ($payload['tipotransaccion_compra_id'] ?? 0),
@@ -536,6 +538,7 @@ class ComprobanteProveedorPersistenciaService
         ]);
         $this->assertPeriodoContablePermitido($payloadPeriodo);
         $this->assertFechaComprobanteCarga($payloadPeriodo);
+        $this->assertProveedorSuspendidoPermitido($payloadPeriodo);
 
         ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
             (int) ($payloadPeriodo['tipotransaccion_compra_id'] ?? 0),
@@ -714,6 +717,7 @@ class ComprobanteProveedorPersistenciaService
 
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);
+        $this->assertProveedorSuspendidoPermitido($payload);
 
         ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
             (int) ($payload['tipotransaccion_compra_id'] ?? 0),
@@ -828,6 +832,7 @@ class ComprobanteProveedorPersistenciaService
         } else {
             $this->aplicarResultadoCompliance($resultadoCompliance);
         }
+        $this->anexarAvisoProveedorSuspendido($payload);
 
         ComprobanteProveedorPrecargaTotalSupport::assertCuadraConPrecarga(
             $precargaId > 0 ? $precargaId : null,
@@ -1599,6 +1604,39 @@ class ComprobanteProveedorPersistenciaService
             $this->complianceValidacion->validarAlGrabar($payload, $lineas)
         );
         unset($payload['wscdc_async_token']);
+        $this->anexarAvisoProveedorSuspendido($payload);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertProveedorSuspendidoPermitido(array $payload): void
+    {
+        ProveedorSuspendidoOperacionSupport::assertPorProveedorId(
+            (int) ($payload['proveedor_id'] ?? 0)
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function anexarAvisoProveedorSuspendido(array $payload): void
+    {
+        if (! ProveedorSuspendidoOperacionSupport::permiteCargaConAviso()) {
+            return;
+        }
+
+        $eval = ProveedorSuspendidoOperacionSupport::evaluar(
+            Proveedor::query()->find((int) ($payload['proveedor_id'] ?? 0))
+        );
+        if (($eval['aviso'] ?? null) === null || $eval['aviso'] === '') {
+            return;
+        }
+
+        $this->ultimosAvisosControles = array_values(array_unique(array_merge(
+            $this->ultimosAvisosControles,
+            [(string) $eval['aviso']]
+        )));
     }
 
     /** @param array{ok: bool, avisos: list<string>, errores: list<string>} $resultado */

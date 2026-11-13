@@ -65,6 +65,11 @@ final class ParametroSistemaSupport
      */
     public const CLAVE_COMPROBANTE_FECHA_TOLERANCIA_DIAS = 'comprobante_fecha_tolerancia_dias';
 
+    /**
+     * Comprobante de proveedor: severidad si el proveedor está suspendido (bloquear | avisar).
+     */
+    public const CLAVE_COMPROBANTE_PROVEEDOR_SUSPENDIDO_SEVERIDAD = 'comprobante_proveedor_suspendido_severidad';
+
     /** Diferencia de cierre de caja Crown que pasa el caso a auditoría. */
     public const CLAVE_TESORERIA_CROWN_TOLERANCIA_AUDITORIA = 'tesoreria_crown_tolerancia_auditoria';
 
@@ -178,6 +183,14 @@ final class ParametroSistemaSupport
                 'ayuda' => 'La fecha impresa puede adelantarse estos días a la de contabilización. Permite cargar el 30/10 una factura con fecha 1/11, contabilizándola el 30/10. 0 no admite adelanto. La contabilización sigue sin poder pasar de hoy.',
                 'tipo' => 'entero',
                 'orden' => 57,
+            ],
+            self::CLAVE_COMPROBANTE_PROVEEDOR_SUSPENDIDO_SEVERIDAD => [
+                'grupo' => 'Compras',
+                'etiqueta' => 'Proveedor suspendido en comprobante',
+                'ayuda' => 'Si el proveedor está suspendido (p. ej. por ARCA/APOC): Bloquear impide cargar y contabilizar; Avisar permite cargar y solo notifica en pantalla y al grabar. Default: bloquear; en Ferli arranca en avisar.',
+                'tipo' => 'select',
+                'orden' => 58,
+                'opciones' => \App\Support\Compras\ProveedorSuspendidoOperacionSupport::opcionesSeveridad(),
             ],
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => [
                 'grupo' => 'Recepción de proveedor',
@@ -294,7 +307,7 @@ final class ParametroSistemaSupport
                 'etiqueta' => 'Cuenta de proveedores al alta',
                 'ayuda' => 'Cuenta contable que se propone al crear un proveedor, en pesos y en moneda extranjera. En el formulario se puede cambiar. En las otras empresas se usa el mismo código. F1 o la lupa abren la consulta.',
                 'tipo' => 'cuentacontable',
-                'orden' => 58,
+                'orden' => 59,
             ];
         }
 
@@ -387,6 +400,24 @@ final class ParametroSistemaSupport
     public static function noPrecargarCantidadRecibida(): bool
     {
         return self::boolean(self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD, false);
+    }
+
+    /**
+     * Severidad al cargar comprobante con proveedor suspendido: bloquear | avisar.
+     * Default: bloquear; en Ferli arranca en avisar (configurable en Configuración general).
+     */
+    public static function comprobanteProveedorSuspendidoSeveridad(): string
+    {
+        $ops = \App\Support\Compras\ProveedorSuspendidoOperacionSupport::opcionesSeveridad();
+        $valor = self::texto(
+            self::CLAVE_COMPROBANTE_PROVEEDOR_SUSPENDIDO_SEVERIDAD,
+            self::fallbackValor(self::CLAVE_COMPROBANTE_PROVEEDOR_SUSPENDIDO_SEVERIDAD)
+        );
+        if ($valor === '' || ! array_key_exists($valor, $ops)) {
+            return (string) array_key_first($ops);
+        }
+
+        return $valor;
     }
 
     /**
@@ -708,6 +739,9 @@ final class ParametroSistemaSupport
                 'comprobante_proveedor.fecha_comprobante_tolerancia_dias_contabilizacion',
                 5
             )),
+            self::CLAVE_COMPROBANTE_PROVEEDOR_SUSPENDIDO_SEVERIDAD => EntornoEmpresaSupport::esFerli()
+                ? \App\Support\Compras\ProveedorSuspendidoOperacionSupport::SEVERIDAD_AVISAR
+                : \App\Support\Compras\ProveedorSuspendidoOperacionSupport::SEVERIDAD_BLOQUEAR,
             self::CLAVE_TESORERIA_CROWN_EMPRESA_ID => '1',
             self::CLAVE_TESORERIA_CROWN_AVISOS_MAILS => '',
             self::CLAVE_TESORERIA_CROWN_AVISOS_HORA => '07:30',

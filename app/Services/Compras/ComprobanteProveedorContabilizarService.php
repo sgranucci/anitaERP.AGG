@@ -26,6 +26,7 @@ use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use App\Support\Compras\ProveedorSuspendidoOperacionSupport;
 use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosTipoImputadoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorIvaLineasDesdeOcSupport;
@@ -251,6 +252,7 @@ class ComprobanteProveedorContabilizarService
 
         ComprobanteProveedorIngresoEgresoEdicionSupport::assertPuedeModificarDesdeComprobante($comprobante);
         $this->assertEstadoPermiteContabilizar($comprobante);
+        ProveedorSuspendidoOperacionSupport::assertPorProveedorId((int) ($comprobante->proveedor_id ?? 0));
 
         app(\App\Services\Compras\ComprobanteProveedorDiferenciaCambioAvisoService::class)
             ->assertPuedeContabilizar($comprobante);

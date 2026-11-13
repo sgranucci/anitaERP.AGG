@@ -543,6 +543,14 @@
 @include('includes.compras.arca_apoc_validacion_modal')
 @include('compras.comprobante_proveedor.partials.proveedor_arca_support')
 @include('compras.comprobante_proveedor.partials.proveedor_arca_apoc_support')
+@php
+    $cpSuspendidoSeveridad = \App\Support\Compras\ProveedorSuspendidoOperacionSupport::severidad();
+    $cpIncluirSuspendidos = $cpSuspendidoSeveridad === \App\Support\Compras\ProveedorSuspendidoOperacionSupport::SEVERIDAD_AVISAR;
+@endphp
+<script>
+window.consultaProveedorIncluirSuspendidos = @json($cpIncluirSuspendidos);
+window.cpProveedorSuspendidoSeveridad = @json($cpSuspendidoSeveridad);
+</script>
 @include('compras.comprobante_proveedor.partials.modal_ver_legajo')
 @include('compras.comprobante_proveedor.partials.modal_devolver_compras')
 @include('compras.comprobante_proveedor.partials.modal_prorratear_cuenta')

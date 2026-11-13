@@ -40,9 +40,24 @@
         @if (! empty($mostrar_aviso_suspendido))
         @php
             $estadoProveedorAviso = trim((string) ($estado_proveedor ?? ''));
+            $severidadSuspendido = \App\Support\Compras\ProveedorSuspendidoOperacionSupport::severidad();
+            $esAvisoSuspendido = $severidadSuspendido === \App\Support\Compras\ProveedorSuspendidoOperacionSupport::SEVERIDAD_AVISAR;
+            $mensajeSuspendido = $esAvisoSuspendido
+                ? \App\Support\Compras\ProveedorSuspendidoOperacionSupport::mensajeAviso()
+                : \App\Support\Compras\ProveedorSuspendidoOperacionSupport::mensajeBloqueo();
+            $mostrarBannerSuspendido = $estadoProveedorAviso === 'Suspendido';
+            $claseBannerSuspendido = $esAvisoSuspendido ? 'alert-warning' : 'alert-danger';
         @endphp
-        <div id="cp-aviso-proveedor-suspendido" class="alert alert-warning py-2 mt-2 mb-0{{ $estadoProveedorAviso === 'Suspendido' ? '' : ' d-none' }}" role="status">
-            El proveedor está suspendido.
+        <div
+            id="cp-proveedor-suspendido-config"
+            class="d-none"
+            aria-hidden="true"
+            data-severidad="{{ $severidadSuspendido }}"
+            data-mensaje-bloqueo="{{ \App\Support\Compras\ProveedorSuspendidoOperacionSupport::mensajeBloqueo() }}"
+            data-mensaje-aviso="{{ \App\Support\Compras\ProveedorSuspendidoOperacionSupport::mensajeAviso() }}"
+        ></div>
+        <div id="cp-aviso-proveedor-suspendido" class="alert {{ $claseBannerSuspendido }} py-2 mt-2 mb-0{{ $mostrarBannerSuspendido ? '' : ' d-none' }}" role="status">
+            {{ $mensajeSuspendido }}
         </div>
         @endif
     </div>
