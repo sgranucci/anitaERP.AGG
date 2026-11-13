@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Models\Compras\ProgramaPagoOp;
 use App\Services\Compras\ProgramaPagoGenerarOpService;
 use App\Services\Compras\ProgramaPagoService;
+use App\Support\Caja\ProgramaPagoAsignarChequesConfigSupport;
 use App\Support\Compras\ProgramaPagoListadoFiltros;
 use App\Support\Compras\ProgramaPagoOpPlanSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -46,6 +47,38 @@ class ProgramaPagoController extends Controller
             'filtrosQuery',
             'empresa_query'
         ));
+    }
+
+    public function configuracion()
+    {
+        $this->assertFerli();
+        can('editar-programa-pago');
+
+        $anticipoMaximo = ProgramaPagoAsignarChequesConfigSupport::anticipoMaximo();
+        $faltanteToleranciaPct = ProgramaPagoAsignarChequesConfigSupport::faltanteToleranciaPct();
+
+        return view('compras.programa_pago.configuracion', compact(
+            'anticipoMaximo',
+            'faltanteToleranciaPct'
+        ));
+    }
+
+    public function actualizarConfiguracion(Request $request)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+
+        $data = $request->validate([
+            'cheque_anticipo_maximo' => 'required|numeric|min:0',
+            'cheque_faltante_tolerancia_pct' => 'required|numeric|min:0|max:100',
+        ]);
+
+        ProgramaPagoAsignarChequesConfigSupport::guardarAnticipoMaximo((float) $data['cheque_anticipo_maximo']);
+        ProgramaPagoAsignarChequesConfigSupport::guardarFaltanteToleranciaPct((float) $data['cheque_faltante_tolerancia_pct']);
+
+        return redirect()
+            ->route('configuracion_programa_pago')
+            ->with('mensaje', 'Configuración de asignación de cheques guardada.');
     }
 
     public function listar(Request $request, $formato = null)

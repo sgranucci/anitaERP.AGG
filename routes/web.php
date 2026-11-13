@@ -4475,6 +4475,8 @@ Route::delete('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@el
 
 Route::get('compras/programa-pago', 'Compras\ProgramaPagoController@index')->name('programa_pago');
 Route::get('compras/listar-programa-pago/{formato?}', 'Compras\ProgramaPagoController@listar')->name('listar_programa_pago');
+Route::get('compras/programa-pago/configuracion', 'Compras\ProgramaPagoController@configuracion')->name('configuracion_programa_pago');
+Route::put('compras/programa-pago/configuracion', 'Compras\ProgramaPagoController@actualizarConfiguracion')->name('actualizar_configuracion_programa_pago');
 Route::get('compras/programa-pago/crear', 'Compras\ProgramaPagoController@crear')->name('crear_programa_pago');
 Route::post('compras/programa-pago', 'Compras\ProgramaPagoController@guardar')->name('guardar_programa_pago');
 Route::get('compras/programa-pago/{id}/editar', 'Compras\ProgramaPagoController@editar')->name('editar_programa_pago');

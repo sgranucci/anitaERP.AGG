@@ -122,7 +122,8 @@ window.programaPagoCfg = {
     mostrarResultadoAsignacion: @json(session()->has('pp_asignacion_cheques')),
     programaId: @json((int) $data->id),
     focoLinea: @json((int) request()->query('linea', session('pp_foco_linea', 0))),
-    toleranciaPct: @json((int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100))
+    toleranciaPct: @json(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::faltanteToleranciaPctEntero()),
+    anticipoMaximo: @json(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::anticipoMaximo())
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}"></script>
@@ -276,11 +277,11 @@ window.programaPagoCfg = {
                                     Siguiente sin marcar
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-dark" id="pp-btn-asignar-cheques-activo"
-                                        title="Asigna CHT al neto (programado − retenciones est.) ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. El resto a transferir queda en TRANSF. Si no entra, propone cheques posteriores">
+                                        title="Asigna CHT al neto priorizando cheques grandes. Faltante ≤{{ \App\Support\Caja\ProgramaPagoAsignarChequesSupport::faltanteToleranciaPctEntero() }}%, anticipo ≤{{ number_format(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::anticipoMaximo(), 0, ',', '.') }}. El resto a transferir queda en TRANSF. Si no entra, propone cheques posteriores">
                                     <i class="fa fa-money-check"></i> Cheques (este)
                                 </button>
                                 <button type="button" class="btn btn-sm btn-dark" id="pp-btn-asignar-cheques-todos"
-                                        title="Asigna CHT al neto de retenciones de todos los programados ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. Lo que falta a transferir va a TRANSF">
+                                        title="Asigna CHT al neto de todos los programados priorizando cheques grandes. Faltante ≤{{ \App\Support\Caja\ProgramaPagoAsignarChequesSupport::faltanteToleranciaPctEntero() }}%, anticipo ≤{{ number_format(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::anticipoMaximo(), 0, ',', '.') }}. Lo que falta a transferir va a TRANSF">
                                     <i class="fa fa-money-check-alt"></i> Cheques (todos programados)
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-danger" id="pp-btn-quitar-cheques-activo"
@@ -689,7 +690,11 @@ window.programaPagoCfg = {
                             · Sin cubrir: <strong class="text-danger">{{ number_format((float) $ppResumen['monto_sin_cubrir'], 2, ',', '.') }}</strong>
                         @endif
                     </p>
-                    <p class="small text-muted">Tolerancia del mes: ±{{ (int) round(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::TOLERANCIA * 100) }}%. Si no entra, se proponen cheques de cualquier mes posterior. Esos no se graban hasta aceptarlos.</p>
+                    <p class="small text-muted">
+                        Tolerancia: faltante ≤{{ \App\Support\Caja\ProgramaPagoAsignarChequesSupport::faltanteToleranciaPctEntero() }}%
+                        · anticipo ≤{{ number_format(\App\Support\Caja\ProgramaPagoAsignarChequesSupport::anticipoMaximo(), 2, ',', '.') }}
+                        (configurable). Prioriza cheques grandes. Si no entra, se proponen cheques de cualquier mes posterior; esos no se graban hasta aceptarlos.
+                    </p>
 
                     @if (count($propuestasAdelanto) > 0)
                         @include('compras.programa_pago.partials.propuestas_cheques_adelantados', [

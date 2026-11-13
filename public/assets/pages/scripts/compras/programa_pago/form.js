@@ -584,9 +584,12 @@
 
         function confirmarAsignarCheques(soloActivo) {
             var tol = parseInt(cfg.toleranciaPct || 10, 10);
+            var anticipo = Number(cfg.anticipoMaximo || 15000);
+            var anticipoTxt = anticipo.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+            var regla = 'faltante ≤' + tol + '%, anticipo ≤' + anticipoTxt + ' (prioriza cheques grandes)';
             var msg = soloActivo
-                ? '¿Asignar cheques en cartera al proveedor activo?\n\nUsa los montos YA GUARDADOS (Guardá antes si hay cambios). Se descuentan retenciones estimadas y se buscan CHT al neto (±' + tol + '%). Si un mes no entra, se proponen cheques posteriores (no se graban hasta aceptarlos). Después los meses se igualan a los cheques y lo que falta a transferir queda en TRANSF.'
-                : '¿Asignar cheques en cartera a TODOS los proveedores programados?\n\nUsa los montos YA GUARDADOS. Reemplaza asignaciones previas. Descuenta retenciones estimadas y busca CHT al neto (±' + tol + '%). Lo que falta a transferir queda en TRANSF.';
+                ? '¿Asignar cheques en cartera al proveedor activo?\n\nUsa los montos YA GUARDADOS (Guardá antes si hay cambios). Se descuentan retenciones estimadas y se buscan CHT al neto (' + regla + '). Si un mes no entra, se proponen cheques posteriores (no se graban hasta aceptarlos). Después los meses se igualan a los cheques y lo que falta a transferir queda en TRANSF.'
+                : '¿Asignar cheques en cartera a TODOS los proveedores programados?\n\nUsa los montos YA GUARDADOS. Reemplaza asignaciones previas. Descuenta retenciones estimadas y busca CHT al neto (' + regla + '). Lo que falta a transferir queda en TRANSF.';
             if (!confirm(msg)) {
                 return;
             }

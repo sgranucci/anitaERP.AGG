@@ -17,13 +17,31 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Asigna CHT diferidos en cartera al neto (programado − retenciones estimadas), tolerancia ±10%.
+ * Asigna CHT diferidos en cartera al neto (programado − retenciones estimadas).
+ * Prioriza cheques de mayor importe y la menor cantidad posible.
+ * Sobrante (anticipo) acotado por configuración; faltante por % configurable.
  * Si el mes no entra, busca en meses posteriores y deja la propuesta para aceptar.
  * Al alinear, TRANSF recibe solo la transferencia (neto − cheques).
  */
 final class ProgramaPagoAsignarChequesSupport
 {
+    /** @deprecated Usar ProgramaPagoAsignarChequesConfigSupport::faltanteToleranciaRatio() */
     public const TOLERANCIA = 0.10;
+
+    public static function anticipoMaximo(): float
+    {
+        return ProgramaPagoAsignarChequesConfigSupport::anticipoMaximo();
+    }
+
+    public static function faltanteToleranciaRatio(): float
+    {
+        return ProgramaPagoAsignarChequesConfigSupport::faltanteToleranciaRatio();
+    }
+
+    public static function faltanteToleranciaPctEntero(): int
+    {
+        return (int) round(ProgramaPagoAsignarChequesConfigSupport::faltanteToleranciaPct());
+    }
 
     /**
      * @return array{
@@ -282,7 +300,10 @@ final class ProgramaPagoAsignarChequesSupport
                         .number_format($propuesta['suma_adelante'], 2, ',', '.')
                         .'.';
                     if (! $propuesta['dentro_tolerancia']) {
-                        $detalle .= ' Queda fuera de ±'.((int) round(self::TOLERANCIA * 100)).'%: se puede aceptar igual.';
+                        $detalle .= ' Queda fuera de tolerancia'
+                            .' (faltante ≤'.self::faltanteToleranciaPctEntero().'%'
+                            .', anticipo ≤'.number_format(self::anticipoMaximo(), 2, ',', '.')
+                            .'): se puede aceptar igual.';
                     }
                     $filaPropuesta = [
                         'linea_id' => $demanda['linea_id'],
@@ -468,6 +489,8 @@ final class ProgramaPagoAsignarChequesSupport
     }
 
     /**
+     * Prioriza cheques grandes y la menor cantidad posible dentro de tolerancia.
+     *
      * @param  list<array{id:int,monto:float,numerocheque:string,nro_interno_anita:?int,fechapago:string}>  $pool
      * @return list<array{id:int,monto:float,numerocheque:string,nro_interno_anita:?int,fechapago:string}>
      */
@@ -477,51 +500,51 @@ final class ProgramaPagoAsignarChequesSupport
             return [];
         }
 
-        $min = round($target * (1 - self::TOLERANCIA), 2);
-        $max = round($target * (1 + self::TOLERANCIA), 2);
+        $min = round($target * (1 - self::faltanteToleranciaRatio()), 2);
+        $max = round($target + self::anticipoMaximo(), 2);
 
         $candidatos = [];
 
         foreach ($pool as $ch) {
-            if ($ch['monto'] + 0.005 < $min || $ch['monto'] - 0.005 > $max) {
+            $monto = (float) $ch['monto'];
+            if ($monto + 0.005 < $min || $monto - 0.005 > $max) {
+                continue;
+            }
+            if (! self::dentroTolerancia($monto, $target)) {
                 continue;
             }
             $candidatos[] = [
                 'cheques' => [$ch],
-                'suma' => $ch['monto'],
-                'diff' => abs($ch['monto'] - $target),
+                'suma' => $monto,
+                'diff' => abs($monto - $target),
                 'cant' => 1,
+                'sobrante' => max(0.0, round($monto - $target, 2)),
             ];
         }
 
-        foreach (['desc', 'asc'] as $orden) {
-            $ordenados = $pool;
-            usort(
-                $ordenados,
-                $orden === 'desc'
-                    ? static fn ($a, $b) => $b['monto'] <=> $a['monto']
-                    : static fn ($a, $b) => $a['monto'] <=> $b['monto']
-            );
-            $seleccion = [];
-            $suma = 0.0;
-            foreach ($ordenados as $ch) {
-                if ($suma + $ch['monto'] > $max + 0.005) {
-                    continue;
-                }
-                $seleccion[] = $ch;
-                $suma = round($suma + $ch['monto'], 2);
-                if ($suma >= $target - 0.005) {
-                    break;
-                }
+        // Solo greedy de mayor a menor: usa primero los cheques grandes.
+        $ordenados = $pool;
+        usort($ordenados, static fn ($a, $b) => $b['monto'] <=> $a['monto']);
+        $seleccion = [];
+        $suma = 0.0;
+        foreach ($ordenados as $ch) {
+            if ($suma + $ch['monto'] > $max + 0.005) {
+                continue;
             }
-            if ($seleccion !== [] && self::dentroTolerancia($suma, $target)) {
-                $candidatos[] = [
-                    'cheques' => $seleccion,
-                    'suma' => $suma,
-                    'diff' => abs($suma - $target),
-                    'cant' => count($seleccion),
-                ];
+            $seleccion[] = $ch;
+            $suma = round($suma + $ch['monto'], 2);
+            if ($suma >= $target - 0.005) {
+                break;
             }
+        }
+        if ($seleccion !== [] && self::dentroTolerancia($suma, $target)) {
+            $candidatos[] = [
+                'cheques' => $seleccion,
+                'suma' => $suma,
+                'diff' => abs($suma - $target),
+                'cant' => count($seleccion),
+                'sobrante' => max(0.0, round($suma - $target, 2)),
+            ];
         }
 
         if ($candidatos === []) {
@@ -529,12 +552,18 @@ final class ProgramaPagoAsignarChequesSupport
         }
 
         usort($candidatos, static function ($a, $b) {
-            $cmp = $a['diff'] <=> $b['diff'];
+            // 1) Menos cheques
+            $cmp = $a['cant'] <=> $b['cant'];
             if ($cmp !== 0) {
                 return $cmp;
             }
-
-            return $a['cant'] <=> $b['cant'];
+            // 2) Menos anticipo / sobrante
+            $cmp = $a['sobrante'] <=> $b['sobrante'];
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            // 3) Más cerca del objetivo
+            return $a['diff'] <=> $b['diff'];
         });
 
         return $candidatos[0]['cheques'];
@@ -545,9 +574,16 @@ final class ProgramaPagoAsignarChequesSupport
         if ($programado < 0.01) {
             return abs($asignado) < 0.01;
         }
-        $ratio = abs($asignado - $programado) / $programado;
+        $diff = round($asignado - $programado, 2);
+        if ($diff > 0.005) {
+            return $diff <= self::anticipoMaximo() + 0.005;
+        }
+        if ($diff >= -0.005) {
+            return true;
+        }
+        $ratio = abs($diff) / $programado;
 
-        return $ratio <= self::TOLERANCIA + 0.0001;
+        return $ratio <= self::faltanteToleranciaRatio() + 0.0001;
     }
 
     /**
@@ -647,6 +683,8 @@ final class ProgramaPagoAsignarChequesSupport
     }
 
     /**
+     * Toma cheques de mayor a menor sin pasar el tope (objetivo + anticipo máximo).
+     *
      * @param  list<array{id:int,monto:float}>  $pool
      * @return list<array{id:int,monto:float}>
      */
@@ -656,12 +694,13 @@ final class ProgramaPagoAsignarChequesSupport
             return [];
         }
 
+        $max = round($target + self::anticipoMaximo(), 2);
         $ordenados = $pool;
         usort($ordenados, static fn ($a, $b) => $b['monto'] <=> $a['monto']);
         $seleccion = [];
         $suma = 0.0;
         foreach ($ordenados as $ch) {
-            if ($suma + $ch['monto'] > $target + 0.005) {
+            if ($suma + $ch['monto'] > $max + 0.005) {
                 continue;
             }
             $seleccion[] = $ch;
@@ -1248,19 +1287,21 @@ final class ProgramaPagoAsignarChequesSupport
 
     private static function mensajeDiscrepancia(string $tipo, float $target, float $suma, int $disponibles): string
     {
-        $tolPct = (int) round(self::TOLERANCIA * 100);
+        $tolPct = self::faltanteToleranciaPctEntero();
+        $anticipo = number_format(self::anticipoMaximo(), 2, ',', '.');
+        $regla = "faltante ≤{$tolPct}% / anticipo ≤{$anticipo}";
         if ($tipo === 'sin_aceptacion') {
-            return "El proveedor no acepta el tipo de CHT disponible en el mes para cubrir {$target} (±{$tolPct}%). Revisá Físico / e-cheq en el ABM del proveedor.";
+            return "El proveedor no acepta el tipo de CHT disponible en el mes para cubrir {$target} ({$regla}). Revisá Físico / e-cheq en el ABM del proveedor.";
         }
         if ($tipo === 'sin_cheques') {
             if ($disponibles <= 0) {
-                return "Sin cheques disponibles en el mes para cubrir {$target} (±{$tolPct}%).";
+                return "Sin cheques disponibles en el mes para cubrir {$target} ({$regla}).";
             }
 
-            return "No se pudo armar un paquete de cheques dentro de ±{$tolPct}% del programado ({$target}). Disponibles en el mes: {$disponibles}.";
+            return "No se pudo armar un paquete de cheques dentro de tolerancia ({$regla}) del programado ({$target}). Disponibles en el mes: {$disponibles}.";
         }
 
-        return "Suma asignable {$suma} fuera de ±{$tolPct}% respecto de {$target}.";
+        return "Suma asignable {$suma} fuera de tolerancia ({$regla}) respecto de {$target}.";
     }
 
     /**

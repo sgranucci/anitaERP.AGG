@@ -11,6 +11,11 @@
             <div class="card-header">
                 <h3 class="card-title">Programa de pagos (cashflow)</h3>
                 <div class="card-tools">
+                    @if (can('editar-programa-pago', false))
+                        <a href="{{ route('configuracion_programa_pago') }}" class="btn btn-outline-secondary btn-sm" title="Tope de anticipo y tolerancia al asignar cheques">
+                            <i class="fa fa-fw fa-cogs"></i> Config. cheques
+                        </a>
+                    @endif
                     @if (can('crear-programa-pago', false))
                         <a href="{{ route('crear_programa_pago') }}" class="btn btn-outline-secondary btn-sm">
                             <i class="fa fa-fw fa-plus-circle"></i> Nuevo programa
