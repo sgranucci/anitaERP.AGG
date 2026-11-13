@@ -136,7 +136,10 @@ class ConsultaMaestro_SueldosController extends Controller
             || can('listar-empleado-sueldos', false)
             || can('editar-empleado-sueldos', false)
             || can('visualizar-empleado-sueldos', false)
-            || can('actualizar-empleado-sueldos', false)) {
+            || can('actualizar-empleado-sueldos', false)
+            || can('listar-contrato-plantilla-sueldos', false)
+            || can('actualizar-contrato-plantilla-sueldos', false)
+            || can('crear-contrato-plantilla-sueldos', false)) {
             return;
         }
         abort(403);

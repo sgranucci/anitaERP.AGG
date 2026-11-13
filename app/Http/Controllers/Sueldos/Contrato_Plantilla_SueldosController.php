@@ -20,7 +20,7 @@ class Contrato_Plantilla_SueldosController extends Controller
         private EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
-    public function index()
+    public function index(Request $request)
     {
         can('listar-contrato-plantilla-sueldos');
 
@@ -35,9 +35,18 @@ class Contrato_Plantilla_SueldosController extends Controller
             ->orderBy('tipo')
             ->get();
 
+        $asignacionEditar = null;
+        $editarId = (int) $request->query('editar_asignacion', 0);
+        if ($editarId > 0) {
+            $asignacionEditar = Contrato_Plantilla_Asignacion_Sueldos::query()
+                ->with(['sindicato', 'empresa', 'plantilla'])
+                ->find($editarId);
+        }
+
         return view('sueldos.contrato_plantilla.index', [
             'plantillas' => $plantillas,
             'asignaciones' => $asignaciones,
+            'asignacionEditar' => $asignacionEditar,
             'tipos' => ContratoDocumentoTipos::LABELS,
             'modalidades' => ContratoModalidadSijp::opciones(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
@@ -155,8 +164,19 @@ class Contrato_Plantilla_SueldosController extends Controller
         Contrato_Plantilla_Asignacion_Sueldos::create($datos);
 
         return redirect()
-            ->back()
+            ->route('consultar_contrato_plantilla_sueldos')
             ->with('mensaje', 'Regla de asignación agregada');
+    }
+
+    public function actualizarAsignacion(Request $request, $id)
+    {
+        can('actualizar-contrato-plantilla-sueldos');
+        $asig = Contrato_Plantilla_Asignacion_Sueldos::findOrFail($id);
+        $asig->update($this->validarAsignacion($request));
+
+        return redirect()
+            ->route('consultar_contrato_plantilla_sueldos')
+            ->with('mensaje', 'Regla de asignación actualizada');
     }
 
     public function eliminarAsignacion($id)
@@ -166,7 +186,7 @@ class Contrato_Plantilla_SueldosController extends Controller
         $asig->delete();
 
         return redirect()
-            ->back()
+            ->route('consultar_contrato_plantilla_sueldos')
             ->with('mensaje', 'Regla de asignación eliminada');
     }
 

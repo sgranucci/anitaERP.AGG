@@ -69,29 +69,15 @@ class Empleado_ContratoSueldosController extends Controller
         return $this->responderPanel($empleado, 'Contrato eliminado');
     }
 
-    public function emitir(Request $request, $empleadoId)
+    public function previsualizar(Request $request, $empleadoId)
     {
         can('emitir-contrato-empleado-sueldos');
         $empleado = Empleado_Sueldos::with(['sindicato', 'categoria', 'lugartrabajo', 'centrocosto'])->findOrFail($empleadoId);
-
-        $datos = $request->validate([
-            'tipo' => ['required', Rule::in(ContratoDocumentoTipos::keys())],
-            'empleado_contrato_id' => ['nullable', 'integer'],
-            'fecha_emision' => ['nullable', 'date'],
-            'liquidacion' => ['nullable', 'integer'],
-            'contrato_plantilla_id' => ['nullable', 'integer', 'exists:contrato_plantilla_sueldos,id'],
-        ]);
-
-        $contrato = null;
-        if (! empty($datos['empleado_contrato_id'])) {
-            $contrato = Empleado_Contrato_Sueldos::query()
-                ->where('empleado_id', $empleado->id)
-                ->whereKey($datos['empleado_contrato_id'])
-                ->firstOrFail();
-        }
+        $datos = $this->validarEmisionRequest($request);
+        $contrato = $this->contratoDeEmision($empleado, $datos);
 
         try {
-            $resultado = $this->emisionService->emitir(
+            $preview = $this->emisionService->previsualizar(
                 $empleado,
                 $datos['tipo'],
                 $contrato,
@@ -103,14 +89,55 @@ class Empleado_ContratoSueldosController extends Controller
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }
 
+        return response()->json([
+            'ok' => true,
+            'html' => $preview['html'],
+            'titulo' => $preview['titulo'],
+            'plantilla' => $preview['plantilla'],
+            'fuente_word' => (bool) ($preview['fuente_word'] ?? false),
+        ]);
+    }
+
+    public function emitir(Request $request, $empleadoId)
+    {
+        can('emitir-contrato-empleado-sueldos');
+        $empleado = Empleado_Sueldos::with(['sindicato', 'categoria', 'lugartrabajo', 'centrocosto'])->findOrFail($empleadoId);
+        $datos = $this->validarEmisionRequest($request);
+        $contrato = $this->contratoDeEmision($empleado, $datos);
+        $formato = strtolower((string) ($datos['formato'] ?? 'pdf'));
+
+        try {
+            $resultado = $this->emisionService->emitir(
+                $empleado,
+                $datos['tipo'],
+                $contrato,
+                $datos['fecha_emision'] ?? null,
+                $datos['liquidacion'] ?? null,
+                $datos['contrato_plantilla_id'] ?? null,
+                $formato,
+            );
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
         if ($request->boolean('descargar', true)) {
+            $headers = [];
+            if (($resultado['formato'] ?? $formato) === 'pdf') {
+                $headers['Content-Type'] = 'application/pdf';
+            } else {
+                $headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            }
+
             return response()->download(
                 $resultado['path'],
-                $resultado['emision']->archivo_nombre
+                $resultado['emision']->archivo_nombre,
+                $headers
             );
         }
 
-        return $this->responderPanel($empleado, 'Documento emitido: '.$resultado['emision']->archivo_nombre);
+        $etiqueta = (($resultado['formato'] ?? $formato) === 'docx') ? 'Word' : 'PDF';
+
+        return $this->responderPanel($empleado, $etiqueta.' emitido: '.$resultado['emision']->archivo_nombre);
     }
 
     public function descargarEmision($id)
@@ -120,7 +147,43 @@ class Empleado_ContratoSueldosController extends Controller
         $path = $emision->rutaAbsoluta();
         abort_unless(is_file($path), 404);
 
-        return response()->download($path, $emision->archivo_nombre);
+        $headers = [];
+        if (str_ends_with(strtolower((string) $emision->archivo_nombre), '.pdf')
+            || str_ends_with(strtolower((string) $emision->archivo_path), '.pdf')) {
+            $headers['Content-Type'] = 'application/pdf';
+        }
+
+        return response()->download($path, $emision->archivo_nombre, $headers);
+    }
+
+    /**
+     * @return array{tipo: string, empleado_contrato_id?: int|null, fecha_emision?: string|null, liquidacion?: int|null, contrato_plantilla_id?: int|null, formato?: string}
+     */
+    private function validarEmisionRequest(Request $request): array
+    {
+        return $request->validate([
+            'tipo' => ['required', Rule::in(ContratoDocumentoTipos::keys())],
+            'empleado_contrato_id' => ['nullable', 'integer'],
+            'fecha_emision' => ['nullable', 'date'],
+            'liquidacion' => ['nullable', 'integer'],
+            'contrato_plantilla_id' => ['nullable', 'integer', 'exists:contrato_plantilla_sueldos,id'],
+            'formato' => ['nullable', Rule::in(['pdf', 'docx'])],
+        ]);
+    }
+
+    /**
+     * @param  array{empleado_contrato_id?: int|null}  $datos
+     */
+    private function contratoDeEmision(Empleado_Sueldos $empleado, array $datos): ?Empleado_Contrato_Sueldos
+    {
+        if (empty($datos['empleado_contrato_id'])) {
+            return null;
+        }
+
+        return Empleado_Contrato_Sueldos::query()
+            ->where('empleado_id', $empleado->id)
+            ->whereKey($datos['empleado_contrato_id'])
+            ->firstOrFail();
     }
 
     /**
@@ -182,11 +245,14 @@ class Empleado_ContratoSueldosController extends Controller
             ->orderBy('codigo')
             ->get();
 
+        $hayFuenteWord = $plantillas->contains(fn (Contrato_Plantilla_Sueldos $p) => $p->esFuenteWord());
+
         $html = view('sueldos.empleado.partials.contratos', [
             'empleado' => $empleado,
             'contratos' => $contratos,
             'emisiones' => $emisiones,
             'plantillas' => $plantillas,
+            'hayFuenteWord' => $hayFuenteWord,
             'tipos' => ContratoDocumentoTipos::LABELS,
             'motivos' => Empleado_Contrato_Sueldos::MOTIVOS,
             'modalidades' => ContratoModalidadSijp::opciones(),
