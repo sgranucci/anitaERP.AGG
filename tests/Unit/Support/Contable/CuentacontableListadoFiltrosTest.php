@@ -20,6 +20,20 @@ class CuentacontableListadoFiltrosTest extends TestCase
         $this->assertSame('una', $filtros['empresa_scope']);
         $this->assertSame(CuentacontableListadoFiltros::VISTA_ARBOL, $filtros['vista']);
         $this->assertFalse($filtros['mostrar_totalizadoras']);
+        $this->assertFalse($filtros['solo_manejaccosto']);
+    }
+
+    public function test_query_string_conserva_solo_manejaccosto(): void
+    {
+        $q = CuentacontableListadoFiltros::paraQueryString([
+            'empresa_id' => 2,
+            'empresa_scope' => 'una',
+            'vista' => 'lista',
+            'solo_manejaccosto' => true,
+        ]);
+
+        $this->assertSame(1, $q['solo_manejaccosto']);
+        $this->assertSame(2, $q['empresa_id']);
     }
 
     public function test_todas_las_empresas_fuerza_vista_lista(): void

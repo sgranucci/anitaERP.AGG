@@ -23,7 +23,6 @@ use App\Support\Seguridad\IngresoProveedorEstados;
 use App\Support\Seguridad\IngresoProveedorListadoFiltros;
 use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Seguridad\IngresoProveedorVisibilidadSupport;
-use App\Traits\Compras\ProveedorTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Maatwebsite\Excel\Facades\Excel;
@@ -480,7 +479,7 @@ class IngresoProveedorController extends Controller
 
         $query = Proveedor::query()
             ->select(['id', 'codigo', 'nombre', 'nroinscripcion'])
-            ->whereIn('estado', ProveedorTrait::$estadosHabilitadosOperacion);
+            ->whereIn('estado', Proveedor::$estadosHabilitadosOperacion);
 
         $empresaId = (int) $request->input('empresa_id', 0);
         if (config('proveedor.filtro_empresa') && $empresaId > 0) {

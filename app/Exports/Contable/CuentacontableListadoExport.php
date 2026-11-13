@@ -23,7 +23,7 @@ class CuentacontableListadoExport implements FromView, ShouldAutoSize, WithColum
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'J';
+    private const COL_ULTIMA = 'K';
 
     /** @var Collection<int, \App\Models\Contable\Cuentacontable>|null */
     private $datas;
@@ -122,8 +122,9 @@ class CuentacontableListadoExport implements FromView, ShouldAutoSize, WithColum
             'F' => 18,
             'G' => 22,
             'H' => 10,
-            'I' => 24,
-            'J' => 12,
+            'I' => 40,
+            'J' => 24,
+            'K' => 12,
         ];
     }
 

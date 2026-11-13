@@ -18,6 +18,17 @@ class CorreoFallidoReintentoSupportTest extends TestCase
         $this->assertSame(CorreoFallidoReintentoSupport::REENCOLAR, $decision);
     }
 
+    public function test_reencola_cuando_office365_cierra_la_conexion_a_mitad(): void
+    {
+        $decision = CorreoFallidoReintentoSupport::decision(
+            $this->payloadMail(),
+            'Symfony\Component\Mailer\Exception\TransportException: Connection to "smtp.office365.com:587" has been closed unexpectedly.',
+            24,
+        );
+
+        $this->assertSame(CorreoFallidoReintentoSupport::REENCOLAR, $decision);
+    }
+
     public function test_no_reencola_un_rechazo_permanente_ni_un_job_que_no_es_correo(): void
     {
         $permanente = CorreoFallidoReintentoSupport::decision(

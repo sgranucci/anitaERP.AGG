@@ -22,10 +22,14 @@ trait ProveedorTrait {
 		'3' => 'Regularizado'
 		];
 
-	/** Estados de proveedor habilitados para elegir en compras (requisición, OC, modales). */
+	/**
+	 * Estados de proveedor habilitados para elegir en compras (requisición, OC, modales).
+	 * Literales (no self::CONST): en PHP 8.3+ acceder a la propiedad vía el trait
+	 * (ProveedorTrait::$estados…) falla con "Cannot access trait constant self::… directly".
+	 */
 	public static $estadosHabilitadosOperacion = [
-		self::ESTADO_ACTIVO,
-		self::ESTADO_REGULARIZADO,
+		'Activo',
+		'Regularizado',
 	];
 
 	/** @return list<string> */

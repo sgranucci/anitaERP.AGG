@@ -19,9 +19,12 @@ use App\Support\Sueldos\Formula\EvaluadorFormula;
 use App\Support\Sueldos\Formula\FormulaException;
 use App\Support\Sueldos\Formula\ParametroSueldosResolver;
 use App\Support\Sueldos\Formula\RastreadorFormula;
+use App\Support\Sueldos\NovedadSueldosCatalogo;
+use App\Support\Sueldos\NovedadSueldosVigencia;
 use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Motor de calculo de una corrida de liquidacion. Recorre la secuencia de
@@ -1095,9 +1098,9 @@ class LiquidacionCalculadorService
             $query->where('estado', EmpleadoEstados::ACTIVO);
         }
 
-        // Modelo Anita: grupo O novedad. No se exige novedad para entrar a vacaciones/SAC;
-        // el set efectivo + la fórmula deciden si hay importe. Los recibos sin líneas
-        // se omiten más abajo (evita cientos de recibos vacíos).
+        // Modelo Anita: grupo O novedad. En vacaciones solo legajos con días a liquidar
+        // (novedad 420/422 o ausencia vacacional que solapa la ventana); evita liquidar
+        // a toda la nómina por el fallback TVAC de la fórmula 422.
         $filtros = $this->filtros($liq);
 
         if (! empty($filtros['empleado_ids']) && is_array($filtros['empleado_ids'])) {
@@ -1110,9 +1113,91 @@ class LiquidacionCalculadorService
             $query->where('centrocosto_id', (int) $filtros['centrocosto_id']);
         }
 
+        if ($liq->tipo === 'vacaciones') {
+            $idsVac = $this->empleadoIdsConVacacionesALiquidar($liq);
+            if ($idsVac === []) {
+                return collect();
+            }
+            $query->whereIn('id', $idsVac);
+        }
+
         $this->multiempresa->aplicarAlcanceAlQueryEmpleados($query, $liq);
 
         return $query->get();
+    }
+
+    /**
+     * Empleados con novedad 420/422 vigente o ausencia de vacaciones que solapa
+     * la ventana de la corrida (periodo_desde/hasta o mes del período).
+     *
+     * @return list<int>
+     */
+    private function empleadoIdsConVacacionesALiquidar(Liquidacion_Sueldos $liq): array
+    {
+        $periodoYm = (int) ($liq->periodo ?: (((int) $liq->periodo_anio) * 100 + (int) $liq->periodo_mes));
+        try {
+            if (! empty($liq->periodo_desde) && ! empty($liq->periodo_hasta)) {
+                $ini = Carbon::parse($liq->periodo_desde)->toDateString();
+                $fin = Carbon::parse($liq->periodo_hasta)->toDateString();
+            } else {
+                [$cIni, $cFin] = NovedadSueldosVigencia::limitesPeriodo($periodoYm);
+                $ini = $cIni->toDateString();
+                $fin = $cFin->toDateString();
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $ids = [];
+
+        if (Schema::hasTable('novedad_sueldos')) {
+            $novIds = DB::table('novedad_sueldos')
+                ->whereIn('concepto_codigo', [420, 422])
+                ->where('estado', '!=', NovedadSueldosCatalogo::ESTADO_ANULADA)
+                ->where(function ($q) use ($liq, $periodoYm, $ini, $fin) {
+                    if ((int) $liq->id > 0) {
+                        $q->orWhere('liquidacion_id', (int) $liq->id);
+                    }
+                    $q->orWhere(function ($q2) use ($periodoYm) {
+                        $q2->where(function ($q3) {
+                            $q3->whereNull('liquidacion_id')->orWhere('liquidacion_id', 0);
+                        })->where('periodo', $periodoYm);
+                    });
+                    $q->orWhere(function ($q2) use ($ini, $fin) {
+                        $q2->where(function ($q3) {
+                            $q3->whereNull('liquidacion_id')->orWhere('liquidacion_id', 0);
+                        })
+                            ->whereNotNull('fecha_desde')
+                            ->whereDate('fecha_desde', '<=', $fin)
+                            ->where(function ($q3) use ($ini) {
+                                $q3->whereNull('fecha_hasta')
+                                    ->orWhereDate('fecha_hasta', '>=', $ini);
+                            });
+                    });
+                })
+                ->pluck('empleado_id')
+                ->map(fn ($v) => (int) $v)
+                ->all();
+            $ids = array_merge($ids, $novIds);
+        }
+
+        if (Schema::hasTable('empleado_ausencia_sueldos') && Schema::hasTable('tipo_ausencia_sueldos')) {
+            $ausIds = DB::table('empleado_ausencia_sueldos as a')
+                ->join('tipo_ausencia_sueldos as t', 't.id', '=', 'a.tipo_ausencia_id')
+                ->whereIn('a.estado', ['planificada', 'aprobada', 'tomada', 'liquidada'])
+                ->where(function ($q) {
+                    $q->where('t.categoria', 'vacaciones')
+                        ->orWhere('t.afecta_saldo_vacaciones', true);
+                })
+                ->whereDate('a.fecha_desde', '<=', $fin)
+                ->whereDate('a.fecha_hasta', '>=', $ini)
+                ->pluck('a.empleado_id')
+                ->map(fn ($v) => (int) $v)
+                ->all();
+            $ids = array_merge($ids, $ausIds);
+        }
+
+        return array_values(array_unique(array_filter($ids, fn ($id) => $id > 0)));
     }
 
     /**

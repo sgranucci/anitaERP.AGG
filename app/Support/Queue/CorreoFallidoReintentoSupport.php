@@ -71,6 +71,10 @@ final class CorreoFallidoReintentoSupport
             'La red es inaccesible',
             'Connection timed out',
             'timed out',
+            // Corte a mitad de sesión (Office365 suele tirar esto; no es rechazo 5xx).
+            'has been closed unexpectedly',
+            'Connection closed unexpectedly',
+            'Broken pipe',
             '421',
             '450',
             '451',

@@ -109,6 +109,7 @@ class CuentacontableListadoFiltros
             'empresa_scope' => $empresaScope,
             'vista' => $vista,
             'mostrar_totalizadoras' => $request->boolean('mostrar_totalizadoras'),
+            'solo_manejaccosto' => $request->boolean('solo_manejaccosto'),
             'tipocuenta' => self::normalizarTipo($request->input('filtro_tipocuenta')),
             'nivel' => self::normalizarNivel($request->input('filtro_nivel')),
             'estado' => self::normalizarEstado($request->input('filtro_estado')),
@@ -185,6 +186,7 @@ class CuentacontableListadoFiltros
             'empresa_scope' => 'una',
             'vista' => self::VISTA_ARBOL,
             'mostrar_totalizadoras' => false,
+            'solo_manejaccosto' => false,
             'tipocuenta' => '',
             'nivel' => 0,
             'estado' => '',
@@ -210,6 +212,9 @@ class CuentacontableListadoFiltros
         }
         if (! empty($filtros['mostrar_totalizadoras'])) {
             $params['mostrar_totalizadoras'] = 1;
+        }
+        if (! empty($filtros['solo_manejaccosto'])) {
+            $params['solo_manejaccosto'] = 1;
         }
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
@@ -256,6 +261,21 @@ class CuentacontableListadoFiltros
 
     /**
      * @param  Builder<\App\Models\Contable\Cuentacontable>  $query
+     */
+    public static function aplicarSoloManejaCosto(Builder $query, array $filtros): void
+    {
+        if (empty($filtros['solo_manejaccosto'])) {
+            return;
+        }
+
+        $query->where(function (Builder $q) {
+            $q->whereIn('cuentacontable.manejaccosto', ['S', 's', '1'])
+                ->orWhere('cuentacontable.manejaccosto', 1);
+        });
+    }
+
+    /**
+     * @param  Builder<\App\Models\Contable\Cuentacontable>  $query
      * @param  list<int>  $empresaIdsPermitidos
      */
     public static function aplicar(Builder $query, array $filtros, array $empresaIdsPermitidos = []): void
@@ -267,6 +287,8 @@ class CuentacontableListadoFiltros
         if (! empty($filtros['empresa_id'])) {
             $query->where('cuentacontable.empresa_id', (int) $filtros['empresa_id']);
         }
+
+        self::aplicarSoloManejaCosto($query, $filtros);
 
         $tipo = (string) ($filtros['tipocuenta'] ?? '');
         if ($tipo !== '') {

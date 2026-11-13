@@ -10,6 +10,7 @@ use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Ausencia_Sueldos;
 use App\Services\Sueldos\AusenciaNovedadSyncService;
 use App\Services\Sueldos\DevengamientoVacacionesService;
+use App\Services\Sueldos\NovedadMultiempresaReplicatorService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -19,12 +20,16 @@ class Empleado_AusenciaSueldosController extends Controller
 
     private AusenciaNovedadSyncService $novedadSync;
 
+    private NovedadMultiempresaReplicatorService $replicator;
+
     public function __construct(
         DevengamientoVacacionesService $devengamiento,
-        AusenciaNovedadSyncService $novedadSync
+        AusenciaNovedadSyncService $novedadSync,
+        NovedadMultiempresaReplicatorService $replicator
     ) {
         $this->devengamiento = $devengamiento;
         $this->novedadSync = $novedadSync;
+        $this->replicator = $replicator;
     }
 
     /**
@@ -49,6 +54,7 @@ class Empleado_AusenciaSueldosController extends Controller
 
         $this->devengamiento->recalcularEmpleado($empleado, $this->usuarioId());
         $this->novedadSync->sincronizar($ausencia->fresh(['tipo.concepto', 'empleado']));
+        $this->replicator->replicarAusencia($ausencia->fresh(['tipo.concepto', 'empleado']));
 
         return $this->responderPanel($empleado, 'Ausencia registrada con éxito');
     }
@@ -63,6 +69,7 @@ class Empleado_AusenciaSueldosController extends Controller
 
         $this->devengamiento->recalcularEmpleado($empleado, $this->usuarioId());
         $this->novedadSync->sincronizar($ausencia->fresh(['tipo.concepto', 'empleado']));
+        $this->replicator->replicarAusencia($ausencia->fresh(['tipo.concepto', 'empleado']));
 
         return $this->responderPanel($empleado, 'Ausencia actualizada con éxito');
     }
@@ -73,6 +80,7 @@ class Empleado_AusenciaSueldosController extends Controller
         $ausencia = Empleado_Ausencia_Sueldos::findOrFail($id);
         $empleado = Empleado_Sueldos::findOrFail($ausencia->empleado_id);
         $ausenciaId = (int) $ausencia->id;
+        $this->replicator->eliminarAusenciaHermanas($ausencia);
         $ausencia->delete();
 
         $this->novedadSync->anularPorAusencia($ausenciaId);

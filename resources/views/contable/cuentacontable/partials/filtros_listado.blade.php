@@ -105,6 +105,17 @@
                 </div>
             </div>
             <div class="form-group col-md-auto mb-2">
+                <div class="custom-control custom-checkbox mt-3">
+                    <input type="checkbox"
+                           class="custom-control-input"
+                           name="solo_manejaccosto"
+                           id="solo_manejaccosto"
+                           value="1"
+                           @checked(!empty($f['solo_manejaccosto']))>
+                    <label class="custom-control-label small" for="solo_manejaccosto">Solo maneja c.costo</label>
+                </div>
+            </div>
+            <div class="form-group col-md-auto mb-2">
                 <button type="submit" class="btn btn-primary btn-sm" data-aplicar-filtros-panel="1">
                     <i class="fa fa-search"></i> Aplicar filtros
                 </button>

@@ -8,6 +8,7 @@ use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Models\Sueldos\Novedad_Sueldos;
 use App\Repositories\Sueldos\Novedad_SueldosRepositoryInterface;
+use App\Services\Sueldos\NovedadMultiempresaReplicatorService;
 use App\Support\Sueldos\NovedadSueldosCatalogo;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -19,9 +20,14 @@ class Empleado_NovedadSueldosController extends Controller
 {
     private Novedad_SueldosRepositoryInterface $repository;
 
-    public function __construct(Novedad_SueldosRepositoryInterface $repository)
-    {
+    private NovedadMultiempresaReplicatorService $replicator;
+
+    public function __construct(
+        Novedad_SueldosRepositoryInterface $repository,
+        NovedadMultiempresaReplicatorService $replicator
+    ) {
         $this->repository = $repository;
+        $this->replicator = $replicator;
     }
 
     public function panel($empleadoId)
@@ -46,7 +52,10 @@ class Empleado_NovedadSueldosController extends Controller
         $datos['origen'] = NovedadSueldosCatalogo::ORIGEN_MANUAL;
         $datos['usuario_id'] = optional(auth()->user())->id;
 
-        $this->repository->create($datos);
+        $creada = $this->repository->create($datos);
+        if ($creada instanceof Novedad_Sueldos) {
+            $this->replicator->replicarNovedad($creada);
+        }
 
         return $this->responderPanel($empleado, 'Novedad registrada con éxito');
     }
@@ -66,6 +75,7 @@ class Empleado_NovedadSueldosController extends Controller
                 return response()->json(['message' => 'Estado no válido.'], 422);
             }
             $novedad->update(['estado' => $destino]);
+            $this->replicator->replicarNovedad($novedad->fresh());
 
             return $this->responderPanel($empleado, 'Estado actualizado.');
         }
@@ -74,6 +84,7 @@ class Empleado_NovedadSueldosController extends Controller
         $datos['empleado_id'] = $empleado->id;
         $datos['empresa_id'] = $empleado->empresa_id;
         $this->repository->update($datos, $novedad->id);
+        $this->replicator->replicarNovedad($novedad->fresh());
 
         return $this->responderPanel($empleado, 'Novedad actualizada con éxito');
     }
@@ -86,6 +97,7 @@ class Empleado_NovedadSueldosController extends Controller
         }
         $novedad = Novedad_Sueldos::findOrFail($id);
         $empleado = Empleado_Sueldos::findOrFail($novedad->empleado_id);
+        $this->replicator->anularNovedadHermanas($novedad);
         $this->repository->delete($id);
 
         return $this->responderPanel($empleado, 'Novedad eliminada');

@@ -3,7 +3,6 @@
 namespace App\Queries\Compras;
 
 use App\Models\Compras\Proveedor;
-use App\Traits\Compras\ProveedorTrait;
 
 class ProveedorQuery implements ProveedorQueryInterface
 {
@@ -125,7 +124,7 @@ class ProveedorQuery implements ProveedorQueryInterface
         $consulta = trim((string) $consulta);
         $limite = 250;
         $filtroEmpresaAplicado = config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0;
-        $estados = ProveedorTrait::$estadosHabilitadosOperacion;
+        $estados = Proveedor::$estadosHabilitadosOperacion;
         if ($incluirSuspendidos) {
             $estados[] = 'Suspendido';
         }

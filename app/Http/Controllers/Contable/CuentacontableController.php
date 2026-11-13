@@ -69,6 +69,7 @@ class CuentacontableController extends Controller
         if ($vistaArbol) {
             $query = $this->baseQueryListado();
             $this->aplicarFiltroEstado($query, $filtros);
+            CuentacontableListadoFiltros::aplicarSoloManejaCosto($query, $filtros);
             if (! empty($filtros['empresa_id'])) {
                 $query->where('cuentacontable.empresa_id', (int) $filtros['empresa_id']);
             } elseif ($empresaIdsPermitidos !== []) {
@@ -513,6 +514,7 @@ class CuentacontableController extends Controller
     private function baseQueryListado(): Builder
     {
         return $this->cuentacontableRepository->queryListado()
+            ->with(['cuentacontable_centrocostos.centrocostos'])
             ->leftJoin('empresa', 'empresa.id', '=', 'cuentacontable.empresa_id')
             ->leftJoin('rubrocontable', 'rubrocontable.id', '=', 'cuentacontable.rubrocontable_id')
             ->leftJoin('conceptogasto', 'conceptogasto.id', '=', 'cuentacontable.conceptogasto_id')

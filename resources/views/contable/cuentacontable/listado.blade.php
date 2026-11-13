@@ -1,6 +1,7 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Contable\CuentacontableArbolSupport;
+    use App\Support\Contable\CuentacontableCentrosAsociadosSupport;
     foreach ($datas as $row) {
         $row->nombreempresa = $row->empresas->nombre ?? '';
     }
@@ -62,15 +63,16 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width: 5%;">ID</th>
-				<th style="width: 12%;">Empresa</th>
-				<th style="width: 10%;">C&oacute;digo</th>
-				<th style="width: 22%;">Nombre</th>
-				<th style="width: 5%;">Nivel</th>
-				<th style="width: 12%;">Tipo</th>
-				<th style="width: 12%;">Rubro</th>
-				<th style="width: 6%;">C.Costo</th>
-				<th style="width: 12%;">Concepto</th>
+				<th style="width: 4%;">ID</th>
+				<th style="width: 10%;">Empresa</th>
+				<th style="width: 8%;">C&oacute;digo</th>
+				<th style="width: 16%;">Nombre</th>
+				<th style="width: 4%;">Nivel</th>
+				<th style="width: 9%;">Tipo</th>
+				<th style="width: 10%;">Rubro</th>
+				<th style="width: 5%;">C.Costo</th>
+				<th style="width: 18%;">Centros asociados</th>
+				<th style="width: 10%;">Concepto</th>
 				<th style="width: 6%;">Inhab.</th>
 			</tr>
 		</thead>
@@ -85,6 +87,7 @@
 					<td>{{ CuentacontableArbolSupport::etiquetaTipo((string) $data->tipocuenta) }}</td>
 					<td>{{ $data->rubrocontables->nombre ?? '' }}</td>
 					<td>{{ $data->manejaccosto == 'S' ? 'Sí' : 'No' }}</td>
+					<td>{{ CuentacontableCentrosAsociadosSupport::desdeCuenta($data) }}</td>
 					<td>{{ $data->conceptogastos->nombre ?? '' }}</td>
 					<td>{{ ! empty($data->inhabilitada) ? 'Sí' : 'No' }}</td>
 				</tr>

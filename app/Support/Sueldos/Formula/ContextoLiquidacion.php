@@ -92,6 +92,11 @@ class ContextoLiquidacion implements EntornoFormula
 
     private ?Carbon $fechaEgreso = null;
 
+    /** Ventana de la corrida (periodo_desde/hasta); si falta, el mes YYYYMM. */
+    private ?Carbon $periodoCorridaDesde = null;
+
+    private ?Carbon $periodoCorridaHasta = null;
+
     /**
      * @param  array<int, array{codigo: string, tipos: array<int,string>, signo: int}>  $acumDefs
      */
@@ -112,6 +117,7 @@ class ContextoLiquidacion implements EntornoFormula
         $this->cargarVariables($empleado, $liquidacion);
         $this->liquidacionId = (int) ($liquidacion->id ?? 0);
         $this->periodoYm = (int) ($liquidacion->periodo ?: ($this->anio * 100 + $this->mes));
+        $this->definirVentanaCorrida($liquidacion);
         $this->cargarBases($empleado, $this->fechaRef);
         // B(1): la base de la categoría es el piso. Si el sueldo del legajo es
         // mayor, manda ese.
@@ -488,9 +494,32 @@ class ContextoLiquidacion implements EntornoFormula
     }
 
     /**
+     * Ventana efectiva de la corrida: periodo_desde/hasta si están cargados;
+     * si no, el mes calendario del período YYYYMM.
+     */
+    private function definirVentanaCorrida(Liquidacion_Sueldos $liq): void
+    {
+        try {
+            if (! empty($liq->periodo_desde) && ! empty($liq->periodo_hasta)) {
+                $this->periodoCorridaDesde = Carbon::parse($liq->periodo_desde)->startOfDay();
+                $this->periodoCorridaHasta = Carbon::parse($liq->periodo_hasta)->endOfDay();
+
+                return;
+            }
+        } catch (\Throwable $e) {
+            // cae al mes
+        }
+        if ($this->periodoYm > 0) {
+            [$ini, $fin] = NovedadSueldosVigencia::limitesPeriodo($this->periodoYm);
+            $this->periodoCorridaDesde = $ini;
+            $this->periodoCorridaHasta = $fin;
+        }
+    }
+
+    /**
      * Anita liquida vacaciones desde el plan/grilla sin novedad ABM obligatoria.
      * Si no hay novedad explícita 420/422, suma días de ausencias de vacaciones
-     * que solapan el período de la corrida → novedad(420|422).
+     * que solapan la ventana de la corrida → novedad(420|422).
      */
     private function incorporarDiasVacacionesDesdeAusencias(): void
     {
@@ -504,8 +533,13 @@ class ContextoLiquidacion implements EntornoFormula
             return;
         }
 
+        $ini = $this->periodoCorridaDesde;
+        $fin = $this->periodoCorridaHasta;
+        if ($ini === null || $fin === null) {
+            return;
+        }
+
         try {
-            [$ini, $fin] = NovedadSueldosVigencia::limitesPeriodo($this->periodoYm);
             $dias = (float) DB::table('empleado_ausencia_sueldos as a')
                 ->join('tipo_ausencia_sueldos as t', 't.id', '=', 'a.tipo_ausencia_id')
                 ->where('a.empleado_id', $this->empleadoId)

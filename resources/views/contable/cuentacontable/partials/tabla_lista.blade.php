@@ -1,5 +1,6 @@
 @php
     use App\Support\Contable\CuentacontableArbolSupport;
+    use App\Support\Contable\CuentacontableCentrosAsociadosSupport;
 @endphp
 <div class="card-body table-responsive p-0">
     @include('includes.exportar-tabla-queryparams', [
@@ -17,6 +18,7 @@
                 <th>Tipo</th>
                 <th>Rubro</th>
                 <th>C.Costo</th>
+                <th>Centros asociados</th>
                 <th>Concepto</th>
                 <th class="width80" data-orderable="false"></th>
             </tr>
@@ -37,6 +39,7 @@
                     <td>{{ CuentacontableArbolSupport::etiquetaTipo($tipo) }}</td>
                     <td>{{ $data->rubrocontables->nombre ?? '' }}</td>
                     <td>{{ $data->manejaccosto == 'S' ? 'Sí' : 'No' }}</td>
+                    <td>{{ CuentacontableCentrosAsociadosSupport::desdeCuenta($data) }}</td>
                     <td>{{ $data->conceptogastos->nombre ?? '' }}</td>
                     <td>
                         @if (can('editar-cuentas-contables', false))
@@ -55,7 +58,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="10" class="text-center text-muted py-4">Sin cuentas para estos filtros.</td>
+                    <td colspan="11" class="text-center text-muted py-4">Sin cuentas para estos filtros.</td>
                 </tr>
             @endforelse
         </tbody>

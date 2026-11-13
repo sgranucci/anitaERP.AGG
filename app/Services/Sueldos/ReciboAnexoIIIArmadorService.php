@@ -223,7 +223,8 @@ class ReciboAnexoIIIArmadorService
                 : '',
             'convenio' => $emp?->sindicato?->descripcion ?? '',
             'fecha_ingreso' => $fechaIngreso,
-            'periodo_liq' => trim(($liq?->descripcion ?? '').' '.($liq?->numero ? (string) $liq->numero : '')),
+            // Solo la descripción (ej. "VACA 2DA QUINC. 11-2026"); no el número interno Anita.
+            'periodo_liq' => trim((string) ($liq?->descripcion ?: ($liq?->numero ? (string) $liq->numero : ''))),
             'lugar_pago' => $liq?->lugar_pago ?? '',
             'fecha_pago' => $liq?->fecha_pago ? Carbon::parse($liq->fecha_pago)->format('d-m-Y') : '',
             'cuil' => $recibo->cuil,
