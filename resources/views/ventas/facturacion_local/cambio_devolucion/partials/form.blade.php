@@ -246,7 +246,7 @@
             Las otras opciones calculan el precio solas: el de la factura original menos el descuento, el precio lleno de esa factura o el precio lleno actual. Solo copian el precio del par devuelto si el reemplazo es el mismo artículo.
             «Traer de la factura» vuelve a leer todos los artículos de la factura original para devolver todos o sumar alguno más.
             Si ya facturaste un reemplazo y sumaste otro par a devolver, usá Agregar reemplazo, Guardar reemplazo y Facturar el reemplazo agregado. La factura anterior queda.
-            Si la factura del reemplazo se cargó mal, la nota de crédito de ese comprobante lo anula y se puede facturar de nuevo sin cerrar el legajo.
+            Si la factura del reemplazo se cargó mal, la nota de crédito de ese comprobante lo anula: <strong>corregí el precio en la misma línea</strong>, guardá y facturá de nuevo. No agregues otra línea del mismo par (quedarían dos y se facturan juntas).
             Cambio: cargar el reemplazo con lupa o F1. Solo reembolso: dejar solo líneas «A devolver» (sin reemplazo) y usar «Continuar sin reemplazo».
             El calzado pide talle y, según el artículo, color o combinación. Si no maneja variante, esos campos quedan en «No aplica».
             Buscar factura: también atajos tipo A26-146 o 23-45335.

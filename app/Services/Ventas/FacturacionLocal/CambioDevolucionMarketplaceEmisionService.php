@@ -34,11 +34,59 @@ final class CambioDevolucionMarketplaceEmisionService
             return ['ok' => false, 'error' => 'Local de venta inexistente.'];
         }
 
+        $preparado = $this->prepararLineas($cambio, $modo);
+        if (! $preparado['ok']) {
+            return ['ok' => false, 'error' => $preparado['error']];
+        }
+        $lineas = $preparado['lineas'];
+        $total = $preparado['total'];
+        $ajustes = $preparado['ajustes'];
+        $avisos = $preparado['avisos'];
+        $lineasReemplazo = $preparado['lineas_reemplazo'];
+
+        try {
+            $medios = CambioDevolucionMarketplacePuenteSupport::medioPagoUnico($total);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        return $this->emitirConLineas($cambio, $local, $modo, $lineas, $medios, $ajustes, $avisos, $lineasReemplazo);
+    }
+
+    /**
+     * Total que saldría en la factura con cada modo de precio, sin emitir.
+     *
+     * @return array<string, array{ok:bool,total?:float,error?:string}>
+     */
+    public function previsualizarPorModo(CambioDevolucionMarketplace $cambio): array
+    {
+        $cambio->loadMissing(['lineas.articulo', 'ventaOriginal.venta_emisiones']);
+        $out = [];
+        foreach (array_keys(CambioDevolucionMarketplacePrecioSupport::MODOS) as $modo) {
+            $preparado = $this->prepararLineas($cambio, $modo);
+            $out[$modo] = $preparado['ok']
+                ? ['ok' => true, 'total' => round((float) $preparado['total'], 2)]
+                : ['ok' => false, 'error' => (string) $preparado['error']];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Valida y resuelve el precio de las líneas pendientes. No graba.
+     *
+     * @return array{ok:bool,error?:string,lineas:list<array<string,mixed>>,total:float,ajustes:list<array<string,mixed>>,avisos:list<string>,lineas_reemplazo:\Illuminate\Support\Collection}
+     */
+    private function prepararLineas(CambioDevolucionMarketplace $cambio, string $modo): array
+    {
+        $vacio = ['lineas' => [], 'total' => 0.0, 'ajustes' => [], 'avisos' => [], 'lineas_reemplazo' => collect()];
+        $falla = static fn (string $error): array => ['ok' => false, 'error' => $error] + $vacio;
+
         $todasReemplazo = $cambio->lineas
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
             ->values();
         if ($todasReemplazo->isEmpty()) {
-            return ['ok' => false, 'error' => 'No hay líneas de reemplazo para facturar.'];
+            return $falla('No hay líneas de reemplazo para facturar.');
         }
 
         $yaFacturadas = $todasReemplazo
@@ -48,9 +96,19 @@ final class CambioDevolucionMarketplaceEmisionService
             ->filter(static fn ($linea): bool => (int) ($linea->venta_fac_id ?? 0) <= 0)
             ->values();
         if ($pendientes->isEmpty()) {
-            return ['ok' => false, 'error' => 'No hay un reemplazo nuevo para facturar. Agregalo en la grilla y guardalo.'];
+            return $falla('No hay un reemplazo nuevo para facturar. Agregalo en la grilla y guardalo.');
         }
-        $lineasReemplazo = $yaFacturadas->isEmpty() ? $todasReemplazo : $pendientes;
+        // Solo pendientes: tras NC todas lo son; si ya hay FAC vigente, solo el par nuevo.
+        // Si dejaron la línea vieja (precio mal) y sumaron otra del mismo artículo, cortar.
+        $lineasReemplazo = $pendientes;
+        $dup = $this->duplicadoPendienteMismoArticulo($lineasReemplazo);
+        if ($dup !== null) {
+            return $falla($dup);
+        }
+        $exceso = CambioDevolucionMarketplaceCatalogoSupport::errorExcesoReemplazo($cambio->lineas);
+        if ($exceso !== null) {
+            return $falla($exceso);
+        }
 
         $emisiones = $cambio->ventaOriginal?->venta_emisiones?->keyBy('id') ?? collect();
         $devolverPendientes = $cambio->lineas
@@ -71,7 +129,7 @@ final class CambioDevolucionMarketplaceEmisionService
             $par = $this->parDeDevolucion($devolverPendientes, $linea, $devolverUsados);
             $resuelto = $this->precioDeReemplazo($modo, $cambio, $linea, $par, $emisiones);
             if ($resuelto['error'] !== null) {
-                return ['ok' => false, 'error' => $resuelto['error']];
+                return $falla($resuelto['error']);
             }
             $precio = (float) $resuelto['precio'];
             if (abs($precio - $anterior) > 0.02) {
@@ -97,27 +155,78 @@ final class CambioDevolucionMarketplaceEmisionService
             ];
         }
 
-        try {
-            $medios = CambioDevolucionMarketplacePuenteSupport::medioPagoUnico($total);
-        } catch (\Throwable $e) {
-            return ['ok' => false, 'error' => $e->getMessage()];
-        }
+        return [
+            'ok' => true,
+            'lineas' => $lineas,
+            'total' => $total,
+            'ajustes' => $ajustes,
+            'avisos' => $avisos,
+            'lineas_reemplazo' => $lineasReemplazo,
+        ];
+    }
 
+    /**
+     * @param  list<array<string,mixed>>  $lineas
+     * @param  list<array<string,mixed>>  $medios
+     * @param  list<array<string,mixed>>  $ajustes
+     * @param  list<string>  $avisos
+     * @param  \Illuminate\Support\Collection<int, CambioDevolucionMarketplaceLinea>  $lineasReemplazo
+     * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
+     */
+    private function emitirConLineas(
+        CambioDevolucionMarketplace $cambio,
+        LocalVenta $local,
+        string $modo,
+        array $lineas,
+        array $medios,
+        array $ajustes,
+        array $avisos,
+        $lineasReemplazo,
+    ): array {
         $ventaOriginal = $cambio->ventaOriginal;
+        $nombre = trim((string) ($cambio->receptor_nombre ?: $ventaOriginal?->nombre ?: ''));
         $doc = preg_replace('/\D/', '', (string) ($cambio->receptor_documento ?: $ventaOriginal?->nroinscripcion ?: '')) ?? '';
+        $domicilio = (string) ($ventaOriginal?->domicilio ?? '');
+        $provinciaId = (int) ($ventaOriginal?->provincia_id ?? 0) ?: null;
+        $localidadId = (int) ($ventaOriginal?->localidad_id ?? 0) ?: null;
         $input = [
             'lineas' => $lineas,
             'medios_pago' => $medios,
             'cliente_id' => $cambio->cliente_id,
             'receptor' => [
-                'nombre' => trim((string) ($cambio->receptor_nombre ?: $ventaOriginal?->nombre ?: '')),
+                'nombre' => $nombre,
                 'nro_documento' => $doc,
-                'domicilio' => (string) ($ventaOriginal?->domicilio ?? ''),
-                'provincia_id' => (int) ($ventaOriginal?->provincia_id ?? 0) ?: null,
-                'localidad_id' => (int) ($ventaOriginal?->localidad_id ?? 0) ?: null,
+                'domicilio' => $domicilio,
+                'provincia_id' => $provinciaId,
+                'localidad_id' => $localidadId,
             ],
             'alinear_medio_al_total' => true,
         ];
+        // El cliente del legajo suele ser CF de Anita (doc 0). Si el legajo/venta trae
+        // nombre+DNI, emitir como receptor eventual identificado (igual que el POS).
+        if ($nombre !== '' && $doc !== '' && (int) $doc > 0 && strlen($doc) !== 11) {
+            $input['receptor_manual'] = [
+                'modo' => 'b',
+                'nombre' => $nombre,
+                'documento' => $doc,
+                'domicilio' => $domicilio,
+            ];
+        } elseif (
+            $nombre !== ''
+            && strlen($doc) === 11
+            && $domicilio !== ''
+            && (int) ($localidadId ?? 0) > 0
+            && (int) ($provinciaId ?? 0) > 0
+        ) {
+            $input['receptor_manual'] = [
+                'modo' => 'a',
+                'nombre' => $nombre,
+                'cuit' => $doc,
+                'domicilio' => $domicilio,
+                'localidad_id' => $localidadId,
+                'provincia_id' => $provinciaId,
+            ];
+        }
 
         $resultado = $this->emisionService->emitir($local, $input);
         if (empty($resultado['ok'])) {
@@ -160,6 +269,36 @@ final class CambioDevolucionMarketplaceEmisionService
             'mensaje' => trim('Factura de reemplazo emitida con medio puente NCD. '.$detalle),
             'modo_precio' => $modo,
         ];
+    }
+
+    /**
+     * Misma variante (artículo+talle+color+combinación) en dos líneas pendientes:
+     * típico al NC por error de precio y agregar otra línea en vez de corregir la existente.
+     *
+     * @param  \Illuminate\Support\Collection<int, CambioDevolucionMarketplaceLinea>  $pendientes
+     */
+    private function duplicadoPendienteMismoArticulo($pendientes): ?string
+    {
+        $vistos = [];
+        foreach ($pendientes as $linea) {
+            $clave = implode(':', [
+                (int) $linea->articulo_id,
+                (int) ($linea->talle_id ?? 0),
+                (int) ($linea->color_id ?? 0),
+                (int) ($linea->combinacion_id ?? 0),
+            ]);
+            if (isset($vistos[$clave])) {
+                $nombre = trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: 'el artículo'));
+
+                return 'Hay más de una línea de reemplazo pendiente de '.$nombre
+                    .' (mismo talle/combinación). Si la factura anterior tenía mal el precio, '
+                    .'dejá una sola línea con el precio correcto, guardá y facturá de nuevo. '
+                    .'No agregues otra línea del mismo par.';
+            }
+            $vistos[$clave] = true;
+        }
+
+        return null;
     }
 
     /**

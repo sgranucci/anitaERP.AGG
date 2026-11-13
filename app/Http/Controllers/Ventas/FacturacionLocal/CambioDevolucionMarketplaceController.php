@@ -9,6 +9,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Ventas\CambioDevolucionMarketplace;
 use App\Models\Ventas\LocalVenta;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
+use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEmisionService;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceOppDevolucionService;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceService;
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
@@ -38,6 +39,7 @@ class CambioDevolucionMarketplaceController extends Controller
 {
     public function __construct(
         private readonly CambioDevolucionMarketplaceService $service,
+        private readonly CambioDevolucionMarketplaceEmisionService $emisionService,
         private readonly CambioDevolucionMarketplaceOppDevolucionService $oppDevolucionService,
         private readonly Caja_MovimientoRepositoryInterface $cajaMovimientoRepository,
     ) {
@@ -586,8 +588,12 @@ class CambioDevolucionMarketplaceController extends Controller
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
             ->filter(static fn ($linea): bool => (int) ($linea->venta_fac_id ?? 0) <= 0)
             ->count();
+        $previewFac = $puedeOperarFacturacion && $reemplazosPendientes > 0 && ! $editable
+            ? $this->previewFacturaReemplazo($data)
+            : null;
 
         return [
+            'previewFac' => $previewFac,
             'data' => $data,
             'locales' => $locales,
             'canales' => CambioDevolucionMarketplaceCatalogoSupport::CANALES,
@@ -616,6 +622,31 @@ class CambioDevolucionMarketplaceController extends Controller
                 && $estado !== CambioDevolucionMarketplaceEstadosSupport::BORRADOR
                 && $estado !== CambioDevolucionMarketplaceEstadosSupport::ABIERTO,
             'puedeNcReemplazo' => $puedeOperarFacturacion && $facVigente,
+        ];
+    }
+
+    /**
+     * Total de la factura por modo de precio y diferencia estimada contra lo devuelto,
+     * para el diálogo de confirmación. Si la NC de lo devuelto no salió, se estima con la grilla.
+     *
+     * @return array{modos:array<string,array{ok:bool,total?:float,error?:string}>,vigente:float,devolver:float,devolver_estimado:bool}
+     */
+    private function previewFacturaReemplazo(CambioDevolucionMarketplace $data): array
+    {
+        $data->loadMissing(['ventaNc', 'comprobantes']);
+        $modos = $this->emisionService->previsualizarPorModo($data);
+        $ncId = (int) ($data->venta_nc_id ?? 0);
+        $devolver = $ncId > 0
+            ? abs((float) ($data->ventaNc->total ?? 0))
+            : (float) $data->lineas
+                ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)
+                ->sum(static fn ($linea): float => (float) $linea->cantidad * (float) $linea->precio_unitario);
+
+        return [
+            'modos' => $modos,
+            'vigente' => CambioDevolucionMarketplaceLiquidacionSupport::totalReemplazosVigentes($data),
+            'devolver' => round($devolver, 2),
+            'devolver_estimado' => $ncId <= 0,
         ];
     }
 

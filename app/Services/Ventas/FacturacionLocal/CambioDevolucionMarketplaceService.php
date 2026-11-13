@@ -18,6 +18,7 @@ use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePrecioSupport
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceVentaConsultaSupport;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -164,6 +165,17 @@ final class CambioDevolucionMarketplaceService
      */
     public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
     {
+        return $this->conBloqueoEmision(
+            $cambio,
+            fn (CambioDevolucionMarketplace $fresco): array => $this->emitirFacReemplazoBloqueado($fresco, $modoPrecio)
+        );
+    }
+
+    /**
+     * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
+     */
+    private function emitirFacReemplazoBloqueado(CambioDevolucionMarketplace $cambio, ?string $modoPrecio): array
+    {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing('lineas');
         $this->assertPuedeFacturarReemplazo($cambio);
@@ -226,6 +238,37 @@ final class CambioDevolucionMarketplaceService
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
     public function emitirNcReemplazo(CambioDevolucionMarketplace $cambio): array
+    {
+        return $this->conBloqueoEmision(
+            $cambio,
+            fn (CambioDevolucionMarketplace $fresco): array => $this->emitirNcReemplazoBloqueado($fresco)
+        );
+    }
+
+    /**
+     * Un doble clic o dos pestañas no pueden emitir dos comprobantes del mismo legajo:
+     * el segundo espera, relee el legajo y las validaciones de estado lo frenan.
+     *
+     * @param  callable(CambioDevolucionMarketplace): array  $emitir
+     * @return array{ok:bool,error?:string}
+     */
+    private function conBloqueoEmision(CambioDevolucionMarketplace $cambio, callable $emitir): array
+    {
+        $lock = Cache::lock('cambio_devolucion_marketplace:emision:'.$cambio->id, 120);
+        if (! $lock->block(15)) {
+            return ['ok' => false, 'error' => 'Hay otra emisión en curso para este legajo. Esperá unos segundos y recargá la pantalla.'];
+        }
+        try {
+            return $emitir($cambio->fresh() ?? $cambio);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
+     */
+    private function emitirNcReemplazoBloqueado(CambioDevolucionMarketplace $cambio): array
     {
         $this->assertPuedeAnularReemplazo($cambio);
         $ventaFacId = (int) $cambio->venta_reemplazo_id;
@@ -351,6 +394,13 @@ final class CambioDevolucionMarketplaceService
             return $this->sumarReemplazos($cambio, $lineas);
         }
 
+        $this->assertReemplazosSinDuplicadoMismaVariante($lineas);
+        $cambio->loadMissing('lineas');
+        $this->assertSinExcesoReemplazo(
+            $cambio->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)->values()->all(),
+            $lineas
+        );
+
         return DB::transaction(function () use ($cambio, $lineas) {
             EloquentAuditDeleteSupport::each(
                 CambioDevolucionMarketplaceLinea::query()
@@ -390,6 +440,58 @@ final class CambioDevolucionMarketplaceService
 
             return $cambio->fresh(['lineas']);
         });
+    }
+
+    /**
+     * Tras NC del reemplazo se reescriben todas las líneas: no permitir dos del mismo par
+     * (error típico: dejar la de $ mal y agregar otra con el precio bien).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    /**
+     * @param  list<mixed>  $lineasExistentes
+     * @param  list<array<string, mixed>>  $lineasNuevas
+     */
+    private function assertSinExcesoReemplazo(array $lineasExistentes, array $lineasNuevas): void
+    {
+        $nuevas = array_values(array_filter(
+            $lineasNuevas,
+            static fn ($linea): bool => is_array($linea)
+                && (string) ($linea['tipo'] ?? '') === CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO
+        ));
+        $error = CambioDevolucionMarketplaceCatalogoSupport::errorExcesoReemplazo(array_merge($lineasExistentes, $nuevas));
+        if ($error !== null) {
+            throw new InvalidArgumentException($error);
+        }
+    }
+
+    private function assertReemplazosSinDuplicadoMismaVariante(array $lineas): void
+    {
+        $vistos = [];
+        foreach ($lineas as $linea) {
+            if ((string) ($linea['tipo'] ?? '') !== CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO) {
+                continue;
+            }
+            $articuloId = (int) ($linea['articulo_id'] ?? 0);
+            if ($articuloId <= 0) {
+                continue;
+            }
+            $clave = implode(':', [
+                $articuloId,
+                (int) ($linea['talle_id'] ?? 0),
+                (int) ($linea['color_id'] ?? 0),
+                (int) ($linea['combinacion_id'] ?? 0),
+            ]);
+            if (isset($vistos[$clave])) {
+                $nombre = trim((string) ($linea['descripcion'] ?? 'el artículo'));
+                throw new InvalidArgumentException(
+                    'Hay más de una línea de reemplazo de '.$nombre
+                    .' (mismo talle/combinación). Si corregís un precio mal facturado, '
+                    .'editá la línea existente o dejá una sola; no agregues otra del mismo par.'
+                );
+            }
+            $vistos[$clave] = true;
+        }
     }
 
     public function registrarRecepcion(CambioDevolucionMarketplace $cambio, string $disposicion, ?string $observacion = null): CambioDevolucionMarketplace
@@ -684,6 +786,12 @@ final class CambioDevolucionMarketplaceService
      */
     private function sumarReemplazos(CambioDevolucionMarketplace $cambio, array $lineas): CambioDevolucionMarketplace
     {
+        $cambio->loadMissing('lineas');
+        $this->assertSinExcesoReemplazo(
+            $cambio->lineas->all(),
+            array_values(array_filter($lineas, static fn ($linea): bool => is_array($linea) && (int) ($linea['id'] ?? 0) <= 0))
+        );
+
         return DB::transaction(function () use ($cambio, $lineas) {
             $guardadas = 0;
             foreach ($lineas as $linea) {

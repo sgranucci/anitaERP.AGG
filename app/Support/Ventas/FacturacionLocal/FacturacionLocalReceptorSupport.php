@@ -177,10 +177,18 @@ final class FacturacionLocalReceptorSupport
         $doc = preg_replace('/\D/', '', (string) ($cliente->numerodocumento ?? '')) ?? '';
         $tipodocExt = (int) ($cliente->tipodocumentos?->codigoexterno ?? 0);
         $docIngresado = self::documentoDesdeReceptor($receptor);
-        // Factura A eventual (shell sin CUIT): el padrón es el del receptor, no el del maestro.
+        // Shell CF / sin doc: el padrón es el del receptor (CUIT → Factura A; DNI → identificado B).
         if (strlen($docIngresado) === 11) {
             $doc = $docIngresado;
             $tipodocExt = 80;
+        } elseif (
+            ($doc === '' || (int) $doc <= 0 || $tipodocExt <= 0 || $tipodocExt === 99)
+            && $docIngresado !== ''
+            && (int) $docIngresado > 0
+            && strlen($docIngresado) >= 7
+        ) {
+            $doc = $docIngresado;
+            $tipodocExt = (int) config('arca_wsfe.receptor.identificado_tipo_documento_default', 96);
         }
         $documentoValido = $doc !== '' && (int) $doc > 0 && $tipodocExt > 0 && $tipodocExt !== 99;
         $letra = strtoupper(trim((string) ($cliente->condicionivas?->letra ?? 'B')));

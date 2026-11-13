@@ -8,6 +8,42 @@ window.cdmArticulosFacturaUrl = @json(route('api_articulos_factura_cambio_devolu
 window.cdmAgregarDevolucionesUrl = @json($data->exists ? route('agregar_devoluciones_cambio_devolucion_marketplace', $data->id) : '');
 window.cdmVariantesUrl = @json(route('api_variantes_cambio_devolucion_marketplace', ['articuloId' => '__ID__']));
 window.cdmPrecioUrl = @json(route('api_precio_cambio_devolucion_marketplace'));
+window.cdmPreviewFac = @json($previewFac ?? null);
+window.cdmConfirmarFac = function (form, pregunta) {
+    var select = form.querySelector('[name=modo_precio]');
+    var modo = select ? select.value : '';
+    var etiqueta = select ? select.options[select.selectedIndex].text.trim() : '';
+    var preview = window.cdmPreviewFac;
+    var fila = preview && preview.modos ? preview.modos[modo] : null;
+    if (fila && !fila.ok) {
+        alert('No se puede facturar con «' + etiqueta + '»:\n' + fila.error);
+        return false;
+    }
+    var pesos = function (n) {
+        return '$ ' + Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    var texto = pregunta + '\n\nPrecio: ' + etiqueta;
+    if (fila) {
+        var facturado = Number(preview.vigente || 0) + Number(fila.total || 0);
+        var diferencia = Math.round((facturado - Number(preview.devolver || 0)) * 100) / 100;
+        texto += '\nTotal de esta factura: ' + pesos(fila.total);
+        if (Number(preview.vigente || 0) > 0) {
+            texto += '\nFacturas de reemplazo vigentes: ' + pesos(preview.vigente);
+        }
+        texto += '\nA devolver' + (preview.devolver_estimado ? ' (estimado con la grilla)' : '') + ': ' + pesos(preview.devolver);
+        if (Math.abs(diferencia) < 0.01) {
+            texto += '\nDiferencia: sin diferencia';
+        } else if (diferencia > 0) {
+            texto += '\nDiferencia: el cliente debe ' + pesos(diferencia);
+        } else {
+            texto += '\nDiferencia: Ferli acredita ' + pesos(-diferencia);
+        }
+        if (Math.abs(diferencia) >= 0.01) {
+            texto += '\n\nRevisá que no haya un par de más ni un precio mal cargado.';
+        }
+    }
+    return confirm(texto);
+};
 </script>
 @if ($lineaInteractiva ?? $editable ?? false)
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}"></script>

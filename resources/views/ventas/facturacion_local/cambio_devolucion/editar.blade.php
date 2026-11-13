@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         </form>
                     @elseif (can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                         <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1 cdm-form-emitir-fac"
-                              onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Emitir la factura del par que se lleva con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? Debe haber turno abierto en el local.');">
+                              onsubmit="return window.cdmConfirmarFac(this, '¿Emitir la factura del par que se lleva? Debe haber turno abierto en el local.');">
                             @csrf
                             @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
                                 'etiquetaPrecio' => 'Precio de la factura',
@@ -110,7 +110,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 @if (($puedeFacturarAgregado ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1 cdm-form-emitir-fac"
-                          onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Facturar solo el reemplazo agregado, con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? La factura anterior queda.');">
+                          onsubmit="return window.cdmConfirmarFac(this, '¿Facturar solo el reemplazo agregado? La factura anterior queda.');">
                         @csrf
                         @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
                             'etiquetaPrecio' => 'Precio de la factura',
@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 @if (($puedeRefacturar ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1 cdm-form-emitir-fac"
-                          onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Facturar de nuevo el reemplazo con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? El legajo sigue hasta el cierre.');">
+                          onsubmit="return window.cdmConfirmarFac(this, '¿Facturar de nuevo el reemplazo? El legajo sigue hasta el cierre.');">
                         @csrf
                         @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
                             'etiquetaPrecio' => 'Precio de la factura',

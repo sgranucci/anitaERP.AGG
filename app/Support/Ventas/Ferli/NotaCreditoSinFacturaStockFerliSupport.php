@@ -8,12 +8,16 @@ use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Ventas\Tipotransaccion;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Ferli: NC de mostrador sin factura origen.
  * Exige combinación/talle en las líneas de mercadería y genera entrada de stock
  * (alta producción), porque NCD tiene operacionstock = O y no mueve stock genérico.
+ *
+ * Sin lote en la línea, asigna un correlativo de la serie de lotes de stock
+ * (misma numeración que el alta de MovimientoStockService: id + 500001).
  *
  * No usar cuando la emisión ya movió stock (PV de local fuerza ENTRADA sobre NCD):
  * ahí el movimiento queda como NCD "Credito" y un ALTAP extra duplicaría el par.
@@ -23,6 +27,13 @@ final class NotaCreditoSinFacturaStockFerliSupport
     public const MODULO_ABIERTO_ID = 30;
 
     public const CONCEPTO_DEVOLUCION_NC = 'Devolución NC';
+
+    /** Misma base que MovimientoStockService::asignarNumeroLoteAlta. */
+    private const LOTE_STOCK_OFFSET_ALTA = 500001;
+
+    private const LOTE_STOCK_RANGO_MIN = 500000;
+
+    private const LOTE_STOCK_RANGO_MAX = 999999;
 
     /**
      * @param  list<array<string, mixed>>  $dataFactura
@@ -110,6 +121,8 @@ final class NotaCreditoSinFacturaStockFerliSupport
 
         $servicio = app(Articulo_MovimientoService::class);
         $creados = 0;
+        $proximoLoteStock = null;
+        $lotesAsignados = [];
 
         foreach ($grupos as $grupo) {
             $articuloId = (int) $grupo['articulo_id'];
@@ -118,7 +131,16 @@ final class NotaCreditoSinFacturaStockFerliSupport
                 continue;
             }
 
-            if (self::yaTieneMovimiento($ventaNcId, $articuloId, $combinacionId, (string) $grupo['lote'])) {
+            $lote = trim((string) ($grupo['lote'] ?? ''));
+            if ($lote === '' || $lote === '0') {
+                if ($proximoLoteStock === null) {
+                    $proximoLoteStock = self::siguienteLoteStockCorrelativo();
+                }
+                $lote = (string) $proximoLoteStock;
+                $proximoLoteStock++;
+            }
+
+            if (self::yaTieneMovimiento($ventaNcId, $articuloId, $combinacionId, $lote)) {
                 continue;
             }
 
@@ -156,7 +178,7 @@ final class NotaCreditoSinFacturaStockFerliSupport
                 'fechajornada' => $fecha,
                 'tipotransaccion_id' => config('consprod.TIPOTRANSACCION_ALTA_PRODUCCION'),
                 'venta_id' => $ventaNcId,
-                'lote' => $grupo['lote'] !== '' ? $grupo['lote'] : 0,
+                'lote' => $lote,
                 'articulo_id' => $articuloId,
                 'combinacion_id' => $combinacionId,
                 'modulo_id' => $moduloId,
@@ -172,6 +194,7 @@ final class NotaCreditoSinFacturaStockFerliSupport
                 'deposito_id' => $depositoId,
             ], $dataTalle);
             $creados++;
+            $lotesAsignados[] = $lote;
         }
 
         if ($creados > 0) {
@@ -180,11 +203,27 @@ final class NotaCreditoSinFacturaStockFerliSupport
                     'venta_nc_id' => $ventaNcId,
                     'movimientos' => $creados,
                     'deposito_id' => $depositoId,
+                    'lotes' => $lotesAsignados,
                 ]);
             } catch (\Throwable) {
                 // No tumbar la NC por fallo de log.
             }
         }
+    }
+
+    /**
+     * Correlativo de lotes de stock Ferli (serie de alta producción / TRA).
+     * Usa el máximo entre la fórmula histórica (último movimientostock + 500001)
+     * y el mayor lote ya grabado en ese rango, para no chocar con altas previas.
+     */
+    public static function siguienteLoteStockCorrelativo(): int
+    {
+        $porFormula = (int) (DB::table('movimientostock')->max('id') ?? 0) + self::LOTE_STOCK_OFFSET_ALTA;
+        $maxExistente = (int) (Articulo_Movimiento::query()
+            ->whereBetween('lote', [self::LOTE_STOCK_RANGO_MIN, self::LOTE_STOCK_RANGO_MAX])
+            ->max('lote') ?? 0);
+
+        return max($porFormula, $maxExistente + 1);
     }
 
     /**

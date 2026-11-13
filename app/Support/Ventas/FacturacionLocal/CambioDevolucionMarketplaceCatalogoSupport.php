@@ -56,6 +56,44 @@ final class CambioDevolucionMarketplaceCatalogoSupport
             && ! self::tieneLineasTipo($lineas, self::TIPO_REEMPLAZO);
     }
 
+    /**
+     * Un cambio es par por par: no se entregan más pares de los que se devuelven.
+     * Un par extra es una venta y va por el POS.
+     *
+     * @param  iterable<mixed>  $lineas  Todas las líneas del legajo (devolver y reemplazo)
+     */
+    public static function errorExcesoReemplazo(iterable $lineas): ?string
+    {
+        $reemplazo = 0.0;
+        $devolver = 0.0;
+        foreach ($lineas as $linea) {
+            $tipo = (string) (is_array($linea) ? ($linea['tipo'] ?? '') : ($linea->tipo ?? ''));
+            $articuloId = (int) (is_array($linea) ? ($linea['articulo_id'] ?? 0) : ($linea->articulo_id ?? 0));
+            if ($articuloId <= 0) {
+                continue;
+            }
+            $cantidad = (float) (is_array($linea) ? ($linea['cantidad'] ?? 1) : ($linea->cantidad ?? 1));
+            if ($tipo === self::TIPO_REEMPLAZO) {
+                $reemplazo += $cantidad;
+            } elseif ($tipo === self::TIPO_DEVOLVER) {
+                $devolver += $cantidad;
+            }
+        }
+        if ($reemplazo <= $devolver + 0.0001) {
+            return null;
+        }
+
+        return 'El legajo tiene '.self::cantidadTexto($reemplazo).' par(es) de reemplazo y '
+            .self::cantidadTexto($devolver).' a devolver. Un cambio es par por par: '
+            .'si corregís un precio, editá la línea existente; si el cliente devuelve otro par, '
+            .'agregalo con «Traer artículos de la factura». Un par extra se vende por el POS.';
+    }
+
+    private static function cantidadTexto(float $cantidad): string
+    {
+        return rtrim(rtrim(number_format($cantidad, 2, ',', ''), '0'), ',');
+    }
+
     /** @var array<string, string> */
     public const MOTIVOS = [
         'cambio_talle' => 'Cambio de talle',
