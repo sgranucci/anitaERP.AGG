@@ -25,8 +25,10 @@ return [
     ),
 
     /**
-     * Alta o actualización de un producto. Menu vacío y Categories vacío → Sin Menú (preparar).
-     * No preparar manda la categoría NO-PREPARAR. placeId va en la query.
+     * Alta o actualización de un producto (syncMenuPOSWebhook).
+     * Jerarquía: menus > categories > items. Menus/categories vacíos → Sin Menú (preparar).
+     * No preparar: menú y categoría NO-PREPARAR con category_ids / entities.
+     * Catálogo: solo place Avellaneda; Waitry replica a las otras salas. placeId va en la query.
      */
     'sync_menu_pos_url' => env(
         'WAITRY_SYNC_MENU_POS_URL',

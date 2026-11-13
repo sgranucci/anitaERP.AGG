@@ -22,9 +22,9 @@
             <div class="modal-body">
                 <p class="mb-2">
                     <strong>Preparar</strong> deja el producto en <strong>Sin Menú</strong>.
-                    <strong>No preparar</strong> lo manda a la categoría No preparar, que Waitry excluye del filtro de cocina.
+                    <strong>No preparar</strong> lo manda al menú y categoría <strong>NO-PREPARAR</strong> (menu → categoría → ítem), que Waitry excluye del filtro de cocina.
+                    El alta se envía solo a <strong>Avellaneda</strong>; Waitry replica el catálogo a las otras salas.
                     Un envío con el mismo SKU actualiza el producto. La foto y la categoría pública se cargan después en Waitry.
-                    Cómo se ve eso en el KDS todavía no está confirmado.
                 </p>
                 <p class="text-muted small mb-3" id="articulo-waitry-sku-guardado">
                     Se envía el SKU guardado{{ $waitryPanel['sku'] !== '' ? ': '.$waitryPanel['sku'] : '' }}.

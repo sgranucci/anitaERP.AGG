@@ -14,9 +14,16 @@ use Illuminate\Support\Facades\Log;
 
 final class ArticuloWaitrySyncService
 {
+    /**
+     * Catálogo de artículos: solo Avellaneda. Waitry replica a las otras salas.
+     *
+     * @see docs/waitry (placeId 11782 = BONUS Avellaneda / BSA)
+     */
+    private const EMPRESA_CATALOGO = 1;
+
     /** @var array<int, string> */
     private const NOMBRES_SALA = [
-        1 => 'Biyemas',
+        1 => 'Avellaneda',
         2 => 'Kandiko',
         3 => 'Rebisco',
     ];
@@ -92,11 +99,11 @@ final class ArticuloWaitrySyncService
         }
 
         $mensaje = match (true) {
-            $huboFallo => 'Alguna sala no pudo completarse. Se puede reintentar solo esa.',
-            ! $huboEnvio && $operacion === ArticuloWaitryEnvio::ALTA => 'No hay salas Waitry configuradas.',
-            ! $huboEnvio => 'No hay salas con un alta registrada para suspender.',
-            $operacion === ArticuloWaitryEnvio::ALTA => 'Producto enviado. Si ya existía, Waitry lo actualiza.',
-            default => 'Suspensión enviada hasta 2040.',
+            $huboFallo => 'Avellaneda no pudo completarse. Se puede reintentar.',
+            ! $huboEnvio && $operacion === ArticuloWaitryEnvio::ALTA => 'No hay place Waitry de Avellaneda configurado.',
+            ! $huboEnvio => 'No hay un alta registrada en Avellaneda para suspender.',
+            $operacion === ArticuloWaitryEnvio::ALTA => 'Producto enviado a Avellaneda. Waitry replica a las otras salas.',
+            default => 'Suspensión enviada en Avellaneda hasta 2040.',
         };
 
         return [
@@ -223,6 +230,8 @@ final class ArticuloWaitrySyncService
     }
 
     /**
+     * Solo Avellaneda: Waitry replica el catálogo al resto de salas.
+     *
      * @return list<array{empresa_id:int,place_id:int,nombre:string}>
      */
     private function salas(): array
@@ -232,20 +241,17 @@ final class ArticuloWaitrySyncService
             return [];
         }
 
-        $salas = [];
-        foreach (self::NOMBRES_SALA as $empresaId => $nombre) {
-            $placeId = (int) ($map[$empresaId] ?? 0);
-            if ($placeId <= 0) {
-                continue;
-            }
-            $salas[] = [
-                'empresa_id' => $empresaId,
-                'place_id' => $placeId,
-                'nombre' => $nombre,
-            ];
+        $empresaId = self::EMPRESA_CATALOGO;
+        $placeId = (int) ($map[$empresaId] ?? $map[(string) $empresaId] ?? 0);
+        if ($placeId <= 0) {
+            return [];
         }
 
-        return $salas;
+        return [[
+            'empresa_id' => $empresaId,
+            'place_id' => $placeId,
+            'nombre' => self::NOMBRES_SALA[$empresaId] ?? 'Avellaneda',
+        ]];
     }
 
     private function jsonCorto(mixed $valor): ?string

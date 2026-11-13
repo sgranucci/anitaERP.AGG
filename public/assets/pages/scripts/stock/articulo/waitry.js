@@ -99,7 +99,7 @@
         if (!url || enviando) {
             return;
         }
-        if (confirmar && !window.confirm('Suspende el producto en Waitry hasta 2040 en las salas donde Anita lo dio de alta. No borra el artículo.')) {
+        if (confirmar && !window.confirm('Suspende el producto en Waitry hasta 2040 en Avellaneda (Waitry replica a las otras salas). No borra el artículo.')) {
             return;
         }
         enviando = true;

@@ -4,8 +4,9 @@ namespace App\Support\Ventas\Waitry;
 
 /**
  * Alta y suspensión de un artículo de catálogo en Waitry.
- * El alta con Menú y Categorías vacíos cae en Sin Menú.
- * No preparar manda el ítem en la categoría que Waitry deja fuera del filtro de cocina.
+ * Jerarquía: menu > categoría > item (menus.category_ids y categories.entities).
+ * Preparar: menus y categories vacíos → Sin Menú.
+ * No preparar: menú y categoría NO-PREPARAR con el ítem en entities.
  * La suspensión usa syncItemsPOSWebhook: suspend_until es timestamp Unix.
  */
 final class WaitryArticuloMenuPayloadSupport
@@ -15,32 +16,43 @@ final class WaitryArticuloMenuPayloadSupport
 
     public const CATEGORIA_NO_PREPARAR_ID = 'NO-PREPARAR';
 
-    public const CATEGORIA_NO_PREPARAR = 'No preparar';
+    public const CATEGORIA_NO_PREPARAR = 'NO-PREPARAR';
 
     /**
-     * @return array{Menu:list<mixed>,Categories:list<array<string,mixed>>,Items:list<array<string,mixed>>}
+     * @return array{menus:list<array<string,mixed>>,categories:list<array<string,mixed>>,items:list<array<string,mixed>>}
      */
     public static function alta(string $sku, string $nombre, bool $preparar = true): array
     {
         $item = self::item($sku, $nombre);
-        $categorias = [];
 
-        if (! $preparar) {
-            $categorias[] = [
-                'id' => self::CATEGORIA_NO_PREPARAR_ID,
-                'externalId' => self::CATEGORIA_NO_PREPARAR_ID,
-                'name' => self::CATEGORIA_NO_PREPARAR,
-                'title' => self::CATEGORIA_NO_PREPARAR,
-                'entities' => [
-                    ['type' => 'ITEM', 'id' => $item['id']],
-                ],
+        if ($preparar) {
+            return [
+                'menus' => [],
+                'categories' => [],
+                'items' => [$item],
             ];
         }
 
+        $categoriaId = self::CATEGORIA_NO_PREPARAR_ID;
+
         return [
-            'Menu' => [],
-            'Categories' => $categorias,
-            'Items' => [$item],
+            'menus' => [
+                [
+                    'id' => $categoriaId,
+                    'title' => self::CATEGORIA_NO_PREPARAR,
+                    'category_ids' => [$categoriaId],
+                ],
+            ],
+            'categories' => [
+                [
+                    'id' => $categoriaId,
+                    'title' => self::CATEGORIA_NO_PREPARAR,
+                    'entities' => [
+                        ['type' => 'ITEM', 'id' => $item['id']],
+                    ],
+                ],
+            ],
+            'items' => [$item],
         ];
     }
 
@@ -96,7 +108,7 @@ final class WaitryArticuloMenuPayloadSupport
     }
 
     /**
-     * @return array{id:string,externalId:string,name:string,title:string}
+     * @return array{id:string,title:string,price_info:array{price:int}}
      */
     private static function item(string $sku, string $nombre): array
     {
@@ -105,9 +117,10 @@ final class WaitryArticuloMenuPayloadSupport
 
         return [
             'id' => $id,
-            'externalId' => $id,
-            'name' => mb_substr($titulo, 0, 180),
             'title' => mb_substr($titulo, 0, 180),
+            'price_info' => [
+                'price' => 0,
+            ],
         ];
     }
 

@@ -57,23 +57,29 @@ final class ArticuloWaitryEstadoSupportTest extends TestCase
         $this->assertStringContainsString('2040', $r['estado']);
     }
 
-    public function test_alta_preparar_manda_menu_y_categorias_vacios(): void
+    public function test_alta_preparar_manda_menus_y_categorias_vacios(): void
     {
         $payload = WaitryArticuloMenuPayloadSupport::alta('v0647', 'Agua', true);
 
-        $this->assertSame([], $payload['Menu']);
-        $this->assertSame([], $payload['Categories']);
-        $this->assertSame('V0647', $payload['Items'][0]['externalId']);
-        $this->assertSame('V0647', $payload['Items'][0]['id']);
-        $this->assertSame('Agua', $payload['Items'][0]['name']);
+        $this->assertSame([], $payload['menus']);
+        $this->assertSame([], $payload['categories']);
+        $this->assertSame('V0647', $payload['items'][0]['id']);
+        $this->assertSame('Agua', $payload['items'][0]['title']);
+        $this->assertSame(0, $payload['items'][0]['price_info']['price']);
     }
 
-    public function test_alta_no_preparar_manda_la_categoria(): void
+    public function test_alta_no_preparar_manda_menu_categoria_e_item(): void
     {
-        $payload = WaitryArticuloMenuPayloadSupport::alta('V0647', 'Agua', false);
+        $payload = WaitryArticuloMenuPayloadSupport::alta('V0950', 'CIGARRILLOS', false);
 
-        $this->assertSame('NO-PREPARAR', $payload['Categories'][0]['externalId']);
-        $this->assertSame('V0647', $payload['Categories'][0]['entities'][0]['id']);
+        $this->assertSame('NO-PREPARAR', $payload['menus'][0]['id']);
+        $this->assertSame(['NO-PREPARAR'], $payload['menus'][0]['category_ids']);
+        $this->assertSame('NO-PREPARAR', $payload['categories'][0]['id']);
+        $this->assertSame('ITEM', $payload['categories'][0]['entities'][0]['type']);
+        $this->assertSame('V0950', $payload['categories'][0]['entities'][0]['id']);
+        $this->assertSame('V0950', $payload['items'][0]['id']);
+        $this->assertSame('CIGARRILLOS', $payload['items'][0]['title']);
+        $this->assertSame(0, $payload['items'][0]['price_info']['price']);
     }
 
     public function test_baja_suspende_hasta_2040(): void
