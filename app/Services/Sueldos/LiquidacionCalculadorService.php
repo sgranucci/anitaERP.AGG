@@ -749,7 +749,9 @@ class LiquidacionCalculadorService
 
             if ($error === null) {
                 $ctx->registrarConcepto($codigo, $importe);
-                if (! in_array((string) $c->tipo, ConceptoTipo::TIPOS_SIN_IMPACTO_TOTALES, true)) {
+                // Misma regla que calcularEmpleado: Anita no acumula si va_recibo=false.
+                if ((bool) $c->va_recibo
+                    && ! in_array((string) $c->tipo, ConceptoTipo::TIPOS_SIN_IMPACTO_TOTALES, true)) {
                     $ctx->aplicarAcumuladores((string) $c->tipo, $importe, $overrides[$c->id] ?? []);
                 }
             }
@@ -1182,15 +1184,16 @@ class LiquidacionCalculadorService
         }
 
         if (Schema::hasTable('empleado_ausencia_sueldos') && Schema::hasTable('tipo_ausencia_sueldos')) {
+            // Salida (fecha_desde) dentro de la ventana: 1ra=01–15, 2da=16–fin.
             $ausIds = DB::table('empleado_ausencia_sueldos as a')
                 ->join('tipo_ausencia_sueldos as t', 't.id', '=', 'a.tipo_ausencia_id')
-                ->whereIn('a.estado', ['planificada', 'aprobada', 'tomada', 'liquidada'])
+                ->whereIn('a.estado', ['planificada', 'aprobada', 'tomada'])
                 ->where(function ($q) {
                     $q->where('t.categoria', 'vacaciones')
                         ->orWhere('t.afecta_saldo_vacaciones', true);
                 })
+                ->whereDate('a.fecha_desde', '>=', $ini)
                 ->whereDate('a.fecha_desde', '<=', $fin)
-                ->whereDate('a.fecha_hasta', '>=', $ini)
                 ->pluck('a.empleado_id')
                 ->map(fn ($v) => (int) $v)
                 ->all();

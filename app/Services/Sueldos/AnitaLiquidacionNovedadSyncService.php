@@ -123,22 +123,28 @@ class AnitaLiquidacionNovedadSyncService
                     $mes = 1;
                 }
 
-                $desde = Carbon::create($anio, $mes, 1)->startOfDay();
-                $hasta = $desde->copy()->endOfMonth();
+                $descLiq = $detalle !== '' ? $detalle : ('Liq. Anita '.$numero);
+                [$desdeStr, $hastaStr] = \App\Support\Sueldos\LiquidacionVentanaPeriodo::resolver(
+                    $anio,
+                    $mes,
+                    $tipo,
+                    $descLiq
+                );
+                $hasta = Carbon::parse($hastaStr);
                 $fechaLiqStr = $this->fechaAnita($fechaLiq) ?? $hasta->toDateString();
                 $fechaPagoStr = $this->fechaAnita($fechaPago);
 
                 $payload = [
                     'empresa_id' => $empresaId,
                     'numero' => $numero,
-                    'descripcion' => $detalle !== '' ? $detalle : ('Liq. Anita '.$numero),
+                    'descripcion' => $descLiq,
                     'tipo' => $tipo,
                     'tipo_vacaciones' => $tipoVacaciones,
                     'periodo' => (string) $periodoYm,
                     'periodo_anio' => $anio,
                     'periodo_mes' => $mes,
-                    'periodo_desde' => $desde->toDateString(),
-                    'periodo_hasta' => $hasta->toDateString(),
+                    'periodo_desde' => $desdeStr,
+                    'periodo_hasta' => $hastaStr,
                     'fecha_liquidacion' => $fechaLiqStr,
                     'fecha_pago' => $fechaPagoStr,
                     'lugar_pago' => trim((string) ($f->mael_lugar_pago ?? '')) ?: null,

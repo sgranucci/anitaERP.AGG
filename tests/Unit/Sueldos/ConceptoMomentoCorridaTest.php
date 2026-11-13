@@ -57,11 +57,20 @@ class ConceptoMomentoCorridaTest extends TestCase
     public function test_grupo_vacaciones_restringe_momentos(): void
     {
         $this->assertSame(
-            ['vacaciones', 'vacaciones_1q', 'vacaciones_2q'],
+            ['vacaciones', 'vacaciones_1q', 'vacaciones_2q', 'mensual'],
             ConceptoMomentoCorrida::momentosPermitidosEnGrupo('vacaciones')
         );
         $this->assertNull(ConceptoMomentoCorrida::momentosPermitidosEnGrupo('mensual'));
         $this->assertNull(ConceptoMomentoCorrida::momentosPermitidosEnGrupo('final'));
+    }
+
+    public function test_mensual_en_vacaciones_solo_retencion_y_soporte(): void
+    {
+        $this->assertTrue(ConceptoMomentoCorrida::permiteMensualEnVacaciones('retencion', 1510));
+        $this->assertTrue(ConceptoMomentoCorrida::permiteMensualEnVacaciones('no_remunerativo', 1000));
+        $this->assertTrue(ConceptoMomentoCorrida::permiteMensualEnVacaciones('remunerativo', 999));
+        $this->assertTrue(ConceptoMomentoCorrida::permiteMensualEnVacaciones('no_remunerativo', 3000));
+        $this->assertFalse(ConceptoMomentoCorrida::permiteMensualEnVacaciones('remunerativo', 110));
     }
 
     public function test_sac_momento_solo_corrida_sac(): void

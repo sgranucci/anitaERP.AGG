@@ -289,6 +289,23 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
             }
         }
 
+        // Si no trajeron ventana, completar 1ra/2da quincena (o vacaciones 1RA/2DA).
+        $tipoOut = (string) ($out['tipo'] ?? $data['tipo'] ?? ($existente->tipo ?? ''));
+        $descOut = (string) ($out['descripcion'] ?? $data['descripcion'] ?? ($existente->descripcion ?? ''));
+        $anioOut = (int) ($out['periodo_anio'] ?? $existente->periodo_anio ?? 0);
+        $mesOut = (int) ($out['periodo_mes'] ?? $existente->periodo_mes ?? 0);
+        $desdeVacio = ! array_key_exists('periodo_desde', $out) || empty($out['periodo_desde']);
+        $hastaVacio = ! array_key_exists('periodo_hasta', $out) || empty($out['periodo_hasta']);
+        if ($anioOut > 0 && $mesOut > 0 && ($desdeVacio || $hastaVacio)) {
+            [$d, $h] = \App\Support\Sueldos\LiquidacionVentanaPeriodo::resolver($anioOut, $mesOut, $tipoOut, $descOut);
+            if ($desdeVacio) {
+                $out['periodo_desde'] = $d;
+            }
+            if ($hastaVacio) {
+                $out['periodo_hasta'] = $h;
+            }
+        }
+
         if (array_key_exists('simulacion', $data)) {
             $out['simulacion'] = (bool) $data['simulacion'];
         }

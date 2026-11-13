@@ -79,8 +79,9 @@ class ConceptoMomentoCorrida
     /**
      * Momentos que el armado por grupos aporta en esta corrida.
      *
-     * En Anita, corrida VACACIONES lee del grupo solo hab_momento==VACACIONES
-     * (p-liquidacion ~2432). El resto (SIEMPRE vía novedad) entra por otro camino.
+     * En Anita, corrida VACACIONES lee del grupo hab_momento==VACACIONES para
+     * haberes; las retenciones SIEMPRE (jubilación, OS, sindicato, redondeo y
+     * bases 999/1000) también entran al recibo de vacaciones.
      *
      * null = sin recorte extra (aplica solo {@see aplica()}).
      *
@@ -91,7 +92,10 @@ class ConceptoMomentoCorrida
         $tipo = self::normalizarTipoCorrida($tipoCorrida);
 
         if ($tipo === 'vacaciones') {
-            return ['vacaciones', 'vacaciones_1q', 'vacaciones_2q'];
+            // Incluye "mensual" (SIEMPRE) para que el filtro de grupo no quite
+            // retenciones/bases; {@see ConceptoSetEfectivoService} igual descarta
+            // remunerativos SIEMPRE que no sean soporte (999/1000/3000).
+            return ['vacaciones', 'vacaciones_1q', 'vacaciones_2q', 'mensual'];
         }
 
         if ($tipo === 'sac') {
@@ -101,6 +105,19 @@ class ConceptoMomentoCorrida
         }
 
         return null;
+    }
+
+    /**
+     * En corrida vacaciones, un concepto con momento SIEMPRE (mensual) solo
+     * aporta si es retención o soporte de bases/redondeo — no el sueldo básico.
+     */
+    public static function permiteMensualEnVacaciones(string $tipoConcepto, int $codigoConcepto): bool
+    {
+        if ($tipoConcepto === 'retencion') {
+            return true;
+        }
+
+        return in_array($codigoConcepto, [999, 1000, 1501, 1502, 3000], true);
     }
 
     /**

@@ -128,10 +128,59 @@
         if (bloqueFinal) bloqueFinal.style.display = sel.value === 'final' ? '' : 'none';
         if (bloqueVac) bloqueVac.style.display = sel.value === 'vacaciones' ? '' : 'none';
         if (selVac) selVac.required = sel.value === 'vacaciones';
+        sugerirVentanaDevengado();
     }
     sel.addEventListener('change', sync);
     sync();
 })();
+
+/**
+ * 1ra quincena → 01–15; 2da → 16–último día; resto → mes completo.
+ * Vacaciones: si la descripción dice 1RA/2DA QUINC, usa esa ventana.
+ */
+function sugerirVentanaDevengado(forzar) {
+    var periodo = document.querySelector('input[name="periodo"]');
+    var desde = document.querySelector('input[name="periodo_desde"]');
+    var hasta = document.querySelector('input[name="periodo_hasta"]');
+    var tipo = document.getElementById('tipo_liquidacion');
+    var desc = document.querySelector('input[name="descripcion"]');
+    if (!periodo || !desde || !hasta || !tipo || !periodo.value) return;
+    if (!forzar && desde.value && hasta.value) return;
+
+    var parts = periodo.value.split('-');
+    if (parts.length < 2) return;
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    if (!y || !m) return;
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    var ultimo = new Date(y, m, 0).getDate();
+    var t = tipo.value;
+    var dtxt = ((desc && desc.value) || '').toUpperCase();
+    var ventana = 'mes';
+    if (t === 'quincena_1' || (t === 'vacaciones' && /1\s*RA|1RA|PRIMERA/.test(dtxt))) {
+        ventana = '1q';
+    } else if (t === 'quincena_2' || (t === 'vacaciones' && /2\s*DA|2DA|SEGUNDA/.test(dtxt))) {
+        ventana = '2q';
+    }
+    if (ventana === '1q') {
+        desde.value = y + '-' + pad(m) + '-01';
+        hasta.value = y + '-' + pad(m) + '-15';
+    } else if (ventana === '2q') {
+        desde.value = y + '-' + pad(m) + '-16';
+        hasta.value = y + '-' + pad(m) + '-' + pad(ultimo);
+    } else {
+        desde.value = y + '-' + pad(m) + '-01';
+        hasta.value = y + '-' + pad(m) + '-' + pad(ultimo);
+    }
+}
+document.addEventListener('DOMContentLoaded', function () {
+    var periodo = document.querySelector('input[name="periodo"]');
+    var tipo = document.getElementById('tipo_liquidacion');
+    var desc = document.querySelector('input[name="descripcion"]');
+    if (periodo) periodo.addEventListener('change', function () { sugerirVentanaDevengado(true); });
+    if (tipo) tipo.addEventListener('change', function () { sugerirVentanaDevengado(true); });
+    if (desc) desc.addEventListener('change', function () { sugerirVentanaDevengado(true); });
+});
 </script>
 
 <div class="form-group row">
@@ -145,6 +194,11 @@
     </div>
     <div class="col-lg-2">
         <input type="date" name="periodo_hasta" class="form-control" value="{{ old('periodo_hasta', $fecha($d->periodo_hasta ?? null)) }}" title="Hasta">
+    </div>
+    <div class="col-lg-9 offset-lg-3">
+        <small class="form-text text-muted">
+            Quincenas: 1ra = 01 al 15 del mes; 2da = 16 al &uacute;ltimo d&iacute;a. En vacaciones us&aacute; la misma ventana seg&uacute;n la quincena que liquid&aacute;s.
+        </small>
     </div>
 </div>
 

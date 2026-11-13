@@ -132,7 +132,10 @@ class MigrarVacacionesLegacySueldos extends Command
                 // Idempotencia: borra migraciones previas de este empleado.
                 Empleado_Ausencia_Sueldos::query()
                     ->where('empleado_id', $empleado->id)
-                    ->where('observacion', self::MARCA)
+                    ->where(function ($q) {
+                        $q->where('observacion', self::MARCA)
+                            ->orWhere('observacion', 'like', self::MARCA.'%');
+                    })
                     ->delete();
 
                 foreach ($tramos as $tramo) {

@@ -333,16 +333,34 @@ class ConceptoSetEfectivoService
     ): array {
         $momentos = Concepto_Sueldos::query()
             ->whereIn('id', $conceptoIds)
-            ->get(['id', 'codigo', 'descripcion', 'momento'])
+            ->get(['id', 'codigo', 'descripcion', 'momento', 'tipo'])
             ->keyBy('id');
 
         $ok = [];
+        $esVacaciones = in_array('vacaciones', $momentosGrupo, true)
+            || in_array('vacaciones_1q', $momentosGrupo, true)
+            || in_array('vacaciones_2q', $momentosGrupo, true);
+
         foreach ($conceptoIds as $cid) {
             $c = $momentos->get($cid);
             if ($c === null) {
                 continue;
             }
-            if (in_array((string) $c->momento, $momentosGrupo, true)) {
+            $momento = (string) $c->momento;
+            if (in_array($momento, $momentosGrupo, true)) {
+                // SIEMPRE en vacaciones: solo retenciones y bases/redondeo.
+                if ($esVacaciones && $momento === 'mensual'
+                    && ! ConceptoMomentoCorrida::permiteMensualEnVacaciones((string) $c->tipo, (int) $c->codigo)) {
+                    $excluidos[] = [
+                        'concepto_id' => $cid,
+                        'codigo' => (int) $c->codigo,
+                        'descripcion' => (string) $c->descripcion,
+                        'motivo' => 'Grupo '.$grupo['codigo'].': momento SIEMPRE omitido en vacaciones (no es retención/soporte)',
+                        'etapa' => 'momento_grupo',
+                    ];
+
+                    continue;
+                }
                 $ok[] = $cid;
 
                 continue;
@@ -351,7 +369,7 @@ class ConceptoSetEfectivoService
                 'concepto_id' => $cid,
                 'codigo' => (int) $c->codigo,
                 'descripcion' => (string) $c->descripcion,
-                'motivo' => 'Grupo '.$grupo['codigo'].': momento "'.$c->momento.'" omitido en esta corrida (solo '
+                'motivo' => 'Grupo '.$grupo['codigo'].': momento "'.$momento.'" omitido en esta corrida (solo '
                     .implode('/', $momentosGrupo).')',
                 'etapa' => 'momento_grupo',
             ];

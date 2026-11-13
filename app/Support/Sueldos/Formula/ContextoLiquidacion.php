@@ -540,16 +540,19 @@ class ContextoLiquidacion implements EntornoFormula
         }
 
         try {
+            // Solo tramos cuya salida (fecha_desde) cae en la ventana de la corrida:
+            // 1ra quincena = salidas 01–15; 2da = 16–fin de mes. Evita liquidar en la
+            // 2da a quien salió en la 1ra aunque el tramo solape el día 16.
             $dias = (float) DB::table('empleado_ausencia_sueldos as a')
                 ->join('tipo_ausencia_sueldos as t', 't.id', '=', 'a.tipo_ausencia_id')
                 ->where('a.empleado_id', $this->empleadoId)
-                ->whereIn('a.estado', ['planificada', 'aprobada', 'tomada', 'liquidada'])
+                ->whereIn('a.estado', ['planificada', 'aprobada', 'tomada'])
                 ->where(function ($q) {
                     $q->where('t.categoria', 'vacaciones')
                         ->orWhere('t.afecta_saldo_vacaciones', true);
                 })
+                ->whereDate('a.fecha_desde', '>=', $ini->toDateString())
                 ->whereDate('a.fecha_desde', '<=', $fin->toDateString())
-                ->whereDate('a.fecha_hasta', '>=', $ini->toDateString())
                 ->sum('a.dias');
         } catch (\Throwable $e) {
             return;
@@ -726,7 +729,12 @@ class ContextoLiquidacion implements EntornoFormula
     }
 
     /**
-     * Importe liquidado del concepto en un período (cualquier tipo de corrida).
+     * Importe liquidado del concepto en un período (IC / novedad_periodo).
+     *
+     * No suma todas las corridas del mes (duplicaba ERP+Anita). Elige UNA mensual:
+     * - En el mismo período de la corrida actual: solo si está cerrada (si el
+     *   mensual aún es borrador, IC=0 y la fórmula cae al mes anterior, como Anita).
+     * - En períodos históricos: prioriza recibo motor_erp, luego cerrada, luego id.
      */
     private function importeConceptoEnPeriodo(int $conceptoCodigo, int $periodoYm): float
     {
@@ -734,12 +742,48 @@ class ContextoLiquidacion implements EntornoFormula
             return 0.0;
         }
         try {
-            return (float) DB::table('liquidacion_detalle_sueldos as d')
-                ->join('liquidacion_sueldos as l', 'l.id', '=', 'd.liquidacion_id')
-                ->where('d.empleado_id', $this->empleadoId)
-                ->where('d.concepto_codigo', $conceptoCodigo)
+            $mismoPeriodoCorrida = $periodoYm === $this->periodoYm;
+
+            $candidatas = DB::table('liquidacion_sueldos as l')
                 ->where('l.periodo', (string) $periodoYm)
-                ->sum('d.importe');
+                ->where('l.estado', '!=', 'anulada')
+                ->whereIn('l.tipo', ['mensual', 'quincena_1', 'quincena_2'])
+                ->when($this->liquidacionId > 0, fn ($q) => $q->where('l.id', '!=', $this->liquidacionId))
+                ->when($this->empresaId, fn ($q) => $q->where('l.empresa_id', $this->empresaId))
+                ->when($mismoPeriodoCorrida, fn ($q) => $q->where('l.estado', 'cerrada'))
+                ->orderByRaw("CASE l.tipo WHEN 'mensual' THEN 0 WHEN 'quincena_2' THEN 1 ELSE 2 END")
+                ->orderByDesc('l.id')
+                ->get(['l.id', 'l.estado', 'l.tipo']);
+
+            if ($candidatas->isEmpty()) {
+                return 0.0;
+            }
+
+            $ids = $candidatas->pluck('id')->map(fn ($v) => (int) $v)->all();
+            $origenPorLiq = DB::table('liquidacion_recibo_sueldos')
+                ->where('empleado_id', $this->empleadoId)
+                ->whereIn('liquidacion_id', $ids)
+                ->pluck('origen', 'liquidacion_id');
+
+            $elegida = null;
+            foreach (['motor_erp', 'anita_auxhist', null] as $origenPref) {
+                foreach ($candidatas as $c) {
+                    $origen = (string) ($origenPorLiq[$c->id] ?? '');
+                    if ($origenPref === null || $origen === $origenPref) {
+                        $elegida = (int) $c->id;
+                        break 2;
+                    }
+                }
+            }
+            if ($elegida === null) {
+                $elegida = (int) $candidatas->first()->id;
+            }
+
+            return (float) DB::table('liquidacion_detalle_sueldos')
+                ->where('empleado_id', $this->empleadoId)
+                ->where('concepto_codigo', $conceptoCodigo)
+                ->where('liquidacion_id', $elegida)
+                ->sum('importe');
         } catch (\Throwable $e) {
             return 0.0;
         }
