@@ -13,8 +13,10 @@ use InvalidArgumentException;
  * Usuarios y turnos de caja asignados a un local de venta.
  *
  * Un usuario sin filas en local_venta_usuario opera todos los locales (administración).
- * Con al menos una fila, el POS, la apertura de caja y los listados operativos
+ * Con al menos una fila, el POS, la apertura de caja y listados operativos
  * quedan limitados a esos locales.
+ * Excepción: la consulta Facturas Local (FacturacionLocalFacturasController) no aplica
+ * este filtro, para permitir devoluciones/cambios con factura de otro local.
  *
  * Un local sin filas en local_venta_turno acepta cualquier turno activo de su empresa.
  * Con filas, solo se puede abrir uno de esos turnos.

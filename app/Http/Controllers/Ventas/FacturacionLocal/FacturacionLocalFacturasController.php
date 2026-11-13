@@ -17,7 +17,6 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalFacturaMedioPagoUiSuppor
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotaCreditoUiSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalNotasCreditoFacturaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVentaDetalleSupport;
-use App\Support\Ventas\FacturacionLocal\LocalVentaAsignacionSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -39,8 +38,9 @@ class FacturacionLocalFacturasController extends Controller
         $this->assertFerli();
         can('listar-facturas-facturacion-local');
 
-        $locales = LocalVentaAsignacionSupport::localesParaUsuario(soloActivos: false);
-        $localId = $this->localIdOperable((int) $request->input('local_id', 0));
+        // Consulta cross-local: sin filtro usuario→local (devoluciones en cualquier sucursal).
+        $locales = LocalVenta::query()->orderBy('codigo')->get();
+        $localId = $this->localIdFiltroConsulta((int) $request->input('local_id', 0));
         $desde = $this->resolverFecha($request, 'desde', now()->format('Y-m-d'));
         $hasta = $this->resolverFecha($request, 'hasta', $desde);
         if ($hasta < $desde) {
@@ -110,7 +110,7 @@ class FacturacionLocalFacturasController extends Controller
 
         $desde = $this->resolverFecha($request, 'desde', now()->format('Y-m-d'));
         $hasta = $this->resolverFecha($request, 'hasta', $desde);
-        $localId = $this->localIdOperable((int) $request->input('local_id', 0));
+        $localId = $this->localIdFiltroConsulta((int) $request->input('local_id', 0));
         $localNombre = $localId > 0
             ? (LocalVenta::query()->whereKey($localId)->value('nombre') ?? '')
             : '';
@@ -346,8 +346,8 @@ class FacturacionLocalFacturasController extends Controller
      */
     private function ventasListadoQuery(Request $request): Builder
     {
-        $permitidos = LocalVentaAsignacionSupport::idsOperables();
-        $localId = $this->localIdOperable((int) $request->input('local_id', 0));
+        // Sin restricción por local_venta_usuario: la consulta sirve devoluciones cross-local.
+        $localId = $this->localIdFiltroConsulta((int) $request->input('local_id', 0));
         $desde = $this->resolverFecha($request, 'desde', now()->format('Y-m-d'));
         $hasta = $this->resolverFecha($request, 'hasta', $desde);
         if ($hasta < $desde) {
@@ -355,7 +355,7 @@ class FacturacionLocalFacturasController extends Controller
         }
         $busqueda = trim((string) $request->get('busqueda', ''));
         $turnoId = (int) $request->input('turno_operativo_local_id', 0);
-        $pvIds = $this->puntoventaIdsDelFiltro($localId, $permitidos);
+        $pvIds = $this->puntoventaIdsDelFiltro($localId);
 
         $q = Venta::query();
 
@@ -384,20 +384,11 @@ class FacturacionLocalFacturasController extends Controller
                             });
                     });
             });
-            if (is_array($permitidos)) {
-                $pvAsignados = $this->puntoventaIdsDelFiltro(0, $permitidos);
-                $q->where(function ($w) use ($permitidos, $pvAsignados) {
-                    $w->whereHas('facturacionLocalEmision', fn ($e) => $e->whereIn('local_venta_id', $permitidos))
-                        ->orWhereHas('facturacionLocalEmisionComoNc', fn ($e) => $e->whereIn('local_venta_id', $permitidos))
-                        ->orWhereIn('venta.puntoventa_id', $pvAsignados !== [] ? $pvAsignados : [0]);
-                });
-            } else {
-                $q->where(function ($w) use ($pvTodos) {
-                    $w->whereHas('facturacionLocalEmision')
-                        ->orWhereHas('facturacionLocalEmisionComoNc')
-                        ->orWhereIn('venta.puntoventa_id', $pvTodos !== [] ? $pvTodos : [0]);
-                });
-            }
+            $q->where(function ($w) use ($pvTodos) {
+                $w->whereHas('facturacionLocalEmision')
+                    ->orWhereHas('facturacionLocalEmisionComoNc')
+                    ->orWhereIn('venta.puntoventa_id', $pvTodos !== [] ? $pvTodos : [0]);
+            });
 
             return $q->orderByDesc('venta.id');
         }
@@ -405,12 +396,10 @@ class FacturacionLocalFacturasController extends Controller
         $q->where('venta.fecha', '>=', $desde)
             ->where('venta.fecha', '<=', $hasta);
 
-        $q->where(function ($w) use ($localId, $turnoId, $pvIds, $permitidos) {
-            $w->whereHas('facturacionLocalEmision', function ($e) use ($localId, $turnoId, $permitidos) {
+        $q->where(function ($w) use ($localId, $turnoId, $pvIds) {
+            $w->whereHas('facturacionLocalEmision', function ($e) use ($localId, $turnoId) {
                 if ($localId > 0) {
                     $e->where('local_venta_id', $localId);
-                } elseif (is_array($permitidos)) {
-                    $e->whereIn('local_venta_id', $permitidos !== [] ? $permitidos : [0]);
                 }
                 if ($turnoId > 0) {
                     $e->where('turno_operativo_local_id', $turnoId);
@@ -651,40 +640,24 @@ class FacturacionLocalFacturasController extends Controller
         return $default;
     }
 
-    private function localIdOperable(int $localId): int
+    /**
+     * Filtro de local para la consulta: 0 = Todos. No fuerza el local asignado al usuario.
+     */
+    private function localIdFiltroConsulta(int $localId): int
     {
-        $ids = LocalVentaAsignacionSupport::idsOperables();
-        if ($ids === null) {
-            return $localId;
-        }
-        if ($localId > 0 && in_array($localId, $ids, true)) {
-            return $localId;
+        if ($localId <= 0) {
+            return 0;
         }
 
-        return count($ids) === 1 ? (int) $ids[0] : 0;
+        return LocalVenta::query()->whereKey($localId)->exists() ? $localId : 0;
     }
 
     /**
-     * @param  list<int>|null  $permitidos
      * @return list<int>
      */
-    private function puntoventaIdsDelFiltro(int $localId, ?array $permitidos): array
+    private function puntoventaIdsDelFiltro(int $localId): array
     {
-        if ($localId > 0) {
-            return FacturacionLocalEmisionVinculoSupport::puntoventaIds($localId);
-        }
-        if ($permitidos === null) {
-            return FacturacionLocalEmisionVinculoSupport::puntoventaIds(null);
-        }
-
-        $ids = [];
-        foreach ($permitidos as $idLocal) {
-            foreach (FacturacionLocalEmisionVinculoSupport::puntoventaIds((int) $idLocal) as $pvId) {
-                $ids[$pvId] = $pvId;
-            }
-        }
-
-        return array_values($ids);
+        return FacturacionLocalEmisionVinculoSupport::puntoventaIds($localId > 0 ? $localId : null);
     }
 
     private function assertFerli(): void
