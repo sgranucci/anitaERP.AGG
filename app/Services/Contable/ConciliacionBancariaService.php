@@ -17,6 +17,7 @@ use App\Support\Ai\AiAgenteEventoDispatcherSupport;
 use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaAnomaliaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
@@ -330,6 +331,11 @@ class ConciliacionBancariaService
                 $mes,
                 $anio,
                 $codigosSaldoExcel,
+            ),
+            'cruce_cheques_ib' => ConciliacionBancariaCruceChequesIbSupport::armar(
+                $empresaId,
+                $cuentacajaId,
+                $movimientosBanco,
             ),
             'caratula' => $caratula,
         ];

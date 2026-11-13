@@ -74,6 +74,7 @@ class ConciliacionBancariaExport
         $this->hojaExtracto($ss);
         $this->hojaSaldo($ss);
         $this->hojaPendientesCheques($ss);
+        $this->hojaCruceChequesIb($ss);
         $this->hojaPendientesOtros($ss);
         $this->hojaGastos($ss);
 
@@ -372,6 +373,81 @@ class ConciliacionBancariaExport
             'G' => 40, 'H' => 18, 'I' => 18, 'J' => 12,
         ]);
         $ws->freezePane('A4');
+    }
+
+    private function hojaCruceChequesIb(Spreadsheet $ss): void
+    {
+        $ws = $ss->createSheet();
+        $ws->setTitle('Cruce cheques IB');
+        $ws->getTabColor()->setARGB('FFF4D03F');
+
+        $cruce = $this->resultado['cruce_cheques_ib'] ?? [];
+        if (! is_array($cruce) || ! isset($cruce['filas'])) {
+            $cruce = \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport::enriquecerResultado($this->resultado)['cruce_cheques_ib'] ?? [
+                'filas' => [],
+                'resumen' => [],
+            ];
+        }
+        $resumen = is_array($cruce['resumen'] ?? null) ? $cruce['resumen'] : [];
+
+        $this->banda($ws, 'A1:N1', 'Cruce cheques Interbanking ↔ ERP', 14, self::NAVY);
+        $ws->mergeCells('A2:N2');
+        $ws->setCellValue(
+            'A2',
+            'Débitos CH* del extracto vs cheques propios. Código Contaduría 9 = CHEQUES. '
+            .'OK='.(int) ($resumen['ok'] ?? 0)
+            .' · importe distinto='.(int) ($resumen['importe_distinto'] ?? 0)
+            .' · faltan='.(int) ($resumen['faltan'] ?? 0)
+            .' · código 9='.(int) ($resumen['codigo_9'] ?? 0)
+        );
+
+        $encabezados = [
+            'Fecha', 'Referencia', 'Concepto', 'Código', 'Importe IB', 'Match',
+            'Nro ERP', 'Monto ERP', 'Estado', 'F.Pago', 'F.Emisión', 'Chequera', 'OP', 'Estado OP',
+        ];
+        $filas = [];
+        $marcasFila = [];
+        foreach ($cruce['filas'] ?? [] as $fila) {
+            if (! is_array($fila)) {
+                continue;
+            }
+            $match = (string) ($fila['match'] ?? '');
+            $filas[] = [
+                $fila['fecha'] ?? '',
+                $fila['referencia'] ?? '',
+                $fila['concepto'] ?? '',
+                $fila['codigo'] ?? '',
+                (float) ($fila['importe'] ?? 0),
+                $match,
+                $fila['erp_numerocheque'] ?? '',
+                $fila['erp_monto'] !== null && $fila['erp_monto'] !== '' ? (float) $fila['erp_monto'] : null,
+                $fila['erp_estado_nombre'] ?? '',
+                $fila['erp_fechapago'] ?? '',
+                $fila['erp_fechaemision'] ?? '',
+                trim(($fila['erp_chequera'] ?? '').'/'.($fila['erp_tipocheque'] ?? ''), '/'),
+                $fila['erp_op'] ?? '',
+                $fila['erp_op_estado'] ?? '',
+            ];
+            $marcasFila[] = $match;
+        }
+
+        $ultima = $this->volcar($ws, 4, $encabezados, $filas, [5, 8]);
+        foreach ($marcasFila as $i => $match) {
+            $row = 5 + $i;
+            if ($match === \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport::MATCH_FALTA) {
+                $this->relleno($ws, 'A'.$row.':N'.$row, 'FFFFFF00');
+            } elseif ($match === \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport::MATCH_IMPORTE) {
+                $this->relleno($ws, 'A'.$row.':N'.$row, self::WARN);
+            } elseif ($match === \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport::MATCH_OK) {
+                $this->relleno($ws, 'A'.$row.':N'.$row, self::OK);
+            }
+        }
+        $this->anchos($ws, [
+            'A' => 12, 'B' => 14, 'C' => 14, 'D' => 10, 'E' => 16, 'F' => 22,
+            'G' => 14, 'H' => 16, 'I' => 12, 'J' => 12, 'K' => 12, 'L' => 12, 'M' => 12, 'N' => 14,
+        ]);
+        $ws->freezePane('A5');
+        unset($ultima);
     }
 
     private function hojaPendientesOtros(Spreadsheet $ss): void

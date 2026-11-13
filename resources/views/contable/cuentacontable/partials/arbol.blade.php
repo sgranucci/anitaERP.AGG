@@ -4,7 +4,12 @@
 <div class="pc-arbol-toolbar px-3 py-2 border-bottom d-flex flex-wrap align-items-center">
     <span class="text-muted small mr-3">{{ (int) ($arbolCount ?? 0) }} cuentas en el árbol</span>
     <button type="button" class="btn btn-outline-secondary btn-sm mr-1" id="pc-expandir-todo">Expandir todo</button>
-    <button type="button" class="btn btn-outline-secondary btn-sm" id="pc-contraer-todo">Contraer</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm mr-2" id="pc-contraer-todo">Contraer</button>
+    @include('includes.exportar-tabla-queryparams', [
+        'ruta' => 'lista_cuentacontable',
+        'queryparams' => $filtrosQuery ?? [],
+        'variant' => 'compact',
+    ])
     <span class="text-muted small ml-auto">Clic en una cuenta para asignar nivel y ver el bloque. Las totalizadoras se ocultan salvo que pida verlas.</span>
 </div>
 @if (($arbol ?? []) === [])

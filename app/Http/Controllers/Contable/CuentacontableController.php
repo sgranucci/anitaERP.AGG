@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\CuentacontableListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCuentacontable;
 use App\Models\Contable\Centrocosto;
@@ -20,7 +21,9 @@ use App\Support\Contable\CuentacontableGemeloSupport;
 use App\Support\Contable\CuentacontableListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use DB;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 class CuentacontableController extends Controller
 {
@@ -60,23 +63,12 @@ class CuentacontableController extends Controller
         $empresaIdsPermitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
         $filtros = $this->resolverFiltrosListado($request, $empresaQuery);
 
-        $query = $this->cuentacontableRepository->queryListado();
-        $query->leftJoin('empresa', 'empresa.id', '=', 'cuentacontable.empresa_id')
-            ->leftJoin('rubrocontable', 'rubrocontable.id', '=', 'cuentacontable.rubrocontable_id')
-            ->leftJoin('conceptogasto', 'conceptogasto.id', '=', 'cuentacontable.conceptogasto_id')
-            ->select('cuentacontable.*');
-
-        $estado = (string) ($filtros['estado'] ?? '');
-        if ($estado === 'habilitadas') {
-            $query->where('cuentacontable.inhabilitada', false);
-        } elseif ($estado === 'inhabilitadas') {
-            $query->where('cuentacontable.inhabilitada', true);
-        }
-
         $vistaArbol = ($filtros['vista'] ?? '') === CuentacontableListadoFiltros::VISTA_ARBOL
             && ($filtros['empresa_scope'] ?? '') === 'una';
 
         if ($vistaArbol) {
+            $query = $this->baseQueryListado();
+            $this->aplicarFiltroEstado($query, $filtros);
             if (! empty($filtros['empresa_id'])) {
                 $query->where('cuentacontable.empresa_id', (int) $filtros['empresa_id']);
             } elseif ($empresaIdsPermitidos !== []) {
@@ -99,11 +91,9 @@ class CuentacontableController extends Controller
             $cuentacontables = collect();
             $arbolCount = CuentacontableArbolSupport::contarNodos($arbol);
         } else {
-            CuentacontableListadoFiltros::aplicar($query, $filtros, $empresaIdsPermitidos);
-            if (empty($filtros['mostrar_totalizadoras']) && (string) ($filtros['tipocuenta'] ?? '') === '') {
-                $query->where('cuentacontable.tipocuenta', '!=', CuentacontableArbolSupport::TIPO_TOTALIZADORA);
-            }
-            $cuentacontables = $query->orderBy('cuentacontable.codigo')->paginate(80)->withQueryString();
+            $cuentacontables = $this->queryListadoPlano($filtros, $empresaIdsPermitidos)
+                ->paginate(80)
+                ->withQueryString();
             $arbol = [];
             $arbolCount = 0;
         }
@@ -121,6 +111,43 @@ class CuentacontableController extends Controller
             'rubrocontable_query' => Rubrocontable::all(),
             'puedeEditarArbol' => can('editar-cuentas-contables', false) || can('actualizar-cuentas-contables', false),
         ]);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-cuentas-contables');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaIdsPermitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $filtros = $this->resolverFiltrosListado($request, $empresaQuery, is_string($busqueda) ? $busqueda : null);
+        $datas = $this->coleccionListadoPlano($filtros, $empresaIdsPermitidos);
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('contable.cuentacontable.listado', compact('datas'))->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_cuentacontable';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+
+            case 'EXCEL':
+                return (new CuentacontableListadoExport)
+                    ->parametros($datas)
+                    ->download('plan_de_cuentas.xlsx');
+
+            case 'CSV':
+                return (new CuentacontableListadoExport)
+                    ->parametros($datas)
+                    ->download('plan_de_cuentas.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('cuentacontable', CuentacontableListadoFiltros::paraQueryString($filtros));
     }
 
     public function crear(Request $request)
@@ -439,12 +466,12 @@ class CuentacontableController extends Controller
      * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
      * @return array<string, mixed>
      */
-    private function resolverFiltrosListado(Request $request, $empresaQuery): array
+    private function resolverFiltrosListado(Request $request, $empresaQuery, ?string $busquedaRuta = null): array
     {
         $empresaDefault = optional($empresaQuery->first())->id;
         $filtros = CuentacontableListadoFiltros::resolverDesdeRequest(
             $request,
-            null,
+            $busquedaRuta,
             $empresaDefault ? (int) $empresaDefault : null
         );
 
@@ -455,6 +482,54 @@ class CuentacontableController extends Controller
         }
 
         return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $empresaIdsPermitidos
+     */
+    private function queryListadoPlano(array $filtros, array $empresaIdsPermitidos): Builder
+    {
+        $query = $this->baseQueryListado();
+        $this->aplicarFiltroEstado($query, $filtros);
+        CuentacontableListadoFiltros::aplicar($query, $filtros, $empresaIdsPermitidos);
+        if (empty($filtros['mostrar_totalizadoras']) && (string) ($filtros['tipocuenta'] ?? '') === '') {
+            $query->where('cuentacontable.tipocuenta', '!=', CuentacontableArbolSupport::TIPO_TOTALIZADORA);
+        }
+
+        return $query->orderBy('cuentacontable.codigo');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $empresaIdsPermitidos
+     * @return Collection<int, Cuentacontable>
+     */
+    private function coleccionListadoPlano(array $filtros, array $empresaIdsPermitidos): Collection
+    {
+        return $this->queryListadoPlano($filtros, $empresaIdsPermitidos)->get();
+    }
+
+    private function baseQueryListado(): Builder
+    {
+        return $this->cuentacontableRepository->queryListado()
+            ->leftJoin('empresa', 'empresa.id', '=', 'cuentacontable.empresa_id')
+            ->leftJoin('rubrocontable', 'rubrocontable.id', '=', 'cuentacontable.rubrocontable_id')
+            ->leftJoin('conceptogasto', 'conceptogasto.id', '=', 'cuentacontable.conceptogasto_id')
+            ->select('cuentacontable.*');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarFiltroEstado(Builder $query, array $filtros): void
+    {
+        $estado = (string) ($filtros['estado'] ?? '');
+        if ($estado === 'habilitadas') {
+            $query->where('cuentacontable.inhabilitada', false);
+        } elseif ($estado === 'inhabilitadas') {
+            $query->where('cuentacontable.inhabilitada', true);
+        }
     }
 
     /**

@@ -1269,6 +1269,7 @@ Route::post('contable/bien-uso-asiento/confirmar', 'Contable\BienUsoAsientoContr
  */
 
 Route::get('contable/cuentacontable', 'Contable\CuentacontableController@index')->name('cuentacontable');
+Route::get('contable/listacuentacontable/{formato?}/{busqueda?}', 'Contable\CuentacontableController@listar')->name('lista_cuentacontable');
 Route::get('contable/cuentacontable/crear', 'Contable\CuentacontableController@crear')->name('crear_cuentacontable');
 Route::post('contable/cuentacontable', 'Contable\CuentacontableController@guardar')->name('guardar_cuentacontable');
 Route::get('contable/cuentacontable/{id}/editar', 'Contable\CuentacontableController@editar')->name('editar_cuentacontable')->middleware('modo.consulta');

@@ -12,6 +12,7 @@ use App\Services\Caja\InterbankingService;
 use App\Services\Contable\ConciliacionBancariaGastoDocumentoService;
 use App\Services\Contable\ConciliacionBancariaService;
 use App\Support\Caja\InterbankingCuentacajaParametrosSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaEngancheSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use Auth;
@@ -147,8 +148,10 @@ class ConciliacionBancariaController extends Controller
                 $resultado = ConciliacionBancariaResultadoCache::leer($empresaId, $cuentacajaId, $mes, $anio);
             }
             $resultado ??= $this->service->ejecutar($empresaId, $cuentacajaId, $mes, $anio, (int) Auth::id(), false);
+            $resultado = ConciliacionBancariaCruceChequesIbSupport::enriquecerResultado($resultado);
             $cc = $resultado['cuentacaja'];
-            $nombre = sprintf('conciliacion_bancaria_%s_%02d_%d.xlsx', $cc->codigo ?? 'cuenta', $mes, $anio);
+            $codigoCuenta = is_object($cc) ? ($cc->codigo ?? 'cuenta') : (is_array($cc) ? ($cc['codigo'] ?? 'cuenta') : 'cuenta');
+            $nombre = sprintf('conciliacion_bancaria_%s_%02d_%d.xlsx', $codigoCuenta, $mes, $anio);
 
             return (new ConciliacionBancariaExport)->parametros($resultado)->descargar($nombre);
         } catch (\Throwable $e) {

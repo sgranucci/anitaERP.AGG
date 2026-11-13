@@ -49,7 +49,8 @@
                     <p class="text-muted small mb-3">
                         Cruza el mayor analítico (subdiario + ctamov vía bridge Anita) contra movimientos Interbanking
                         persistidos. La solapa <strong>Pendientes</strong> lista cheques propios (cpromae), como Contaduría;
-                        la carátula usa los de vencimiento en el mes. Los emparejamientos quedan guardados para períodos posteriores.
+                        <strong>Cruce cheques IB</strong> compara débitos CH* del extracto con cheques propios del ERP (código 9).
+                        La carátula usa los de vencimiento en el mes. Los emparejamientos quedan guardados para períodos posteriores.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -156,6 +157,7 @@
 
                     <ul class="nav nav-tabs mt-3" role="tablist">
                         <li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pendientes">Pendientes cheques</a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-cruce-cheques-ib">Cruce cheques IB</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-mayor">Pendientes otros</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-saldo-banco">Saldo banco (codificado)</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-banco-pend">Pendientes banco</a></li>
@@ -191,6 +193,61 @@
                                     @endforelse
                                 </tbody>
                             </table>
+                        </div>
+                        <div class="tab-pane" id="tab-cruce-cheques-ib">
+                            @php
+                                $cruceIb = $resultado['cruce_cheques_ib'] ?? ['filas' => [], 'resumen' => []];
+                                $cruceRes = $cruceIb['resumen'] ?? [];
+                                $cruceFilas = $cruceIb['filas'] ?? [];
+                            @endphp
+                            <p class="text-muted small mb-2">
+                                Débitos Interbanking con concepto de cheque (CH DEP / CH/PAG / etc.) cruzados contra cheques propios del ERP.
+                                Contaduría: código <strong>9 = CHEQUES</strong>.
+                                OK {{ (int) ($cruceRes['ok'] ?? 0) }}
+                                · importe distinto {{ (int) ($cruceRes['importe_distinto'] ?? 0) }}
+                                · faltan {{ (int) ($cruceRes['faltan'] ?? 0) }}
+                                · código 9 {{ (int) ($cruceRes['codigo_9'] ?? 0) }}
+                                de {{ (int) ($cruceRes['total'] ?? 0) }}.
+                            </p>
+                            <table class="table table-sm table-striped">
+                                <thead style="background:#85C1E9;color:#17202A">
+                                    <tr>
+                                        <th>Fecha</th><th>Referencia</th><th>Concepto</th><th>Cód.</th>
+                                        <th class="text-right">Importe IB</th><th>Match</th>
+                                        <th>Estado ERP</th><th>F.Pago</th><th>OP</th><th>Est. OP</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse (array_slice($cruceFilas, 0, 200) as $fila)
+                                        @php
+                                            $match = (string) ($fila['match'] ?? '');
+                                            $rowClass = match ($match) {
+                                                'NO_EN_ERP' => 'table-warning',
+                                                'OK_NRO_IMPORTE_DISTINTO' => 'table-danger',
+                                                'OK_NRO_Y_IMPORTE' => '',
+                                                default => '',
+                                            };
+                                        @endphp
+                                        <tr class="{{ $rowClass }}">
+                                            <td>{{ ! empty($fila['fecha']) ? \Carbon\Carbon::parse($fila['fecha'])->format('d/m/Y') : '' }}</td>
+                                            <td>{{ $fila['referencia'] ?? '' }}</td>
+                                            <td>{{ $fila['concepto'] ?? '' }}</td>
+                                            <td>{{ $fila['codigo'] ?? '' }}</td>
+                                            <td class="text-right">{{ number_format((float) ($fila['importe'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="small">{{ $match }}</td>
+                                            <td>{{ $fila['erp_estado_nombre'] ?? '' }}</td>
+                                            <td>{{ ! empty($fila['erp_fechapago']) ? \Carbon\Carbon::parse($fila['erp_fechapago'])->format('d/m/Y') : '' }}</td>
+                                            <td>{{ $fila['erp_op'] ?? '' }}</td>
+                                            <td>{{ $fila['erp_op_estado'] ?? '' }}</td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="10" class="text-muted">Sin débitos de cheques Interbanking en el período.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                            @if (count($cruceFilas) > 200)
+                                <p class="text-muted small">Mostrando 200 de {{ count($cruceFilas) }}. El Excel trae el listado completo (solapa «Cruce cheques IB»).</p>
+                            @endif
                         </div>
                         <div class="tab-pane" id="tab-mayor">
                             <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques pendientes (incluye ANULA de cheques ya conciliados). Los CHP del stock están en la solapa anterior.</p>
