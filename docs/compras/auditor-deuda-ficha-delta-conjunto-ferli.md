@@ -12,19 +12,65 @@ El número que se controla es el **delta conjunto** = delta proveedores + delta 
 
 | Corte | Delta proveedores | Delta anticipos | **Delta conjunto** |
 |---|---:|---:|---:|
-| **13/11/2026** | 137.018.079,72 | 1.941.669,28 | **138.959.749,00** |
+| **14/11/2026** | 312.720.614,72 | 1.941.669,28 | **314.662.284,00** |
 
-Detalle por cuenta al 13/11/2026 (tras corregir NDR cheque rechazado):
+Detalle por cuenta al 14/11/2026 (tras corregir FAC ANDINA y con los tres despachos de importación):
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211100001 PROVEEDORES | 156.692.942,08 | 103.725.770,79 | −52.967.171,29 |
-| 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 189.985.251,01 | 189.985.251,01 |
-| 114110001 ANTICIPO PROVEEDORES | −1.386.527,49 | 555.141,79 | 1.941.669,28 |
+| 211100001 PROVEEDORES | 203.569.131,95 | 150.601.960,66 | −52.967.171,29 |
+| 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 365.687.786,01 | 365.687.786,01 |
+| 114110001 ANTICIPO PROVEEDORES | −1.635.853,71 | 307.815,57 | 1.941.669,28 |
 
-Mismo **delta conjunto** que el snapshot del 12/11/2026 (antes del hueco de la NDR sin asiento). Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+Variación del conjunto 13→14 (después de ANDINA): **+175.702.535,00** · solo **211100002**. El delta de proveedores locales y el de anticipos quedan iguales a la base del 13/11. Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
 
-Base anterior documentada: **06/11/2026** = 126.637.152,79. El salto a 138.959.749,00 es el mayor de **211100002** (+12.322.596,21 entre 10/11 y 11/11); no es descuadre de ficha.
+Base anterior documentada: **13/11/2026** = 138.959.749,00.
+
+---
+
+## Salto documentado: 13/11 → 14/11/2026 (despachos importación)
+
+| | 13/11/2026 | 14/11 cron (antes ANDINA) | 14/11 (después ANDINA) |
+|---|---:|---:|---:|
+| Delta proveedores | 137.018.079,72 | 312.454.414,72 | 312.720.614,72 |
+| Delta anticipos | 1.941.669,28 | 1.941.669,28 | 1.941.669,28 |
+| **Delta conjunto** | **138.959.749,00** | **314.396.084,00** | **314.662.284,00** |
+
+Variación cron 13→14: **+175.436.335,00** (exterior +175.702.535 y locales −266.200 por FAC ANDINA mal imputada). Tras corregir ANDINA: variación **+175.702.535,00** · solo **211100002**.
+
+Ficha deuda vs ficha: **cuadrada** (0 diferencias). La alerta del mail fue solo por el delta.
+
+### Cuenta que movió el conjunto (aceptada)
+
+Solo **211100002 PROVEEDORES DEL EXTERIOR** — tres asientos de despacho cargados por Adriana el 13/11 **sin** `comprobante_proveedor_id` ni fila de CC (deuda de la cuenta sigue en 0):
+
+| Asiento | Nro | Fecha | Observación | Monto en 211100002 |
+|---|---|---|---|---:|
+| 184566 | 428718 | 13/11/2026 | CALZADOS HOFFLLES — DESPACHO IC05 030518 S | 19.400.360,00 |
+| 184616 | 428769 | 13/11/2026 | MOULD IND.DE MATRIZES LTDA — DESPACHO IC05 030519 T | 148.700.169,60 |
+| 184622 | 428775 | 13/11/2026 | FOSHAN ANNA TRADING CO. LIMITED — DESPACHO 26001IC04 228949 G | 7.602.005,40 |
+| **Total = variación del conjunto** | | | | **175.702.535,00** |
+
+Contrapartidas: HOFFLLES y MOULD → `115000007 MERCADERIA DE REVENTA FERLI`; FOSHAN → `511000020 CAPELLADAS`.
+
+Mismo patrón que el salto 03→04/11 (FAM exterior): crece el hueco mayor − deuda en proveedores del exterior; la CC no acompaña.
+
+### Corregido aparte: FAC A-1-100 ANDINA (no forma parte de la base)
+
+| | Cron 14/11 | Tras corrección |
+|---|---:|---:|
+| Delta 211100001 | −53.233.371,29 | −52.967.171,29 (= base 13/11) |
+| Variación 001 vs 13/11 | −266.200,00 | 0,00 |
+
+Origen: alta del proveedor **ANDINA** (44) el 13/11 11:05 con `cuentacontable_id = 542` (P-FLETES) en vez de PROVEEDORES. Al contabilizar FAC A-1-100 (cp **32212**, asiento **184508** / nro **428660**, Romina 11:08) el Haber fue a fletes. A las 11:46 corrigieron el maestro (542→209); el asiento quedó mal. OPP **46298** (mariana) ya aplicada → no se pudo descontabilizar.
+
+Corrección (14/11): línea Haber mov **587688** `cuentacontable_id` **542 → 209**; resync `ctamov` Anita (nro interno **118602**). Debe fletes/IVA sin cambio.
+
+### Lectura
+
+- **No es descuadre de ficha.**
+- **Sí es un hueco mayor − deuda** nuevo en proveedores del exterior por los tres despachos sin CC.
+- El conjunto **314.662.284,00** se **acepta como base vigente** al 14/11/2026.
 
 ---
 
