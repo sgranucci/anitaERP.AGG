@@ -31,7 +31,8 @@
     $subtipoTexto = old('subtipo_texto', $subtipoTexto ?? '');
 @endphp
 <div class="form-group row tc-boveda-subtipo {{ $subtipos->isEmpty() ? 'd-none' : '' }}" id="tc-boveda-subtipo-wrap"
-     data-url="{{ route('subtipos_tesoreria_crown_kardex_valores') }}">
+     data-url="{{ route('subtipos_tesoreria_crown_kardex_valores') }}"
+     data-fecha-jornada="{{ $fechaJornada ?? '' }}">
     <label for="subtipo_id" class="col-lg-3 control-label text-right pr-2{{ $editable ? ' requerido' : '' }}">Subtipo</label>
     <div class="col-lg-8">
         @if ($editable)

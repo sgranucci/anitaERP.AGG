@@ -908,18 +908,48 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $a = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'FNU', 'A', 1, 55);
         $b = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('000123', 'fnu', 'a', 1, 55);
         $this->assertSame($a, $b);
-        $this->assertSame('000123|FNU|A|1|55', $a);
+        $this->assertSame('000123|FNU|A|1|55|STD', $a);
 
         $ncAnita = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'N/C', 'A', 1, 55);
         $ncErp = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('000123', 'NC', 'A', 1, 55);
         $this->assertSame($ncAnita, $ncErp);
-        $this->assertSame('000123|NC|A|1|55', $ncAnita);
+        $this->assertSame('000123|NC|A|1|55|STD', $ncAnita);
+
+        $fce = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'FIB', 'A', 3, 43, true);
+        $this->assertSame('000123|FIB|A|3|43|FCE', $fce);
+        $this->assertNotSame(
+            LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'FIB', 'A', 3, 43, false),
+            $fce,
+        );
+
         $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('N/C'));
         $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('NCD'));
         $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('CRE'));
         $this->assertFalse(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('FAC'));
         $this->assertSame(1.0, LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteMoneda('PES', 1482));
         $this->assertSame(1450.0, LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteMoneda('DOL', 1450));
+    }
+
+    public function test_tipo_comprobante_compras_respeta_marca_fce(): void
+    {
+        $this->assertSame('001', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('001', 'A', false));
+        $this->assertSame('201', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('001', 'A', true));
+        $this->assertSame('006', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('001', 'B', false));
+        $this->assertSame('206', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('001', 'B', true));
+        $this->assertSame('011', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('001', 'C', false));
+        $this->assertSame('211', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('001', 'C', true));
+        $this->assertSame('002', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('002', 'A', false));
+        $this->assertSame('202', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('002', 'A', true));
+        $this->assertSame('003', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('003', 'A', false));
+        $this->assertSame('203', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('003', 'A', true));
+        $this->assertSame('008', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('003', 'B', false));
+        $this->assertSame('208', LibroIvaDigitalMapeosSupport::tipoComprobanteCompras('003', 'B', true));
+        // Ya FCE o TurIVA: no vuelve a sumar 200.
+        $this->assertSame('201', LibroIvaDigitalMapeosSupport::aplicarMarcaFce('201', true));
+        $this->assertSame('195', LibroIvaDigitalMapeosSupport::aplicarMarcaFce('195', true));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esTipoNotaCredito('203'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esTipoNotaCredito('208'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esTipoNotaCredito('213'));
     }
 
     /**

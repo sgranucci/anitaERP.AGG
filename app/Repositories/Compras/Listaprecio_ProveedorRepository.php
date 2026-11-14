@@ -14,6 +14,7 @@ use App\Models\Compras\Listaprecio_Proveedor_Articulo;
 use App\Support\Compras\ListaprecioProveedorAnitaEsquemaSupport as AnitaEsquema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Auth;
 use Exception;
@@ -102,8 +103,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'tabla' => $this->tableAnita[0],
             'orderBy' => $this->keyFieldAnita,
         ];
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-        if (! is_iterable($dataAnita)) {
+        $dataAnita = ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+        if ($dataAnita === []) {
             return;
         }
 
@@ -113,10 +114,13 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         foreach ($dataAnita as $value) {
             $idLocal = (int) $value->{$this->keyField};
 
-            if (! in_array($idLocal, $idsLocal, true)) {
-                $this->traerRegistroDeAnita((int) $value->{$this->keyField}, true);
-            } else {
-                $this->traerRegistroDeAnita((int) $value->{$this->keyField}, false);
+            try {
+                $this->traerRegistroDeAnita($idLocal, ! in_array($idLocal, $idsLocal, true));
+            } catch (\Throwable $e) {
+                Log::warning('listaprecio_proveedor.traer_anita_fallo', [
+                    'lispm_nro' => $idLocal,
+                    'mensaje' => $e->getMessage(),
+                ]);
             }
         }
     }
@@ -132,11 +136,10 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'campos' => AnitaEsquema::sqlCamposCabecera(),
             'whereArmado' => " WHERE $this->keyFieldAnita = '".$nroLista."' ",
         ];
-        $cab = json_decode($apiAnita->apiCall($data));
-        if (! $cab || count($cab) === 0) {
+        $cab = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
+        if (! $cab) {
             return;
         }
-        $cab = $cab[0];
 
         // Mapeos (si no existe algo, queda null y no bloquea el alta)
         $proveedorCodigo = ltrim((string) $cab->lispm_proveedor, '0');
@@ -192,8 +195,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                 'whereArmado' => " WHERE listpv_nro = '".$nroLista."' ",
                 'orderBy' => 'listpv_nro_orden',
             ];
-            $movs = json_decode($apiAnita->apiCall($dataMov));
-            if (! is_iterable($movs)) {
+            $movs = ApiAnita::decodificarListaFilas($apiAnita->apiCall($dataMov));
+            if ($movs === []) {
                 return;
             }
 
@@ -278,8 +281,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'campos' => 'lispm_nro',
             'whereArmado' => " WHERE lispm_nro = '".$listaprecio_proveedor_id."' ",
         ];
-        $existe = json_decode($apiAnita->apiCall($dataChk));
-        if (! $existe || count($existe) === 0) {
+        $existe = ApiAnita::decodificarListaFilas($apiAnita->apiCall($dataChk));
+        if ($existe === []) {
             return $this->guardarAnitaDesdeErp($listaprecio_proveedor_id);
         }
 

@@ -73,14 +73,43 @@
                             <input type="text" name="nombre" id="nombre" class="form-control" maxlength="60" required value="{{ old('nombre', $subtipo->nombre) }}">
                         </div>
                     </div>
+                    @php
+                        $signoSub = (string) old('signo', $subtipo->signo ?? '');
+                    @endphp
+                    <div class="form-group row">
+                        <label for="signo" class="col-lg-4 control-label text-right pr-2">Efecto (override)</label>
+                        <div class="col-lg-6">
+                            <select name="signo" id="signo" class="form-control">
+                                <option value="" @selected($signoSub === '')>Hereda del tipo</option>
+                                <option value="0" @selected($signoSub === '0')>Entra</option>
+                                <option value="1" @selected($signoSub === '1')>Sale</option>
+                                <option value="2" @selected($signoSub === '2')>No mueve saldo</option>
+                            </select>
+                            <small class="form-text text-muted">Usado en Bingo (BGO) cuando un mismo tipo tiene subconceptos que entran y salen.</small>
+                        </div>
+                    </div>
                     <div class="form-group row">
                         <label class="col-lg-4 control-label text-right pr-2">Mueve billetaje</label>
                         <div class="col-lg-8">
                             <input type="hidden" name="mueve_billetaje" value="0">
                             <input type="checkbox" name="mueve_billetaje" value="1" @checked($mueveBilletaje)>
                             <small class="form-text text-muted">
-                                Si está desmarcado (p. ej. propina Híbrida), el movimiento es solo informativo para RRHH y no altera el saldo de billetes en bóveda.
+                                Si está desmarcado (p. ej. propina Híbrida), el movimiento es solo informativo y no altera el saldo de billetes.
                             </small>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="vigente_desde" class="col-lg-4 control-label text-right pr-2">Vigente desde</label>
+                        <div class="col-lg-4">
+                            <input type="date" name="vigente_desde" id="vigente_desde" class="form-control"
+                                   value="{{ old('vigente_desde', optional($subtipo->vigente_desde)->format('Y-m-d')) }}">
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="vigente_hasta" class="col-lg-4 control-label text-right pr-2">Vigente hasta</label>
+                        <div class="col-lg-4">
+                            <input type="date" name="vigente_hasta" id="vigente_hasta" class="form-control"
+                                   value="{{ old('vigente_hasta', optional($subtipo->vigente_hasta)->format('Y-m-d')) }}">
                         </div>
                     </div>
                     <div class="form-group row">

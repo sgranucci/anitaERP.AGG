@@ -7,7 +7,12 @@
 @section('scripts')
 <script>
 (function () {
+    function checks() {
+        return document.querySelectorAll('.op-envio-check');
+    }
+
     function conteo() {
+        var lista = checks();
         var n = document.querySelectorAll('.op-envio-check:checked').length;
         var el = document.getElementById('op-envio-conteo');
         if (el) {
@@ -15,35 +20,66 @@
         }
         var todas = document.getElementById('op-envio-todas');
         if (todas) {
-            var habilitados = document.querySelectorAll('.op-envio-check');
-            var marcados = document.querySelectorAll('.op-envio-check:checked');
-            todas.checked = habilitados.length > 0 && habilitados.length === marcados.length;
+            todas.checked = lista.length > 0 && n === lista.length;
+            todas.indeterminate = n > 0 && n < lista.length;
         }
+    }
+
+    function aplicarDefaultPendientes() {
+        // Al cargar: tildar solo pendientes (data-ya-enviada=0). El tilde global opera sobre todas.
+        checks().forEach(function (el) {
+            el.checked = el.getAttribute('data-ya-enviada') === '0';
+        });
+        conteo();
     }
 
     var todas = document.getElementById('op-envio-todas');
     if (todas) {
         todas.addEventListener('change', function () {
-            document.querySelectorAll('.op-envio-check').forEach(function (el) {
-                el.checked = todas.checked;
+            var marcar = todas.checked;
+            checks().forEach(function (el) {
+                el.checked = marcar;
             });
             conteo();
         });
     }
-    document.querySelectorAll('.op-envio-check').forEach(function (el) {
+    checks().forEach(function (el) {
         el.addEventListener('change', conteo);
     });
 
     var form = document.getElementById('form-envio-op-masivo');
+    var overlay = document.getElementById('pagoproveedor-envio-masivo-overlay');
+    function mostrarOverlay() {
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.style.pointerEvents = 'all';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+    function ocultarOverlay() {
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = 'none';
+        overlay.style.pointerEvents = 'none';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+    ocultarOverlay();
     if (form) {
         form.addEventListener('submit', function (e) {
             if (document.querySelectorAll('.op-envio-check:checked').length === 0) {
                 e.preventDefault();
                 window.alert('Seleccione al menos una orden de pago.');
+                return;
             }
+            mostrarOverlay();
         });
     }
-    conteo();
+    window.addEventListener('pageshow', ocultarOverlay);
+    aplicarDefaultPendientes();
 })();
 </script>
 @endsection
@@ -72,7 +108,11 @@
                         Arma los correos de las OP de <strong>transferencia</strong> o <strong>cheque</strong> de la fecha elegida.
                         En transferencia busca el comprobante en las transferencias persistidas de Interbanking
                         (mismo importe y CBU o CUIT del proveedor), aunque la OP no tenga el id cargado.
-                        Destilde las que no quiera enviar.
+                        Por defecto se tildan las <strong>pendientes con email</strong> (aún sin envío).
+                        Las ya enviadas van destildadas (se pueden marcar a mano para reenviar).
+                        Sin email en el proveedor no se pueden tildar: hay que cargar el mail en el ABM del proveedor.
+                        El tilde de cabecera marca / desmarca <strong>todas</strong> las que tienen email.
+                        El envío corre en segundo plano (como CAEA) y el resumen llega por mail.
                     </p>
                     @include('includes.form-empresa-asignada', [
                         'empresa_query' => $empresa_query,
@@ -147,8 +187,15 @@
         @endif
 
         @if (!empty($consultado))
+            @include('includes.proceso_overlay_aviso', [
+                'overlayId' => 'pagoproveedor-envio-masivo-overlay',
+                'tituloId' => 'pagoproveedor-envio-masivo-overlay-titulo',
+                'subtituloId' => 'pagoproveedor-envio-masivo-overlay-subtitulo',
+                'titulo' => 'Encolando envío de OP…',
+                'subtitulo' => 'El proceso corre en segundo plano. Al terminar recibirás un mail.',
+            ])
             <form method="post" action="{{ route('pagoproveedor_envio_masivo_enviar') }}" id="form-envio-op-masivo"
-                  data-mensaje-grabacion="Enviando correos a proveedores…">
+                  data-mensaje-grabacion="Encolando envío a proveedores…">
                 @csrf
                 <input type="hidden" name="empresa_id" value="{{ (int) ($filtros['empresa_id'] ?? 0) }}">
                 <input type="hidden" name="fecha_desde" value="{{ $filtros['fecha_desde'] ?? '' }}">
@@ -169,7 +216,7 @@
                                     <thead>
                                         <tr>
                                             <th style="width:36px">
-                                                <input type="checkbox" id="op-envio-todas" title="Marcar todas las que se pueden enviar">
+                                                <input type="checkbox" id="op-envio-todas" title="Marcar / desmarcar todas las que tienen email">
                                             </th>
                                             <th>OP</th>
                                             <th>Fecha</th>
@@ -179,6 +226,7 @@
                                             <th class="text-right">Neto</th>
                                             <th>Transferencia</th>
                                             <th>Asociación</th>
+                                            <th>Mail</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -187,9 +235,10 @@
                                                 <td>
                                                     @if ($fila['tiene_email'])
                                                         <input type="checkbox" class="op-envio-check" name="ids[]" value="{{ $fila['id'] }}"
-                                                               @checked($fila['seleccionada'])>
+                                                               data-ya-enviada="{{ !empty($fila['ya_enviada']) ? '1' : '0' }}"
+                                                               title="{{ !empty($fila['ya_enviada']) ? 'Ya enviada: marcá solo si querés reenviar' : 'Pendiente de envío' }}">
                                                     @else
-                                                        <input type="checkbox" disabled title="Sin email de proveedor">
+                                                        <input type="checkbox" disabled title="Sin email de proveedor: cargalo en el ABM del proveedor">
                                                     @endif
                                                 </td>
                                                 <td>
@@ -231,6 +280,17 @@
                                                     <span class="badge badge-{{ $fila['asociacion_badge'] }}">{{ $fila['asociacion_etiqueta'] }}</span>
                                                     <div class="small text-muted mt-1">{{ $fila['asociacion_detalle'] }}</div>
                                                 </td>
+                                                <td class="small">
+                                                    @if (empty($fila['tiene_email']))
+                                                        <span class="badge badge-danger">Sin email</span>
+                                                        <div class="text-muted mt-1">Cargá el mail en el proveedor.</div>
+                                                    @elseif (!empty($fila['ya_enviada']))
+                                                        <span class="badge badge-info">Ya enviada</span>
+                                                        <div class="text-muted mt-1">Destildada; marcá para reenviar.</div>
+                                                    @else
+                                                        <span class="badge badge-success">Pendiente</span>
+                                                    @endif
+                                                </td>
                                             </tr>
                                         @endforeach
                                     </tbody>
@@ -247,6 +307,9 @@
                             <button type="submit" class="btn btn-success">
                                 <i class="fa fa-envelope"></i> Enviar seleccionadas
                             </button>
+                            <span class="text-muted small ml-2">
+                                Queda en cola; el resultado te llega por mail (no hace falta dejar la pantalla abierta).
+                            </span>
                         </div>
                     @endif
                 </div>

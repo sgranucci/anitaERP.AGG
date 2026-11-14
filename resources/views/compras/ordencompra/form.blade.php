@@ -122,13 +122,37 @@
                 </div>
             </div>
 
-            @include('includes.form-empresa-asignada', [
-                'empresa_query' => $empresa_query,
-                'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
-                'solo_lectura' => $soloLectura,
-                'col_label' => 'col-lg-4 text-right pr-2',
-                'col_input' => 'col-lg-8',
-            ])
+            @php
+                $esCrownOcForm = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
+                $salaIdOcForm = old('sala_id', (isset($data) && $data) ? ($data->sala_id ?? null) : null);
+                $salaQueryOcForm = $sala_query ?? collect();
+                $empresaIdOcDesdeSala = null;
+                if ($esCrownOcForm && (int) $salaIdOcForm > 0) {
+                    $empresaIdOcDesdeSala = optional($salaQueryOcForm->firstWhere('id', (int) $salaIdOcForm))->empresa_id;
+                }
+                if ($esCrownOcForm && $empresaIdOcDesdeSala === null && $salaQueryOcForm->count() === 1) {
+                    $empresaIdOcDesdeSala = optional($salaQueryOcForm->first())->empresa_id;
+                }
+            @endphp
+            @if ($esCrownOcForm)
+                <input type="hidden" name="empresa_id" id="empresa_id"
+                    value="{{ old('empresa_id', (isset($data) && $data) ? $data->empresa_id : ($empresaIdOcDesdeSala ?? optional($empresa_query->first())->id)) }}">
+                @include('includes.form-sala-asignada', [
+                    'sala_query' => $salaQueryOcForm,
+                    'sala_id' => $salaIdOcForm,
+                    'solo_lectura' => $soloLectura,
+                    'col_label' => 'col-lg-4 text-right pr-2',
+                    'col_input' => 'col-lg-8',
+                ])
+            @else
+                @include('includes.form-empresa-asignada', [
+                    'empresa_query' => $empresa_query,
+                    'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
+                    'solo_lectura' => $soloLectura,
+                    'col_label' => 'col-lg-4 text-right pr-2',
+                    'col_input' => 'col-lg-8',
+                ])
+            @endif
 
             @if ($ocSolicitanteModal)
                 <div class="form-group row align-items-center">
@@ -799,6 +823,9 @@
                             @if (!$soloLectura)
                                 <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                                     <i class="fa fa-search text-primary"></i>
+                                </button>
+                                <button type="button" title="Consultar listas de precios de compra (si no hay artículo, muestra las últimas listas vigentes del proveedor)" style="padding:1;" class="btn-accion-tabla consultalistasprecio tooltipsC flex-shrink-0">
+                                    <i class="fa fa-tags text-info"></i>
                                 </button>
                             @endif
                             <input type="text" class="codigoarticulo form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;"

@@ -9,6 +9,7 @@ use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownAnitaConsulta;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownAsientoBuilder;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownCriterioFecha;
+use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownVencaeSupport;
 use Carbon\Carbon;
 use RuntimeException;
 
@@ -23,6 +24,7 @@ final class TransferenciaVentaGastronomiaService
         private readonly TransferenciaCrownAnitaConsulta $anita,
         private readonly TransferenciaCrownAsientoBuilder $asientos,
         private readonly TransferenciaCrownFacturaWriter $writer,
+        private readonly TransferenciaCrownVencaeSupport $vencae = new TransferenciaCrownVencaeSupport(),
     ) {
     }
 
@@ -91,19 +93,35 @@ final class TransferenciaVentaGastronomiaService
             ->get(['id', 'codigo', 'empresa_id', 'nombre'])
             ->keyBy(static fn ($pv): string => str_pad((string) $pv->codigo, 5, '0', STR_PAD_LEFT));
 
+        $mapaCae = [];
+        try {
+            $mapaCae = $this->vencae->mapaDesdeVentasSala($ventas, $sala['ifx_server']);
+        } catch (\Throwable $e) {
+            $advertencias[] = 'No se pudo leer vencae de '.$sala['nombre'].' ('.$e->getMessage().'). Las facturas entran sin CAE; completá con ventas:transferencia-crown-completar-cae-replicar.';
+        }
+
         $filas = [];
+        $sinCae = 0;
         foreach ($ventas as $venta) {
-            $filas[] = $this->normalizar($venta, $sala, $porComprobante, $puntosVenta);
+            $fila = $this->normalizar($venta, $sala, $porComprobante, $puntosVenta, $mapaCae);
+            if (trim((string) ($fila['cae'] ?? '')) === '') {
+                $sinCae++;
+            }
+            $filas[] = $fila;
         }
         $filas = $this->writer->marcarExistentes($filas);
 
         $advertencias[] = 'Criterio de rango: '.TransferenciaCrownCriterioFecha::etiqueta($criterioFecha).'.';
-        $advertencias[] = 'Solo se graba en el ERP. No escribe en Anita (ni venta ni asiento/ctamov).';
+        $advertencias[] = 'La factura ya está en Anita de la sala; este proceso solo la deja en el ERP (con CAE de vencae) y arma el asiento. No reescribe Anita.';
         $advertencias[] = 'La factura, la factura hotel y el ticket entran como factura (FAC). La nota de crédito entra como nota de crédito. Si la factura ya está y no tiene asiento, este proceso se lo engancha.';
+        if ($mapaCae !== []) {
+            $advertencias[] = 'CAE tomados de vencae en '.$sala['ifx_server'].' ('.count($mapaCae).' filas).'
+                .($sinCae > 0 ? ' Sin CAE en '.$sinCae.' comprobantes.' : '');
+        }
         if ($porComprobante !== []) {
             $advertencias[] = 'Donde la sala ya tiene subdiario, el asiento copia esas cuentas. Donde no, usa las cuentas de gastronomía del punto de venta.';
         } else {
-            $advertencias[] = 'Lectura única de venta en Anita. El asiento usa las cuentas de gastronomía del punto de venta (Cuentas automáticas).';
+            $advertencias[] = 'Lectura de venta (+ vencae) en Anita de la sala. El asiento usa las cuentas de gastronomía del punto de venta (Cuentas automáticas).';
         }
 
         return [
@@ -165,14 +183,16 @@ final class TransferenciaVentaGastronomiaService
      * @param  array{codigo: string, nombre: string, ifx_server: string}  $sala
      * @param  array<string, list<object>>  $porComprobante
      * @param  \Illuminate\Support\Collection<string, Puntoventa>  $puntosVenta
+     * @param  array<string, array{cae: string, fechavencimientocae: string}>  $mapaCae
      * @return array<string, mixed>
      */
-    private function normalizar(object $venta, array $sala, array $porComprobante, $puntosVenta): array
+    private function normalizar(object $venta, array $sala, array $porComprobante, $puntosVenta, array $mapaCae = []): array
     {
         $tipo = strtoupper(trim((string) ($venta->ven_tipo ?? '')));
         $letra = strtoupper(trim((string) ($venta->ven_letra ?? '')));
         $sucursal = (int) ($venta->ven_sucursal ?? 0);
         $numero = (int) ($venta->ven_nro ?? 0);
+        $caeSala = TransferenciaCrownVencaeSupport::buscar($mapaCae, $tipo, $letra !== '' ? $letra : 'B', $sucursal, $numero);
         $gravadoOt = round(abs((float) ($venta->ven_gravado_ot ?? 0)), 2);
         $tasaOt = round(abs((float) ($venta->ven_tasa_iva_ot ?? 0)), 2);
         $iva = round(abs((float) ($venta->ven_impuesto1 ?? 0)), 2);
@@ -210,7 +230,8 @@ final class TransferenciaVentaGastronomiaService
             'nombre' => trim((string) ($venta->ven_nombre_cliente ?? '')),
             'cuit' => preg_replace('/\D+/', '', (string) ($venta->ven_cuit_cli ?? '')) ?? '',
             'domicilio' => '',
-            'cae' => '',
+            'cae' => $caeSala['cae'] ?? '',
+            'fechavencimientocae' => $caeSala['fechavencimientocae'] ?? '',
             'moneda' => trim((string) ($venta->ven_cod_mon ?? '1')) !== '' ? trim((string) $venta->ven_cod_mon) : '1',
             'cotizacion' => abs((float) ($venta->ven_cotizacion ?? 0)),
             'gravado21' => $gravado21,

@@ -4,6 +4,7 @@ namespace App\Exports\Caja\Flash;
 
 use App\Support\Caja\Flash\FlashCrownCalculoSupport;
 use App\Support\Caja\Flash\FlashCrownPerfilVistaSupport;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Export\ExcelNumericCellsSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -29,7 +30,7 @@ class FlashCrownPeriodoExport implements FromView, WithEvents
     {
         $rows = [];
         foreach ($this->filas as $fila) {
-            $arr = $fila->toArray();
+            $arr = FlashCrownCalculoSupport::baseVistaDesdeFlash($fila);
             $arr['nombre_sala'] = $fila->sala->nombre ?? '';
             $arr['codigo_sala'] = $fila->sala->codigo ?? '';
             $arr['fecha_fmt'] = $fila->fecha->format('d/m/Y');
@@ -65,8 +66,14 @@ class FlashCrownPeriodoExport implements FromView, WithEvents
                         'color' => ['rgb' => '17202A'],
                     ],
                 ]);
-                // A fecha, B sala — texto; resto numérico.
-                ExcelNumericCellsSupport::forzarRangoDatos($sheet, 3, 3, [], '#,##0.00');
+                // A fecha, B sala — texto; resto numérico con miles (máscara Excel).
+                ExcelNumericCellsSupport::forzarRangoDatos(
+                    $sheet,
+                    3,
+                    3,
+                    [],
+                    ExcelFormatoNumero::mascara(2),
+                );
             },
         ];
     }

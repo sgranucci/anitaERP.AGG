@@ -16,6 +16,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Support\Configuracion\CotizacionVigenteSupport;
+use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownImputacionSupport;
@@ -210,6 +211,7 @@ final class TransferenciaCrownFacturaWriter
                 'pais_id' => (int) ($cliente->pais_id ?? 0) > 0 ? (int) $cliente->pais_id : 1,
                 'condicioniva_id' => $cliente->condicioniva_id,
                 'cae' => trim((string) ($fila['cae'] ?? '')) !== '' ? mb_substr(trim((string) $fila['cae']), 0, 50) : null,
+                'fechavencimientocae' => $this->fechaVencimientoCae($fila),
                 'numeroremito' => 0,
                 'cantidadbulto' => 1,
             ]);
@@ -287,6 +289,15 @@ final class TransferenciaCrownFacturaWriter
             if (Asiento::query()->where('venta_id', (int) $venta->id)->exists()) {
                 throw new RuntimeException('La factura ya tiene asiento.');
             }
+            $cae = trim((string) ($fila['cae'] ?? ''));
+            if ($cae !== '' && trim((string) ($venta->cae ?? '')) === '') {
+                $venta->cae = mb_substr($cae, 0, 50);
+                $vto = $this->fechaVencimientoCae($fila);
+                if ($vto !== null) {
+                    $venta->fechavencimientocae = $vto;
+                }
+                $venta->save();
+            }
             $asiento = $this->crearAsiento($venta, $fila, $usuarioId, $leyenda, $lineas, $empresaId, $fecha, $monedaId, $cotizacion, $codigo);
 
             return [
@@ -326,7 +337,7 @@ final class TransferenciaCrownFacturaWriter
             'usuario_id' => $usuarioId > 0 ? $usuarioId : null,
             'estado_aprobacion' => Asiento::ESTADO_APROBACION_CONFIRMADO,
             // Metadatos de origen en ERP; no implican escritura al bridge.
-            'anita_origen' => 'transferencia',
+            'anita_origen' => AsientoAnitaMetadatosSupport::ORIGEN_TRANSFERENCIA,
             'anita_sistema' => 'V',
             'anita_tipo' => $tipoAnita,
             'anita_letra' => strtoupper((string) $fila['letra']),
@@ -492,6 +503,26 @@ final class TransferenciaCrownFacturaWriter
                 'impuesto_id' => $concepto['tasa'] > 0 ? $this->impuestoPorValor($concepto['tasa']) : $this->impuestoPorValor(0),
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function fechaVencimientoCae(array $fila): ?string
+    {
+        $raw = trim((string) ($fila['fechavencimientocae'] ?? ''));
+        if ($raw === '') {
+            return null;
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
+            return $raw;
+        }
+        $ymd = preg_replace('/\D+/', '', $raw) ?? '';
+        if (strlen($ymd) !== 8) {
+            return null;
+        }
+
+        return substr($ymd, 0, 4).'-'.substr($ymd, 4, 2).'-'.substr($ymd, 6, 2);
     }
 
     private function reservarNumeroErp(int $empresaId): string

@@ -53,7 +53,8 @@
                         </div>
                     </div>
                     <p class="small text-muted mb-0">
-                        Comparativo diario de caja empleados (propina) por casino, equivalente a Anita <code>l-propinaxcas</code>.
+                        Comparativo diario de propina por casino: movimientos de bóveda tipificados
+                        (tipos con «Reporte propinas por casino») más la propina de los estados finales de mesa.
                     </p>
                 </form>
 

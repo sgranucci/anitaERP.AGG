@@ -41,6 +41,9 @@ class ValidacionTesoreriaCrownBovedaTipo extends FormRequest
             'signo' => ['required', 'in:0,1,2'],
             'operacion' => ['required', 'in:0,1,2,3,4,5,6,7'],
             'activo' => ['required', 'in:0,1'],
+            'para_reporte_propina' => ['required', 'in:0,1'],
+            'vigente_desde' => ['nullable', 'date'],
+            'vigente_hasta' => ['nullable', 'date', 'after_or_equal:vigente_desde'],
         ];
     }
 
@@ -54,6 +57,9 @@ class ValidacionTesoreriaCrownBovedaTipo extends FormRequest
             'signo' => 'efecto en saldo',
             'operacion' => 'operación',
             'activo' => 'activo',
+            'para_reporte_propina' => 'reporte propinas por casino',
+            'vigente_desde' => 'vigente desde',
+            'vigente_hasta' => 'vigente hasta',
         ];
     }
 }

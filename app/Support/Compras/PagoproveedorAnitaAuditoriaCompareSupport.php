@@ -119,6 +119,52 @@ final class PagoproveedorAnitaAuditoriaCompareSupport
     }
 
     /**
+     * True si alguna línea de ctamov corresponde al comprobante (tipo + nro).
+     * Filas de otro documento bajo el mismo numeroasiento (colisión) → false.
+     *
+     * @param  iterable<mixed>  $filas
+     */
+    public static function ctamovPerteneceAComprobante(iterable $filas, string $tipo, int $nro): bool
+    {
+        $tipo = strtoupper(substr(trim($tipo), 0, 3));
+        if ($tipo === '' || $nro <= 0) {
+            return false;
+        }
+
+        foreach ($filas as $fila) {
+            $row = is_array($fila) ? $fila : get_object_vars($fila);
+            $tipoFila = strtoupper(substr(trim((string) ($row['ctav_tipo'] ?? '')), 0, 3));
+            $nroFila = (int) ($row['ctav_nro'] ?? 0);
+            if ($tipoFila === $tipo && $nroFila === $nro) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Líneas de caja con importe real. Monto ~0 (aplicación de anticipo neto 0)
+     * no exige tesmov en Anita.
+     *
+     * @param  iterable<mixed>  $lineas
+     */
+    public static function cantidadLineasCajaConImporte(iterable $lineas, float $minimo = 0.01): int
+    {
+        $n = 0;
+        foreach ($lineas as $linea) {
+            $monto = is_array($linea)
+                ? (float) ($linea['monto'] ?? $linea['importe'] ?? 0)
+                : (float) ($linea->monto ?? $linea->importe ?? 0);
+            if (abs($monto) >= $minimo) {
+                $n++;
+            }
+        }
+
+        return $n;
+    }
+
+    /**
      * Cabecera de la OP en promov. Cualquier cuota sirve: el alta deja la 0 y un
      * reproceso puede haber actualizado la 1.
      *

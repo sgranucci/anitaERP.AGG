@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja\Flash;
 
+use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\TesoreriaCrownCasinoOnline;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
@@ -18,6 +19,158 @@ use Throwable;
  */
 final class FlashCrownCalculoSupport
 {
+    /**
+     * Del Río / Betsur / Apuestas: un solo bloque de la empresa Crown (no por sala).
+     * Fuente: tesoreria_crown_casino_online.
+     *
+     * @return array{
+     *   ol_att: int, ol_drop: float, ol_coin_in: float, ol_cage_bal: float, ol_win: float,
+     *   bs_att: int, bs_coin_in: float, bs_cage_bal: float, bs_win: float,
+     *   ad_att: int, ad_coin_in: float, ad_cage_bal: float, ad_win: float
+     * }
+     */
+    public static function valoresOnlineGlobal(string $fechaYmd): array
+    {
+        $cero = [
+            'ol_att' => 0,
+            'ol_drop' => 0.0,
+            'ol_coin_in' => 0.0,
+            'ol_cage_bal' => 0.0,
+            'ol_win' => 0.0,
+            'bs_att' => 0,
+            'bs_coin_in' => 0.0,
+            'bs_cage_bal' => 0.0,
+            'bs_win' => 0.0,
+            'ad_att' => 0,
+            'ad_coin_in' => 0.0,
+            'ad_cage_bal' => 0.0,
+            'ad_win' => 0.0,
+        ];
+
+        $fecha = Carbon::parse($fechaYmd)->toDateString();
+        $global = TesoreriaCrownCasinoOnline::deFecha($fecha);
+        if ($global === null) {
+            return $cero;
+        }
+
+        return [
+            'ol_att' => (int) ($global->attendance ?? 0),
+            'ol_drop' => round((float) ($global->drop ?? 0), 2),
+            'ol_coin_in' => round((float) ($global->apostado ?? 0), 2),
+            'ol_cage_bal' => round((float) ($global->pagado ?? 0), 2),
+            'ol_win' => round((float) ($global->resultado ?? 0), 2),
+            'bs_att' => (int) ($global->betsur_attendance ?? 0),
+            'bs_coin_in' => round((float) ($global->betsur_apostado ?? 0), 2),
+            'bs_cage_bal' => round((float) ($global->betsur_pagado ?? 0), 2),
+            'bs_win' => round((float) ($global->betsur_resultado ?? 0), 2),
+            'ad_att' => (int) ($global->ad_attendance ?? 0),
+            'ad_coin_in' => round((float) ($global->ad_apostado ?? 0), 2),
+            'ad_cage_bal' => round((float) ($global->ad_pagado ?? 0), 2),
+            'ad_win' => round((float) ($global->ad_resultado ?? 0), 2),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $base
+     * @return array<string, mixed>
+     */
+    public static function aplicarOnlineVivoEnBase(array $base, string $fechaYmd, bool $esBloqueEmpresa): array
+    {
+        $online = $esBloqueEmpresa
+            ? self::valoresOnlineGlobal($fechaYmd)
+            : [
+                'ol_att' => 0,
+                'ol_drop' => 0.0,
+                'ol_coin_in' => 0.0,
+                'ol_cage_bal' => 0.0,
+                'ol_win' => 0.0,
+                'bs_att' => 0,
+                'bs_coin_in' => 0.0,
+                'bs_cage_bal' => 0.0,
+                'bs_win' => 0.0,
+                'ad_att' => 0,
+                'ad_coin_in' => 0.0,
+                'ad_cage_bal' => 0.0,
+                'ad_win' => 0.0,
+            ];
+
+        return array_merge($base, $online);
+    }
+
+    /**
+     * Fila por sala: mesas/slots del flash; online = 0 (va en consolidado / Resumen empresa).
+     *
+     * @return array<string, mixed>
+     */
+    public static function baseVistaDesdeFlash(\App\Models\Caja\Flash\FlashCrown $flash): array
+    {
+        $base = $flash->toArray();
+        $fecha = $flash->fecha instanceof Carbon
+            ? $flash->fecha->toDateString()
+            : Carbon::parse((string) $flash->fecha)->toDateString();
+        $base = self::completarSlotsVaciosDesdeResultadoOnline(
+            $base,
+            (int) $flash->sala_id,
+            $fecha,
+        );
+
+        return self::aplicarOnlineVivoEnBase($base, $fecha, false);
+    }
+
+    /**
+     * Réplica Anita sin resulol aún: completar coin_in/slot_r desde tesorería resultado_online
+     * sin pisar soft_count/mesas/ayb/hotel de Anita.
+     *
+     * @param  array<string, mixed>  $base
+     * @return array<string, mixed>
+     */
+    public static function completarSlotsVaciosDesdeResultadoOnline(array $base, int $salaId, string $fechaYmd): array
+    {
+        $tieneSlots = abs((float) ($base['coin_in'] ?? 0)) >= 0.02
+            || abs((float) ($base['slot_r'] ?? 0)) >= 0.02;
+        if ($tieneSlots || $salaId <= 0) {
+            return $base;
+        }
+
+        $online = TesoreriaCrownResultadoOnline::deSalaFecha($salaId, Carbon::parse($fechaYmd)->toDateString());
+        if ($online === null) {
+            return $base;
+        }
+
+        $coinIn = round((float) ($online->coin_in ?? 0), 2);
+        $coinOut = round((float) ($online->coin_out ?? 0), 2);
+        $pagoManual = round((float) ($online->pago_manual ?? 0), 2);
+        $slotR = round((float) ($online->slot_resultado ?? 0), 2);
+        if (abs($slotR) < 0.0001) {
+            $slotR = round($coinIn - $coinOut - $pagoManual, 2);
+        }
+        if (abs($coinIn) < 0.02 && abs($slotR) < 0.02) {
+            return $base;
+        }
+
+        $base['coin_in'] = $coinIn;
+        $base['coin_out'] = $coinOut;
+        $base['pago_manual'] = $pagoManual;
+        $base['slot_r'] = $slotR;
+        if ((int) ($base['cant_slots'] ?? 0) === 0) {
+            $base['cant_slots'] = (int) ($online->cantidad_slots ?? 0);
+        }
+
+        $detalle = is_array($base['detalle'] ?? null) ? $base['detalle'] : [];
+        if (isset($base['detalle_json']) && is_array($base['detalle_json']) && $detalle === []) {
+            $detalle = $base['detalle_json'];
+        }
+        $fuentes = is_array($detalle['fuentes'] ?? null) ? $detalle['fuentes'] : [];
+        if (! in_array('resultado_online', $fuentes, true)) {
+            $fuentes[] = 'resultado_online';
+        }
+        $detalle['fuentes'] = $fuentes;
+        $base['detalle'] = $detalle;
+        $base['detalle_json'] = $detalle;
+
+        return $base;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -303,23 +456,12 @@ final class FlashCrownCalculoSupport
      */
     private static function aplicarCasinoOnlineGlobal(array &$flash, string $fecha, ?TesoreriaCrownResultadoOnline $legacy): void
     {
-        $global = TesoreriaCrownCasinoOnline::deFecha($fecha);
-        if ($global) {
-            $flash['ol_att'] = (int) ($global->attendance ?? 0);
-            $flash['ol_drop'] = round((float) ($global->drop ?? 0), 2);
-            $flash['ol_coin_in'] = round((float) ($global->apostado ?? 0), 2);
-            $flash['ol_cage_bal'] = round((float) ($global->pagado ?? 0), 2);
-            $flash['ol_win'] = round((float) ($global->resultado ?? 0), 2);
-
-            $flash['bs_att'] = (int) ($global->betsur_attendance ?? 0);
-            $flash['bs_coin_in'] = round((float) ($global->betsur_apostado ?? 0), 2);
-            $flash['bs_cage_bal'] = round((float) ($global->betsur_pagado ?? 0), 2);
-            $flash['bs_win'] = round((float) ($global->betsur_resultado ?? 0), 2);
-
-            $flash['ad_att'] = (int) ($global->ad_attendance ?? 0);
-            $flash['ad_coin_in'] = round((float) ($global->ad_apostado ?? 0), 2);
-            $flash['ad_cage_bal'] = round((float) ($global->ad_pagado ?? 0), 2);
-            $flash['ad_win'] = round((float) ($global->ad_resultado ?? 0), 2);
+        // Fuente de verdad: carga diaria. No depender de ol_*/bs_*/ad_* en flash_crown.
+        $hayFilaDiaria = TesoreriaCrownCasinoOnline::deFecha($fecha) !== null;
+        if ($hayFilaDiaria) {
+            foreach (self::valoresOnlineGlobal($fecha) as $campo => $valor) {
+                $flash[$campo] = $valor;
+            }
             $flash['detalle']['fuentes'][] = 'casino_online_diario';
         } elseif ($legacy) {
             // Compatibilidad con cargas anteriores cargados por sala.
@@ -344,7 +486,7 @@ final class FlashCrownCalculoSupport
         if (abs((float) $flash['ad_win']) > 0.001 || abs((float) $flash['ad_coin_in']) > 0.001) {
             $flash['detalle']['fuentes'][] = 'apuestas_deportivas';
         }
-        if (! $global && ! $legacy) {
+        if (! $hayFilaDiaria && ! $legacy) {
             $flash['avisos'][] = 'Sin carga de casino online diario para la fecha.';
         }
     }
@@ -383,20 +525,57 @@ final class FlashCrownCalculoSupport
     }
 
     /**
-     * Combined del mismo día año anterior (columna “Anterior” de l-consolida).
+     * Combined estilo Anita / l-consolida (Comb. Ant.):
+     * win mesas + soft_count + F&B + hotel (no usa slot_r de resulol).
+     *
+     * @param  array<string, mixed>  $flash
+     */
+    public static function combinedComoAnita(array $flash): float
+    {
+        $winMesas = (float) self::metricasDerivadas($flash)['win_mesas'];
+
+        return round(
+            $winMesas
+            + (float) ($flash['soft_count'] ?? 0)
+            + (float) ($flash['ayb'] ?? 0)
+            + (float) ($flash['hotel'] ?? 0),
+            2
+        );
+    }
+
+    /**
+     * Combined del mismo día año anterior (columna “Comb. Ant.”).
+     * Usa flash persistido (réplica Anita); no recalcula tesorería vacía.
      */
     public static function combinedAnteriorAnio(int $salaId, string $fechaYmd): float
     {
-        $anterior = Carbon::parse($fechaYmd)->subYear()->toDateString();
-        $calc = self::deSalaFecha($salaId, $anterior);
-        $gaming = (float) $calc['wheel_r'] + (float) $calc['baccarat_r'] + (float) $calc['blackjack_r']
-            + (float) $calc['multi_r'] + (float) $calc['crap_r'] + (float) $calc['caribbean_r']
-            + (float) $calc['poker_r'] + (float) $calc['seven_r'] + (float) $calc['super_peek_r']
-            + (float) $calc['slot_r'] - (float) $calc['cash_less'] + (float) $calc['ruleta_el_r']
-            + (float) ($calc['ol_win'] ?? 0) + (float) ($calc['bs_win'] ?? 0)
-            + (float) ($calc['ad_win'] ?? 0);
+        $fecha = Carbon::parse($fechaYmd)->startOfDay();
+        $anioAnt = $fecha->year - 1;
+        $dia = min($fecha->day, Carbon::create($anioAnt, $fecha->month, 1)->daysInMonth);
+        $anterior = Carbon::create($anioAnt, $fecha->month, $dia)->toDateString();
 
-        return round($gaming + (float) $calc['ayb'] + (float) $calc['hotel'], 2);
+        $flash = FlashCrown::query()
+            ->where('sala_id', $salaId)
+            ->whereDate('fecha', $anterior)
+            ->first();
+        if ($flash === null) {
+            return 0.0;
+        }
+
+        return self::combinedComoAnita(self::baseVistaDesdeFlash($flash));
+    }
+
+    /**
+     * Attendance consolidado Anita = salas + Del Río + Betsur + Apuestas.
+     *
+     * @param  array<string, mixed>  $fila  Debe traer att + ol_att/bs_att/ad_att
+     */
+    public static function attendanceConsolidado(array $fila): int
+    {
+        return (int) ($fila['att'] ?? 0)
+            + (int) ($fila['ol_att'] ?? 0)
+            + (int) ($fila['bs_att'] ?? 0)
+            + (int) ($fila['ad_att'] ?? 0);
     }
 
     /**

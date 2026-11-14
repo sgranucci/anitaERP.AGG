@@ -538,6 +538,14 @@
                         <span class="text-muted small ml-2">Pedir firmas guarda esta pantalla. Después el cajero firma con número y PIN, y tesorería con usuario y clave.</span>
                     @endif
                 </form>
+                @if ($editable && can('crear-tesoreria-crown-movimiento', false))
+                    <form method="POST" action="{{ route('eliminar_tesoreria_crown_movimiento', $comprobante->id) }}" class="mt-3" onsubmit="return confirm('¿Eliminar este borrador? No queda una reversa.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-times-circle"></i> Eliminar borrador</button>
+                        <p class="text-muted small mb-0 mt-2">Sirve también si abriste la Hab/Rend por error y todavía no la guardaste. Se borra; no se arma una reversa.</p>
+                    </form>
+                @endif
 
                 @php
                     $firmas = [

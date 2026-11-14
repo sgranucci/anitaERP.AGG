@@ -39,7 +39,63 @@
                     Preview de transferencias a CBU, selección individual o global, y envío por API.
                     Anti-duplicado: un pago / operación ya enviado con éxito no se vuelve a mandar.
                     Solo ERP (OP + I/E) y CSV de retiro juego (destino Interbanking).
+                    La <strong>cuenta de caja origen</strong> es un filtro (OP/I-E de esa cuenta) y el débito Interbanking; el CBU del proveedor sale de cada OP.
                 </p>
+
+                @if (! empty($ultimo_envio))
+                    @php
+                        $envio = $ultimo_envio;
+                        $lineasError = $envio->lineas->where('estado', 'error');
+                        $lineasOk = $envio->lineas->where('estado', 'ok');
+                        $lineasOmit = $envio->lineas->where('estado', 'omitido_duplicado');
+                    @endphp
+                    <div class="alert {{ (int) $envio->cantidad_error > 0 ? 'alert-danger' : 'alert-success' }} mb-3">
+                        <div class="d-flex flex-wrap align-items-center">
+                            <strong class="mr-2">Resultado envío #{{ $envio->id }}</strong>
+                            <span class="mr-2">
+                                {{ (int) $envio->cantidad_ok }} ok ·
+                                {{ (int) $envio->cantidad_error }} error ·
+                                {{ $lineasOmit->count() }} omitidas ·
+                                estado {{ $envio->estado }}
+                            </span>
+                            @if ($envio->cuentacaja)
+                                <span class="badge badge-secondary">
+                                    Débito: {{ $envio->cuentacaja->codigo }} — {{ $envio->cuentacaja->nombre }}
+                                </span>
+                            @endif
+                        </div>
+                        @if ($lineasError->isNotEmpty())
+                            <div class="table-responsive mt-2 mb-0">
+                                <table class="table table-sm table-bordered bg-white mb-0">
+                                    <thead style="background:#85C1E9;color:#17202A;">
+                                        <tr>
+                                            <th>Referencia</th>
+                                            <th>Beneficiario</th>
+                                            <th>CBU</th>
+                                            <th class="text-right">Importe</th>
+                                            <th>HTTP</th>
+                                            <th>Error</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($lineasError as $lin)
+                                            <tr>
+                                                <td>{{ $lin->referencia }}</td>
+                                                <td>{{ $lin->beneficiario }}</td>
+                                                <td class="text-monospace small">{{ $lin->credit_cbu }}</td>
+                                                <td class="text-right">{{ number_format((float) $lin->amount, 2, ',', '.') }}</td>
+                                                <td>{{ $lin->http_code ?: '—' }}</td>
+                                                <td class="small text-danger">{{ $lin->error_mensaje ?: 'Sin detalle' }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        @elseif ($lineasOk->isNotEmpty())
+                            <div class="small mt-1">{{ $lineasOk->count() }} transferencia(s) aceptada(s) por Interbanking.</div>
+                        @endif
+                    </div>
+                @endif
 
                 @include('includes.tabs-activas-estilos')
                 <div class="tabs-activas mb-3">
@@ -74,15 +130,19 @@
                                     'opcion_vacia' => 'Seleccione…',
                                 ])
                             </div>
-                            <label class="{{ $colLabel }} requerido">Cuenta de caja</label>
+                            <label class="{{ $colLabel }} requerido" for="codigo_cuentacaja">
+                                Cuenta origen
+                                <span class="badge badge-info font-weight-normal">filtro</span>
+                            </label>
                             <div class="{{ $colInput }}">
                                 <input type="hidden" name="cuentacaja_id" id="cuentacaja_id"
-                                       value="{{ (int) ($filtros['cuentacaja_id'] ?? 0) ?: '' }}">
+                                       value="{{ (int) ($filtros['cuentacaja_id'] ?? 0) ?: '' }}" required>
                                 <input type="hidden" name="cbu_origen" id="cbu_origen"
                                        value="{{ $filtros['cbu_origen'] ?? '' }}">
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="codigo_cuentacaja" autocomplete="off"
-                                           value="{{ $cuenta_origen->codigo ?? '' }}" placeholder="Código">
+                                <div class="input-group {{ ! empty($filtro_error) ? 'border border-danger rounded' : '' }}">
+                                    <input type="text" class="form-control {{ ! empty($filtro_error) ? 'is-invalid' : '' }}"
+                                           id="codigo_cuentacaja" autocomplete="off"
+                                           value="{{ $cuenta_origen->codigo ?? '' }}" placeholder="Código" required>
                                     <div class="input-group-append">
                                         <button type="button" class="btn btn-outline-secondary consultacuentacaja" title="F1">
                                             <i class="fa fa-search"></i>
@@ -91,6 +151,12 @@
                                 </div>
                                 <input type="text" class="form-control form-control-sm mt-1" id="nombre_cuentacaja" readonly
                                        value="{{ $cuenta_origen->nombre ?? '' }}">
+                                <small class="form-text text-muted">
+                                    Filtra OP/I-E pagadas por esta cuenta y define el débito Interbanking (no es el CBU del proveedor).
+                                </small>
+                                @if (! empty($filtro_error))
+                                    <div class="invalid-feedback d-block">{{ $filtro_error }}</div>
+                                @endif
                             </div>
                         </div>
                         <div class="form-group row">
@@ -137,15 +203,18 @@
                                     'opcion_vacia' => 'Seleccione…',
                                 ])
                             </div>
-                            <label class="{{ $colLabel }} requerido">Cuenta de caja</label>
+                            <label class="{{ $colLabel }} requerido" for="codigo_cuentacaja">
+                                Cuenta origen
+                                <span class="badge badge-info font-weight-normal">débito</span>
+                            </label>
                             <div class="{{ $colInput }}">
                                 <input type="hidden" name="cuentacaja_id" id="cuentacaja_id"
-                                       value="{{ (int) ($filtros['cuentacaja_id'] ?? 0) ?: '' }}">
+                                       value="{{ (int) ($filtros['cuentacaja_id'] ?? 0) ?: '' }}" required>
                                 <input type="hidden" name="cbu_origen" id="cbu_origen"
                                        value="{{ $filtros['cbu_origen'] ?? '' }}">
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="codigo_cuentacaja" autocomplete="off"
-                                           value="{{ $cuenta_origen->codigo ?? '' }}" placeholder="Código">
+                                           value="{{ $cuenta_origen->codigo ?? '' }}" placeholder="Código" required>
                                     <div class="input-group-append">
                                         <button type="button" class="btn btn-outline-secondary consultacuentacaja" title="F1">
                                             <i class="fa fa-search"></i>
@@ -154,6 +223,9 @@
                                 </div>
                                 <input type="text" class="form-control form-control-sm mt-1" id="nombre_cuentacaja" readonly
                                        value="{{ $cuenta_origen->nombre ?? '' }}">
+                                <small class="form-text text-muted">
+                                    Cuenta de la empresa desde la que Interbanking debita (no el CBU del destinatario).
+                                </small>
                             </div>
                         </div>
                         <div class="form-group row">

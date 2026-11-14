@@ -7,6 +7,7 @@ namespace App\Support\Contable\LibroIvaDigital;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\ComprobanteProveedorInternoTipos;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         string $letra,
         int $sucursal,
         int $numero,
+        bool $esFce = false,
     ): string {
         $tipoNorm = self::normalizarAbreviaturaTipo($tipo);
         if ($tipoNorm === '') {
@@ -37,6 +39,8 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             strtoupper(substr(trim($letra), 0, 1)),
             (string) $sucursal,
             (string) $numero,
+            // Misma numeración FAC y FCE son dos comprobantes (Anita com_es_fce).
+            $esFce ? 'FCE' : 'STD',
         ]);
     }
 
@@ -61,7 +65,12 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             STR_PAD_LEFT,
         );
 
-        $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra);
+        $esFce = ComprobanteProveedorUnicidadSupport::esMarcaFce($compra['com_es_fce'] ?? 'N');
+        $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteCompras(
+            $codigoAfip,
+            $letra,
+            $esFce,
+        );
         $puntoVenta = (int) ($compra['com_sucursal'] ?? 0);
         $numero = (int) ($compra['com_nro'] ?? 0);
         if ($puntoVenta < 0 || $numero <= 0) {

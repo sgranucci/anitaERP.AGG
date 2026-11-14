@@ -102,7 +102,7 @@ class OrdencompraController extends Controller
 
         $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
         $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
             : collect();
         $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
         $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
@@ -259,7 +259,7 @@ class OrdencompraController extends Controller
         $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
         $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
         $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
             : collect();
         $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
         $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
@@ -395,8 +395,8 @@ class OrdencompraController extends Controller
             return response()->json(['message' => 'Sin permisos'], 403);
         }
         $request->validate([
-            'requisicion_id' => 'required|integer|exists:requisicion,id',
-            'requisicion_articulo_id' => 'required|integer|exists:requisicion_articulo,id',
+            'requisicion_id' => 'nullable|integer|exists:requisicion,id',
+            'requisicion_articulo_id' => 'nullable|integer|exists:requisicion_articulo,id',
             'articulo_id' => 'required|integer|exists:articulo,id',
             'fecha_referencia' => 'nullable|date',
             'proveedor_id' => 'nullable|integer|exists:proveedor,id',
@@ -422,16 +422,28 @@ class OrdencompraController extends Controller
         $cpId = $request->query('condicionpago_id');
         $cpId = ($cpId !== null && $cpId !== '' && (int) $cpId > 0) ? (int) $cpId : null;
 
-        $data = $opcionesPrecioService->opcionesLinea(
-            (int) $request->query('requisicion_id'),
-            (int) $request->query('requisicion_articulo_id'),
-            (int) $request->query('articulo_id'),
-            $proveedorId,
-            $ccId,
-            $ceId,
-            $cpId,
-            $fechaRef
-        );
+        $reqId = (int) $request->query('requisicion_id', 0);
+        $reqArtId = (int) $request->query('requisicion_articulo_id', 0);
+        $articuloId = (int) $request->query('articulo_id');
+
+        if ($reqId > 0 && $reqArtId > 0) {
+            $data = $opcionesPrecioService->opcionesLinea(
+                $reqId,
+                $reqArtId,
+                $articuloId,
+                $proveedorId,
+                $ccId,
+                $ceId,
+                $cpId,
+                $fechaRef
+            );
+        } else {
+            $data = $opcionesPrecioService->opcionesLineaLibre(
+                $articuloId,
+                $proveedorId,
+                $fechaRef
+            );
+        }
 
         if (isset($data['message'])) {
             return response()->json($data, 422);
@@ -1463,6 +1475,9 @@ class OrdencompraController extends Controller
         }
 
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
+            : collect();
         $centrocosto_query = $this->centrocostoRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $formapago_query = $this->formapagoRepository->all();
@@ -1583,6 +1598,7 @@ class OrdencompraController extends Controller
         return view('compras.ordencompra.editar', compact(
             'data',
             'empresa_query',
+            'sala_query',
             'centrocosto_query',
             'moneda_query',
             'formapago_query',

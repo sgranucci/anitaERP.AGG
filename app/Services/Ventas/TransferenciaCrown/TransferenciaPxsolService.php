@@ -9,6 +9,7 @@ use App\Support\Ventas\TransferenciaCrown\PxsolArcaArchivoParser;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownArcaTipos;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownAsientoBuilder;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
+use Carbon\Carbon;
 use RuntimeException;
 
 /**
@@ -20,6 +21,7 @@ final class TransferenciaPxsolService
         private readonly PxsolArcaArchivoParser $parser,
         private readonly TransferenciaCrownAsientoBuilder $asientos,
         private readonly TransferenciaCrownFacturaWriter $writer,
+        private readonly TransferenciaCrownAnitaReplicaDesdeErpSupport $replicaAnita,
     ) {
     }
 
@@ -45,7 +47,7 @@ final class TransferenciaPxsolService
             'filas' => $filas,
             'resumen' => $this->resumen($filas),
             'advertencias' => [
-                'Solo se graba en el ERP. No escribe en Anita (ni venta ni asiento/ctamov).',
+                'Se graba en el ERP y se replica la cabecera a Anita (venta + vencae). El asiento queda solo en el ERP.',
                 'Cada fila entra con el tipo que elegiste. Havanna y PXSOL usan la misma imputación: la del punto de venta del archivo (venta, efectivo y tarjetas), cargada en Cuentas automáticas.',
                 'Si la factura ya está en el ERP y no tiene asiento, se lo crea y engancha. El asiento manda el total a efectivo, igual que el C.',
             ],
@@ -56,6 +58,18 @@ final class TransferenciaPxsolService
      * @param  list<array<string, mixed>>  $filas
      * @return array{grabados: int, enganchados: int, asientos: int, total_grabado: float, total_enganchado: float, errores: list<string>}
      */
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return array{
+     *   grabados: int,
+     *   enganchados: int,
+     *   asientos: int,
+     *   replicadas_anita: int,
+     *   total_grabado: float,
+     *   total_enganchado: float,
+     *   errores: list<string>
+     * }
+     */
     public function confirmar(array $filas, int $usuarioId): array
     {
         ini_set('memory_limit', '1024M');
@@ -63,6 +77,7 @@ final class TransferenciaPxsolService
 
         $grabados = 0;
         $enganchados = 0;
+        $replicadasAnita = 0;
         $totalGrabado = 0.0;
         $totalEnganchado = 0.0;
         $errores = [];
@@ -75,14 +90,25 @@ final class TransferenciaPxsolService
             $signo = TransferenciaCrownComprobante::esCredito($fila) ? -1 : 1;
             $importe = round($signo * abs((float) ($fila['total'] ?? 0)), 2);
             try {
+                $fila = $this->asegurarVtoCae($fila);
                 if ($estado === 'enganchar') {
                     $this->writer->enganchar($fila, $usuarioId, 'Importación ARCA '.$etiqueta);
                     $enganchados++;
                     $totalEnganchado = round($totalEnganchado + $importe, 2);
+                    $ventaId = (int) ($fila['venta_id'] ?? 0);
                 } else {
-                    $this->writer->grabar($fila, $usuarioId, 'Importación ARCA '.$etiqueta);
+                    $grabado = $this->writer->grabar($fila, $usuarioId, 'Importación ARCA '.$etiqueta);
                     $grabados++;
                     $totalGrabado = round($totalGrabado + $importe, 2);
+                    $ventaId = (int) ($grabado['venta_id'] ?? 0);
+                }
+                if ($ventaId > 0) {
+                    $rep = $this->replicaAnita->replicarVentaId($ventaId);
+                    if ($rep['ok']) {
+                        $replicadasAnita++;
+                    } else {
+                        $errores[] = $etiqueta.': ERP OK; Anita: '.$rep['mensaje'];
+                    }
                 }
             } catch (\Throwable $e) {
                 $errores[] = $etiqueta.': '.$e->getMessage();
@@ -93,10 +119,36 @@ final class TransferenciaPxsolService
             'grabados' => $grabados,
             'enganchados' => $enganchados,
             'asientos' => $grabados + $enganchados,
+            'replicadas_anita' => $replicadasAnita,
             'total_grabado' => $totalGrabado,
             'total_enganchado' => $totalEnganchado,
             'errores' => $errores,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function asegurarVtoCae(array $fila): array
+    {
+        if (trim((string) ($fila['fechavencimientocae'] ?? '')) !== '') {
+            return $fila;
+        }
+        if (trim((string) ($fila['cae'] ?? '')) === '') {
+            return $fila;
+        }
+        $fecha = trim((string) ($fila['fecha'] ?? ''));
+        if ($fecha === '') {
+            return $fila;
+        }
+        try {
+            $fila['fechavencimientocae'] = Carbon::parse($fecha)->addDays(10)->format('Y-m-d');
+        } catch (\Throwable) {
+            // sin vto: la replica Anita puede omitir vencae
+        }
+
+        return $fila;
     }
 
     /**

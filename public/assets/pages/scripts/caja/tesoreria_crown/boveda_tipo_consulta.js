@@ -6,6 +6,15 @@
         return campo ? campo.value : '';
     }
 
+    function fechaJornada() {
+        var wrap = document.getElementById('tc-boveda-subtipo-wrap');
+        if (wrap && wrap.getAttribute('data-fecha-jornada')) {
+            return wrap.getAttribute('data-fecha-jornada');
+        }
+        var campo = document.querySelector('[data-fecha-jornada], input[name="fecha_jornada"], #fecha_jornada');
+        return campo ? (campo.getAttribute('data-fecha-jornada') || campo.value || '') : '';
+    }
+
     function aplicarTipo(tipo) {
         var hidden = document.getElementById('boveda_tipo_id');
         var codigo = document.getElementById('boveda_tipo_codigo');
@@ -67,7 +76,8 @@
         }
         window.jQuery.get(window.carpetaBase + '/caja/tesoreria-crown/boveda/resolver-tipo', {
             sala_id: salaId(),
-            codigo: texto
+            codigo: texto,
+            fecha: fechaJornada()
         }).done(function (respuesta) {
             if (!respuesta || !respuesta.ok) {
                 limpiarTipo(campo);
@@ -159,7 +169,7 @@
             type: 'POST',
             dataType: 'json',
             headers: { 'X-CSRF-TOKEN': window.jQuery('meta[name="csrf-token"]').attr('content') },
-            data: { sala_id: salaId(), consulta: consulta || '' }
+            data: { sala_id: salaId(), consulta: consulta || '', fecha: fechaJornada() }
         }).done(function (respuesta) {
             cuerpo.textContent = '';
             var lista = (respuesta && respuesta.data) || [];
@@ -240,12 +250,13 @@
         }
         window.jQuery.get(window.carpetaBase + '/caja/tesoreria-crown/boveda/resolver-tipo', {
             sala_id: salaId(),
-            codigo: texto
+            codigo: texto,
+            fecha: fechaJornada()
         }).done(function (respuesta) {
             if (!respuesta || !respuesta.ok) {
                 limpiarTipo(campo);
                 campo.setAttribute('data-invalido', '1');
-                avisarCodigo(campo, 'Código de transacción inexistente.');
+                avisarCodigo(campo, (respuesta && respuesta.mensaje) || 'Código de transacción inexistente.');
                 return;
             }
             aplicarTipo(respuesta.tipo);

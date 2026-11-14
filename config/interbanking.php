@@ -55,6 +55,8 @@
  *
  * Transferencia a CBU (Confección de Transferencias):
  * - PHP: `app(InterbankingService::class)->crearTransferenciaACbu($empresaId, […])`.
+ * - Auth distinta a consultas: `grant_type=password` + Operador API
+ *   (`INTERBANKING_OPERADOR_*`, scope `INTERBANKING_CONFECCION_SCOPE`).
  * - OP / I-E → `POST …/v2/transfers/confection/supplier`
  * - Retiro juego / terceros → `POST …/v2/transfers/confection/third-party`
  * - Seguimiento: `GET …/v1/transfers/asynchronous-process/{idProceso}`
@@ -98,6 +100,10 @@ $transferenciaCbu = [
         'INTERBANKING_TRANSFERENCIA_PROCESO_ASYNC_URL',
         $apiProdBase.'/v1/transfers/asynchronous-process'
     ),
+    'operador_api_clave_sistema' => (string) env('INTERBANKING_OPERADOR_CLAVE_SISTEMA', ''),
+    'operador_api_usuario' => (string) env('INTERBANKING_OPERADOR_USUARIO', ''),
+    'operador_api_password' => (string) env('INTERBANKING_OPERADOR_PASSWORD', ''),
+    'confeccion_scope' => (string) env('INTERBANKING_CONFECCION_SCOPE', 'confeccion-transferencias'),
 ];
 
 switch (strtoupper(config('app.empresa'))) {

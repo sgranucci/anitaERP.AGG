@@ -228,4 +228,16 @@ return [
     'comprobante_escritura_lock_segundos' => max(30, (int) env('COMPRAS_COMPROBANTE_ESCRITURA_LOCK_SEGUNDOS', 120)),
     'comprobante_escritura_lock_espera_segundos' => max(5, (int) env('COMPRAS_COMPROBANTE_ESCRITURA_LOCK_ESPERA', 30)),
 
+    /*
+    | Envío masivo de OP al proveedor: corre en cola (reports-mail) para no cortar
+    | el browser por Gateway Timeout. Al terminar avisa por mail al operador.
+    */
+    'pagoproveedor_envio_masivo' => [
+        'cola' => env('COMPRAS_OP_ENVIO_MASIVO_COLA', 'reports-mail'),
+        'segundos_por_op' => max(20, (int) env('COMPRAS_OP_ENVIO_MASIVO_SEGUNDOS_POR_OP', 45)),
+        'timeout_minimo' => max(300, (int) env('COMPRAS_OP_ENVIO_MASIVO_TIMEOUT_MIN', 600)),
+        'timeout_maximo' => max(600, (int) env('COMPRAS_OP_ENVIO_MASIVO_TIMEOUT_MAX', 5400)),
+        'unique_for' => max(600, (int) env('COMPRAS_OP_ENVIO_MASIVO_UNIQUE_FOR', 7200)),
+    ],
+
 ];

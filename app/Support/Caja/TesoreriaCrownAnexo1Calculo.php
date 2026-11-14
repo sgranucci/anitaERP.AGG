@@ -16,8 +16,9 @@ use RuntimeException;
  * con el join de efeboveda y rendmbill: ese cruce recorre todo el detalle
  * de billetes y es lo que demoraba la pantalla.
  *
- * Drop, propina, clientes y caja inicial: solo ERP. Si falta el dato, queda
+ * Drop, clientes y caja inicial: solo ERP. Si falta el dato, queda
  * en 0 / vacío con aviso para cargarlo o importarlo; no hay lectura live a Anita.
+ * Propina empleados y depósito propina no entran (reporte propinas por casino).
  * Caja inicial: `caja_final_viii` de la jornada anterior (total l-estboveda);
  * si falta, se calcula y se persiste.
  * `caja_final_dia` / `caja_final_mes` son la caja final por variación del Anexo I
@@ -130,7 +131,7 @@ final class TesoreriaCrownAnexo1Calculo
         if (abs($slotPoder['dia']) < 0.001 && abs($slotPoder['mes']) < 0.001 && abs($slotPoder['anio']) < 0.001) {
             $avisos[] = 'Poder público de slot en cero: falta subtotal de soft count o resultado de slots del día.';
         }
-        $propina = $valor('propina');
+        // Propina empleados / depósito propina: fuera del Anexo I (reporte propinas por casino).
         $torneo = $valor('torneo');
         $bingo = $valor('bingo');
         $online = $valor('online');
@@ -139,13 +140,12 @@ final class TesoreriaCrownAnexo1Calculo
         $bancarios = $valor('bancarios');
         $excedente = $valor('excedente');
         $recargo = $valor('recargo');
-        $otros = self::suma($poderFila, $slotPoder, $propina, $torneo, $bingo, $online, $voucher, $apuestas, $bancarios, $excedente, $recargo);
+        $otros = self::suma($poderFila, $slotPoder, $torneo, $bingo, $online, $voucher, $apuestas, $bancarios, $excedente, $recargo);
         $ingresos = self::suma($recaudacion, $otros);
 
         $compras = $valor('compras');
         $fallos = $valor('fallos');
         $deposito = $valor('deposito');
-        $depositoPropina = $valor('deposito_propina');
         $credito = $valor('credito');
         $debito = $valor('debito');
         $qr = $valor('qr');
@@ -154,7 +154,7 @@ final class TesoreriaCrownAnexo1Calculo
         $ctacte = $valor('ctacte');
         $transferencia = $valor('transferencia');
         $otrosEgresos = $valor('otros_egresos');
-        $egresos = self::suma($compras, $fallos, $deposito, $depositoPropina, $credito, $debito, $qr, $dolares, $euros, $ctacte, $transferencia, $otrosEgresos);
+        $egresos = self::suma($compras, $fallos, $deposito, $credito, $debito, $qr, $dolares, $euros, $ctacte, $transferencia, $otrosEgresos);
         $variacion = self::resta($ingresos, $egresos);
 
         $finalDia = $inicial['dia'] === null ? null : round($variacion['dia'] + $inicial['dia'], 2);
@@ -179,7 +179,6 @@ final class TesoreriaCrownAnexo1Calculo
         $filas[] = self::tot('Total recaudación', $recaudacion);
         $filas[] = self::lin('Fichas poder público (anexo II)', $poderFila);
         $filas[] = self::lin('Fichas poder público slot (anexo II)', $slotPoder);
-        $filas[] = self::lin('Recaudación propina empleados (anexo II)', $propina);
         $filas[] = self::lin('Torneos (anexo II)', $torneo);
         $filas[] = self::lin('Bingo (anexo II)', $bingo);
         $filas[] = self::lin('On-line', $online);
@@ -194,7 +193,6 @@ final class TesoreriaCrownAnexo1Calculo
         $filas[] = self::lin('Compras y gastos en efectivo y pagos de cuenta corriente (anexo VI)', $compras);
         $filas[] = self::lin('Anticipos a cuenta de sueldo y fallos de caja (anexo VII)', $fallos);
         $filas[] = self::lin('Depósito efectivo', $deposito);
-        $filas[] = self::lin('Depósito propina', $depositoPropina);
         $filas[] = self::lin('Tarjetas de crédito', $credito);
         $filas[] = self::lin('Tarjetas de débito', $debito);
         $filas[] = self::lin('Total QR', $qr);
@@ -276,16 +274,8 @@ final class TesoreriaCrownAnexo1Calculo
         $out['gastro'] = $ventaContado('G');
         $out['hotel'] = $ventaContado('H');
 
-        $propinaErp = 0.0;
-        foreach (self::propinasFilas($jornada) as $fila) {
-            $propinaErp += (float) $fila->propina;
-        }
-        $propinaErp = round($propinaErp, 2);
-        // Propina empleados = rendición tipo E. Mesa (tipo F) se resta en sala; no se suma acá.
-        $out['propina'] = round((float) ($porTipo['E']['resultado'] ?? 0), 2);
-        if (abs($propinaErp) < 0.001 && abs($out['propina']) < 0.001) {
-            $avisos[] = 'Propina en cero: cargá la propina en el estado final de mesas (ERP) o en la rendición de propina.';
-        }
+        // Propina empleados / depósito propina ya no entran al Anexo I (reporte propinas por casino).
+        $out['propina'] = 0.0;
 
         foreach ($resumen['filas'] as $fila) {
             if (! empty($fila['propina'])) {
@@ -325,7 +315,7 @@ final class TesoreriaCrownAnexo1Calculo
         $out['fallos'] = round($out['fallos'] + $sumarCod(...TesoreriaCrownAnexo7Calculo::CODIGOS_BOVEDA_FALLO), 2);
         $out['compras'] = $sumarCod(2);
         $out['deposito'] = $sumarCod(3, 22);
-        $out['deposito_propina'] = $sumarCod(7, 24);
+        $out['deposito_propina'] = 0.0;
         $out['credito'] = round($out['credito'] + $sumarCod(10), 2);
         $out['otros_egresos'] = $sumarCod(14, 30);
         $out['dolares'] = TesoreriaCrownBovedaMonedaExtranjeraPesosSupport::totalJornada(

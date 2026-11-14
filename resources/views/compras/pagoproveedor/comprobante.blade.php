@@ -153,7 +153,12 @@
         @forelse ($aplicaciones as $apl)
             <tr>
                 <td>{{ $apl['fecha'] }}</td>
-                <td>{{ $apl['numero'] }}</td>
+                <td>
+                    {{ $apl['numero'] }}
+                    @if (trim((string) ($apl['detalle'] ?? '')) !== '')
+                        <div class="muted" style="margin-top:1px;line-height:1.25;">{{ $apl['detalle'] }}</div>
+                    @endif
+                </td>
                 <td>{{ $apl['nro_int'] }}</td>
                 <td class="num">{{ number_format($apl['monto'], 2, ',', '.') }}</td>
                 <td>{{ $apl['moneda'] }}</td>

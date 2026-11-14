@@ -13,6 +13,9 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * - listapmov: listpv_nro, listpv_nro_orden, listpv_fecha, listpv_articulo,
  *   listpv_precio, listpv_proveedor
  *
+ * Crown (verificado 13/nov/2026 en /usr2/casino compras): igual que AGG pero
+ * sin `lispm_cod_mon` (Informix 217 si se pide).
+ *
  * AGG / otros: mismas tablas con columnas extra (estado, nombre lista, moneda,
  * usuario, descripción, cód. art. proveedor, descuento).
  */
@@ -38,6 +41,22 @@ final class ListaprecioProveedorAnitaEsquemaSupport
                 'lispm_cond_pago',
                 'lispm_cond_compra',
                 'lispm_nombre_prov',
+            ];
+        }
+
+        // Crown: sin moneda en listapmae
+        if (EntornoEmpresaSupport::esCrown()) {
+            return [
+                'lispm_nro',
+                'lispm_proveedor',
+                'lispm_fecha',
+                'lispm_cond_entrega',
+                'lispm_cond_pago',
+                'lispm_cond_compra',
+                'lispm_nombre_prov',
+                'lispm_estado',
+                'lispm_nombre_lista',
+                'lispm_usuario',
             ];
         }
 

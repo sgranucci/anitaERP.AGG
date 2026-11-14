@@ -138,8 +138,8 @@ class TesoreriaCrownBovedaListadoFiltros
             ->selectRaw(
                 "SUM(l.cantidad * v.denominacion * CASE"
                 ." WHEN st.mueve_billetaje = 0 THEN 0"
-                ." WHEN t.signo = '0' THEN 1"
-                ." WHEN t.signo = '1' THEN -1"
+                ." WHEN COALESCE(NULLIF(st.signo, ''), t.signo) = '0' THEN 1"
+                ." WHEN COALESCE(NULLIF(st.signo, ''), t.signo) = '1' THEN -1"
                 .' ELSE 0 END) as importe'
             );
 

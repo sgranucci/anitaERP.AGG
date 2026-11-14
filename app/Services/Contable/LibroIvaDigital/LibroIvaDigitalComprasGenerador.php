@@ -5,6 +5,7 @@ namespace App\Services\Contable\LibroIvaDigital;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
@@ -77,6 +78,7 @@ class LibroIvaDigitalComprasGenerador
                     $letraAnita,
                     (int) ($compra['com_sucursal'] ?? 0),
                     (int) ($compra['com_nro'] ?? 0),
+                    ComprobanteProveedorUnicidadSupport::esMarcaFce($compra['com_es_fce'] ?? 'N'),
                 );
                 $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
 
@@ -363,6 +365,7 @@ class LibroIvaDigitalComprasGenerador
             $letra,
             (int) $cp->sucursal,
             (int) $cp->numerocomprobante,
+            (bool) ($cp->es_fce ?? false),
         );
     }
 
@@ -380,7 +383,11 @@ class LibroIvaDigitalComprasGenerador
         }
 
         $codigoAfip = (string) ($cp->tipotransaccion_compras->codigoafip ?? '001');
-        $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra);
+        $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteCompras(
+            $codigoAfip,
+            $letra,
+            (bool) ($cp->es_fce ?? false),
+        );
         $puntoVenta = (int) $cp->sucursal;
         $numero = (int) $cp->numerocomprobante;
 

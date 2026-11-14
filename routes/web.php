@@ -3475,6 +3475,7 @@ Route::post('caja/tesoreria-crown/movimiento/{id}/firmar-cajero', 'Caja\Tesoreri
 Route::post('caja/tesoreria-crown/movimiento/{id}/blanquear-pin-cajero', 'Caja\TesoreriaCrownComprobanteController@blanquearPinCajero')->name('blanquear_pin_tesoreria_crown_movimiento')->middleware('modo.consulta');
 Route::post('caja/tesoreria-crown/movimiento/{id}/cierre-fiscal-manual', 'Caja\TesoreriaCrownComprobanteController@cierreFiscalManual')->name('cierre_fiscal_manual_tesoreria_crown_movimiento')->middleware('modo.consulta');
 Route::post('caja/tesoreria-crown/movimiento/{id}/volver-borrador', 'Caja\TesoreriaCrownComprobanteController@volverABorrador')->name('volver_borrador_tesoreria_crown_movimiento')->middleware('modo.consulta');
+Route::delete('caja/tesoreria-crown/movimiento/{id}', 'Caja\TesoreriaCrownComprobanteController@eliminar')->name('eliminar_tesoreria_crown_movimiento')->middleware('modo.consulta');
 Route::post('caja/tesoreria-crown/movimiento/{id}/vincular-cajero', 'Caja\TesoreriaCrownComprobanteController@vincularCajero')->name('vincular_cajero_tesoreria_crown_movimiento')->middleware('modo.consulta');
 Route::post('caja/tesoreria-crown/movimiento/{id}/no-conforme', 'Caja\TesoreriaCrownComprobanteController@noConforme')->name('noconforme_tesoreria_crown_movimiento')->middleware('modo.consulta');
 Route::post('caja/tesoreria-crown/movimiento/{id}/resolver-no-conforme', 'Caja\TesoreriaCrownComprobanteController@resolverNoConforme')->name('resolver_noconforme_tesoreria_crown_movimiento')->middleware('modo.consulta');

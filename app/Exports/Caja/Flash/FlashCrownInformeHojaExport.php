@@ -3,6 +3,7 @@
 namespace App\Exports\Caja\Flash;
 
 use App\Support\Caja\Flash\FlashCrownInformeSupport;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Export\ExcelNumericCellsSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -41,6 +42,7 @@ class FlashCrownInformeHojaExport implements FromView, ShouldAutoSize, WithEvent
             'titulo' => $this->titulo,
             'modo_excel' => true,
             'seccion' => $this->seccion,
+            'formatoNumero' => ExcelFormatoNumero::AUTO,
         ]);
     }
 
@@ -49,15 +51,39 @@ class FlashCrownInformeHojaExport implements FromView, ShouldAutoSize, WithEvent
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $sheet->freezePane('A3');
-                // Fila 1 título, 2 generado; datos desde 3. Col A = etiquetas.
-                ExcelNumericCellsSupport::forzarRangoDatos(
-                    $sheet,
-                    3,
-                    2,
-                    [],
-                    '#,##0.00',
-                );
+                $formato = FlashCrownInformeSupport::normalizarFormato($this->formato);
+                $mascara = ExcelFormatoNumero::mascara(2);
+
+                // Filas 1–2: título / generado. Luego thead de la tabla; datos debajo.
+                // Forzar NÚMERO real + máscara de miles (Excel los muestra según región de la PC).
+                if ($formato === FlashCrownInformeSupport::FORMATO_DAILY) {
+                    // thead: grupos + columnas → datos desde fila 5. A=Day B=Fecha.
+                    $sheet->freezePane('A5');
+                    ExcelNumericCellsSupport::forzarRangoDatos($sheet, 5, 3, [], $mascara);
+                } elseif ($formato === FlashCrownInformeSupport::FORMATO_GAMING) {
+                    // 1 título, 2 generado, 3 thead, 4+ casino/datos (títulos de casino = texto, se ignoran).
+                    $headerRow = 3;
+                    $sheet->freezePane('A'.($headerRow + 1));
+                    $lastCol = $sheet->getHighestColumn($headerRow);
+                    $sheet->getStyle('A'.$headerRow.':'.$lastCol.$headerRow)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'color' => ['rgb' => '17202A'],
+                            'size' => 11,
+                        ],
+                    ]);
+                    ExcelNumericCellsSupport::forzarRangoDatos(
+                        $sheet,
+                        $headerRow + 1,
+                        2,
+                        [],
+                        $mascara,
+                    );
+                } else {
+                    // Completo: thead fila 3, datos desde 4. A=Sala.
+                    $sheet->freezePane('A4');
+                    ExcelNumericCellsSupport::forzarRangoDatos($sheet, 4, 2, [], $mascara);
+                }
             },
         ];
     }

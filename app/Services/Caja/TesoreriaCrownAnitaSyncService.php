@@ -422,6 +422,12 @@ class TesoreriaCrownAnitaSyncService
         return $plan;
     }
 
+    /** Códigos de tipo solo Crown (no vienen de Anita / no se insertan desde transmae). */
+    private const TIPOS_CROWN_ONLY = [43, 44];
+
+    /** Códigos con nombre/abrev local Crown (no pisar desde Anita). */
+    private const TIPOS_NOMBRE_LOCAL = [6, 25, 30];
+
     /**
      * @param  list<object>  $filas
      * @return array{leer: int, crear: int, actualizar: int, omitir: int, filas: list<array<string, mixed>>, avisos: list<string>}
@@ -438,6 +444,14 @@ class TesoreriaCrownAnitaSyncService
 
                 continue;
             }
+            // ECCH/BGO y similares: solo catálogo Crown, no crear desde Anita.
+            if (in_array($codigo, self::TIPOS_CROWN_ONLY, true)) {
+                $plan['omitir']++;
+
+                continue;
+            }
+            $activoAnita = strtoupper(trim((string) ($fila->transm_estado ?? 'A'))) !== 'S'
+                && ! str_starts_with($nombre, 'NO USAR');
             $datos = [
                 'sala_id' => $salaId,
                 'codigo' => $codigo,
@@ -445,8 +459,7 @@ class TesoreriaCrownAnitaSyncService
                 'nombre' => mb_substr($nombre, 0, 40),
                 'signo' => substr(trim((string) ($fila->transm_signo ?? '2')), 0, 1),
                 'operacion' => substr(trim((string) ($fila->transm_operacion ?? '0')), 0, 1),
-                'activo' => strtoupper(trim((string) ($fila->transm_estado ?? 'A'))) !== 'S'
-                    && ! str_starts_with($nombre, 'NO USAR'),
+                'activo' => $activoAnita,
             ];
             $existente = TesoreriaCrownBovedaTipo::query()
                 ->where('sala_id', $salaId)
@@ -458,15 +471,31 @@ class TesoreriaCrownAnitaSyncService
 
                 continue;
             }
-            $cambia = $existente->abreviatura !== $datos['abreviatura']
-                || $existente->nombre !== $datos['nombre']
-                || (string) $existente->signo !== $datos['signo']
-                || (string) $existente->operacion !== $datos['operacion']
-                || (bool) $existente->activo !== $datos['activo'];
+            // No tocar vigencia ni reabrir tipos ya cerrados por catálogo unificado.
+            unset($datos['sala_id'], $datos['codigo']);
+            if ($existente->vigente_hasta !== null) {
+                unset($datos['activo']);
+            }
+            if (in_array($codigo, self::TIPOS_NOMBRE_LOCAL, true)) {
+                unset($datos['abreviatura'], $datos['nombre']);
+            }
+            $cambia = false;
+            $payload = [];
+            foreach ($datos as $campo => $valor) {
+                $actual = $existente->{$campo};
+                $distinto = match ($campo) {
+                    'activo' => (bool) $actual !== (bool) $valor,
+                    'signo', 'operacion' => (string) $actual !== (string) $valor,
+                    default => (string) $actual !== (string) $valor,
+                };
+                if ($distinto) {
+                    $payload[$campo] = $valor;
+                    $cambia = true;
+                }
+            }
             if ($cambia) {
-                unset($datos['sala_id'], $datos['codigo']);
                 $plan['actualizar']++;
-                $plan['filas'][] = ['accion' => 'actualizar', 'id' => $existente->id, 'datos' => $datos];
+                $plan['filas'][] = ['accion' => 'actualizar', 'id' => $existente->id, 'datos' => $payload];
 
                 continue;
             }

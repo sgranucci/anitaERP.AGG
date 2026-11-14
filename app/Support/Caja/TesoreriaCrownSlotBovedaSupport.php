@@ -36,22 +36,31 @@ final class TesoreriaCrownSlotBovedaSupport
         if ($deposito === null) {
             return 'No hay depósito Bóveda en esta sala para asentar el CashBox.';
         }
-        $tipo = TesoreriaCrownBovedaTipo::query()
+        $slot->loadMissing('jornada');
+        $fecha = $slot->jornada?->fecha;
+        $qTipo = TesoreriaCrownBovedaTipo::query()
             ->where('sala_id', $slot->sala_id)
             ->where('abreviatura', 'INGR')
-            ->where('activo', true)
-            ->first();
+            ->where('activo', true);
+        TesoreriaCrownBovedaVigenciaSupport::aplicarVigenteEn(
+            $qTipo,
+            TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fecha)
+        );
+        $tipo = $qTipo->first();
         if ($tipo === null) {
-            return 'Falta el tipo INGR para asentar el CashBox en bóveda.';
+            return 'Falta el tipo INGR vigente para asentar el CashBox en bóveda.';
         }
+        $subtipo = TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id, $fecha)
+            ->firstWhere('codigo', 'ENC');
 
-        DB::transaction(function () use ($slot, $usuario, $deposito, $tipo) {
+        DB::transaction(function () use ($slot, $usuario, $deposito, $tipo, $subtipo) {
             $mov = TesoreriaCrownBoveda::query()->create([
                 'sala_id' => $slot->sala_id,
                 'empresa_id' => $slot->empresa_id,
                 'jornada_id' => $slot->jornada_id,
                 'deposito_id' => $deposito->id,
                 'tipo_id' => $tipo->id,
+                'subtipo_id' => $subtipo?->id,
                 'numero' => TesoreriaCrownNumeradorSupport::siguiente((int) $slot->sala_id, 'V'),
                 'estado' => TesoreriaCrownBoveda::CONFIRMADO,
                 'comentario' => mb_substr(

@@ -57,16 +57,18 @@ $(function () {
 
 	$(document).on('click', '.consultalistasprecio', function (event) {
 		event.preventDefault();
-		var $row = $(this).closest('tr.item-requisicion-articulo');
+		var $row = $(this).closest('tr.item-requisicion-articulo, tr.item-ordencompra-articulo');
 		var articuloId = parseInt($row.find('.articulo_id').val(), 10);
 		var hayArticulo = !!(articuloId && articuloId > 0);
 
 		var proveedorVal = $('#proveedor_id').val();
 		var proveedorId = proveedorVal ? parseInt(proveedorVal, 10) : null;
 		var hayProveedor = !!(proveedorId && proveedorId > 0);
+		var esOc = $row.hasClass('item-ordencompra-articulo');
+		var etiquetaDoc = esOc ? 'orden de compra' : 'requisición';
 
 		if (!hayArticulo && !hayProveedor) {
-			alert('Seleccione un artículo, o cargue un proveedor en la requisición, para consultar listas de precios.');
+			alert('Seleccione un artículo, o cargue un proveedor en la ' + etiquetaDoc + ', para consultar listas de precios.');
 			return;
 		}
 
@@ -132,8 +134,8 @@ $(function () {
 						ref +
 						'. ' +
 						(data.filtrado_por_proveedor
-							? 'Proveedor cargado en la requisición: solo listas ACTIVAS de ese proveedor y precio vigente del ítem a esa fecha.'
-							: 'Sin proveedor en la requisición: todas las listas ACTIVAS que incluyen el ítem; orden por precio neto (tras % descuento) para comparar. La fila con menor precio neto se resalta.');
+							? 'Proveedor cargado en la ' + etiquetaDoc + ': solo listas ACTIVAS de ese proveedor y precio vigente del ítem a esa fecha.'
+							: 'Sin proveedor en la ' + etiquetaDoc + ': todas las listas ACTIVAS que incluyen el ítem; orden por precio neto (tras % descuento) para comparar. La fila con menor precio neto se resalta.');
 				}
 				$sub.text(subt);
 

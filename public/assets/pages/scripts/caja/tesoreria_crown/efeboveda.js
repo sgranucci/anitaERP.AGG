@@ -60,7 +60,12 @@
             select.removeAttribute('required');
             return;
         }
-        fetch(url + '?tipo_id=' + encodeURIComponent(tipoId), {
+        var fecha = wrap.getAttribute('data-fecha-jornada') || '';
+        var qs = '?tipo_id=' + encodeURIComponent(tipoId);
+        if (fecha) {
+            qs += '&fecha=' + encodeURIComponent(fecha);
+        }
+        fetch(url + qs, {
             headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
         }).then(function (r) { return r.json(); }).then(function (data) {
             var filas = data.data || [];
@@ -73,9 +78,12 @@
             filas.forEach(function (fila) {
                 var opt = document.createElement('option');
                 opt.value = fila.id;
-                opt.textContent = fila.etiqueta;
+                opt.textContent = fila.etiqueta + (fila.efecto ? ' (' + fila.efecto + ')' : '');
                 opt.setAttribute('data-codigo', fila.codigo || '');
                 opt.setAttribute('data-mueve-billetaje', fila.mueve_billetaje === false || fila.mueve_billetaje === 0 ? '0' : '1');
+                if (fila.signo) {
+                    opt.setAttribute('data-signo', fila.signo);
+                }
                 select.appendChild(opt);
             });
             wrap.classList.remove('d-none');

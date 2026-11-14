@@ -41,7 +41,13 @@ class Listaprecio_ProveedorController extends Controller
         can('listar-listaprecio-proveedor');
 
         if (! Listaprecio_Proveedor::query()->exists()) {
-            $this->repository->sincronizarConAnita();
+            try {
+                $this->repository->sincronizarConAnita();
+            } catch (\Throwable $e) {
+                Log::warning('listaprecio_proveedor.sincronizar_anita_fallo', [
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
         }
 
         $filtros = ListaprecioProveedorListadoFiltros::resolverDesdeRequest($request);

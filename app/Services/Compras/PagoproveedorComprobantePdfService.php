@@ -122,6 +122,7 @@ class PagoproveedorComprobantePdfService
             'pagoproveedor_comprobantes.proveedor_cuentacorrientes.comprobante_proveedores.tipotransaccion_compras',
             'pagoproveedor_comprobantes.proveedor_cuentacorrientes.pagoproveedores',
             'pagoproveedor_comprobantes.proveedor_cuentacorrientes.comprobante_proveedores.monedas',
+            'pagoproveedor_comprobantes.proveedor_cuentacorrientes.comprobante_proveedor_cuotas',
             'pagoproveedor_retenciones.provincias',
             'pagoproveedor_retenciones.monedas',
             'pagoproveedor_retenciones.retencionganancias',
@@ -309,6 +310,7 @@ class PagoproveedorComprobantePdfService
                 'fecha' => $fecha ? Carbon::parse($fecha)->format('d/m/Y') : '',
                 'tipo' => $tipo,
                 'numero' => $nroFmt,
+                'detalle' => $this->detalleFacturaAplicacion($pcc, $cp),
                 'nro_int' => (string) (optional($pcc)->id ?? ''),
                 'monto' => $signo * $montoDoc,
                 'moneda' => (string) (optional($apl->monedas)->abreviatura
@@ -320,6 +322,29 @@ class PagoproveedorComprobantePdfService
                 'signo' => $signo,
             ];
         })->values();
+    }
+
+    /**
+     * Detalle cargado al ingresar la factura (leyenda) o, si no hay, el de la cuota / CC.
+     */
+    private function detalleFacturaAplicacion($pcc, $cp): string
+    {
+        $leyendaCp = trim((string) (optional($cp)->leyenda ?? ''));
+        if ($leyendaCp !== '') {
+            return $leyendaCp;
+        }
+
+        $detalleCuota = trim((string) (optional(optional($pcc)->comprobante_proveedor_cuotas)->detalle ?? ''));
+        if ($detalleCuota !== '') {
+            return $detalleCuota;
+        }
+
+        $leyendaCc = trim((string) (optional($pcc)->leyenda ?? ''));
+        if ($leyendaCc === '' || str_starts_with($leyendaCc, ProveedorCuentacorrienteGrillaSupport::PREFIJO_LEYENDA_AJUSTE)) {
+            return '';
+        }
+
+        return $leyendaCc;
     }
 
     /**

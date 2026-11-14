@@ -98,6 +98,41 @@ class PagoproveedorAnitaAuditoriaCompareSupportTest extends TestCase
         $this->assertTrue(str_contains($texto, 'desbalanceado'));
     }
 
+    public function test_ctamov_pertenece_a_comprobante_detecta_colision(): void
+    {
+        $facAjena = [
+            (object) ['ctav_tipo' => ' ', 'ctav_nro' => 0, 'ctav_importe' => 850000],
+            (object) ['ctav_tipo' => ' ', 'ctav_nro' => 0, 'ctav_importe' => 850000],
+        ];
+        $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::ctamovPerteneceAComprobante(
+            $facAjena,
+            'OPP',
+            219876
+        ));
+
+        $opOk = [
+            ['ctav_tipo' => 'OPP', 'ctav_nro' => 219900, 'ctav_importe' => 5760000],
+            ['ctav_tipo' => 'OPP', 'ctav_nro' => 219900, 'ctav_importe' => 5760000],
+        ];
+        $this->assertTrue(PagoproveedorAnitaAuditoriaCompareSupport::ctamovPerteneceAComprobante(
+            $opOk,
+            'OPP',
+            219900
+        ));
+    }
+
+    public function test_lineas_caja_con_importe_ignora_cero(): void
+    {
+        $this->assertSame(0, PagoproveedorAnitaAuditoriaCompareSupport::cantidadLineasCajaConImporte([
+            (object) ['monto' => 0],
+            ['monto' => 0.001],
+        ]));
+        $this->assertSame(1, PagoproveedorAnitaAuditoriaCompareSupport::cantidadLineasCajaConImporte([
+            (object) ['monto' => 0],
+            (object) ['monto' => -60029],
+        ]));
+    }
+
     public function test_cpromae_detecta_para_dep_y_cotizacion(): void
     {
         $esperado = ChequePropioCpromaeAnitaMapper::mapear([

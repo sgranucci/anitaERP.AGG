@@ -24,6 +24,10 @@ class StkParteUnicaAnitaBridgeSupport
 
     public static function maxNumeroparteAnita(): int
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return 0;
+        }
+
         $api = new ApiAnita;
         $raw = $api->apiCall([
             'acc' => 'list',
@@ -46,6 +50,10 @@ class StkParteUnicaAnitaBridgeSupport
 
     public static function existeEnAnita(int $numeroparte): bool
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return false;
+        }
+
         $api = new ApiAnita;
         $raw = $api->apiCall([
             'acc' => 'list',
@@ -86,6 +94,10 @@ class StkParteUnicaAnitaBridgeSupport
 
     public static function insertar(Articulo_ParteUnica $parte): bool
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return true;
+        }
+
         $parte->loadMissing('articulos');
         $numeroparte = (int) $parte->numeroparte;
         if ($numeroparte <= 0) {
@@ -139,6 +151,10 @@ class StkParteUnicaAnitaBridgeSupport
 
     public static function eliminarPorClave(?Articulo $articulo, int $numeroparte): bool
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return true;
+        }
+
         if ($numeroparte <= 0) {
             return false;
         }
@@ -168,6 +184,10 @@ class StkParteUnicaAnitaBridgeSupport
      */
     public static function listarDesdeAnita(?string $whereArmado = null, ?string $limit = null): array
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return [];
+        }
+
         $api = new ApiAnita;
         $data = [
             'acc' => 'list',

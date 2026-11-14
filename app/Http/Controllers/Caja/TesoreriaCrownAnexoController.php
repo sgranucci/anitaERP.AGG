@@ -9,6 +9,8 @@ use App\Support\Caja\TesoreriaCrownAnexo2Calculo;
 use App\Support\Caja\TesoreriaCrownAnexo3AuditoriaSupport;
 use App\Support\Caja\TesoreriaCrownAnexo7Calculo;
 use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
+use App\Support\Caja\TesoreriaCrownAnexoListadoFilasSupport;
+use App\Support\Caja\TesoreriaCrownAnexoRangoSupport;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownResumenCajeroCalculo;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -320,93 +322,109 @@ class TesoreriaCrownAnexoController extends Controller
 
     public function listarAnexo8(Request $request, $formato = null)
     {
+        $desdeMenuRango = (string) $request->input('origen') === 'menu'
+            && TesoreriaCrownAnexoRangoSupport::tieneRangoEnRequest($request);
+
+        if ($desdeMenuRango) {
+            return $this->listarAnexo8PorRangoMenu($request, $formato);
+        }
+
         return $this->exportar($request, $formato, 'anexo8', function (TesoreriaCrownJornada $jornada) {
             $armado = TesoreriaCrownAnexo8Calculo::deJornada($jornada);
-            $filas = [];
-            $fichas = $armado['fichas'] ?? null;
-            if (is_array($fichas) && ($fichas['filas'] ?? []) !== []) {
-                $filas[] = ['Stock de fichas (no entra al total)', '', '', ''];
-                foreach ($fichas['filas'] as $fila) {
-                    $filas[] = [
-                        $fila['serie'].' '.$fila['descripcion'],
-                        (float) $fila['valor'],
-                        (float) $fila['cantidad'],
-                        (float) $fila['monto'],
-                    ];
-                }
-                $filas[] = ['', 'Total conversión valorizado', '', (float) $fichas['conversion_valorizada']];
-                $filas[] = ['', 'Total poder público valorizado', '', (float) $fichas['poder_valorizado']];
-                $filas[] = ['', 'Total poder público diario', '', (float) $fichas['diario_valorizado']];
-                $filas[] = ['', '', '', ''];
-            }
-            $c = $armado['componentes'] ?? null;
-            if (is_array($c)) {
-                $filas[] = ['Componentes', '', '', ''];
-                $filas[] = ['', 'Pesos en bóveda', '', (float) ($c['pesos'] ?? 0)];
-                $filas[] = ['', 'Slots (recuento)', '', (float) ($c['slots'] ?? 0)];
-                $filas[] = ['', 'Drops de mesa', '', (float) ($c['drops_mesa'] ?? 0)];
-                $filas[] = ['', 'Items resumen final', '', (float) ($c['resumen'] ?? 0)];
-                foreach ($c['resumen_detalle'] ?? [] as $item) {
-                    $filas[] = ['', '  '.$item['descripcion'], '', (float) $item['monto']];
-                }
-                if (((float) ($c['usd_pesos'] ?? 0)) > 0.001) {
-                    $filas[] = [
-                        '',
-                        'Total dolares convertidos a pesos (equiv. '.(float) ($c['usd_face'] ?? 0).' u$s)',
-                        '',
-                        (float) ($c['usd_pesos'] ?? 0),
-                    ];
-                }
-                if (((float) ($c['eur_pesos'] ?? 0)) > 0.001) {
-                    $filas[] = [
-                        '',
-                        'Total euros convertidos a pesos (equiv. '.(float) ($c['eur_face'] ?? 0).' EUR)',
-                        '',
-                        (float) ($c['eur_pesos'] ?? 0),
-                    ];
-                }
-                $filas[] = ['', 'Otras monedas segun cotiz.', '', (float) ($c['moneda_extranjera'] ?? 0)];
-                $filas[] = ['', 'Total Anexo VIII', '', (float) $armado['total']];
-                if (($c['saldo_final_anexo1'] ?? null) !== null) {
-                    $filas[] = ['', 'Saldo final Anexo I (caja por variación)', '', (float) $c['saldo_final_anexo1']];
-                    $filas[] = ['', 'Dif. final de bóveda', '', (float) ($c['dif_final_boveda'] ?? 0)];
-                }
-                $filas[] = ['', '', '', ''];
-            }
-            foreach ($armado['lugares'] as $lugar) {
-                $filas[] = [$lugar['lugar'], '', '', ''];
-                foreach ($lugar['grupos'] as $grupo) {
-                    $filas[] = [$grupo['titulo'], '', '', ''];
-                    foreach ($grupo['filas'] as $fila) {
-                        $filas[] = [
-                            '',
-                            $fila['denominacion'],
-                            (float) $fila['cantidad'],
-                            (float) $fila['monto'],
-                        ];
-                    }
-                    $filas[] = ['', 'Subtotal '.$grupo['titulo'], '', (float) $grupo['monto']];
-                }
-                $filas[] = ['', 'Total '.$lugar['lugar'], '', (float) $lugar['total']];
-            }
-            if ($armado['lugares'] !== []) {
-                $filas[] = ['', 'Total general', '', (float) $armado['total']];
-            }
 
             return [
                 'titulo' => 'Anexo VIII '.$jornada->fecha->format('d/m/Y'),
                 'subtitulo' => 'Estado de bóveda · l-estboveda.c',
                 'archivo' => 'anexo8_'.$jornada->fecha->format('Ymd'),
                 'titulo_corto' => 'Anexo VIII',
-                'columnas' => [
-                    ['label' => 'Grupo', 'ancho' => 36, 'wrap' => true],
-                    ['label' => 'Denominación', 'ancho' => 28, 'wrap' => true],
-                    ['label' => 'Cantidad', 'ancho' => 14, 'numero' => true],
-                    ['label' => 'Monto', 'ancho' => 16, 'numero' => true],
-                ],
-                'filas' => $filas,
+                'columnas' => TesoreriaCrownAnexoListadoFilasSupport::columnasAnexo8(),
+                'filas' => TesoreriaCrownAnexoListadoFilasSupport::anexo8($armado),
             ];
         });
+    }
+
+    /**
+     * Export Anexo VIII por rango: solo menú Anexos (origen=menu). El escritorio sigue con un día.
+     */
+    private function listarAnexo8PorRangoMenu(Request $request, $formato)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('listar-tesoreria-crown-anexo');
+
+        $fechas = TesoreriaCrownAnexoRangoSupport::resolverFechas($request);
+        $sala = TesoreriaCrownSalaSupport::pedida($request, TesoreriaCrownSalaSupport::salas());
+        $volver = TesoreriaCrownAnexoRangoSupport::paraQueryString(
+            $sala ? (int) $sala->id : null,
+            $fechas['fecha_desde'],
+            $fechas['fecha_hasta'],
+            [
+                'panel' => 'anexo8',
+                'consultar' => 1,
+            ]
+        );
+
+        if ($formato === null || $formato === '' || $sala === null || $fechas['fecha_desde'] === null || $fechas['fecha_hasta'] === null) {
+            return redirect()->route('tesoreria_crown_anexo1', $volver);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $jornadas = TesoreriaCrownAnexoRangoSupport::jornadasEnRango(
+            (int) $sala->id,
+            $fechas['fecha_desde'],
+            $fechas['fecha_hasta']
+        );
+        if ($jornadas->isEmpty()) {
+            return redirect()->route('tesoreria_crown_anexo1', $volver)
+                ->with('mensaje-error', 'No hay jornadas en el rango para exportar el Anexo VIII.');
+        }
+
+        $filas = [];
+        $varios = $jornadas->count() > 1;
+        foreach ($jornadas as $jornada) {
+            if ($varios) {
+                $filas[] = TesoreriaCrownAnexoListadoFilasSupport::corteDiaAnexo8(
+                    '—— '.$jornada->fecha->format('d/m/Y').' ——'
+                );
+            }
+            $armado = TesoreriaCrownAnexo8Calculo::deJornada($jornada);
+            foreach (TesoreriaCrownAnexoListadoFilasSupport::anexo8($armado) as $fila) {
+                $filas[] = $fila;
+            }
+            if ($varios) {
+                $filas[] = TesoreriaCrownAnexoListadoFilasSupport::corteDiaAnexo8('');
+            }
+        }
+
+        $primera = $jornadas->first();
+        $ultima = $jornadas->last();
+        $archivo = $varios
+            ? 'anexo8_'.$primera->fecha->format('Ymd').'_'.$ultima->fecha->format('Ymd')
+            : 'anexo8_'.$primera->fecha->format('Ymd');
+
+        $payload = [
+            'titulo' => $varios
+                ? 'Anexo VIII '.$primera->fecha->format('d/m/Y').' al '.$ultima->fecha->format('d/m/Y')
+                : 'Anexo VIII '.$primera->fecha->format('d/m/Y'),
+            'subtitulo' => TesoreriaCrownAnexoRangoSupport::subtituloRango(
+                $fechas['fecha_desde'],
+                $fechas['fecha_hasta'],
+                $jornadas->count()
+            ).' · Estado de bóveda · l-estboveda.c',
+            'archivo' => $archivo,
+            'titulo_corto' => 'Anexo VIII',
+            'columnas' => TesoreriaCrownAnexoListadoFilasSupport::columnasAnexo8(),
+            'filas' => $filas,
+            'coleccion' => collect([(object) ['nombreempresa' => (string) ($primera->empresa->nombre ?? '')]]),
+        ];
+
+        $respuesta = TesoreriaCrownListadoDocumento::responder((string) $formato, $payload);
+        if ($respuesta) {
+            return $respuesta;
+        }
+
+        return redirect()->route('tesoreria_crown_anexo1', $volver);
     }
 
     public function auditoriaAnexo3(Request $request, int $id): JsonResponse

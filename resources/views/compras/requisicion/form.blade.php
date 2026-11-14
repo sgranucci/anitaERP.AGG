@@ -46,28 +46,23 @@
                 $esCrownForm = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown();
                 $salaIdForm = old('sala_id', (isset($data) && $data) ? ($data->sala_id ?? null) : null);
                 $salaQueryForm = $sala_query ?? collect();
+                $empresaIdDesdeSala = null;
+                if ($esCrownForm && (int) $salaIdForm > 0) {
+                    $empresaIdDesdeSala = optional($salaQueryForm->firstWhere('id', (int) $salaIdForm))->empresa_id;
+                }
+                if ($esCrownForm && $empresaIdDesdeSala === null && $salaQueryForm->count() === 1) {
+                    $empresaIdDesdeSala = optional($salaQueryForm->first())->empresa_id;
+                }
             @endphp
             @if ($esCrownForm)
-                <input type="hidden" name="empresa_id" id="empresa_id" value="{{ old('empresa_id', (isset($data) && $data) ? $data->empresa_id : (optional($salaQueryForm->firstWhere('id', (int) $salaIdForm))->empresa_id ?? optional($empresa_query->first())->id)) }}">
-                <div class="form-group row">
-                    <label for="sala_id" class="col-lg-3 control-label requerido">Sala</label>
-                    <div class="col-lg-5">
-                        <select name="sala_id" id="sala_id" class="form-control" required {{ $cabeceraSoloLectura ? 'disabled' : '' }}
-                                onchange="var o=this.options[this.selectedIndex]; if(o&&o.dataset.empresa){ document.getElementById('empresa_id').value=o.dataset.empresa; }">
-                            <option value="">Seleccione…</option>
-                            @foreach ($salaQueryForm as $sala)
-                                <option value="{{ $sala->id }}"
-                                        data-empresa="{{ $sala->empresa_id }}"
-                                        {{ (int) $salaIdForm === (int) $sala->id ? 'selected' : '' }}>
-                                    {{ $sala->codigo }} — {{ $sala->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @if ($cabeceraSoloLectura)
-                            <input type="hidden" name="sala_id" value="{{ $salaIdForm }}">
-                        @endif
-                    </div>
-                </div>
+                <input type="hidden" name="empresa_id" id="empresa_id" value="{{ old('empresa_id', (isset($data) && $data) ? $data->empresa_id : ($empresaIdDesdeSala ?? optional($empresa_query->first())->id)) }}">
+                @include('includes.form-sala-asignada', [
+                    'sala_query' => $salaQueryForm,
+                    'sala_id' => $salaIdForm,
+                    'solo_lectura' => $cabeceraSoloLectura,
+                    'col_label' => 'col-lg-3',
+                    'col_input' => 'col-lg-5',
+                ])
             @else
                 @include('includes.form-empresa-asignada', [
                     'empresa_query' => $empresa_query,

@@ -31,16 +31,31 @@ final class TesoreriaCrownBovedaSupport
     }
 
     /**
-     * Efecto del movimiento. Si el subtipo declara mueve_billetaje=false
-     * (p. ej. PROPINA / Híbrida), no altera el saldo de billetes.
+     * Efecto del movimiento.
+     * 1) mueve_billetaje=false → 0 (p. ej. PROP/Híbrida)
+     * 2) si $signoSubtipo está definido → ese signo
+     * 3) si no → signo del tipo
      */
-    public static function efectoConSubtipo(string $signo, mixed $mueveBilletaje = null): int
-    {
+    public static function efectoConSubtipo(
+        string $signo,
+        mixed $mueveBilletaje = null,
+        mixed $signoSubtipo = null
+    ): int {
         if ($mueveBilletaje !== null && ! (bool) (int) $mueveBilletaje) {
             return 0;
         }
+        $efectivo = self::signoEfectivo($signo, $signoSubtipo);
 
-        return self::efecto($signo);
+        return self::efecto($efectivo);
+    }
+
+    public static function signoEfectivo(string $signoTipo, mixed $signoSubtipo = null): string
+    {
+        if ($signoSubtipo !== null && $signoSubtipo !== '') {
+            return substr(trim((string) $signoSubtipo), 0, 1);
+        }
+
+        return substr(trim($signoTipo), 0, 1);
     }
 
     public static function efectoTexto(string $signo): string
@@ -52,13 +67,16 @@ final class TesoreriaCrownBovedaSupport
         };
     }
 
-    public static function efectoTextoConSubtipo(string $signo, mixed $mueveBilletaje = null): string
-    {
+    public static function efectoTextoConSubtipo(
+        string $signo,
+        mixed $mueveBilletaje = null,
+        mixed $signoSubtipo = null
+    ): string {
         if ($mueveBilletaje !== null && ! (bool) (int) $mueveBilletaje) {
             return 'Informativo (sin billetaje)';
         }
 
-        return self::efectoTexto($signo);
+        return self::efectoTexto(self::signoEfectivo($signo, $signoSubtipo));
     }
 
     public static function estado(string $codigo): string
@@ -102,31 +120,36 @@ final class TesoreriaCrownBovedaSupport
     /**
      * @return Collection<int, TesoreriaCrownBovedaTipo>
      */
-    public static function tiposActivos(int $salaId): Collection
+    public static function tiposActivos(int $salaId, null|string|\Carbon\CarbonInterface $fecha = null): Collection
     {
-        return TesoreriaCrownBovedaTipo::query()
+        $fechaYmd = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fecha);
+        $q = TesoreriaCrownBovedaTipo::query()
             ->where('sala_id', $salaId)
-            ->where('activo', true)
-            ->orderBy('codigo')
-            ->get();
+            ->where('activo', true);
+        TesoreriaCrownBovedaVigenciaSupport::aplicarVigenteEn($q, $fechaYmd);
+
+        return $q->orderBy('codigo')->get();
     }
 
     /**
      * Tipos que a-efeboveda deja cargar a mano. La apertura entra aunque esté inactiva.
      * La habilitación y la rendición las graba el conforme del cajero.
+     * Filtra por vigencia a la fecha de la jornada.
      *
      * @return Collection<int, TesoreriaCrownBovedaTipo>
      */
-    public static function tiposParaCarga(int $salaId): Collection
+    public static function tiposParaCarga(int $salaId, null|string|\Carbon\CarbonInterface $fecha = null): Collection
     {
-        return TesoreriaCrownBovedaTipo::query()
+        $fechaYmd = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fecha);
+        $q = TesoreriaCrownBovedaTipo::query()
             ->where('sala_id', $salaId)
             ->whereNotIn('abreviatura', ['HAB', 'REN'])
             ->where(function ($q) {
                 $q->where('activo', true)->orWhere('abreviatura', 'APER');
-            })
-            ->orderBy('codigo')
-            ->get();
+            });
+        TesoreriaCrownBovedaVigenciaSupport::aplicarVigenteEn($q, $fechaYmd);
+
+        return $q->orderBy('codigo')->get();
     }
 
     /**
@@ -195,11 +218,15 @@ final class TesoreriaCrownBovedaSupport
             ->where('b.deposito_id', $depositoId)
             ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
             ->whereDate('j.fecha', '<=', $hastaYmd)
-            ->get(['l.valor_id', 'l.cantidad', 't.signo', 'st.mueve_billetaje']);
+            ->get(['l.valor_id', 'l.cantidad', 't.signo', 'st.mueve_billetaje', 'st.signo as subtipo_signo']);
 
         $saldos = [];
         foreach ($filas as $fila) {
-            $efecto = self::efectoConSubtipo((string) $fila->signo, $fila->mueve_billetaje ?? null);
+            $efecto = self::efectoConSubtipo(
+                (string) $fila->signo,
+                $fila->mueve_billetaje ?? null,
+                $fila->subtipo_signo ?? null
+            );
             if ($efecto === 0) {
                 continue;
             }
@@ -239,13 +266,18 @@ final class TesoreriaCrownBovedaSupport
                 't.nombre as tipo_nombre',
                 't.signo',
                 'st.mueve_billetaje',
+                'st.signo as subtipo_signo',
                 'l.cantidad',
             ]);
 
         $saldo = 0.0;
         $out = [];
         foreach ($filas as $fila) {
-            $efecto = self::efectoConSubtipo((string) $fila->signo, $fila->mueve_billetaje ?? null);
+            $efecto = self::efectoConSubtipo(
+                (string) $fila->signo,
+                $fila->mueve_billetaje ?? null,
+                $fila->subtipo_signo ?? null
+            );
             if ($efecto === 0 || abs((float) $fila->cantidad) < 0.0001) {
                 continue;
             }
@@ -259,7 +291,11 @@ final class TesoreriaCrownBovedaSupport
                 'fecha' => $fecha,
                 'numero' => TesoreriaCrownNumeradorSupport::visible((int) $fila->numero),
                 'tipo' => trim((string) $fila->abreviatura.' '.(string) $fila->tipo_nombre),
-                'efecto' => self::efectoTextoConSubtipo((string) $fila->signo, $fila->mueve_billetaje ?? null),
+                'efecto' => self::efectoTextoConSubtipo(
+                    (string) $fila->signo,
+                    $fila->mueve_billetaje ?? null,
+                    $fila->subtipo_signo ?? null
+                ),
                 'cantidad' => $delta,
                 'saldo' => $saldo,
                 'comentario' => trim((string) $fila->comentario),
@@ -338,7 +374,11 @@ final class TesoreriaCrownBovedaSupport
             $movimiento->load('subtipo');
         }
         $mueveBilletaje = $movimiento->subtipo?->mueve_billetaje;
-        $efecto = self::efectoConSubtipo((string) ($movimiento->tipo->signo ?? '2'), $mueveBilletaje);
+        $efecto = self::efectoConSubtipo(
+            (string) ($movimiento->tipo->signo ?? '2'),
+            $mueveBilletaje,
+            $movimiento->subtipo?->signo
+        );
         $porCodigo = [];
         foreach ($movimiento->lineas as $linea) {
             $valor = $linea->valor;

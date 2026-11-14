@@ -116,6 +116,7 @@ class ImportarAsientosAnitaCommand extends Command
                 ['Duplicados → reemplazar', (string) $r['duplicados_reemplazar']],
                 ['Reemplazados', (string) $r['reemplazados']],
                 ['Omitidos sin movimientos', (string) $r['omitidos_sin_movimientos']],
+                ['Omitidos: comprobante ya en transferencia/venta', (string) ($r['omitidos_documento_proceso'] ?? 0)],
                 ['Cuentas faltantes (distintas)', (string) count($r['cuentas_faltantes'] ?? [])],
                 ['Errores bridge', (string) count($r['errores'] ?? [])],
             ],

@@ -18,6 +18,7 @@ use App\Support\Caja\TesoreriaCrownBovedaListadoColumnas;
 use App\Support\Caja\TesoreriaCrownBovedaListadoFiltros;
 use App\Support\Caja\TesoreriaCrownBovedaPredepositoSupport;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
+use App\Support\Caja\TesoreriaCrownBovedaVigenciaSupport;
 use App\Support\Caja\TesoreriaCrownKardexValoresSupport;
 use App\Support\Caja\TesoreriaCrownCierreCalculo;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
@@ -818,7 +819,12 @@ class TesoreriaCrownBovedaController extends Controller
      */
     private function datosCarga(int $salaId, ?TesoreriaCrownBoveda $movimiento, string $tipoPedido = '', ?string $fecha = null): array
     {
-        $tipos = TesoreriaCrownBovedaSupport::tiposParaCarga($salaId);
+        $fechaJornada = $movimiento?->jornada?->fecha?->format('Y-m-d');
+        if ($fechaJornada === null && is_string($fecha) && $fecha !== '') {
+            $parseada = \DateTime::createFromFormat('!d/m/Y', $fecha);
+            $fechaJornada = $parseada ? $parseada->format('Y-m-d') : null;
+        }
+        $tipos = TesoreriaCrownBovedaSupport::tiposParaCarga($salaId, $fechaJornada);
         $tipo = $movimiento?->tipo;
         $tipoIdOld = (int) old('tipo_id');
         if ($tipoIdOld > 0) {
@@ -839,11 +845,6 @@ class TesoreriaCrownBovedaController extends Controller
             : null;
         $grupos = $this->gruposEfectivo($salaId);
         $cantidades = $movimiento ? $movimiento->lineas->pluck('cantidad', 'valor_id') : collect();
-        $fechaJornada = $movimiento?->jornada?->fecha?->format('Y-m-d');
-        if ($fechaJornada === null && is_string($fecha) && $fecha !== '') {
-            $parseada = \DateTime::createFromFormat('!d/m/Y', $fecha);
-            $fechaJornada = $parseada ? $parseada->format('Y-m-d') : null;
-        }
         $efectivoPesos = $this->pesosDesdeGrupos($salaId, $fechaJornada, $grupos, $cantidades);
         $monedasPesos = [];
         foreach ($efectivoPesos['monedas'] ?? [] as $monedaPesos) {
@@ -879,13 +880,16 @@ class TesoreriaCrownBovedaController extends Controller
             'subtipoId' => old('subtipo_id', $movimiento?->subtipo_id ?? ''),
             'subtipoTexto' => old('subtipo_texto', $movimiento?->subtipo_texto ?? ''),
             'subtipos' => $tipo
-                ? TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id)
+                ? TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id, $fechaJornada)
                 : collect(),
         ];
     }
 
-    private function resolverTipo(int $salaId, string $texto): TesoreriaCrownBovedaTipo|string
-    {
+    private function resolverTipo(
+        int $salaId,
+        string $texto,
+        null|string|\Carbon\CarbonInterface $fecha = null
+    ): TesoreriaCrownBovedaTipo|string {
         $texto = strtoupper(trim($texto));
         if ($texto === '' || $texto === '0') {
             return 'Elegí el código de transacción.';
@@ -897,11 +901,14 @@ class TesoreriaCrownBovedaController extends Controller
             return 'Código de transacción inexistente.';
         }
 
-        return $this->tipoGuardable($tipo);
+        return $this->tipoGuardable($tipo, $fecha);
     }
 
-    private function tipoPorId(int $salaId, int $id): TesoreriaCrownBovedaTipo|string
-    {
+    private function tipoPorId(
+        int $salaId,
+        int $id,
+        null|string|\Carbon\CarbonInterface $fecha = null
+    ): TesoreriaCrownBovedaTipo|string {
         if ($id <= 0) {
             return 'Elegí el código de transacción.';
         }
@@ -910,11 +917,13 @@ class TesoreriaCrownBovedaController extends Controller
             return 'Código de transacción inexistente.';
         }
 
-        return $this->tipoGuardable($tipo);
+        return $this->tipoGuardable($tipo, $fecha);
     }
 
-    private function tipoGuardable(TesoreriaCrownBovedaTipo $tipo): TesoreriaCrownBovedaTipo|string
-    {
+    private function tipoGuardable(
+        TesoreriaCrownBovedaTipo $tipo,
+        null|string|\Carbon\CarbonInterface $fecha = null
+    ): TesoreriaCrownBovedaTipo|string {
         $abreviatura = strtoupper(trim((string) $tipo->abreviatura));
         if (in_array($abreviatura, ['HAB', 'REN'], true)) {
             return 'La habilitación y la rendición entran solas cuando el cajero firma.';
@@ -924,6 +933,13 @@ class TesoreriaCrownBovedaController extends Controller
         }
         if (stripos((string) $tipo->nombre, 'NO USAR') === 0) {
             return 'Operación no permitida.';
+        }
+        if ($fecha !== null && ! TesoreriaCrownBovedaVigenciaSupport::registroVigenteEn(
+            $tipo->vigente_desde,
+            $tipo->vigente_hasta,
+            $fecha
+        )) {
+            return 'Transacción fuera de vigencia para la fecha de la jornada.';
         }
 
         return $tipo;
@@ -1019,8 +1035,11 @@ class TesoreriaCrownBovedaController extends Controller
         }
         $salaId = (int) $request->input('sala_id');
         TesoreriaCrownSalaSupport::exigida($salaId);
+        $fecha = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha', $request->input('fecha_jornada'))
+        );
         $texto = mb_strtoupper(trim((string) $request->input('consulta')));
-        $tipos = TesoreriaCrownBovedaSupport::tiposParaCarga($salaId)
+        $tipos = TesoreriaCrownBovedaSupport::tiposParaCarga($salaId, $fecha)
             ->filter(function (TesoreriaCrownBovedaTipo $tipo) use ($texto) {
                 if ($texto === '') {
                     return true;
@@ -1050,9 +1069,12 @@ class TesoreriaCrownBovedaController extends Controller
         }
         $salaId = (int) $request->input('sala_id');
         TesoreriaCrownSalaSupport::exigida($salaId);
-        $tipo = $this->resolverTipo($salaId, (string) $request->input('codigo'));
+        $fecha = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha', $request->input('fecha_jornada'))
+        );
+        $tipo = $this->resolverTipo($salaId, (string) $request->input('codigo'), $fecha);
         if (is_string($tipo)) {
-            return response()->json(['ok' => false]);
+            return response()->json(['ok' => false, 'mensaje' => $tipo]);
         }
 
         return response()->json(['ok' => true, 'tipo' => $this->tipoJson($tipo)]);
@@ -1124,13 +1146,15 @@ class TesoreriaCrownBovedaController extends Controller
         if ($this->comentario($datos['comentario']) === null) {
             return 'No se puede grabar una operación sin observaciones.';
         }
-        $tipo = $this->tipoPorId((int) $movimiento->sala_id, (int) $datos['tipo_id']);
+        $movimiento->loadMissing('jornada');
+        $fechaJornada = $movimiento->jornada?->fecha;
+        $tipo = $this->tipoPorId((int) $movimiento->sala_id, (int) $datos['tipo_id'], $fechaJornada);
         if (is_string($tipo)) {
             return $tipo;
         }
         $subtipoId = (int) ($datos['subtipo_id'] ?? 0);
         $subtipoTexto = trim((string) ($datos['subtipo_texto'] ?? ''));
-        $subtiposTipo = TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id);
+        $subtiposTipo = TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id, $fechaJornada);
         if ($subtiposTipo->isNotEmpty()) {
             if ($subtipoId <= 0 || ! $subtiposTipo->contains('id', $subtipoId)) {
                 return 'Elegí el subtipo del movimiento.';

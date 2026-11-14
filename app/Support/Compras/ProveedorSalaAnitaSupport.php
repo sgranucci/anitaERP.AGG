@@ -90,4 +90,15 @@ final class ProveedorSalaAnitaSupport
             ->orderBy('nombre')
             ->get(['id', 'codigo', 'nombre', 'empresa_id']);
     }
+
+    /**
+     * Salas del usuario en sesión (Crown). Para formularios OC/requisición e índice.
+     * Sin salas asignadas = todas; con ≥1 = solo las del usuario.
+     *
+     * @return Collection<int, Sala>
+     */
+    public static function salasParaSelectorUsuario(): Collection
+    {
+        return \App\Support\Ventas\UsuarioSalaAsignadaSupport::coleccionParaSelector();
+    }
 }

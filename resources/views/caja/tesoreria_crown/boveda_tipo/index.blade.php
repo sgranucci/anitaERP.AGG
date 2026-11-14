@@ -37,11 +37,26 @@
                 'exportQueryparams' => $filtrosQuery ?? [],
             ])
             <div class="card-body border-bottom py-2">
-                <p class="text-muted mb-0">
+                <p class="text-muted mb-2">
                     Catálogo de tipos de movimiento de bóveda (efecto en saldo y operación).
-                    Los subtipos se cargan en
+                    Corte unificado: 01/11/2026. Los subtipos se cargan en
                     <a href="{{ route('tesoreria_crown_boveda_subtipo', array_filter(['sala_id' => $sala->id ?? null])) }}">Subtipos de movimiento</a>.
                 </p>
+                @if ($sala)
+                    <form method="get" class="form-inline" action="{{ route('tesoreria_crown_boveda_tipo') }}">
+                        <input type="hidden" name="sala_id" value="{{ $sala->id }}">
+                        <label class="mr-2 mb-0" for="filtro_vigencia">Vigencia</label>
+                        <select name="filtro_vigencia" id="filtro_vigencia" class="form-control form-control-sm mr-2">
+                            <option value="vigentes" @selected(($filtroVigencia ?? 'vigentes') === 'vigentes')>Vigentes en fecha</option>
+                            <option value="vencidos" @selected(($filtroVigencia ?? '') === 'vencidos')>Vencidos</option>
+                            <option value="futuros" @selected(($filtroVigencia ?? '') === 'futuros')>Futuros</option>
+                            <option value="todos" @selected(($filtroVigencia ?? '') === 'todos')>Todos</option>
+                        </select>
+                        <input type="date" name="fecha_vigencia" class="form-control form-control-sm mr-2"
+                               value="{{ $fechaVigencia ?? now()->toDateString() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-info">Aplicar</button>
+                    </form>
+                @endif
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-sm table-hover table-bordered mb-0" id="tabla-paginada">
@@ -52,6 +67,9 @@
                             <th>Nombre</th>
                             <th>Efecto</th>
                             <th>Operación</th>
+                            <th>Rep. propina</th>
+                            <th>Vig. desde</th>
+                            <th>Vig. hasta</th>
                             <th>Activo</th>
                             <th class="text-left" style="width:110px;">Acciones</th>
                         </tr>
@@ -64,6 +82,9 @@
                                 <td>{{ $tipo->nombre }}</td>
                                 <td>{{ \App\Support\Caja\TesoreriaCrownBovedaSupport::efectoTexto((string) $tipo->signo) }}</td>
                                 <td>{{ $operacionesMap[(string) $tipo->operacion] ?? $tipo->operacion }}</td>
+                                <td>{{ ($tipo->para_reporte_propina ?? false) ? 'Sí' : 'No' }}</td>
+                                <td>{{ $tipo->vigente_desde?->format('d/m/Y') }}</td>
+                                <td>{{ $tipo->vigente_hasta?->format('d/m/Y') }}</td>
                                 <td>{{ $tipo->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-left text-nowrap">
                                     @if (can('listar-tesoreria-crown-boveda-subtipo', false) && $sala)
@@ -89,7 +110,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-3">No hay tipos en esta sala.</td>
+                                <td colspan="10" class="text-center text-muted py-3">No hay tipos en esta sala.</td>
                             </tr>
                         @endforelse
                     </tbody>

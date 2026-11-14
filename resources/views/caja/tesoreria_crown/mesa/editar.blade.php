@@ -32,32 +32,6 @@
         recalcular();
         panel.addEventListener('input', recalcular);
     });
-    var panelPropina = document.querySelector('.js-panel-propina-billetes');
-    var inputPropina = document.getElementById('propina');
-    if (panelPropina) {
-        function recalcularPropina() {
-            var total = 0;
-            var hayBilletes = false;
-            panelPropina.querySelectorAll('input[data-denom]').forEach(function (input) {
-                if (String(input.value).trim() !== '') {
-                    hayBilletes = true;
-                }
-                var cantidad = parseFloat(String(input.value).replace(',', '.'));
-                var denominacion = parseFloat(input.getAttribute('data-denom'));
-                if (!isNaN(cantidad) && !isNaN(denominacion)) {
-                    total += cantidad * denominacion;
-                }
-            });
-            panelPropina.querySelectorAll('.js-total-propina-billetes').forEach(function (nodo) {
-                nodo.textContent = texto(total);
-            });
-            if (inputPropina && hayBilletes) {
-                inputPropina.value = total > 0 ? total.toFixed(2) : '';
-            }
-        }
-        recalcularPropina();
-        panelPropina.addEventListener('input', recalcularPropina);
-    }
     var primeraCantidad = document.querySelector('#form-mesa-crown input[data-denom]:not([disabled])');
     if (primeraCantidad) {
         window.setTimeout(function () {
@@ -138,9 +112,9 @@
                             </div>
                             @if ($movimiento->tipo === 'F')
                                 <div class="form-group col-md-3 mb-2">
-                                    <label for="propina">Propina total ($)</label>
-                                    <input type="number" name="propina" id="propina" class="form-control text-right" min="0" step="0.01" inputmode="decimal" value="{{ old('propina', $movimiento->propina) }}" readonly title="Se calcula con el billetaje. Va al Anexo II.">
-                                    <small class="form-text text-muted">Anexo II · se arma con el billetaje de abajo.</small>
+                                    <label for="propina">Propina ($)</label>
+                                    <input type="number" name="propina" id="propina" class="form-control text-right" min="0" step="0.01" inputmode="decimal" value="{{ old('propina', $movimiento->propina) }}" title="Solo monto. Neutro: no mueve billetaje. Va al Anexo II y al reporte propinas por casino.">
+                                    <small class="form-text text-muted">Anexo II · neutro (sin billetaje), como propina híbrida.</small>
                                 </div>
                             @endif
                         </div>
@@ -188,45 +162,6 @@
                             </div>
                         @endforeach
                     </div>
-                    @if ($movimiento->tipo === 'F' && ! empty($gruposPropina))
-                        <h5 class="mt-2 mb-2">Propina de mesa — billetaje</h5>
-                        <p class="text-muted small mb-2">
-                            El total alimenta el Anexo II; el detalle de billetes va al movimiento de bóveda PROP / Mesas.
-                        </p>
-                        <div class="row">
-                            @foreach ($gruposPropina as $grupo)
-                                <div class="col-lg-4 col-md-6 mb-3">
-                                    <div class="card card-outline card-primary h-100 mb-0 js-panel-valor js-panel-propina-billetes">
-                                        <div class="card-header py-2 d-flex justify-content-between">
-                                            <h3 class="card-title mb-0">{{ $grupo['titulo'] }} (propina)</h3>
-                                            <strong class="js-total-valor js-total-propina-billetes">0,00</strong>
-                                        </div>
-                                        <div class="card-body p-0 table-responsive">
-                                            <table class="table table-sm table-bordered mb-0">
-                                                <thead style="background:#85C1E9;color:#17202A;"><tr><th>Denominación</th><th>Tipo</th><th style="width:110px;">Cantidad</th></tr></thead>
-                                                <tbody>
-                                                    @foreach ($grupo['filas'] as $valor)
-                                                        @php $cantidadProp = $propinaCantidades[$valor->id] ?? null; @endphp
-                                                        <tr>
-                                                            <td class="text-right">{{ number_format((float) $valor->denominacion, 0, ',', '.') }}</td>
-                                                            <td>{{ $valor->descripcion }}</td>
-                                                            <td>
-                                                                @if ($editable)
-                                                                    <input type="number" name="propina_cantidad[{{ $valor->id }}]" class="form-control form-control-sm text-right" min="0" step="1" inputmode="numeric" data-denom="{{ (float) $valor->denominacion }}" value="{{ old('propina_cantidad.'.$valor->id, $cantidadProp === null || $cantidadProp === '' ? '' : (int) $cantidadProp) }}">
-                                                                @elseif ($cantidadProp !== null && (float) $cantidadProp != 0)
-                                                                    {{ number_format((float) $cantidadProp, 0, ',', '.') }}
-                                                                @endif
-                                                            </td>
-                                                        </tr>
-                                                    @endforeach
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    @endif
                     @if ($editable && can('crear-tesoreria-crown-mesa', false))
                         <button type="submit" class="btn btn-primary" id="btn-guardar-mesa">Guardar borrador</button>
                     @endif
@@ -235,7 +170,7 @@
                             <p class="mb-2">
                                 Confirmar guarda estas cantidades y fija la banca de esta fecha.
                                 @if ($movimiento->tipo === 'F')
-                                    Si hay billetaje de propina, genera el movimiento de bóveda PROPINA / Mesas con ese detalle.
+                                    Si hay propina, genera el asiento informativo de bóveda PROPINA / Mesas (solo monto, sin billetaje).
                                 @endif
                                 Un cambio posterior de banca no reescribe este movimiento.
                             </p>

@@ -35,35 +35,40 @@
         <tbody>
             @foreach ($filas as $fila)
                 @php
-                    $m = \App\Support\Caja\Flash\FlashCrownCalculoSupport::metricasDerivadas($fila->toArray());
+                    $baseVista = \App\Support\Caja\Flash\FlashCrownCalculoSupport::baseVistaDesdeFlash($fila);
+                    $m = \App\Support\Caja\Flash\FlashCrownCalculoSupport::metricasDerivadas($baseVista);
+                    $N = \App\Support\Caja\Flash\FlashCrownNumeroSupport::class;
                 @endphp
                 <tr>
                     <td>{{ $fila->sala->codigo ?? '' }} {{ $fila->sala->nombre ?? '' }}</td>
-                    <td class="num">{{ number_format((int) $fila->att, 0, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $fila->cashdrop, 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $m['win_mesas'], 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $fila->coin_in, 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $fila->slot_r, 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $m['gaming'], 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $fila->ayb, 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $fila->hotel, 2, ',', '.') }}</td>
-                    <td class="num">{{ number_format((float) $m['combined'], 2, ',', '.') }}</td>
+                    <td class="num">{!! $N::html($fila->att, 0) !!}</td>
+                    <td class="num">{!! $N::html($fila->cashdrop) !!}</td>
+                    <td class="num">{!! $N::html($m['win_mesas']) !!}</td>
+                    <td class="num">{!! $N::html($fila->coin_in) !!}</td>
+                    <td class="num">{!! $N::html($fila->slot_r) !!}</td>
+                    <td class="num">{!! $N::html($m['gaming']) !!}</td>
+                    <td class="num">{!! $N::html($fila->ayb) !!}</td>
+                    <td class="num">{!! $N::html($fila->hotel) !!}</td>
+                    <td class="num">{!! $N::html($m['combined'], 2, true) !!}</td>
                     <td>{{ $fila->estaValidado() ? 'Sí' : 'No' }}</td>
                 </tr>
             @endforeach
             @if (! empty($consolidado))
-                @php $cm = \App\Support\Caja\Flash\FlashCrownCalculoSupport::metricasDerivadas($consolidado); @endphp
+                @php
+                    $cm = \App\Support\Caja\Flash\FlashCrownCalculoSupport::metricasDerivadas($consolidado);
+                    $N = \App\Support\Caja\Flash\FlashCrownNumeroSupport::class;
+                @endphp
                 <tr>
                     <td><strong>CONSOLIDADO</strong></td>
-                    <td class="num"><strong>{{ number_format((int) ($consolidado['att'] ?? 0), 0, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($consolidado['cashdrop'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($cm['win_mesas'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($consolidado['coin_in'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($consolidado['slot_r'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($cm['gaming'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($consolidado['ayb'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($consolidado['hotel'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td class="num"><strong>{{ number_format((float) ($cm['combined'] ?? 0), 2, ',', '.') }}</strong></td>
+                    <td class="num">{!! $N::html($consolidado['att'] ?? 0, 0, true) !!}</td>
+                    <td class="num">{!! $N::html($consolidado['cashdrop'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($cm['win_mesas'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($consolidado['coin_in'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($consolidado['slot_r'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($cm['gaming'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($consolidado['ayb'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($consolidado['hotel'] ?? 0, 2, true) !!}</td>
+                    <td class="num">{!! $N::html($cm['combined'] ?? 0, 2, true) !!}</td>
                     <td></td>
                 </tr>
             @endif

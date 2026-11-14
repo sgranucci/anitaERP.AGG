@@ -22,8 +22,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class TesoreriaCrownAnexo7Calculo
 {
+    /** @deprecated Usar TesoreriaCrownBovedaAnexoMapaSupport::anexo7Codigos() */
     public const CODIGOS_BOVEDA_FALLO = [4, 15, 16];
 
+    /** @deprecated Usar TesoreriaCrownBovedaAnexoMapaSupport::anexo7Codigos() */
     public const CODIGOS_BOVEDA_EXCEDENTE = [13, 17];
 
     /**
@@ -73,8 +75,11 @@ final class TesoreriaCrownAnexo7Calculo
             $agregar($fila, $fallos, $excedentes);
         }
 
-        foreach (self::movimientosBovedaTerceros($jornada) as $mov) {
-            $esFallo = in_array((int) $mov->codigo, self::CODIGOS_BOVEDA_FALLO, true);
+        $mapa = TesoreriaCrownBovedaAnexoMapaSupport::anexo7Codigos(
+            $jornada->fecha?->format('Y-m-d')
+        );
+        foreach (self::movimientosBovedaTerceros($jornada, $mapa) as $mov) {
+            $esFallo = in_array((int) $mov->codigo, $mapa['fallos'], true);
             $monto = round(abs((float) $mov->monto), 2);
             $agregar([
                 'caja' => 'Bóveda '.trim((string) $mov->abreviatura).' '.(int) $mov->numero,
@@ -96,10 +101,13 @@ final class TesoreriaCrownAnexo7Calculo
     }
 
     /**
+     * @param  array{fallos: list<int>, excedentes: list<int>}  $mapa
      * @return list<object>
      */
-    private static function movimientosBovedaTerceros(TesoreriaCrownJornada $jornada): array
+    private static function movimientosBovedaTerceros(TesoreriaCrownJornada $jornada, array $mapa): array
     {
+        $codigos = array_merge($mapa['fallos'], $mapa['excedentes']);
+
         return DB::table('tesoreria_crown_boveda as b')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
             ->join('tesoreria_crown_boveda_linea as l', 'l.boveda_id', '=', 'b.id')
@@ -113,7 +121,7 @@ final class TesoreriaCrownAnexo7Calculo
                     ->from('tesoreria_crown_boveda as r')
                     ->whereColumn('r.revierte_id', 'b.id');
             })
-            ->whereIn('t.codigo', array_merge(self::CODIGOS_BOVEDA_FALLO, self::CODIGOS_BOVEDA_EXCEDENTE))
+            ->whereIn('t.codigo', $codigos)
             ->where(function ($q) {
                 $q->whereNull('tv.codigo')->orWhereNotIn('tv.codigo', ['USD', 'DOL', 'EUR', 'EURO']);
             })

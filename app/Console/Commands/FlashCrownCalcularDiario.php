@@ -16,7 +16,7 @@ class FlashCrownCalcularDiario extends Command
                             {--forzar : Recalcula aunque esté validado}
                             {--dry-run : No persiste}';
 
-    protected $description = 'Calcula/persiste el Flash Crown online de la jornada (default: ayer, todas las salas)';
+    protected $description = 'Calcula/persiste Flash Crown desde jornada. No pisa réplica Anita salvo --forzar.';
 
     public function handle(FlashCrownService $service): int
     {

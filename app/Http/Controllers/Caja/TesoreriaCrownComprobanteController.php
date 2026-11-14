@@ -663,6 +663,50 @@ class TesoreriaCrownComprobanteController extends Controller
             : 'Volvió a borrador. Podés modificar las cantidades.');
     }
 
+    /**
+     * Descarta un borrador (también el vacío que nace al abrir Hab/Rend).
+     * No pide reversa: el borrador no quedó conforme.
+     */
+    public function eliminar(int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('crear-tesoreria-crown-movimiento');
+
+        $comprobante = $this->comprobanteEnAlcance($id);
+        if (! $comprobante->esBorrador() || ! $comprobante->jornada->estaAbierta()) {
+            return back()->with('mensaje-error', 'Solo se borra un borrador con la jornada abierta.');
+        }
+        if ($comprobante->cierreOperativo() !== null) {
+            return back()->with('mensaje-error', 'Este cajero ya está cerrado.');
+        }
+        if ($comprobante->revierte_id !== null) {
+            return back()->with('mensaje-error', 'Una reversa no se borra como borrador.');
+        }
+
+        $volver = [
+            'sala_id' => (int) $comprobante->sala_id,
+            'jornada_id' => (int) $comprobante->jornada_id,
+        ];
+
+        DB::transaction(function () use ($comprobante) {
+            TesoreriaCrownBovedaSupport::anularAsientoCajero($comprobante);
+            DB::table('tesoreria_crown_boveda')
+                ->where('comprobante_id', $comprobante->id)
+                ->update(['comprobante_id' => null, 'updated_at' => now()]);
+            EloquentAuditDeleteSupport::each(
+                TesoreriaCrownComprobanteLinea::query()->where('comprobante_id', $comprobante->id)
+            );
+            EloquentAuditDeleteSupport::each(
+                TesoreriaCrownCierreFiscal::query()->where('comprobante_id', $comprobante->id)
+            );
+            $comprobante->delete();
+        });
+
+        return redirect()
+            ->route('ver_tesoreria_crown_jornada', $volver['jornada_id'])
+            ->with('mensaje', 'Borrador eliminado.');
+    }
+
     public function vincularCajero(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();

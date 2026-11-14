@@ -2,8 +2,10 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Configuracion\Sala;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -43,6 +45,29 @@ final class UsuarioSalaAsignadaSupport
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * Salas para formularios / chips (Crown). Sin asignación = todas; con ≥1 = solo esas.
+     *
+     * @return Collection<int, Sala>
+     */
+    public static function coleccionParaSelector(): Collection
+    {
+        if (! self::activo()) {
+            return collect();
+        }
+
+        $query = Sala::query()
+            ->orderBy('codigo')
+            ->orderBy('nombre');
+
+        $ids = self::idsDesdeSesion();
+        if (count($ids) >= 1) {
+            $query->whereIn('id', $ids);
+        }
+
+        return $query->get(['id', 'codigo', 'nombre', 'empresa_id']);
     }
 
     /**

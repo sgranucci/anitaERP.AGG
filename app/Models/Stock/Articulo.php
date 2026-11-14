@@ -5,11 +5,13 @@ namespace App\Models\Stock;
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\ArticuloAnitaAbmSupport;
 use App\Support\Stock\ArticuloCuentacontableEmpresasSupport;
 use App\Support\Stock\ArticuloImpuestoAnitaSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Stock\InterformingArticuloAnitaMapperSupport;
+use App\Support\Stock\CrownArticuloTipoUsoAsignacionSupport;
 use App\Support\Stock\TipoarticuloDefaultSupport;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Contable\Centrocosto;
@@ -374,6 +376,17 @@ class Articulo extends Model implements Auditable
      */
     public function sincronizarConAnita(): array
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return [
+                'en_anita' => 0,
+                'importados' => 0,
+                'omitidos_ya_en_erp' => 0,
+                'lotes_bridge' => 0,
+                'tamano_lote' => ArticuloStkmaeAnitaBridgeSupport::tamanoLote(),
+                'advertencias' => ['En Crown el ABM de artículos no sincroniza con Anita.'],
+            ];
+        }
+
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
@@ -448,6 +461,18 @@ class Articulo extends Model implements Auditable
      */
     public function resincronizarDesdeAnita(): array
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return [
+                'en_anita' => 0,
+                'importados' => 0,
+                'actualizados' => 0,
+                'errores' => 0,
+                'lotes_bridge' => 0,
+                'tamano_lote' => ArticuloStkmaeAnitaBridgeSupport::tamanoLote(),
+                'advertencias' => ['En Crown el ABM de artículos no sincroniza con Anita.'],
+            ];
+        }
+
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
@@ -526,6 +551,10 @@ class Articulo extends Model implements Auditable
 
     public function traerRegistroDeAnita($key, $fl_crea_registro, ?int $empresaIdBridge = null)
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return;
+        }
+
         $filas = ArticuloStkmaeAnitaBridgeSupport::listarDetallePorCodigos([(string) $key], $empresaIdBridge);
         if ($filas === []) {
             return;
@@ -764,14 +793,32 @@ class Articulo extends Model implements Auditable
 
             switch (config('app.empresa')) {
                 case 'CROWN':
-                    // Gastronomía Crown: sin stcustom; detalle en stkm_desc_det; usoarticulo vacío en ERP.
+                    // Gastronomía Crown: sin stcustom; detalle en stkm_desc_det.
+                    // Tipo/uso: categoría + SKU I* = INSUMO GASTRONOMIA.
                     $detalle = trim((string) ($data->stkm_desc_det ?? ''));
                     if ($detalle === '') {
                         $detalle = (string) ($data->stkm_desc ?? '');
                     }
 
-                    $tipoarticulo = Tipoarticulo::select('id')->where('abreviatura', $data->stkm_tipo_articulo ?? '')->first();
-                    $tipoarticulo_id = $tipoarticulo?->id ?? TipoarticuloDefaultSupport::idParaImportacionAnita();
+                    $skuCrown = ltrim((string) ($data->stkm_articulo ?? ''), '0');
+                    $nombreCategoriaCrown = null;
+                    if ($categoria_id > 0) {
+                        $nombreCategoriaCrown = Categoria::query()->whereKey($categoria_id)->value('nombre');
+                    }
+
+                    try {
+                        $asigCrown = CrownArticuloTipoUsoAsignacionSupport::resolverIdsParaImport(
+                            $skuCrown,
+                            $nombreCategoriaCrown !== null ? (string) $nombreCategoriaCrown : null,
+                            (string) ($data->stkm_tipo_articulo ?? '')
+                        );
+                        $tipoarticulo_id = $asigCrown['tipoarticulo_id'];
+                        $usoarticulo_id = $asigCrown['usoarticulo_id'];
+                    } catch (\Throwable) {
+                        $tipoarticulo = Tipoarticulo::select('id')->where('abreviatura', $data->stkm_tipo_articulo ?? '')->first();
+                        $tipoarticulo_id = $tipoarticulo?->id ?? TipoarticuloDefaultSupport::idParaImportacionAnita();
+                        $usoarticulo_id = null;
+                    }
 
                     $estado = 'ACTIVO';
                     switch ((string) ($data->stkm_fl_no_factura ?? '0')) {
@@ -796,7 +843,7 @@ class Articulo extends Model implements Auditable
 
                     $arrayCampos = [
                         'descripcion' => $data->stkm_desc,
-                        'sku' => ltrim($data->stkm_articulo, '0'),
+                        'sku' => $skuCrown,
                         'detalle' => $detalle,
                         'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
                         'unidadesxenvase' => $data->stkm_unidad_xenv,
@@ -818,7 +865,7 @@ class Articulo extends Model implements Auditable
                         'ppp' => $data->stkm_ppp,
                         'usuario_id' => $usuario_id,
                         'fechaultimacompra' => $fechaultimacompra,
-                        'usoarticulo_id' => null,
+                        'usoarticulo_id' => $usoarticulo_id,
                         'tipoarticulo_id' => $tipoarticulo_id,
                         'leyenda' => '',
                         'coeficienteconversion' => $data->stkm_peso_aprox,
@@ -1382,6 +1429,10 @@ class Articulo extends Model implements Auditable
 
     public function guardarAnita($request)
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return ['Success'];
+        }
+
         $this->condicionentregaRepository = App::make(\App\Repositories\Compras\CondicionentregaRepositoryInterface::class);
 
         $apiAnita = new ApiAnita;
@@ -2088,7 +2139,7 @@ class Articulo extends Model implements Auditable
 
     public function actualizarAnita($request, $id)
     {
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (! ArticuloAnitaAbmSupport::habilitado() || EntornoEmpresaSupport::esFerli()) {
             return ['Success'];
         }
 
@@ -2575,6 +2626,10 @@ class Articulo extends Model implements Auditable
 
     public function eliminarAnita($id)
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return;
+        }
+
         $apiAnita = new ApiAnita;
         $data = ['acc' => 'delete', 'tabla' => $this->tableAnita,
             'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, '0', STR_PAD_LEFT)."' "];

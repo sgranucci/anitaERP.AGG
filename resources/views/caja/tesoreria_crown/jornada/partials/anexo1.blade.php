@@ -6,7 +6,8 @@
 
         return number_format((float) $importe, 2, ',', '.');
     };
-    $variante = (string) ($anexoVariante ?? 'clasico');
+    $variante = (string) ($anexoVariante ?? 'nuevo');
+    $puedeContable = (bool) ($puedeAnexoContable ?? false);
     $anexoIndexUrl = $anexoIndexUrl ?? route('ver_tesoreria_crown_jornada', $jornada->id);
     $anexoIndexQuery = $anexoIndexQuery ?? [];
     $urlAnexo = function (string $formatoAnexo) use ($anexoIndexUrl, $anexoIndexQuery): string {
@@ -19,24 +20,30 @@
 <div class="card card-outline card-info mb-3">
     <div class="card-header py-2 d-flex flex-wrap align-items-center">
         <h3 class="card-title mb-0 mr-auto"><i class="fa fa-file-text-o"></i> Anexo I</h3>
-        <div class="btn-group btn-group-sm" role="group" aria-label="Formato del anexo">
-            <a href="{{ $urlAnexo('clasico') }}" class="btn {{ $variante === 'clasico' ? 'btn-info' : 'btn-outline-info' }}" title="Como l-anexo1.c">
-                Día / mes / anual
-            </a>
-            <a href="{{ $urlAnexo('nuevo') }}" class="btn {{ $variante === 'nuevo' ? 'btn-info' : 'btn-outline-info' }}" title="Como l-anexo1new.c">
-                Débito / crédito / saldo
-            </a>
-        </div>
+        @if ($puedeContable)
+            <div class="btn-group btn-group-sm" role="group" aria-label="Formato del anexo">
+                <a href="{{ $urlAnexo('clasico') }}" class="btn {{ $variante === 'clasico' ? 'btn-info' : 'btn-outline-info' }}" title="Como l-anexo1.c">
+                    Día / mes / anual
+                </a>
+                <a href="{{ $urlAnexo('nuevo') }}" class="btn {{ $variante === 'nuevo' ? 'btn-info' : 'btn-outline-info' }}" title="Como l-anexo1new.c">
+                    Débito / crédito / saldo
+                </a>
+            </div>
+        @endif
     </div>
     <div class="card-body pb-2">
-        @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
+        @if (empty($ocultarTabsAnexo))
+            @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
+        @endif
         <p class="text-muted small mb-2">
             @if ($variante === 'nuevo')
                 Formato de <code>l-anexo1new.c</code>: concepto, fecha, débito, crédito y saldo corrido.
+                @if (! $puedeContable)
+                    Solo este formato (debe / haber). El contable (día / mes / anual) pide permiso aparte.
+                @endif
             @else
                 Formato de <code>l-anexo1.c</code>: concepto con día, mes y anual. Se arma con la jornada.
             @endif
-           
         </p>
         @if ($anexo === null)
             <div class="alert alert-warning mb-0">No se pudo armar el anexo. {{ $anexoError }}</div>

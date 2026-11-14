@@ -107,7 +107,7 @@ class RequisicionController extends Controller
 
         $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
         $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
             : collect();
         $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
 
@@ -245,7 +245,7 @@ class RequisicionController extends Controller
 
         $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
         $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
             : collect();
         $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
         $filtros = RequisicionListadoFiltros::resolverDesdeRequest(
@@ -290,7 +290,7 @@ class RequisicionController extends Controller
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
             : collect();
         $centrocosto_query = $this->centrocostoRepository->all();
         $formapago_query = $this->formapagoRepository->all();
@@ -518,7 +518,7 @@ class RequisicionController extends Controller
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
             : collect();
         $centrocosto_query = $this->centrocostoRepository->all();
         $formapago_query = $this->formapagoRepository->all();
@@ -1047,7 +1047,7 @@ class RequisicionController extends Controller
             $subMaxFv = DB::table('listaprecio_proveedor_articulo as lpa2')
                 ->join('listaprecio_proveedor as lp2', 'lp2.id', '=', 'lpa2.listaprecio_proveedor_id')
                 ->select('lpa2.listaprecio_proveedor_id', 'lpa2.articulo_id', DB::raw('MAX(lpa2.fechavigencia) as max_fv'))
-                ->where('lp2.estado', 'ACTIVA')
+                ->whereRaw('UPPER(TRIM(lp2.estado)) IN (?, ?)', ['ACTIVA', 'A'])
                 ->where('lp2.proveedor_id', $proveedorId)
                 ->whereDate('lpa2.fechavigencia', '<=', $fechaRef)
                 ->groupBy('lpa2.listaprecio_proveedor_id', 'lpa2.articulo_id');
@@ -1096,7 +1096,7 @@ class RequisicionController extends Controller
             ->leftJoin('usuario as ulinea', 'ulinea.id', '=', 'lpa.usuarioultcambio_id')
             ->leftJoin('articulo as art', 'art.id', '=', 'lpa.articulo_id')
             ->whereIn('lpa.id', $lineIds)
-            ->where('lp.estado', 'ACTIVA');
+            ->whereRaw('UPPER(TRIM(lp.estado)) IN (?, ?)', ['ACTIVA', 'A']);
 
         if ($modoArticulo && $filtradoPorProveedor) {
             $q->where('lp.proveedor_id', $proveedorId);
@@ -1262,7 +1262,7 @@ class RequisicionController extends Controller
             $data = $this->requisicionRepository->find($id);
             $empresa_query = $this->empresaRepository->allFiltrado();
             $sala_query = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-                ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelector()
+                ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
                 : collect();
             $centrocosto_query = $this->centrocostoRepository->all();
             $formapago_query = $this->formapagoRepository->all();

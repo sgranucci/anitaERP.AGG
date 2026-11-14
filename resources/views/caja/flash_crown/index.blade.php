@@ -29,8 +29,10 @@
 
 @section('contenido')
 @php
+    use App\Support\Caja\Flash\FlashCrownNumeroSupport as N;
     $cm = $consolidado['_metricas'] ?? [];
     $mostrarKpis = ($filtros['consultar'] ?? false) && $consolidado;
+    $onlineEmp = $onlineEmpresa ?? [];
     $queryChips = array_filter([
         'fecha' => $filtros['fecha'] ?? null,
         'consultar' => 1,
@@ -95,25 +97,34 @@
                     <div class="kpi-row">
                         <div class="kpi">
                             <span class="lbl">Combined</span>
-                            <span class="val">{{ number_format((float) ($cm['combined'] ?? 0), 2, ',', '.') }}</span>
+                            <span class="val">{!! N::html($cm['combined'] ?? 0) !!}</span>
                         </div>
                         <div class="kpi">
                             <span class="lbl">Gaming</span>
-                            <span class="val">{{ number_format((float) ($cm['gaming'] ?? 0), 2, ',', '.') }}</span>
+                            <span class="val">{!! N::html($cm['gaming'] ?? 0) !!}</span>
                         </div>
                         <div class="kpi">
                             <span class="lbl">Win mesas</span>
-                            <span class="val">{{ number_format((float) ($cm['win_mesas'] ?? 0), 2, ',', '.') }}</span>
+                            <span class="val">{!! N::html($cm['win_mesas'] ?? 0) !!}</span>
                         </div>
                         <div class="kpi">
                             <span class="lbl">Win slots</span>
-                            <span class="val">{{ number_format((float) ($consolidado['slot_r'] ?? 0), 2, ',', '.') }}</span>
+                            <span class="val">{!! N::html($consolidado['slot_r'] ?? 0) !!}</span>
                         </div>
                         <div class="kpi">
                             <span class="lbl">Attendance</span>
-                            <span class="val">{{ number_format((int) ($consolidado['att'] ?? 0), 0, ',', '.') }}</span>
+                            <span class="val">{!! N::html($consolidado['att'] ?? 0, 0) !!}</span>
+                        </div>
+                        <div class="kpi" title="Bloque empresa Crown (carga diaria), no por sala">
+                            <span class="lbl">OL + BS + AD</span>
+                            <span class="val">{!! N::html(($onlineEmp['ol_win'] ?? 0) + ($onlineEmp['bs_win'] ?? 0) + ($onlineEmp['ad_win'] ?? 0)) !!}</span>
                         </div>
                     </div>
+                    <p class="text-muted small mb-2">
+                        Online (Del Río / Betsur / Apuestas) es <strong>uno solo de la empresa</strong>, leído en vivo de la carga diaria.
+                        Las columnas OL/BS/AD de cada sala van en cero; el consolidado las incluye una sola vez.
+                        Attendance consolidado = salas + OL + BS + AD (clientes Anita). Comb. Ant. = soft count del año anterior.
+                    </p>
                 @endif
 
                 @if (($filtros['consultar'] ?? false) && $filas->isNotEmpty())
@@ -141,22 +152,23 @@
                             <tbody>
                                 @foreach ($filas as $fila)
                                     @php
-                                        $m = \App\Support\Caja\Flash\FlashCrownCalculoSupport::metricasDerivadas($fila->toArray());
+                                        $baseVista = \App\Support\Caja\Flash\FlashCrownCalculoSupport::baseVistaDesdeFlash($fila);
+                                        $m = \App\Support\Caja\Flash\FlashCrownCalculoSupport::metricasDerivadas($baseVista);
                                     @endphp
                                     <tr>
                                         <td>{{ $fila->sala->codigo ?? '' }} {{ $fila->sala->nombre ?? '' }}</td>
-                                        <td class="text-right">{{ number_format((int) $fila->att, 0, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $fila->cashdrop, 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $m['win_mesas'], 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $fila->coin_in, 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $fila->slot_r, 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($fila->ol_win ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($fila->bs_win ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($fila->ad_win ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $m['gaming'], 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $fila->ayb, 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) $fila->hotel, 2, ',', '.') }}</td>
-                                        <td class="text-right"><strong>{{ number_format((float) $m['combined'], 2, ',', '.') }}</strong></td>
+                                        <td class="text-right">{!! N::html($fila->att, 0) !!}</td>
+                                        <td class="text-right">{!! N::html($fila->cashdrop) !!}</td>
+                                        <td class="text-right">{!! N::html($m['win_mesas']) !!}</td>
+                                        <td class="text-right">{!! N::html($fila->coin_in) !!}</td>
+                                        <td class="text-right">{!! N::html($fila->slot_r) !!}</td>
+                                        <td class="text-right">{!! N::html($baseVista['ol_win'] ?? 0) !!}</td>
+                                        <td class="text-right">{!! N::html($baseVista['bs_win'] ?? 0) !!}</td>
+                                        <td class="text-right">{!! N::html($baseVista['ad_win'] ?? 0) !!}</td>
+                                        <td class="text-right">{!! N::html($m['gaming']) !!}</td>
+                                        <td class="text-right">{!! N::html($fila->ayb) !!}</td>
+                                        <td class="text-right">{!! N::html($fila->hotel) !!}</td>
+                                        <td class="text-right">{!! N::html($m['combined'], 2, true) !!}</td>
                                         <td class="text-center">
                                             @if ($fila->estaValidado())
                                                 <i class="fa fa-check text-success" title="Validado"></i>
@@ -188,21 +200,21 @@
                                         </td>
                                     </tr>
                                 @endforeach
-                                @if ($consolidado)
+                                @if ($consolidado && empty($consolidado['_solo_una_sala']))
                                     <tr style="background:#D6EAF8;font-weight:600;">
-                                        <td>CONSOLIDADO</td>
-                                        <td class="text-right">{{ number_format((int) ($consolidado['att'] ?? 0), 0, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['cashdrop'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($cm['win_mesas'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['coin_in'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['slot_r'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['ol_win'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['bs_win'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['ad_win'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($cm['gaming'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['ayb'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($consolidado['hotel'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-right">{{ number_format((float) ($cm['combined'] ?? 0), 2, ',', '.') }}</td>
+                                        <td>CONSOLIDADO (+ online empresa)</td>
+                                        <td class="text-right">{!! N::html($consolidado['att'] ?? 0, 0, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['cashdrop'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($cm['win_mesas'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['coin_in'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['slot_r'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['ol_win'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['bs_win'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['ad_win'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($cm['gaming'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['ayb'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($consolidado['hotel'] ?? 0, 2, true) !!}</td>
+                                        <td class="text-right">{!! N::html($cm['combined'] ?? 0, 2, true) !!}</td>
                                         <td colspan="2"></td>
                                     </tr>
                                 @endif

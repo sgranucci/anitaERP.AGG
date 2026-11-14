@@ -119,6 +119,42 @@ final class LibroIvaDigitalMapeosSupport
     }
 
     /**
+     * Tipo AFIP de compras con marca FCE MiPyME (es_fce / com_es_fce).
+     * El ABM guarda codigoafip de FAC/ND/NC (001/002/003); FCE es flag aparte.
+     * Misma regla que ventas: tipo ordinario + 200 → 201/202/203 (A), 206/207/208 (B), 211/… (C).
+     */
+    public static function tipoComprobanteCompras(
+        string $codigoBase,
+        string $letra,
+        bool $esFce = false,
+        ?string $abreviatura = null,
+    ): string {
+        return self::aplicarMarcaFce(
+            self::tipoComprobanteVentas($codigoBase, $letra, $abreviatura),
+            $esFce,
+        );
+    }
+
+    /**
+     * FAC/ND/NC (001–199) → FCE/NDE/NCE (201–399). No toca tipos ya FCE ni TurIVA (≥195 ordinario).
+     */
+    public static function aplicarMarcaFce(string $tipoComprobante, bool $esFce): string
+    {
+        $tipo = str_pad(preg_replace('/\D+/', '', $tipoComprobante) ?: '0', 3, '0', STR_PAD_LEFT);
+        if (! $esFce) {
+            return $tipo;
+        }
+
+        $n = (int) $tipo;
+        // Ordinarios de compras/ventas (FAC/ND/NC A–C/M y derivados < 200). TurIVA 195–197 no son FCE.
+        if ($n > 0 && $n < 195) {
+            $n += 200;
+        }
+
+        return str_pad((string) $n, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
      * Comprobantes internos sin CAE que sí van al Libro IVA Digital / IVA Simple.
      * IZV queda excluido (interno gastronómico no informable).
      *

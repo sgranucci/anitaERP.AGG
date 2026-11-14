@@ -7,6 +7,7 @@ use App\Http\Requests\ValidacionTesoreriaCrownBovedaTipo;
 use App\Models\Caja\TesoreriaCrownBovedaTipo;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
+use App\Support\Caja\TesoreriaCrownBovedaVigenciaSupport;
 use App\Support\Caja\TesoreriaCrownKardexValoresSupport;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -22,14 +23,20 @@ class TesoreriaCrownBovedaTipoController extends Controller
 
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
-        $filtrosQuery = $this->filtrosQuery($sala?->id);
-        $tipos = $this->consultaSala((int) ($sala->id ?? 0));
+        $filtroVigencia = (string) $request->input('filtro_vigencia', 'vigentes');
+        $fechaVigencia = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha_vigencia')
+        );
+        $filtrosQuery = $this->filtrosQuery($sala?->id, $filtroVigencia, $fechaVigencia);
+        $tipos = $this->consultaSala((int) ($sala->id ?? 0), $filtroVigencia, $fechaVigencia);
 
         return view('caja.tesoreria_crown.boveda_tipo.index', [
             'salas' => $salas,
             'sala' => $sala,
             'tipos' => $tipos,
             'filtrosQuery' => $filtrosQuery,
+            'filtroVigencia' => $filtroVigencia,
+            'fechaVigencia' => $fechaVigencia,
             'operacionesMap' => $this->operacionesMap(),
         ]);
     }
@@ -47,7 +54,11 @@ class TesoreriaCrownBovedaTipoController extends Controller
         if (! $sala) {
             return redirect()->route('tesoreria_crown_boveda_tipo');
         }
-        $coleccion = $this->consultaSala((int) $sala->id);
+        $filtroVigencia = (string) $request->input('filtro_vigencia', 'vigentes');
+        $fechaVigencia = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha_vigencia')
+        );
+        $coleccion = $this->consultaSala((int) $sala->id, $filtroVigencia, $fechaVigencia);
         $sala->loadMissing('empresas');
         $nombreEmpresa = $sala->empresas->nombre ?? config('app.empresa');
         foreach ($coleccion as $fila) {
@@ -63,9 +74,12 @@ class TesoreriaCrownBovedaTipoController extends Controller
             'columnas' => [
                 ['label' => 'Código', 'ancho' => 12, 'texto' => true],
                 ['label' => 'Abrev.', 'ancho' => 12, 'texto' => true],
-                ['label' => 'Nombre', 'ancho' => 36, 'wrap' => true],
-                ['label' => 'Efecto', 'ancho' => 16],
-                ['label' => 'Operación', 'ancho' => 20, 'wrap' => true],
+                ['label' => 'Nombre', 'ancho' => 32, 'wrap' => true],
+                ['label' => 'Efecto', 'ancho' => 14],
+                ['label' => 'Operación', 'ancho' => 18, 'wrap' => true],
+                ['label' => 'Rep. propina', 'ancho' => 12],
+                ['label' => 'Vig. desde', 'ancho' => 12],
+                ['label' => 'Vig. hasta', 'ancho' => 12],
                 ['label' => 'Activo', 'ancho' => 10],
             ],
             'filas' => $coleccion->map(function (TesoreriaCrownBovedaTipo $tipo) use ($ops) {
@@ -75,6 +89,9 @@ class TesoreriaCrownBovedaTipoController extends Controller
                     $tipo->nombre,
                     TesoreriaCrownBovedaSupport::efectoTexto((string) $tipo->signo),
                     $ops[(string) $tipo->operacion] ?? (string) $tipo->operacion,
+                    ($tipo->para_reporte_propina ?? false) ? 'Sí' : 'No',
+                    $tipo->vigente_desde?->format('d/m/Y') ?? '',
+                    $tipo->vigente_hasta?->format('d/m/Y') ?? '',
                     $tipo->activo ? 'Sí' : 'No',
                 ];
             })->all(),
@@ -105,6 +122,7 @@ class TesoreriaCrownBovedaTipoController extends Controller
                 'signo' => '0',
                 'operacion' => '0',
                 'activo' => true,
+                'para_reporte_propina' => false,
             ]),
             'sala' => $sala,
             'operaciones' => TesoreriaCrownKardexValoresSupport::operaciones(),
@@ -188,11 +206,17 @@ class TesoreriaCrownBovedaTipoController extends Controller
     /**
      * @return array<string, int>
      */
-    private function filtrosQuery(?int $salaId): array
+    private function filtrosQuery(?int $salaId, string $filtroVigencia = 'vigentes', ?string $fechaVigencia = null): array
     {
         $out = [];
         if ($salaId && $salaId > 0) {
             $out['sala_id'] = $salaId;
+        }
+        if ($filtroVigencia !== '' && $filtroVigencia !== 'todos') {
+            $out['filtro_vigencia'] = $filtroVigencia;
+        }
+        if ($fechaVigencia) {
+            $out['fecha_vigencia'] = $fechaVigencia;
         }
 
         return $out;
@@ -210,16 +234,19 @@ class TesoreriaCrownBovedaTipoController extends Controller
     /**
      * @return Collection<int, TesoreriaCrownBovedaTipo>
      */
-    private function consultaSala(int $salaId): Collection
-    {
+    private function consultaSala(
+        int $salaId,
+        string $filtroVigencia = 'vigentes',
+        ?string $fechaVigencia = null
+    ): Collection {
         if ($salaId <= 0) {
             return collect();
         }
+        $fecha = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fechaVigencia);
+        $q = TesoreriaCrownBovedaTipo::query()->where('sala_id', $salaId);
+        TesoreriaCrownBovedaVigenciaSupport::aplicarFiltroAbm($q, $filtroVigencia, $fecha);
 
-        return TesoreriaCrownBovedaTipo::query()
-            ->where('sala_id', $salaId)
-            ->orderBy('codigo')
-            ->get();
+        return $q->orderBy('codigo')->get();
     }
 
     /**
@@ -238,6 +265,9 @@ class TesoreriaCrownBovedaTipoController extends Controller
             'signo' => (string) $datos['signo'],
             'operacion' => (string) $datos['operacion'],
             'activo' => TesoreriaCrownAcceso::marcado($datos['activo']),
+            'para_reporte_propina' => TesoreriaCrownAcceso::marcado($datos['para_reporte_propina'] ?? 0),
+            'vigente_desde' => $datos['vigente_desde'] ?? null,
+            'vigente_hasta' => $datos['vigente_hasta'] ?? null,
         ];
     }
 

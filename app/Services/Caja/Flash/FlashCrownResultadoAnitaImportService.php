@@ -27,11 +27,17 @@ final class FlashCrownResultadoAnitaImportService
      * Campos estables en todas las salas (schema mínimo + soft/peek/multi).
      * Se evita customSql con columnas opcionales que no existen en todos los Informix.
      */
+    /**
+     * Campos de ventas.resultado que el flash debe replicar 1:1 (salvo slots → resulol).
+     * No hardcodear a 0 un campo que exista acá: si Anita lo trae, mapearlo en mapearPayload.
+     */
     private const CAMPOS_LIST = 'resul_sucursal,resul_fecha,resul_att,resul_blackjack_r,resul_wheel_r,'
         .'resul_baccarat_r,resul_caribbean_r,resul_poker_r,resul_crap_r,resul_seven_r,'
-        .'resul_cashdrop,resul_cant_mesas,resul_ayb,resul_tot_hotel,resul_slot_d,resul_slot_r,resul_cant_slots,'
-        .'resul_ruleta_el_d,resul_ruleta_el_r,resul_proc_mesa,resul_proc_slot,resul_soft_count,'
-        .'resul_super_peek_r,resul_multi_r';
+        .'resul_cashdrop,resul_cant_mesas,resul_caja_emp,resul_soft_mesas,resul_ayb,resul_tot_hotel,'
+        .'resul_slot_d,resul_slot_r,resul_cant_slots,resul_hard_count,resul_soft_count,'
+        .'resul_ruleta_el_d,resul_ruleta_el_r,resul_soft_rul_el,resul_cant_rul_el,resul_coin_in_rul,'
+        .'resul_cash_less,resul_torneo_poker,resul_master_cup,resul_inscripcion,resul_premio,'
+        .'resul_proc_mesa,resul_proc_slot,resul_super_peek_r,resul_multi_r';
 
     /**
      * @param  list<string>|null  $codigosSala  null = todas excepto CIP
@@ -248,11 +254,13 @@ final class FlashCrownResultadoAnitaImportService
                         $detallePrev['anita_revenue'] = [
                             'ayb' => $payload['ayb'],
                             'hotel' => $payload['hotel'],
-                            'fuente' => 'resultado.resul_ayb/resul_tot_hotel',
+                            'caja_empleado' => $payload['caja_empleado'],
+                            'fuente' => 'resultado.resul_ayb/resul_tot_hotel/resul_caja_emp',
                         ];
                         $flash->fill([
                             'ayb' => $payload['ayb'],
                             'hotel' => $payload['hotel'],
+                            'caja_empleado' => $payload['caja_empleado'],
                             'detalle_json' => $detallePrev,
                         ]);
                         $flash->save();
@@ -346,22 +354,26 @@ final class FlashCrownResultadoAnitaImportService
     private function leerResultado(string $ifxServer, int $sucursal, int $desdeInt, int $hastaInt): array
     {
         $api = new ApiAnita;
-        // list + filtro local: el WHERE del bridge a veces no aplica; customSql varía por schema.
-        $payload = [
-            'acc' => 'list',
-            'tabla' => 'resultado',
+        // customSql con rango: `list` + where del bridge suele ignorar el filtro y
+        // descarga todo el historial de la sucursal → OOM en el request web (512M).
+        $sql = 'SELECT '.self::CAMPOS_LIST
+            .' FROM resultado WHERE resul_sucursal = '.$sucursal
+            .' AND resul_fecha BETWEEN '.$desdeInt.' AND '.$hastaInt
+            .' ORDER BY resul_fecha';
+        $raw = $api->apiCall([
+            'acc' => 'customSql',
+            'campos' => self::CAMPOS_LIST,
+            'customSql' => $sql,
             'sistema' => 'ventas',
             'path_sistema' => (string) config('caja_anita.path_sistema', '/usr2/casino'),
             'ifx_server' => $ifxServer,
-            'campos' => self::CAMPOS_LIST,
-            'where' => ' WHERE resul_sucursal = '.$sucursal,
-        ];
-        $raw = $api->apiCall($payload);
+        ]);
         $error = ApiAnita::extraerMensajeError(is_string($raw) ? $raw : null);
         if ($error !== null && $error !== '') {
             throw new RuntimeException($error);
         }
         $filas = ApiAnita::decodificarListaFilas(is_string($raw) ? $raw : '');
+        unset($raw);
         $out = [];
         foreach ($filas as $fila) {
             if ((int) ($fila->resul_sucursal ?? 0) !== $sucursal) {
@@ -373,6 +385,7 @@ final class FlashCrownResultadoAnitaImportService
             }
             $out[] = $fila;
         }
+        unset($filas);
         usort($out, static fn ($a, $b) => (int) $a->resul_fecha <=> (int) $b->resul_fecha);
 
         return $out;
@@ -528,9 +541,9 @@ final class FlashCrownResultadoAnitaImportService
             'fecha' => $fecha,
             'att' => $this->entero($anita, 'resul_att'),
             'cashdrop' => $this->num($anita, 'resul_cashdrop'),
-            'soft_mesas' => 0.0,
+            'soft_mesas' => $this->num($anita, 'resul_soft_mesas'),
             'cant_mesas' => $this->entero($anita, 'resul_cant_mesas'),
-            'caja_empleado' => 0.0,
+            'caja_empleado' => $this->num($anita, 'resul_caja_emp'),
             'wheel_r' => $wheel,
             'baccarat_r' => $baccarat,
             'blackjack_r' => $blackjack,
@@ -540,24 +553,24 @@ final class FlashCrownResultadoAnitaImportService
             'poker_r' => $poker,
             'seven_r' => $seven,
             'super_peek_r' => $peek,
-            'torneo_poker' => 0.0,
-            'master_cup' => 0.0,
-            'inscripcion' => 0.0,
-            'premio' => 0.0,
+            'torneo_poker' => $this->num($anita, 'resul_torneo_poker'),
+            'master_cup' => $this->num($anita, 'resul_master_cup'),
+            'inscripcion' => $this->num($anita, 'resul_inscripcion'),
+            'premio' => $this->num($anita, 'resul_premio'),
             'slot_d' => $this->num($anita, 'resul_slot_d'),
             'soft_count' => $soft,
-            'hard_count' => 0.0,
+            'hard_count' => $this->num($anita, 'resul_hard_count'),
             'cant_slots' => $cantSlots,
             'coin_in' => $coinIn,
             'coin_out' => $coinOut,
             'pago_manual' => $pagoManual,
             'slot_r' => $slotR,
-            'cash_less' => 0.0,
+            'cash_less' => $this->num($anita, 'resul_cash_less'),
             'ruleta_el_d' => $this->num($anita, 'resul_ruleta_el_d'),
             'ruleta_el_r' => $this->num($anita, 'resul_ruleta_el_r'),
-            'soft_rul_el' => 0.0,
-            'cant_rul_el' => 0,
-            'coin_in_rul' => 0.0,
+            'soft_rul_el' => $this->num($anita, 'resul_soft_rul_el'),
+            'cant_rul_el' => $this->entero($anita, 'resul_cant_rul_el'),
+            'coin_in_rul' => $this->num($anita, 'resul_coin_in_rul'),
             'ayb' => $this->num($anita, 'resul_ayb'),
             // l-flashcasino / a-resultado: Hotel = resul_tot_hotel (todas las salas, no solo CIP).
             'hotel' => $this->num($anita, 'resul_tot_hotel'),
@@ -593,11 +606,15 @@ final class FlashCrownResultadoAnitaImportService
 
         $diffHotel = abs((float) $erp->hotel - (float) $payload['hotel']) >= 0.02;
         $diffAyb = abs((float) $erp->ayb - (float) $payload['ayb']) >= 0.02;
+        $diffCajaEmp = abs((float) $erp->caja_empleado - (float) $payload['caja_empleado']) >= 0.02;
 
-        // Validado / ya facturado: igual se puede alinear Hotel/F&B (no tocan proc_*/ventas de juego).
+        // Validado / ya facturado: igual se puede alinear Hotel/F&B/caja emp. (no tocan proc_*/ventas).
         if ($erp->estaValidado() || $this->yaFacturado($erp)) {
-            if ($diffHotel || $diffAyb) {
-                return ['accion' => 'actualizar_revenue', 'motivo' => $erp->estaValidado() ? 'validado+hotel/ayb' : 'facturado+hotel/ayb'];
+            if ($diffHotel || $diffAyb || $diffCajaEmp) {
+                return [
+                    'accion' => 'actualizar_revenue',
+                    'motivo' => $erp->estaValidado() ? 'validado+revenue' : 'facturado+revenue',
+                ];
             }
 
             return ['accion' => 'omitir', 'motivo' => $erp->estaValidado() ? 'validado' : 'ya facturado'];
@@ -615,11 +632,11 @@ final class FlashCrownResultadoAnitaImportService
             && abs($slotErp - (float) $payload['_slot']) < 0.02
             && abs((float) $erp->ruleta_el_r - (float) $payload['ruleta_el_r']) < 0.02;
 
-        if ($igualJuego && ! $diffHotel && ! $diffAyb) {
+        if ($igualJuego && ! $diffHotel && ! $diffAyb && ! $diffCajaEmp) {
             return ['accion' => 'omitir', 'motivo' => 'igual'];
         }
-        if ($igualJuego && ($diffHotel || $diffAyb)) {
-            return ['accion' => 'actualizar_revenue', 'motivo' => 'hotel/ayb'];
+        if ($igualJuego && ($diffHotel || $diffAyb || $diffCajaEmp)) {
+            return ['accion' => 'actualizar_revenue', 'motivo' => 'hotel/ayb/caja_emp'];
         }
 
         return ['accion' => 'actualizar', 'motivo' => 'diff'];

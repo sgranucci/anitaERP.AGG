@@ -5,7 +5,8 @@ namespace App\Support\Caja;
 use Illuminate\Http\Request;
 
 /**
- * Filtros del informe comparativo de propinas por casino (Anita: l-propinaxcas.c).
+ * Filtros del informe comparativo de propinas por casino
+ * (bóveda tipificada + propina de estados finales de mesa).
  */
 final class TesoreriaCrownPropinaCasinoFiltros
 {

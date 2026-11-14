@@ -14,6 +14,9 @@ final class AsientoAnitaMetadatosSupport
 
     public const ORIGEN_SUBHIST = 'subhist';
 
+    /** Asiento armado por transferencia Crown (ARCA / gastronomía / hotel), con venta_id. */
+    public const ORIGEN_TRANSFERENCIA = 'transferencia';
+
     /**
      * Observación generada por AnitaAsientoImportService:
      * "[SUBH] C COM X 1 159056" o "B COM X 1 156408".
@@ -175,5 +178,25 @@ final class AsientoAnitaMetadatosSupport
     public static function claveAsiento(int $empresa, int $fechaYmd, int $numeroAsiento): string
     {
         return $empresa.'|'.$fechaYmd.'|'.$numeroAsiento;
+    }
+
+    /**
+     * Clave fiscal para detectar el mismo comprobante con distinto numeroasiento
+     * (p. ej. transferencia ERP vs nro_operacion de subdiario Anita).
+     */
+    public static function claveDocumento(?string $tipo, ?string $letra, int|string|null $sucursal, int|string|null $nro): ?string
+    {
+        $tipo = strtoupper(trim((string) $tipo));
+        $letra = strtoupper(trim((string) $letra));
+        if ($letra === '') {
+            $letra = ' ';
+        }
+        $sucursal = (int) $sucursal;
+        $nro = (int) $nro;
+        if ($tipo === '' || $sucursal <= 0 || $nro <= 0) {
+            return null;
+        }
+
+        return $tipo.'|'.$letra.'|'.$sucursal.'|'.$nro;
     }
 }

@@ -28,6 +28,7 @@
 
 @section('contenido')
 @php
+    use App\Support\Caja\Flash\FlashCrownNumeroSupport as N;
     $grupos = [
         'mesas' => [
             'titulo' => 'Mesas',
@@ -134,15 +135,15 @@
                     <div class="fc-kpi">
                         <div class="kpi ok">
                             <span class="lbl">Combined</span>
-                            <span class="val">{{ number_format((float) ($metricas['combined'] ?? 0), 2, ',', '.') }}</span>
+                            <span class="val">{!! N::html($metricas['combined'] ?? 0) !!}</span>
                         </div>
                         <div class="kpi">
                             <span class="lbl">Año ant. mismo día</span>
-                            <span class="val">{{ number_format((float) ($metricas['combined_anterior'] ?? 0), 2, ',', '.') }}</span>
+                            <span class="val">{!! N::html($metricas['combined_anterior'] ?? 0) !!}</span>
                         </div>
                         <div class="kpi">
                             <span class="lbl">Variación</span>
-                            <span class="val">{{ number_format((float) ($metricas['variacion_anterior'] ?? 0), 2, ',', '.') }}%</span>
+                            <span class="val">{!! N::html($metricas['variacion_anterior'] ?? 0) !!}%</span>
                         </div>
                     </div>
                     <div class="text-muted small">
@@ -185,11 +186,14 @@
                                                     <tr>
                                                         <td>{{ $label }}</td>
                                                         <td class="text-right online">
-                                                            {{ $esEntero || is_int($liveVal) ? number_format((int) $liveVal, 0, ',', '.') : number_format((float) $liveVal, 2, ',', '.') }}
+                                                            {!! $esEntero || is_int($liveVal) ? N::html($liveVal, 0) : N::html($liveVal) !!}
                                                         </td>
                                                         <td>
-                                                            <input type="text" name="{{ $key }}" class="form-control form-control-sm text-right"
-                                                                   value="{{ is_numeric($val) ? ($esEntero ? (int) $val : number_format((float) $val, 2, '.', '')) : $val }}">
+                                                            <input type="text" name="{{ $key }}"
+                                                                   class="form-control form-control-sm text-right fc-input-num"
+                                                                   inputmode="decimal"
+                                                                   data-decimales="{{ $esEntero ? 0 : 2 }}"
+                                                                   value="{{ is_numeric($val) ? N::texto($val, $esEntero ? 0 : 2) : $val }}">
                                                         </td>
                                                         <td class="text-center">
                                                             <input type="checkbox" name="marcar_{{ $key }}" value="1" {{ $esOverride ? 'checked' : '' }} title="Override manual">
@@ -233,5 +237,41 @@ document.querySelectorAll('#form-flash-crown input[type=checkbox][name^="marcar_
         if (hidden) hidden.value = cb.checked ? '1' : '';
     });
 });
+
+(function () {
+    function parseAr(raw) {
+        if (raw === null || raw === undefined) return 0;
+        var s = String(raw).trim().replace(/\s|\u00a0/g, '');
+        if (!s || s === '-' || s === ',' || s === '.') return 0;
+        var neg = false;
+        if (s.charAt(0) === '-') { neg = true; s = s.slice(1); }
+        if (s.indexOf(',') !== -1) {
+            s = s.replace(/\./g, '').replace(',', '.');
+        } else if ((s.match(/\./g) || []).length > 1) {
+            s = s.replace(/\./g, '');
+        }
+        var n = parseFloat(s);
+        if (isNaN(n)) n = 0;
+        return neg ? -n : n;
+    }
+    function formatAr(n, dec) {
+        dec = dec || 0;
+        var neg = n < 0;
+        n = Math.abs(n);
+        var partes = n.toFixed(dec).split('.');
+        partes[0] = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        var t = partes.join(',');
+        return neg ? '-' + t : t;
+    }
+    document.querySelectorAll('#form-flash-crown input.fc-input-num').forEach(function (inp) {
+        var dec = parseInt(inp.getAttribute('data-decimales') || '2', 10);
+        inp.addEventListener('blur', function () {
+            inp.value = formatAr(parseAr(inp.value), dec);
+        });
+        inp.addEventListener('focus', function () {
+            inp.select();
+        });
+    });
+})();
 </script>
 @endsection

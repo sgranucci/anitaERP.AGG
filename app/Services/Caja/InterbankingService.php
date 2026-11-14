@@ -11,9 +11,15 @@ class InterbankingService
     public function __construct(
     ) {}
 
-    private function tokenStoragePath(int $empresaId): string
+    private const TOKEN_USO_CONSULTA = 'consulta';
+
+    private const TOKEN_USO_CONFECCION = 'confeccion';
+
+    private function tokenStoragePath(int $empresaId, string $uso = self::TOKEN_USO_CONSULTA): string
     {
-        return 'tokeninterbanking_'.$empresaId.'.json';
+        return $uso === self::TOKEN_USO_CONFECCION
+            ? 'tokeninterbanking_confeccion_'.$empresaId.'.json'
+            : 'tokeninterbanking_'.$empresaId.'.json';
     }
 
     /**
@@ -52,11 +58,13 @@ class InterbankingService
     }
 
     /**
-     * Token OAuth y datos de cliente para llamadas a la API (balances, movimientos, etc.).
+     * Token OAuth y datos de cliente para llamadas a la API.
+     * Consultas: client_credentials + info-financiera.
+     * Confección: password + Operador API + scope confeccion-transferencias.
      *
      * @return array{ok: true, access_token: string, client_id: string, customer_id: string}|array{ok: false, error: string}
      */
-    private function contextoApiInterbanking(int $empresaId): array
+    private function contextoApiInterbanking(int $empresaId, string $uso = self::TOKEN_USO_CONSULTA): array
     {
         $customerIds = config('interbanking.customer_id');
         if (! is_array($customerIds)) {
@@ -82,10 +90,20 @@ class InterbankingService
             ];
         }
 
+        if ($uso === self::TOKEN_USO_CONFECCION && $this->credencialesOperadorApi() === null) {
+            return [
+                'ok' => false,
+                'error' => 'Falta Operador API Interbanking (INTERBANKING_OPERADOR_CLAVE_SISTEMA / USUARIO / PASSWORD).',
+            ];
+        }
+
         try {
-            $this->ensureTokenInterbanking($empresaId);
+            $this->ensureTokenInterbanking($empresaId, $uso);
         } catch (Throwable $e) {
-            Log::warning('Interbanking: fallo al asegurar token', ['exception' => $e->getMessage()]);
+            Log::warning('Interbanking: fallo al asegurar token', [
+                'uso' => $uso,
+                'exception' => $e->getMessage(),
+            ]);
 
             return [
                 'ok' => false,
@@ -93,17 +111,19 @@ class InterbankingService
             ];
         }
 
-        $path = $this->tokenStoragePath($empresaId);
+        $path = $this->tokenStoragePath($empresaId, $uso);
         if (! Storage::exists($path)) {
             return [
                 'ok' => false,
-                'error' => 'No hay token de Interbanking; verifique credenciales y conectividad.',
+                'error' => $uso === self::TOKEN_USO_CONFECCION
+                    ? 'No hay token de Confección Interbanking; verifique Operador API y conectividad.'
+                    : 'No hay token de Interbanking; verifique credenciales y conectividad.',
             ];
         }
 
         $token = json_decode(Storage::get($path));
         if (! $token || empty($token->access_token)) {
-            Log::warning('Interbanking: token ausente o JSON inválido');
+            Log::warning('Interbanking: token ausente o JSON inválido', ['uso' => $uso]);
 
             return [
                 'ok' => false,
@@ -116,6 +136,26 @@ class InterbankingService
             'access_token' => (string) $token->access_token,
             'client_id' => $credenciales['client_id'],
             'customer_id' => (string) $customerIds[$idx],
+        ];
+    }
+
+    /**
+     * @return array{clave_sistema: string, usuario: string, password: string, username_oauth: string}|null
+     */
+    private function credencialesOperadorApi(): ?array
+    {
+        $clave = trim((string) config('interbanking.operador_api_clave_sistema', ''));
+        $usuario = trim((string) config('interbanking.operador_api_usuario', ''));
+        $password = (string) config('interbanking.operador_api_password', '');
+        if ($clave === '' || $usuario === '' || $password === '') {
+            return null;
+        }
+
+        return [
+            'clave_sistema' => $clave,
+            'usuario' => $usuario,
+            'password' => $password,
+            'username_oauth' => '-3|'.$clave.'|'.$usuario,
         ];
     }
 
@@ -142,7 +182,8 @@ class InterbankingService
         string $method,
         callable $construirUrl,
         ?array $bodyJson,
-        string $operacion
+        string $operacion,
+        string $usoToken = self::TOKEN_USO_CONSULTA
     ): array {
         $method = strtoupper($method);
         if (! in_array($method, ['GET', 'POST'], true)) {
@@ -155,7 +196,7 @@ class InterbankingService
         }
 
         try {
-            $ctx = $this->contextoApiInterbanking($empresaId);
+            $ctx = $this->contextoApiInterbanking($empresaId, $usoToken);
             if (! $ctx['ok']) {
                 return [
                     'ok' => false,
@@ -167,8 +208,8 @@ class InterbankingService
 
             for ($intento = 1; $intento <= 2; $intento++) {
                 if ($intento > 1) {
-                    $this->pideTokenInterbanking($empresaId);
-                    $ctx = $this->contextoApiInterbanking($empresaId);
+                    $this->pideTokenInterbanking($empresaId, $usoToken);
+                    $ctx = $this->contextoApiInterbanking($empresaId, $usoToken);
                     if (! $ctx['ok']) {
                         return [
                             'ok' => false,
@@ -236,6 +277,13 @@ class InterbankingService
                             'error' => null,
                         ];
                     }
+
+                    return [
+                        'ok' => false,
+                        'http_code' => $httpCode,
+                        'data' => null,
+                        'error' => 'Interbanking respondió HTTP '.$httpCode.' sin detalle en el cuerpo.',
+                    ];
                 }
 
                 if (! is_array($data)) {
@@ -341,6 +389,22 @@ class InterbankingService
 
     private function mensajeErrorHttpInterbanking(array $data, int $httpCode): string
     {
+        if (! empty($data['errors']) && is_array($data['errors'])) {
+            $partes = [];
+            foreach ($data['errors'] as $err) {
+                if (! is_array($err)) {
+                    continue;
+                }
+                $parte = trim((string) ($err['message'] ?? $err['code'] ?? ''));
+                if ($parte !== '') {
+                    $partes[] = $parte;
+                }
+            }
+            if ($partes !== []) {
+                return implode(' | ', $partes);
+            }
+        }
+
         $msg = $data['message']
             ?? $data['moreInformation']
             ?? $data['httpMessage']
@@ -679,19 +743,21 @@ class InterbankingService
     /**
      * Pre-confección de transferencia a CBU (API transaccional Confección de Transferencias).
      *
-     * Confección de Transferencias (portal):
-     * - supplier / third-party / own-account / salary → `POST …/v2/transfers/confection/{tipo}`
-     * - query `customer-id` (+ opcionales `resend-validated`, `consolidated-check`, `unified-send`)
+     * Body real (v1.5.x): flags en root + `found_transfers[]` con
+     * `debit_account.account_cbu` / `credit_account.account_cbu`, `confection_id` numérico,
+     * `request_date`, `amount`.
      *
      * Enganche: OP/I-E → `supplier`; solicitud retiro juego → `third-party`.
-     * No persiste proceso de negocio: solo proxy HTTP.
      *
      * @param  array{
-     *     debit_account_number: string,
-     *     debit_bank_number: string,
+     *     debit_cbu: string,
      *     credit_cbu: string,
      *     amount: float|int|string,
      *     confection_type?: string,
+     *     confection_id?: int|string|null,
+     *     request_date?: string|null,
+     *     debit_account_number?: string,
+     *     debit_bank_number?: string,
      *     debit_account_type?: string,
      *     debit_currency?: string,
      *     concept?: string|null,
@@ -705,25 +771,16 @@ class InterbankingService
      */
     public function crearTransferenciaACbu(int $empresaId, array $payload): array
     {
-        $debitAccount = trim((string) ($payload['debit_account_number'] ?? ''));
-        $debitBank = trim((string) ($payload['debit_bank_number'] ?? ''));
+        $debitCbu = preg_replace('/\D/', '', (string) ($payload['debit_cbu'] ?? '')) ?? '';
         $creditCbu = preg_replace('/\D/', '', (string) ($payload['credit_cbu'] ?? '')) ?? '';
         $amountRaw = $payload['amount'] ?? null;
 
-        if ($debitAccount === '') {
+        if (! preg_match('/^[0-9]{22}$/', $debitCbu)) {
             return [
                 'ok' => false,
                 'http_code' => 0,
                 'data' => null,
-                'error' => 'debit_account_number es obligatorio.',
-            ];
-        }
-        if (! preg_match('/^[0-9]{3}$/', $debitBank)) {
-            return [
-                'ok' => false,
-                'http_code' => 0,
-                'data' => null,
-                'error' => 'debit_bank_number debe ser un código de 3 dígitos.',
+                'error' => 'debit_cbu (CBU cuenta origen) debe tener 22 dígitos.',
             ];
         }
         if (! preg_match('/^[0-9]{22}$/', $creditCbu)) {
@@ -743,59 +800,54 @@ class InterbankingService
             ];
         }
 
-        $debitAccountType = strtoupper((string) ($payload['debit_account_type'] ?? 'CC'));
-        if (! in_array($debitAccountType, ['CC', 'CA'], true)) {
-            return [
-                'ok' => false,
-                'http_code' => 0,
-                'data' => null,
-                'error' => 'debit_account_type debe ser CC o CA.',
-            ];
+        $confectionId = (int) ($payload['confection_id'] ?? 0);
+        if ($confectionId <= 0) {
+            $confectionId = (int) substr((string) (time().random_int(100, 999)), -18);
         }
+        // API: numérico, máx. 18 dígitos.
+        $confectionId = (int) substr((string) $confectionId, 0, 18);
 
-        $debitCurrency = strtoupper((string) ($payload['debit_currency'] ?? 'ARS'));
-        if (! in_array($debitCurrency, ['ARS', 'USD'], true)) {
-            return [
-                'ok' => false,
-                'http_code' => 0,
-                'data' => null,
-                'error' => 'debit_currency debe ser ARS o USD.',
-            ];
+        $requestDate = trim((string) ($payload['request_date'] ?? ''));
+        if ($requestDate === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $requestDate)) {
+            $requestDate = date('Y-m-d');
         }
-
-        $body = [
-            'debit-account-number' => $debitAccount,
-            'debit-bank-number' => $debitBank,
-            'debit-account-type' => $debitAccountType,
-            'debit-currency' => $debitCurrency,
-            'credit-cbu' => $creditCbu,
-            'amount' => round((float) $amountRaw, 2),
-        ];
 
         $concept = trim((string) ($payload['concept'] ?? $payload['description'] ?? ''));
-        if ($concept !== '') {
-            $body['concept'] = $concept;
-            $body['description'] = $concept;
+        if ($concept === '') {
+            $concept = 'Transferencia';
         }
+
+        $transfer = [
+            'confection_id' => $confectionId,
+            'request_date' => $requestDate,
+            'amount' => round((float) $amountRaw, 2),
+            'concept' => $concept,
+            'description' => $concept,
+            'debit_account' => [
+                'account_cbu' => $debitCbu,
+            ],
+            'credit_account' => [
+                'account_cbu' => $creditCbu,
+            ],
+        ];
 
         $email = trim((string) ($payload['email'] ?? ''));
         if ($email !== '') {
-            $body['email'] = $email;
+            $transfer['email'] = $email;
         }
 
-        $queryExtra = [];
-        foreach (
-            [
-                'resend_validated' => 'resend-validated',
-                'consolidated_check' => 'consolidated-check',
-                'unified_send' => 'unified-send',
-            ] as $inputKey => $apiKey
-        ) {
-            if (! array_key_exists($inputKey, $payload) || $payload[$inputKey] === null) {
-                continue;
-            }
-            $queryExtra[$apiKey] = ! empty($payload[$inputKey]) ? 'true' : 'false';
-        }
+        $body = [
+            'consolidated_check' => array_key_exists('consolidated_check', $payload)
+                ? (bool) $payload['consolidated_check']
+                : false,
+            'unified_send' => array_key_exists('unified_send', $payload)
+                ? (bool) $payload['unified_send']
+                : false,
+            'resend_validated' => array_key_exists('resend_validated', $payload)
+                ? (bool) $payload['resend_validated']
+                : true,
+            'found_transfers' => [$transfer],
+        ];
 
         $confectionType = strtolower(trim((string) ($payload['confection_type'] ?? 'supplier')));
         $baseUrl = $this->urlConfeccionTransferencia($confectionType);
@@ -808,20 +860,97 @@ class InterbankingService
             ];
         }
 
-        return $this->ejecutarRequestAutenticado(
+        $resultado = $this->ejecutarRequestAutenticado(
             $empresaId,
             'POST',
-            function (array $ctx) use ($baseUrl, $queryExtra): string {
-                $query = array_merge($queryExtra, [
-                    'customer-id' => $ctx['customer_id'],
-                ]);
+            function (array $ctx) use ($baseUrl): string {
                 $sep = str_contains($baseUrl, '?') ? '&' : '?';
 
-                return $baseUrl.$sep.http_build_query($query);
+                return $baseUrl.$sep.http_build_query([
+                    'customer-id' => $ctx['customer_id'],
+                ]);
             },
             $body,
-            'crear-transferencia-cbu-'.$confectionType
+            'crear-transferencia-cbu-'.$confectionType,
+            self::TOKEN_USO_CONFECCION
         );
+
+        return $this->interpretarRespuestaConfeccion($resultado);
+    }
+
+    /**
+     * HTTP 200 puede traer status:false + rejected_transfers (negocio).
+     *
+     * @param  array{ok: bool, http_code: int, data: array|null, error: string|null}  $resultado
+     * @return array{ok: bool, http_code: int, data: array|null, error: string|null}
+     */
+    private function interpretarRespuestaConfeccion(array $resultado): array
+    {
+        if (empty($resultado['ok'])) {
+            return $resultado;
+        }
+
+        $data = $resultado['data'];
+        if (! is_array($data)) {
+            return $resultado;
+        }
+
+        $inner = is_array($data['data'] ?? null) ? $data['data'] : $data;
+        $accepted = $inner['accepted_transfers'] ?? null;
+        $rejected = $inner['rejected_transfers'] ?? null;
+        $statusOk = ! empty($inner['status']) || (is_array($accepted) && $accepted !== []);
+
+        if ($statusOk && is_array($accepted) && $accepted !== []) {
+            return [
+                'ok' => true,
+                'http_code' => (int) ($resultado['http_code'] ?? 200),
+                'data' => $data,
+                'error' => null,
+            ];
+        }
+
+        $mensajes = [];
+        if (is_array($rejected)) {
+            foreach ($rejected as $rej) {
+                if (! is_array($rej)) {
+                    continue;
+                }
+                $errs = $rej['errors'] ?? [];
+                if (! is_array($errs)) {
+                    continue;
+                }
+                foreach ($errs as $err) {
+                    if (! is_array($err)) {
+                        continue;
+                    }
+                    $msg = trim((string) ($err['message'] ?? $err['code'] ?? ''));
+                    if ($msg !== '') {
+                        $mensajes[] = $msg;
+                    }
+                }
+            }
+        }
+
+        if ($mensajes === [] && isset($data['errors']) && is_array($data['errors'])) {
+            foreach ($data['errors'] as $err) {
+                if (! is_array($err)) {
+                    continue;
+                }
+                $msg = trim((string) ($err['message'] ?? $err['code'] ?? ''));
+                if ($msg !== '') {
+                    $mensajes[] = $msg;
+                }
+            }
+        }
+
+        return [
+            'ok' => false,
+            'http_code' => (int) ($resultado['http_code'] ?? 200),
+            'data' => $data,
+            'error' => $mensajes !== []
+                ? implode(' | ', $mensajes)
+                : 'Interbanking no aceptó la transferencia (sin detalle).',
+        ];
     }
 
     /**
@@ -877,16 +1006,17 @@ class InterbankingService
                 'customer-id' => $ctx['customer_id'],
             ]),
             null,
-            'proceso-async-transferencia'
+            'proceso-async-transferencia',
+            self::TOKEN_USO_CONFECCION
         );
     }
 
-    private function ensureTokenInterbanking(int $empresaId): void
+    private function ensureTokenInterbanking(int $empresaId, string $uso = self::TOKEN_USO_CONSULTA): void
     {
-        $path = $this->tokenStoragePath($empresaId);
+        $path = $this->tokenStoragePath($empresaId, $uso);
 
         if (! Storage::exists($path)) {
-            $this->pideTokenInterbanking($empresaId);
+            $this->pideTokenInterbanking($empresaId, $uso);
 
             return;
         }
@@ -894,7 +1024,7 @@ class InterbankingService
         $raw = Storage::get($path);
         $token = is_string($raw) ? json_decode($raw, true) : null;
         if (! is_array($token) || empty($token['access_token'])) {
-            $this->pideTokenInterbanking($empresaId);
+            $this->pideTokenInterbanking($empresaId, $uso);
 
             return;
         }
@@ -907,11 +1037,11 @@ class InterbankingService
         $obtainedAt = Storage::lastModified($path);
         $bufferSeconds = 120;
         if (time() >= $obtainedAt + $expiresIn - $bufferSeconds) {
-            $this->pideTokenInterbanking($empresaId);
+            $this->pideTokenInterbanking($empresaId, $uso);
         }
     }
 
-    public function pideTokenInterbanking(int $empresaId): void
+    public function pideTokenInterbanking(int $empresaId, string $uso = self::TOKEN_USO_CONSULTA): void
     {
         $credenciales = $this->credencialesPorEmpresa($empresaId);
         if ($credenciales === null) {
@@ -921,18 +1051,35 @@ class InterbankingService
         }
 
         $url = 'https://auth.interbanking.com.ar/cas/oidc/accessToken';
-        $clienteId = $credenciales['client_id'];
-        $clientSecret = $credenciales['client_secret'];
+        $postData = [
+            'client_id' => $credenciales['client_id'],
+            'client_secret' => $credenciales['client_secret'],
+        ];
+
+        if ($uso === self::TOKEN_USO_CONFECCION) {
+            $operador = $this->credencialesOperadorApi();
+            if ($operador === null) {
+                Log::warning('Interbanking: sin Operador API para confección', ['empresa_id' => $empresaId]);
+
+                return;
+            }
+            $scope = trim((string) config('interbanking.confeccion_scope', 'confeccion-transferencias'));
+            if ($scope === '') {
+                $scope = 'confeccion-transferencias';
+            }
+            $postData['grant_type'] = 'password';
+            $postData['username'] = $operador['username_oauth'];
+            $postData['password'] = $operador['password'];
+            $postData['scope'] = $scope;
+        } else {
+            $postData['grant_type'] = 'client_credentials';
+            $postData['scope'] = 'info-financiera - Informacion Financiera';
+        }
 
         $curl = curl_init();
-
-        $header = ['Content-Type: application/x-www-form-urlencoded'];
-
-        $postData = [
-            'grant_type' => 'client_credentials',
-            'client_id' => $clienteId,
-            'client_secret' => $clientSecret,
-            'scope' => 'info-financiera - Informacion Financiera',
+        $header = [
+            'Content-Type: application/x-www-form-urlencoded',
+            'Accept: application/json',
         ];
 
         curl_setopt($curl, CURLOPT_URL, $url);
@@ -949,6 +1096,7 @@ class InterbankingService
         if (curl_errno($curl)) {
             Log::warning('Interbanking: error cURL al pedir token', [
                 'empresa_id' => $empresaId,
+                'uso' => $uso,
                 'errno' => curl_errno($curl),
                 'error' => curl_error($curl),
             ]);
@@ -956,10 +1104,11 @@ class InterbankingService
             $result = json_decode($response, true);
 
             if (isset($result['access_token'])) {
-                Storage::put($this->tokenStoragePath($empresaId), json_encode($result));
+                Storage::put($this->tokenStoragePath($empresaId, $uso), json_encode($result));
             } else {
                 Log::warning('Interbanking: error al obtener token', [
                     'empresa_id' => $empresaId,
+                    'uso' => $uso,
                     'http' => (int) curl_getinfo($curl, CURLINFO_HTTP_CODE),
                     'fragmento' => is_string($response) ? substr($response, 0, 500) : null,
                 ]);

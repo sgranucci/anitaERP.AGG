@@ -26,6 +26,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/articulo_centrocosto_cuenta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/articulo_centrocosto_cuenta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/formulario.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/consulta-listasprecio.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/consulta-listasprecio.js')) ?: time() }}" type="text/javascript"></script>
 @if (\App\Support\Compras\OrdencompraUiConfigSupport::solicitanteEditable() && empty($visualizar))
 <script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script>

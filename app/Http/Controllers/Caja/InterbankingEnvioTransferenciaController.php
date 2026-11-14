@@ -52,15 +52,32 @@ class InterbankingEnvioTransferenciaController extends Controller
 
         $preview = null;
         $consultado = false;
+        $filtroError = null;
 
         if ($fuente === 'proveedores' && $request->boolean('consultar')) {
             $consultado = true;
-            ini_set('memory_limit', '512M');
-            $preview = $this->service->previewProveedores($filtros);
-            if (! empty($preview['ok'])) {
-                $this->guardarPreviewSesion('proveedores', $filtros, $preview['filas']);
+            if ((int) ($filtros['cuentacaja_id'] ?? 0) <= 0 || $cuentaOrigen === null) {
+                $filtroError = 'Indique la cuenta de caja origen (filtro): solo se listan OP/I-E pagadas por esa cuenta y con ella se debita en Interbanking.';
+                $preview = [
+                    'ok' => false,
+                    'mensaje' => $filtroError,
+                    'filas' => [],
+                    'omitidas' => [],
+                    'total_importe' => 0.0,
+                    'cantidad' => 0,
+                    'seleccionables' => 0,
+                ];
+            } else {
+                ini_set('memory_limit', '512M');
+                $preview = $this->service->previewProveedores($filtros);
+                if (! empty($preview['ok'])) {
+                    $this->guardarPreviewSesion('proveedores', $filtros, $preview['filas']);
+                }
             }
         }
+
+        $ultimoEnvioId = (int) (session('ib_envio_id') ?: $request->input('envio_id', 0));
+        $ultimoEnvio = $this->cargarUltimoEnvio($ultimoEnvioId);
 
         return view('caja.interbanking.envio_transferencias', [
             'empresa_query' => $empresaQuery,
@@ -69,7 +86,8 @@ class InterbankingEnvioTransferenciaController extends Controller
             'consultado' => $consultado,
             'preview' => $preview,
             'cuenta_origen' => $cuentaOrigen,
-            'ultimo_envio_id' => session('ib_envio_id'),
+            'filtro_error' => $filtroError,
+            'ultimo_envio' => $ultimoEnvio,
         ]);
     }
 
@@ -81,6 +99,12 @@ class InterbankingEnvioTransferenciaController extends Controller
         $filtros = InterbankingArchivoPagoFiltros::resolverDesdeRequest($request);
         $cuentaOrigen = $this->hidratarCuenta($request, $filtros);
         $filtros['cuentacaja_id'] = $cuentaOrigen ? (int) $cuentaOrigen->id : (int) ($filtros['cuentacaja_id'] ?? 0);
+
+        if ($cuentaOrigen === null || (int) ($filtros['cuentacaja_id'] ?? 0) <= 0) {
+            return redirect()
+                ->route('interbanking_envio_transferencias', ['fuente' => 'solicitud_retiro'])
+                ->with('mensaje_error', 'Indique la cuenta de caja origen (filtro / débito Interbanking) antes de cargar el CSV.');
+        }
 
         $archivo = $request->file('archivo_csv');
         if ($archivo === null || ! $archivo->isValid()) {
@@ -111,7 +135,8 @@ class InterbankingEnvioTransferenciaController extends Controller
             'consultado' => true,
             'preview' => $preview,
             'cuenta_origen' => $cuentaOrigen,
-            'ultimo_envio_id' => null,
+            'filtro_error' => null,
+            'ultimo_envio' => null,
         ]);
     }
 
@@ -173,6 +198,7 @@ class InterbankingEnvioTransferenciaController extends Controller
                 'fecha_hasta' => $preview['filtros']['fecha_hasta'] ?? null,
                 'tipo_op' => $preview['filtros']['tipo_op'] ?? null,
                 'consultar' => ($preview['fuente'] ?? '') === 'proveedores' ? 1 : null,
+                'envio_id' => $resultado['envio_id'] ?? null,
             ])
             ->with('ib_envio_id', $resultado['envio_id'] ?? null);
 
@@ -219,6 +245,19 @@ class InterbankingEnvioTransferenciaController extends Controller
         }
 
         return $this->archivoPagoService->buscarCuentaOrigen((int) ($filtros['empresa_id'] ?? 0), $id);
+    }
+
+    private function cargarUltimoEnvio(int $envioId): ?InterbankingEnvio
+    {
+        if ($envioId <= 0) {
+            return null;
+        }
+
+        return InterbankingEnvio::query()
+            ->with(['lineas' => static function ($q) {
+                $q->orderBy('id');
+            }, 'cuentacaja:id,codigo,nombre'])
+            ->find($envioId);
     }
 
     private function respuestaEnvio(Request $request, bool $ok, string $mensaje): RedirectResponse|JsonResponse

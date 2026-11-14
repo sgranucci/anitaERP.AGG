@@ -23,7 +23,7 @@ use Throwable;
  *   + moneda extranjera convertida (l-monextr: partidas × cotización de ingreso)
  *
  * La propina acumulada ya no suma al VIII: se registra en bóveda PROP
- * (Mesas/Pública con billetaje; Híbrida solo informativo RRHH) y en
+ * (Pública con billetaje; Híbrida y Mesas solo informativo / RRHH) y en
  * tesoreria_crown_propina_dia para liquidación de sueldos.
  *
  * Fuentes ERP: stock_dia / arqueo conforme, bóveda resumen, monextr ERP.
@@ -50,13 +50,14 @@ final class TesoreriaCrownAnexo8Calculo
      *
      * @var array<int, string>
      */
+    /** @deprecated Usar TesoreriaCrownBovedaAnexoMapaSupport::anexo8SignoResumen() */
     private const SIGNO_RESUMEN = [
-        21 => '0', 22 => '1', // Pre depósito
-        25 => '0', 30 => '1', // Fondo
-        31 => '0', 32 => '1', // Caja chica hotel
-        35 => '0', 36 => '1', // Diferencia tesorería
-        6 => '0', 40 => '1',  // Caja chica adm.
-        99 => '0', 98 => '1', // Cancela dif. final bóveda
+        21 => '0', 22 => '1',
+        25 => '0', 30 => '1',
+        31 => '0', 32 => '1',
+        35 => '0', 36 => '1',
+        6 => '0', 40 => '1',
+        99 => '0', 98 => '1',
     ];
 
     /** Grupos del snapshot que ya no entran al VIII (legado Anita). */
@@ -549,24 +550,18 @@ final class TesoreriaCrownAnexo8Calculo
      */
     private static function resumenFinal(string $fechaYmd): array
     {
-        $grupoDeTipo = [
-            21 => 1, 22 => 1,
-            25 => 3, 30 => 3,
-            31 => 4, 32 => 4,
-            35 => 6, 36 => 6,
-            6 => 7, 40 => 7,
-            99 => 99, 98 => 99,
-        ];
-        $codigos = array_keys(self::SIGNO_RESUMEN);
+        $signoResumen = TesoreriaCrownBovedaAnexoMapaSupport::anexo8SignoResumen($fechaYmd);
+        $grupoDeTipo = TesoreriaCrownBovedaAnexoMapaSupport::anexo8GrupoDeTipo($fechaYmd);
+        $codigos = array_keys($signoResumen);
         $porGrupo = self::resumenFinalSnapshot($fechaYmd);
         if ($porGrupo === []) {
-            $porGrupo = self::resumenFinalErp($fechaYmd, $codigos, $grupoDeTipo);
+            $porGrupo = self::resumenFinalErp($fechaYmd, $codigos, $grupoDeTipo, $signoResumen);
         }
         foreach (self::GRUPOS_RESUMEN_EXCLUIDOS as $excluido) {
             unset($porGrupo[$excluido]);
         }
 
-        $descripciones = self::descripcionesResumen();
+        $descripciones = TesoreriaCrownBovedaAnexoMapaSupport::anexo8Descripciones();
         $detalle = [];
         $total = 0.0;
         ksort($porGrupo);
@@ -611,10 +606,18 @@ final class TesoreriaCrownAnexo8Calculo
     /**
      * @param  list<int>  $codigos
      * @param  array<int, int>  $grupoDeTipo
+     * @param  array<int, string>  $signoResumen
      * @return array<int, float>
      */
-    private static function resumenFinalErp(string $fechaYmd, array $codigos, array $grupoDeTipo): array
-    {
+    private static function resumenFinalErp(
+        string $fechaYmd,
+        array $codigos,
+        array $grupoDeTipo,
+        array $signoResumen = []
+    ): array {
+        if ($signoResumen === []) {
+            $signoResumen = TesoreriaCrownBovedaAnexoMapaSupport::anexo8SignoResumen($fechaYmd);
+        }
         $movimientos = TesoreriaCrownBoveda::query()
             ->with(['lineas.valor.tipoValor', 'tipo'])
             ->where('estado', TesoreriaCrownBoveda::CONFIRMADO)
@@ -630,7 +633,7 @@ final class TesoreriaCrownAnexo8Calculo
         $porGrupo = [];
         foreach ($movimientos as $mov) {
             $cod = (int) ($mov->tipo->codigo ?? 0);
-            $sr = self::SIGNO_RESUMEN[$cod] ?? null;
+            $sr = $signoResumen[$cod] ?? null;
             if ($sr === null) {
                 continue;
             }
@@ -648,21 +651,6 @@ final class TesoreriaCrownAnexo8Calculo
         }
 
         return $porGrupo;
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private static function descripcionesResumen(): array
-    {
-        return [
-            1 => 'Pre deposito',
-            3 => 'FONDO',
-            4 => 'Caja chica hotel',
-            6 => 'Diferencia tesoreria',
-            7 => 'Caja chica adm.',
-            99 => 'Cancela dif. final boveda',
-        ];
     }
 
     /**

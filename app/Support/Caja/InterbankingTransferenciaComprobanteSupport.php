@@ -4,6 +4,7 @@ namespace App\Support\Caja;
 
 use App\Models\Caja\InterbankingTransferencia;
 use App\Repositories\Caja\BancoRepositoryInterface;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 
 /**
@@ -392,5 +393,27 @@ final class InterbankingTransferenciaComprobanteSupport
             : now()->format('Ymd');
 
         return 'comprobante_transferencia_'.$fecha.'_'.$id.'.pdf';
+    }
+
+    /**
+     * PDF temporal del formulario Interbanking (mail OP / envío masivo).
+     *
+     * @return array{ruta: string, nombre: string}
+     */
+    public function generarPdfTemporal(InterbankingTransferencia $transferencia, ?string $directorio = null): array
+    {
+        $datos = $this->datosDesdeModelo($transferencia);
+        $nombre = $this->nombreArchivoPdf($transferencia);
+        $html = view('caja.interbanking.comprobante_transferencia', compact('datos'))->render();
+
+        $dir = $directorio ?: storage_path('pdf/pagoproveedor');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $ruta = $dir.'/ib_'.$transferencia->id.'_'.uniqid('', true).'.pdf';
+        Pdf::loadHTML($html, 'UTF-8')->setPaper('a4', 'portrait')->save($ruta);
+
+        return ['ruta' => $ruta, 'nombre' => $nombre];
     }
 }

@@ -12,6 +12,8 @@ class PagoproveedorImportarDesdeAnitaCommand extends Command
                             {--hasta=2025-12-31 : Fecha ISO hasta}
                             {--usuario-id= : Usuario para estados}
                             {--tipos=OPP,OPA : Tipos Anita separados por coma (OPP, OPA, OPV)}
+                            {--solo-huerfanos-cc : Solo OPP/OPA referenciadas por créditos CC sin pagoproveedor_id}
+                            {--empresa= : Empresa ERP al filtrar huérfanos (solo con --solo-huerfanos-cc)}
                             {--ejecutar : Persiste documentos sin cuenta corriente; default dry-run}';
 
     protected $description = 'Importa OPP/OPA/OPV desde Anita che_ban.pago como documentos (sin cuenta corriente)';
@@ -21,23 +23,30 @@ class PagoproveedorImportarDesdeAnitaCommand extends Command
         $dryRun = ! (bool) $this->option('ejecutar');
         $usuario = $this->option('usuario-id');
         $usuarioId = ($usuario !== null && $usuario !== '') ? (int) $usuario : null;
+        $soloHuerfanos = (bool) $this->option('solo-huerfanos-cc');
+        $empresaOpt = $this->option('empresa');
+        $empresaId = ($empresaOpt !== null && $empresaOpt !== '') ? (int) $empresaOpt : null;
 
         $tipos = array_values(array_filter(array_map(
             static fn ($t) => strtoupper(trim((string) $t)),
             explode(',', (string) $this->option('tipos'))
         )));
 
-        $this->info(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' pagoproveedor desde Anita (sin cuenta corriente) tipos '.implode(',', $tipos));
+        if ($soloHuerfanos) {
+            $this->info(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' pagoproveedor huérfanos CC (sin cuenta corriente)');
+            $stats = $service->importarParaHuerfanosCc($dryRun, $usuarioId, $empresaId);
+        } else {
+            $this->info(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' pagoproveedor desde Anita (sin cuenta corriente) tipos '.implode(',', $tipos));
+            $stats = $service->importar(
+                (string) $this->option('desde'),
+                (string) $this->option('hasta'),
+                $dryRun,
+                $usuarioId,
+                $tipos,
+            );
+        }
 
-        $stats = $service->importar(
-            (string) $this->option('desde'),
-            (string) $this->option('hasta'),
-            $dryRun,
-            $usuarioId,
-            $tipos,
-        );
-
-        $this->table(['Métrica', 'Cantidad'], [
+        $filas = [
             ['En Anita', $stats['en_anita']],
             ['A crear', $stats['a_crear']],
             ['Creados', $stats['creados']],
@@ -52,7 +61,15 @@ class PagoproveedorImportarDesdeAnitaCommand extends Command
             ['Cuenta corriente escrita', $stats['cuenta_corriente']],
             ['Errores', count($stats['errores'])],
             ['Errores bridge', count($stats['errores_bridge'])],
-        ]);
+        ];
+        if ($soloHuerfanos) {
+            array_unshift(
+                $filas,
+                ['Etiquetas huérfanos', $stats['huerfanos_etiquetas'] ?? 0],
+                ['Recs únicos huérfanos', $stats['huerfanos_recs'] ?? 0],
+            );
+        }
+        $this->table(['Métrica', 'Cantidad'], $filas);
 
         foreach (array_slice($stats['errores'], 0, 15) as $e) {
             $this->warn($e);

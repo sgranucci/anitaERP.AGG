@@ -31,7 +31,7 @@ final class TesoreriaCrownMesaSupport
         'A' => 'Fichas con las que arranca la mesa. Se precarga la banca tipo configurada; podés ajustarla. Suman al stock.',
         'R' => 'Fichas que se agregan durante el juego. Suman al stock.',
         'C' => 'Fichas que salen de la mesa. Restan del stock.',
-        'F' => 'Conteo al cerrar (fichas). La propina se carga con billetaje ARS: el total va al Anexo II y el detalle a bóveda PROP/Mesas. Queda como apertura del día siguiente.',
+        'F' => 'Conteo al cerrar (fichas). La propina se carga solo con monto (neutro, sin billetaje): va al Anexo II y al reporte de propinas por casino. Queda como apertura del día siguiente.',
         'D' => 'Drop de la mesa. No mueve el stock de fichas.',
         'P' => 'Propina suelta (legado). Preferí cargar la propina en el Estado final.',
     ];

@@ -109,7 +109,7 @@
                         ])
                         : (
                             ($panel ?? '') === 'anexo'
-                                ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'clasico']
+                                ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'nuevo']
                                 : (
                                     ($panel ?? '') === 'anexo2'
                                         ? ['id' => $jornada->id, 'grupo_anexo2' => $anexo2['grupo'] ?? 'todo']

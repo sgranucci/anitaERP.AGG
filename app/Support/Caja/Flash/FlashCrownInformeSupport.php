@@ -4,7 +4,6 @@ namespace App\Support\Caja\Flash;
 
 use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\TesoreriaCrownJornada;
-use App\Models\Caja\TesoreriaCrownCasinoOnline;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Configuracion\Sala;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
@@ -27,8 +26,16 @@ final class FlashCrownInformeSupport
     /** @var array<string, FlashCrown|null> */
     private array $flashPorClave = [];
 
+    /**
+     * Solo jornada de tesorería fuerza recálculo vivo.
+     * resultado_online NO debe pisar mesas/slots ya importados de Anita en flash_crown.
+     *
+     * @var array<string, true>
+     */
+    private array $conJornada = [];
+
     /** @var array<string, true> */
-    private array $conFuente = [];
+    private array $conOnlineSlots = [];
 
     /**
      * @return array<string, string>
@@ -82,6 +89,12 @@ final class FlashCrownInformeSupport
         $filas = [];
         foreach ($salas as $sala) {
             $base = $this->baseSalaFecha((int) $sala->id, $fecha->toDateString());
+            // Online es bloque empresa: en filas por sala va en 0 (Resumen lo aplica aparte).
+            $base = FlashCrownCalculoSupport::aplicarOnlineVivoEnBase(
+                $base,
+                $fecha->toDateString(),
+                false,
+            );
             $filas[] = [
                 'codigo' => (string) $sala->codigo,
                 'nombre' => (string) $sala->nombre,
@@ -161,12 +174,12 @@ final class FlashCrownInformeSupport
                 [
                     'clave' => 'mtd',
                     'titulo' => 'Ac. '.$this->mesCorto($fecha).' '.$fecha->year,
-                    'subtitulo' => '',
+                    'subtitulo' => 'al día '.$fecha->format('j/n'),
                 ],
                 [
                     'clave' => 'mtd_anterior',
                     'titulo' => 'Ac. '.$this->mesCorto($mtdAnteriorHasta).' '.$mtdAnteriorHasta->year,
-                    'subtitulo' => '',
+                    'subtitulo' => 'al día '.$mtdAnteriorHasta->format('j/n'),
                 ],
             ],
             'casinos' => $casinos,
@@ -289,6 +302,12 @@ final class FlashCrownInformeSupport
     private function filaDailyDia(int $salaId, Carbon $fecha): array
     {
         $base = $this->baseSalaFecha($salaId, $fecha->toDateString());
+        // Online es bloque empresa Crown: no se atribuye a la sala.
+        $base = FlashCrownCalculoSupport::aplicarOnlineVivoEnBase(
+            $base,
+            $fecha->toDateString(),
+            false,
+        );
         $m = FlashCrownCalculoSupport::metricasDerivadas($base);
         $att = (int) ($base['att'] ?? 0);
         $drop = round((float) ($base['cashdrop'] ?? 0), 2);
@@ -351,9 +370,9 @@ final class FlashCrownInformeSupport
     {
         $ant = $this->mismoDiaDeMes($fecha, $fecha->year - 1);
         $base = $this->baseSalaFecha($salaId, $ant->toDateString());
-        $m = FlashCrownCalculoSupport::metricasDerivadas($base);
 
-        return (float) $m['combined'];
+        // Misma fórmula que Anita (soft_count), no slot_r de resulol.
+        return FlashCrownCalculoSupport::combinedComoAnita($base);
     }
 
     /**
@@ -384,6 +403,9 @@ final class FlashCrownInformeSupport
                 'fecha' => $cursor->format('d/m/Y'),
                 'fecha_ymd' => $ymd,
             ]);
+            // Online global (Del Río / Betsur / Apuestas): manda la carga diaria de Eli,
+            // no el ol_*/bs_*/ad_* repetido o vacío en flash_crown por sala.
+            $fila = $this->aplicarOnlineGlobalDaily($fila, $ymd);
             $out[] = $this->recalcularDerivedDaily($fila, true);
             $cursor->addDay();
         }
@@ -493,6 +515,10 @@ final class FlashCrownInformeSupport
         $caja = (float) ($fila['caja_empleado'] ?? 0);
         $coinIn = (float) ($fila['coin_in'] ?? 0);
         $netWin = (float) ($fila['netwin'] ?? 0);
+        // Total / promedio: Att = salas + online (como clientes Anita).
+        if (! empty($fila['es_total']) || ! empty($fila['es_promedio'])) {
+            $fila['att'] = FlashCrownCalculoSupport::attendanceConsolidado($fila);
+        }
         $att = (int) ($fila['att'] ?? 0);
         $totalRev = (float) ($fila['total_rev'] ?? 0);
         $combinadoAnt = (float) ($fila['combinado_ant'] ?? 0);
@@ -623,30 +649,14 @@ final class FlashCrownInformeSupport
      */
     private function juegoOnlineGlobal(string $fechaYmd): array
     {
-        $global = TesoreriaCrownCasinoOnline::deFecha($fechaYmd);
-        if ($global) {
-            return [
-                'ol' => round((float) $global->resultado, 2),
-                'bs' => round((float) $global->betsur_resultado, 2),
-                'ad' => round((float) $global->ad_resultado, 2),
-                'att' => (int) $global->attendance
-                    + (int) $global->betsur_attendance
-                    + (int) $global->ad_attendance,
-            ];
-        }
+        $vivo = FlashCrownCalculoSupport::valoresOnlineGlobal($fechaYmd);
 
-        // Fallback: tomar de cualquier flash del día (valores globales repetidos).
-        $flash = FlashCrown::query()->whereDate('fecha', $fechaYmd)->first();
-        if ($flash) {
-            return [
-                'ol' => round((float) $flash->ol_win, 2),
-                'bs' => round((float) $flash->bs_win, 2),
-                'ad' => round((float) ($flash->ad_win ?? 0), 2),
-                'att' => (int) $flash->ol_att + (int) $flash->bs_att + (int) ($flash->ad_att ?? 0),
-            ];
-        }
-
-        return ['ol' => 0.0, 'bs' => 0.0, 'ad' => 0.0, 'att' => 0];
+        return [
+            'ol' => (float) $vivo['ol_win'],
+            'bs' => (float) $vivo['bs_win'],
+            'ad' => (float) $vivo['ad_win'],
+            'att' => (int) $vivo['ol_att'] + (int) $vivo['bs_att'] + (int) $vivo['ad_att'],
+        ];
     }
 
     /**
@@ -752,27 +762,37 @@ final class FlashCrownInformeSupport
     {
         $clave = $salaId.'|'.$fechaYmd;
         $stored = $this->flashPorClave[$clave] ?? null;
-        if ($stored instanceof FlashCrown && ($stored->estaValidado() || ! isset($this->conFuente[$clave]))) {
-            $base = $stored->toArray();
+        $tieneJornada = isset($this->conJornada[$clave]);
+        $tieneOnlineSlots = isset($this->conOnlineSlots[$clave]);
+
+        // Réplica Anita / validado: manda el flash persistido (jornada abierta no debe
+        // pisar coin_in/slot_r/mesas con un vivo vacío — bug Daily CIP 1/11).
+        if ($stored instanceof FlashCrown
+            && ($stored->estaValidado() || ! $tieneJornada || $stored->esReplicaAnita())) {
+            $base = FlashCrownCalculoSupport::completarSlotsVaciosDesdeResultadoOnline(
+                $stored->toArray(),
+                $salaId,
+                $fechaYmd,
+            );
             $base['_validado'] = $stored->estaValidado();
 
             return $base;
         }
 
-        if (! isset($this->conFuente[$clave])) {
+        if (! $tieneJornada && ! $tieneOnlineSlots) {
             return $this->vacio($salaId, $fechaYmd);
         }
 
         $calc = FlashCrownCalculoSupport::deSalaFecha($salaId, $fechaYmd);
-        // Recálculo sin gastro: conservar AyB/Hotel del flash (Anita / carga previa).
-        $fuentes = $calc['detalle']['fuentes'] ?? [];
-        if ($stored instanceof FlashCrown && ! in_array('gastro_hotel', $fuentes, true)) {
-            if (abs((float) ($calc['ayb'] ?? 0)) < 0.001) {
-                $calc['ayb'] = round((float) $stored->ayb, 2);
+        // Jornada sin gastro/slots: conservar réplica ya cargada.
+        if ($stored instanceof FlashCrown) {
+            foreach (['ayb', 'hotel', 'caja_empleado', 'coin_in', 'coin_out', 'pago_manual', 'slot_r', 'soft_count', 'hard_count', 'cant_slots', 'slot_d'] as $campo) {
+                if (abs((float) ($calc[$campo] ?? 0)) < 0.001
+                    && abs((float) $stored->{$campo}) >= 0.001) {
+                    $calc[$campo] = round((float) $stored->{$campo}, 2);
+                }
             }
-            if (abs((float) ($calc['hotel'] ?? 0)) < 0.001) {
-                $calc['hotel'] = round((float) $stored->hotel, 2);
-            }
+            $calc = $this->conservarMesasDesdeFlash($calc, $stored);
         }
         $overrides = $stored instanceof FlashCrown && is_array($stored->overrides_json)
             ? $stored->overrides_json
@@ -783,6 +803,65 @@ final class FlashCrownInformeSupport
         $calc['_validado'] = false;
 
         return $calc;
+    }
+
+    /**
+     * @param  array<string, mixed>  $calc
+     * @return array<string, mixed>
+     */
+    private function conservarMesasDesdeFlash(array $calc, FlashCrown $stored): array
+    {
+        $mesaCalc = (float) FlashCrownCalculoSupport::metricasDerivadas($calc)['win_mesas'];
+        $mesaStored = (float) FlashCrownCalculoSupport::metricasDerivadas($stored->toArray())['win_mesas'];
+        if (abs($mesaStored) < 0.02) {
+            return $calc;
+        }
+
+        $esAnita = $stored->esReplicaAnita();
+
+        // Flash Anita / auto: no reemplazar mesas por un vivo de jornada vacío o distinto.
+        if (! $esAnita && abs($mesaCalc) >= 0.02) {
+            return $calc;
+        }
+        if (! $esAnita && abs($mesaCalc) < 0.02) {
+            // sin Anita: solo rellenar si el vivo no trae mesas
+        } elseif ($esAnita && abs($mesaCalc - $mesaStored) < 0.02) {
+            return $calc;
+        }
+
+        foreach ([
+            'cashdrop', 'cant_mesas', 'caja_empleado',
+            'wheel_r', 'baccarat_r', 'blackjack_r', 'multi_r', 'crap_r',
+            'caribbean_r', 'poker_r', 'seven_r', 'super_peek_r',
+            'torneo_poker', 'master_cup', 'inscripcion', 'premio',
+            'ruleta_el_d', 'ruleta_el_r', 'soft_rul_el', 'cant_rul_el', 'coin_in_rul',
+            'att',
+        ] as $campo) {
+            $calc[$campo] = $stored->{$campo};
+        }
+
+        return $calc;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function aplicarOnlineGlobalDaily(array $fila, string $fechaYmd): array
+    {
+        // gaming aún es solo local (entre salas); se recompone en recalcularDerivedDaily.
+        $vivo = FlashCrownCalculoSupport::valoresOnlineGlobal($fechaYmd);
+        $fila['ol_att'] = (int) $vivo['ol_att'];
+        $fila['ol_coin_in'] = (float) $vivo['ol_coin_in'];
+        $fila['ol_win'] = (float) $vivo['ol_win'];
+        $fila['bs_att'] = (int) $vivo['bs_att'];
+        $fila['bs_coin_in'] = (float) $vivo['bs_coin_in'];
+        $fila['bs_win'] = (float) $vivo['bs_win'];
+        $fila['ad_att'] = (int) $vivo['ad_att'];
+        $fila['ad_coin_in'] = (float) $vivo['ad_coin_in'];
+        $fila['ad_win'] = (float) $vivo['ad_win'];
+
+        return $fila;
     }
 
     /**
@@ -819,7 +898,7 @@ final class FlashCrownInformeSupport
             $fecha = $jornada->fecha instanceof Carbon
                 ? $jornada->fecha->format('Y-m-d')
                 : Carbon::parse((string) $jornada->fecha)->format('Y-m-d');
-            $this->conFuente[(int) $jornada->sala_id.'|'.$fecha] = true;
+            $this->conJornada[(int) $jornada->sala_id.'|'.$fecha] = true;
         }
 
         $online = TesoreriaCrownResultadoOnline::query()
@@ -830,7 +909,7 @@ final class FlashCrownInformeSupport
             $fecha = $fila->fecha instanceof Carbon
                 ? $fila->fecha->format('Y-m-d')
                 : Carbon::parse((string) $fila->fecha)->format('Y-m-d');
-            $this->conFuente[(int) $fila->sala_id.'|'.$fecha] = true;
+            $this->conOnlineSlots[(int) $fila->sala_id.'|'.$fecha] = true;
         }
     }
 

@@ -31,6 +31,10 @@
                     <input type="hidden" name="sala_id" value="{{ $sala->id }}">
                     @php
                         $activo = (string) old('activo', ($tipo->activo ?? true) ? '1' : '0') === '1';
+                        $paraReportePropina = (string) old(
+                            'para_reporte_propina',
+                            ($tipo->para_reporte_propina ?? false) ? '1' : '0'
+                        ) === '1';
                         $signo = (string) old('signo', $tipo->signo ?? '0');
                         $operacion = (string) old('operacion', $tipo->operacion ?? '0');
                     @endphp
@@ -83,6 +87,32 @@
                                     </option>
                                 @endforeach
                             </select>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-lg-4 control-label text-right pr-2">Reporte propinas por casino</label>
+                        <div class="col-lg-8">
+                            <input type="hidden" name="para_reporte_propina" value="0">
+                            <input type="checkbox" name="para_reporte_propina" value="1" @checked($paraReportePropina)>
+                            <small class="form-text text-muted">
+                                Si está marcado, los movimientos confirmados de este tipo entran al informe
+                                «Propinas por casino» (junto con la propina de los estados finales de mesa).
+                            </small>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="vigente_desde" class="col-lg-4 control-label text-right pr-2">Vigente desde</label>
+                        <div class="col-lg-4">
+                            <input type="date" name="vigente_desde" id="vigente_desde" class="form-control"
+                                   value="{{ old('vigente_desde', optional($tipo->vigente_desde)->format('Y-m-d')) }}">
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label for="vigente_hasta" class="col-lg-4 control-label text-right pr-2">Vigente hasta</label>
+                        <div class="col-lg-4">
+                            <input type="date" name="vigente_hasta" id="vigente_hasta" class="form-control"
+                                   value="{{ old('vigente_hasta', optional($tipo->vigente_hasta)->format('Y-m-d')) }}">
+                            <small class="form-text text-muted">Vacío = sin vencimiento.</small>
                         </div>
                     </div>
                     <div class="form-group row">

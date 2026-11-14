@@ -8,6 +8,7 @@ use App\Models\Caja\Flash\FlashCrown;
 use App\Services\Caja\Flash\FlashCrownService;
 use App\Support\Caja\Flash\FlashCrownCalculoSupport;
 use App\Support\Caja\Flash\FlashCrownListadoFiltros;
+use App\Support\Caja\Flash\FlashCrownNumeroSupport;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Http\Request;
@@ -36,31 +37,42 @@ class FlashCrownController extends Controller
 
         $filas = collect();
         $consolidado = null;
+        $onlineEmpresa = null;
         $avisos = [];
 
         if ($filtros['consultar']) {
+            // Fallback Anita del día: varios Informix + JSON. 512M no alcanza si el bridge
+            // trae historial; el WHERE por fecha mitiga, esto es red de seguridad.
+            ini_set('memory_limit', '1024M');
+            ini_set('max_execution_time', '600');
+
+            $fecha = (string) $filtros['fecha'];
             $salaIds = $sala
                 ? [(int) $sala->id]
                 : $salas->pluck('id')->map(fn ($id) => (int) $id)->all();
 
+            // Un solo plan Anita para todas las salas sin dato ERP usable.
+            $avisos = array_merge($avisos, $this->service->asegurarListadoDesdeAnita($salaIds, $fecha));
+
             foreach ($salaIds as $idSala) {
                 try {
-                    $flash = $this->service->sincronizar(
-                        $idSala,
-                        (string) $filtros['fecha'],
-                        [],
-                        persistir: true,
-                        forzar: false,
-                    );
-                    $filas->push($flash);
+                    $filas->push($this->service->obtenerParaConsulta($idSala, $fecha));
                 } catch (\Throwable $e) {
                     $avisos[] = 'Sala '.$idSala.': '.$e->getMessage();
                 }
             }
 
+            $onlineEmpresa = FlashCrownCalculoSupport::valoresOnlineGlobal($fecha);
+
             if ($filas->count() > 1) {
                 $consolidado = $this->service->consolidar($filas->all());
                 $consolidado['_metricas'] = FlashCrownCalculoSupport::metricasDerivadas($consolidado);
+            } elseif ($filas->count() === 1) {
+                // Una sala: métricas de juego de esa sala + online empresa aparte.
+                $base = FlashCrownCalculoSupport::baseVistaDesdeFlash($filas->first());
+                $consolidado = array_merge($base, $onlineEmpresa);
+                $consolidado['_metricas'] = FlashCrownCalculoSupport::metricasDerivadas($consolidado);
+                $consolidado['_solo_una_sala'] = true;
             }
         }
 
@@ -71,6 +83,7 @@ class FlashCrownController extends Controller
             'sala' => $sala,
             'filas' => $filas,
             'consolidado' => $consolidado,
+            'onlineEmpresa' => $onlineEmpresa,
             'avisos' => $avisos,
             'puedeValidar' => can('validar-flash-crown', false),
             'puedeEditar' => can('editar-flash-crown', false),
@@ -84,7 +97,9 @@ class FlashCrownController extends Controller
 
         $flash = FlashCrown::query()->with(['sala', 'empresa'])->findOrFail($id);
         $live = FlashCrownCalculoSupport::deSalaFecha((int) $flash->sala_id, $flash->fecha->format('Y-m-d'));
-        $metricas = FlashCrownCalculoSupport::metricasDerivadas($flash->toArray());
+        $metricas = FlashCrownCalculoSupport::metricasDerivadas(
+            FlashCrownCalculoSupport::baseVistaDesdeFlash($flash)
+        );
         $anterior = FlashCrownCalculoSupport::combinedAnteriorAnio(
             (int) $flash->sala_id,
             $flash->fecha->format('Y-m-d')
@@ -119,8 +134,8 @@ class FlashCrownController extends Controller
             if ($request->filled('override_'.$campo) || $request->boolean('marcar_'.$campo)) {
                 $raw = $request->input($campo);
                 $overrides[$campo] = in_array($campo, ['att', 'cant_mesas', 'cant_slots', 'cant_rul_el'], true)
-                    ? (int) str_replace(['.', ','], ['', '.'], (string) $raw)
-                    : (float) str_replace(['.', ','], ['', '.'], (string) $raw);
+                    ? FlashCrownNumeroSupport::parsearEntero($raw)
+                    : FlashCrownNumeroSupport::parsear($raw);
             }
         }
         if ($request->filled('comentario')) {
@@ -204,8 +219,8 @@ class FlashCrownController extends Controller
     {
         $this->assertCrown();
         can('exportar-flash-crown');
-        ini_set('memory_limit', '512M');
-        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '1024M');
+        ini_set('max_execution_time', '600');
 
         $filtros = FlashCrownListadoFiltros::resolverDesdeRequest($request);
         $salas = TesoreriaCrownSalaSupport::salas();
@@ -214,9 +229,11 @@ class FlashCrownController extends Controller
             ? [$salaId]
             : $salas->pluck('id')->map(fn ($id) => (int) $id)->all();
 
+        // Misma fuente que el index (fallback Anita en lote si falta dato ERP).
+        $this->service->asegurarListadoDesdeAnita($salaIds, (string) $filtros['fecha']);
         $filas = [];
         foreach ($salaIds as $idSala) {
-            $filas[] = $this->service->sincronizar($idSala, (string) $filtros['fecha'], [], true, false);
+            $filas[] = $this->service->obtenerParaConsulta($idSala, (string) $filtros['fecha']);
         }
 
         $formato = strtoupper((string) $formato);

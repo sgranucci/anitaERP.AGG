@@ -1,12 +1,10 @@
 @php
+    use App\Support\Caja\Flash\FlashCrownNumeroSupport as N;
     use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport as F;
     use App\Support\Export\ExcelFormatoNumero;
 
     $excel = ! empty($modo_excel);
     $formatoNumero = $formatoNumero ?? ExcelFormatoNumero::preferenciaGlobal();
-    $fn = $excel
-        ? static fn ($v, int $dec = 2) => F::nExcelFormato($v, $formatoNumero, $dec)
-        : static fn ($v, int $dec = 2) => F::n($v, $dec);
 @endphp
 <table cellspacing="0" cellpadding="4" style="border-collapse:collapse; font-family:Arial, sans-serif; font-size:12px; color:#17202A; width:100%;">
     <thead>
@@ -23,18 +21,33 @@
             @php $m = $fila['metricas']; @endphp
             <tr>
                 <td style="padding:2px 8px;">{{ $fila['codigo'] }} {{ $fila['nombre'] }}</td>
-                <td style="text-align:right;">{{ $fn($fila['att'], 0) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['cashdrop'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($m['win_mesas'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['coin_in'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['slot_r'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['ol_win'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['bs_win'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['ad_win'] ?? 0, 2) }}</td>
-                <td style="text-align:right;">{{ $fn($m['gaming'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['ayb'], 2) }}</td>
-                <td style="text-align:right;">{{ $fn($fila['hotel'], 2) }}</td>
-                <td style="text-align:right; font-weight:700;">{{ $fn($m['combined'], 2) }}</td>
+                @if ($excel)
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['att'], $formatoNumero, 0) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['cashdrop'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($m['win_mesas'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['coin_in'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['slot_r'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['ol_win'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['bs_win'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['ad_win'] ?? 0, $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($m['gaming'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['ayb'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right;">{{ F::nExcelFormato($fila['hotel'], $formatoNumero, 2) }}</td>
+                    <td style="text-align:right; font-weight:700;">{{ F::nExcelFormato($m['combined'], $formatoNumero, 2) }}</td>
+                @else
+                    <td style="text-align:right;">{!! N::html($fila['att'], 0) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['cashdrop']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($m['win_mesas']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['coin_in']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['slot_r']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['ol_win']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['bs_win']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['ad_win'] ?? 0) !!}</td>
+                    <td style="text-align:right;">{!! N::html($m['gaming']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['ayb']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($fila['hotel']) !!}</td>
+                    <td style="text-align:right;">{!! N::html($m['combined'], 2, true) !!}</td>
+                @endif
             </tr>
         @endforeach
     </tbody>

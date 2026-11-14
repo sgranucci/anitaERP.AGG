@@ -33,10 +33,13 @@ use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Models\Caja\TesoreriaCrownSlot;
 use App\Support\Caja\TesoreriaCrownMesaSupport;
 use App\Support\Caja\TesoreriaCrownAnexo1Calculo;
+use App\Support\Caja\TesoreriaCrownAnexo1FormatoSupport;
 use App\Support\Caja\TesoreriaCrownAnexo1NewCalculo;
 use App\Support\Caja\TesoreriaCrownAnexo2Calculo;
 use App\Support\Caja\TesoreriaCrownAnexo7Calculo;
 use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
+use App\Support\Caja\TesoreriaCrownAnexoListadoFilasSupport;
+use App\Support\Caja\TesoreriaCrownAnexoRangoSupport;
 use App\Support\Caja\TesoreriaCrownPoderPublicoCalculo;
 use App\Support\Caja\TesoreriaCrownPoderPublicoGenerador;
 use App\Support\Caja\TesoreriaCrownResumenCajeroCalculo;
@@ -581,8 +584,15 @@ class TesoreriaCrownJornadaController extends Controller
         TesoreriaCrownAcceso::abortSiNoEsCrown();
         can('listar-tesoreria-crown-anexo');
 
-        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
         $variante = $this->anexoVariante($request);
+        $desdeMenuRango = (string) $request->input('origen') === 'menu'
+            && TesoreriaCrownAnexoRangoSupport::tieneRangoEnRequest($request);
+
+        if ($desdeMenuRango) {
+            return $this->listarAnexo1PorRangoMenu($request, $formato, $variante);
+        }
+
+        $jornada = $this->jornadaEnAlcance((int) $request->input('id'));
         if ($formato === null || $formato === '') {
             return redirect()->route('ver_tesoreria_crown_jornada', [
                 'id' => $jornada->id,
@@ -596,52 +606,9 @@ class TesoreriaCrownJornadaController extends Controller
 
         $jornada->loadMissing('empresa');
         $armado = $this->anexoDelDia($request, $jornada, $variante);
-        $filas = [];
-        if ($variante === 'nuevo') {
-            foreach ($armado['filas'] as $fila) {
-                if ($fila['seccion']) {
-                    $filas[] = [$fila['concepto'], '', '', '', ''];
-
-                    continue;
-                }
-                $filas[] = [
-                    $fila['concepto'],
-                    $fila['fecha'] ?? '',
-                    $fila['debito'] === null ? '' : (float) $fila['debito'],
-                    $fila['credito'] === null ? '' : (float) $fila['credito'],
-                    $fila['saldo'] === null ? '' : (float) $fila['saldo'],
-                ];
-            }
-            $columnas = [
-                ['label' => 'Concepto', 'ancho' => 48, 'wrap' => true],
-                ['label' => 'Fecha', 'ancho' => 14],
-                ['label' => 'Débito', 'ancho' => 16, 'numero' => true],
-                ['label' => 'Crédito', 'ancho' => 16, 'numero' => true],
-                ['label' => 'Saldo', 'ancho' => 16, 'numero' => true],
-            ];
-            $subtituloExtra = 'Formato l-anexo1new.c';
-        } else {
-            foreach ($armado['filas'] as $fila) {
-                if ($fila['seccion']) {
-                    $filas[] = [$fila['concepto'], '', '', ''];
-
-                    continue;
-                }
-                $filas[] = [
-                    $fila['concepto'],
-                    $fila['dia'] === null ? '' : (float) $fila['dia'],
-                    $fila['mes'] === null ? '' : (float) $fila['mes'],
-                    $fila['anio'] === null ? '' : (float) $fila['anio'],
-                ];
-            }
-            $columnas = [
-                ['label' => 'Concepto', 'ancho' => 70, 'wrap' => true],
-                ['label' => 'Día', 'ancho' => 18, 'numero' => true],
-                ['label' => 'Mes', 'ancho' => 18, 'numero' => true],
-                ['label' => 'Anual', 'ancho' => 18, 'numero' => true],
-            ];
-            $subtituloExtra = 'Formato l-anexo1.c';
-        }
+        $filas = TesoreriaCrownAnexoListadoFilasSupport::anexo1($armado, $variante);
+        $columnas = TesoreriaCrownAnexoListadoFilasSupport::columnasAnexo1($variante);
+        $subtituloExtra = $variante === 'nuevo' ? 'Formato l-anexo1new.c' : 'Formato l-anexo1.c';
 
         return $this->documentoListado((string) $formato, [
             'titulo' => 'Anexo I '.$jornada->fecha->format('d/m/Y'),
@@ -659,6 +626,83 @@ class TesoreriaCrownJornadaController extends Controller
             'panel' => 'anexo',
             'formato_anexo' => $variante,
         ]);
+    }
+
+    /**
+     * Export Anexo I por rango: solo menú Anexos (origen=menu). El escritorio sigue con un día.
+     */
+    private function listarAnexo1PorRangoMenu(Request $request, $formato, string $variante)
+    {
+        $fechas = TesoreriaCrownAnexoRangoSupport::resolverFechas($request);
+        $sala = TesoreriaCrownSalaSupport::pedida($request, TesoreriaCrownSalaSupport::salas());
+        $volver = TesoreriaCrownAnexoRangoSupport::paraQueryString(
+            $sala ? (int) $sala->id : null,
+            $fechas['fecha_desde'],
+            $fechas['fecha_hasta'],
+            [
+                'panel' => 'anexo',
+                'formato_anexo' => $variante,
+                'consultar' => 1,
+            ]
+        );
+
+        if ($formato === null || $formato === '' || $sala === null || $fechas['fecha_desde'] === null || $fechas['fecha_hasta'] === null) {
+            return redirect()->route('tesoreria_crown_anexo1', $volver);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $jornadas = TesoreriaCrownAnexoRangoSupport::jornadasEnRango(
+            (int) $sala->id,
+            $fechas['fecha_desde'],
+            $fechas['fecha_hasta']
+        );
+        if ($jornadas->isEmpty()) {
+            return redirect()->route('tesoreria_crown_anexo1', $volver)
+                ->with('mensaje-error', 'No hay jornadas en el rango para exportar el Anexo I.');
+        }
+
+        $filas = [];
+        $varios = $jornadas->count() > 1;
+        foreach ($jornadas as $jornada) {
+            if ($varios) {
+                $filas[] = TesoreriaCrownAnexoListadoFilasSupport::corteDiaAnexo1(
+                    '—— '.$jornada->fecha->format('d/m/Y').' ——',
+                    $variante
+                );
+            }
+            $armado = $this->anexoDelDia($request, $jornada, $variante);
+            foreach (TesoreriaCrownAnexoListadoFilasSupport::anexo1($armado, $variante) as $fila) {
+                $filas[] = $fila;
+            }
+            if ($varios) {
+                $filas[] = TesoreriaCrownAnexoListadoFilasSupport::corteDiaAnexo1('', $variante);
+            }
+        }
+
+        $primera = $jornadas->first();
+        $ultima = $jornadas->last();
+        $subtituloExtra = $variante === 'nuevo' ? 'Formato l-anexo1new.c' : 'Formato l-anexo1.c';
+        $archivo = $varios
+            ? 'anexo1_'.$variante.'_'.$primera->fecha->format('Ymd').'_'.$ultima->fecha->format('Ymd')
+            : 'anexo1_'.$variante.'_'.$primera->fecha->format('Ymd');
+
+        return $this->documentoListado((string) $formato, [
+            'titulo' => $varios
+                ? 'Anexo I '.$primera->fecha->format('d/m/Y').' al '.$ultima->fecha->format('d/m/Y')
+                : 'Anexo I '.$primera->fecha->format('d/m/Y'),
+            'subtitulo' => TesoreriaCrownAnexoRangoSupport::subtituloRango(
+                $fechas['fecha_desde'],
+                $fechas['fecha_hasta'],
+                $jornadas->count()
+            ).' · '.$subtituloExtra,
+            'archivo' => $archivo,
+            'titulo_corto' => 'Anexo I',
+            'columnas' => TesoreriaCrownAnexoListadoFilasSupport::columnasAnexo1($variante),
+            'filas' => $filas,
+            'coleccion' => collect([(object) ['nombreempresa' => (string) ($primera->empresa->nombre ?? '')]]),
+        ], 'tesoreria_crown_anexo1', $volver);
     }
 
     public function ver(Request $request, int $id)
@@ -856,6 +900,7 @@ class TesoreriaCrownJornadaController extends Controller
             'anexo' => $anexo,
             'anexoError' => $anexoError,
             'anexoVariante' => $anexoVariante,
+            'puedeAnexoContable' => TesoreriaCrownAnexo1FormatoSupport::puedeFormatoContable(),
             'anexo2' => $anexo2,
             'anexo2Error' => $anexo2Error,
             'rescajero' => $rescajero,
@@ -1422,7 +1467,7 @@ class TesoreriaCrownJornadaController extends Controller
 
     private function anexoVariante(Request $request): string
     {
-        return $request->input('formato_anexo') === 'nuevo' ? 'nuevo' : 'clasico';
+        return TesoreriaCrownAnexo1FormatoSupport::resolver($request->input('formato_anexo'));
     }
 
     private function anexoDelDia(Request $request, TesoreriaCrownJornada $jornada, ?string $variante = null): array

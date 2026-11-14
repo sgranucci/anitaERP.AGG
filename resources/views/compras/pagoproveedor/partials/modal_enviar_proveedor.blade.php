@@ -15,9 +15,11 @@
                 <div id="op-envio-proveedor-form-wrap" class="d-none">
                     <p class="small text-muted mb-2">
                         Se adjuntará el PDF de la orden de pago al correo indicado.
+                        Si hay transferencia Interbanking asociada o coincidente, también el formulario/comprobante.
                         Los archivos que sume abajo también van en el correo y quedan asociados a la OP.
                     </p>
                     <div id="op-envio-proveedor-aviso" class="alert alert-info small d-none" role="alert"></div>
+                    <div id="op-envio-proveedor-comprobante-ib" class="alert alert-success small d-none" role="alert"></div>
                     <div id="op-envio-proveedor-advertencia" class="alert alert-warning small d-none" role="alert"></div>
                     <div id="op-envio-historial" class="d-none mb-3">
                         <label class="d-block">Correos ya enviados de esta OP</label>

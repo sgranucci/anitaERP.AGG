@@ -4,6 +4,7 @@ namespace App\Services\Contable\LibroIvaDigital;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasImportesSupport;
@@ -453,6 +454,7 @@ class LibroIvaDigitalIvaSimpleGenerador
                     $letraAnita,
                     (int) ($compra['com_sucursal'] ?? 0),
                     (int) ($compra['com_nro'] ?? 0),
+                    ComprobanteProveedorUnicidadSupport::esMarcaFce($compra['com_es_fce'] ?? 'N'),
                 );
                 $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
 
@@ -569,7 +571,11 @@ class LibroIvaDigitalIvaSimpleGenerador
                 );
                 $totales = LibroIvaDigitalComprasImportesSupport::aplicarCoeficiente($totales, $coeficiente);
                 $codigoAfip = (string) ($cp->tipotransaccion_compras->codigoafip ?? '001');
-                $tipoCbte = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra);
+                $tipoCbte = LibroIvaDigitalMapeosSupport::tipoComprobanteCompras(
+                    $codigoAfip,
+                    $letra,
+                    (bool) ($cp->es_fce ?? false),
+                );
                 $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras)
                     || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte);
                 $tipoAbrevErp = (string) ($cp->tipotransaccion_compras->abreviatura ?? '');
@@ -646,6 +652,7 @@ class LibroIvaDigitalIvaSimpleGenerador
             $letra,
             (int) $cp->sucursal,
             (int) $cp->numerocomprobante,
+            (bool) ($cp->es_fce ?? false),
         );
     }
 

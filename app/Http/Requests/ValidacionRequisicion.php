@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Configuracion\Sala;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionRequisicion extends FormRequest
@@ -49,7 +50,16 @@ class ValidacionRequisicion extends FormRequest
         ];
 
         if (EntornoEmpresaSupport::esCrown()) {
-            $rules['sala_id'] = 'required|integer|exists:sala,id';
+            $rules['sala_id'] = [
+                'required',
+                'integer',
+                'exists:sala,id',
+                function (string $attribute, $value, \Closure $fail): void {
+                    if (! UsuarioSalaAsignadaSupport::salaIdPermitida((int) $value)) {
+                        $fail('La sala indicada no está asignada a su usuario.');
+                    }
+                },
+            ];
         } else {
             $rules['sala_id'] = 'nullable|integer|exists:sala,id';
         }

@@ -173,16 +173,11 @@ class TesoreriaCrownMesaController extends Controller
                 $cantidades = collect(TesoreriaCrownMesaSupport::cantidadesDeBanca((int) $banca->id));
             }
         }
-        $propinaCantidades = $this->propinaCantidadesParaVista($movimiento);
 
         return view('caja.tesoreria_crown.mesa.editar', [
             'movimiento' => $movimiento,
             'grupos' => TesoreriaCrownMesaSupport::grupos((int) $movimiento->sala_id, $movimiento->tipo),
-            'gruposPropina' => $movimiento->tipo === 'F'
-                ? TesoreriaCrownMesaSupport::gruposPropinaBilletaje((int) $movimiento->sala_id)
-                : [],
             'cantidades' => $cantidades,
-            'propinaCantidades' => $propinaCantidades,
             'editable' => $editable,
             'escritorio' => $movimiento->jornada
                 ? TesoreriaCrownEscritorioNav::armar($movimiento->jornada)
@@ -219,7 +214,7 @@ class TesoreriaCrownMesaController extends Controller
         if (! $movimiento->esBorrador()) {
             return back()->with('mensaje-error', 'Este movimiento ya no está en borrador.');
         }
-        if ($request->exists('cantidad') || $request->exists('propina_cantidad')) {
+        if ($request->exists('cantidad') || $request->exists('propina')) {
             $datos = $this->datosBorrador($request);
             if ($error = $this->persistirBorrador($movimiento, $datos)) {
                 return back()->withInput()->with('mensaje-error', $error);
@@ -531,7 +526,7 @@ class TesoreriaCrownMesaController extends Controller
     }
 
     /**
-     * @return array{comentario: ?string, cajero_numero: ?string, cantidad: array<int|string, mixed>, propina?: mixed, propina_cantidad?: array<int|string, mixed>}
+     * @return array{comentario: ?string, cajero_numero: ?string, cantidad: array<int|string, mixed>, propina?: mixed}
      */
     private function datosBorrador(Request $request): array
     {
@@ -541,13 +536,11 @@ class TesoreriaCrownMesaController extends Controller
             'cantidad' => ['nullable', 'array'],
             'cantidad.*' => ['nullable', 'integer', 'min:0'],
             'propina' => ['nullable', 'numeric', 'min:0'],
-            'propina_cantidad' => ['nullable', 'array'],
-            'propina_cantidad.*' => ['nullable', 'integer', 'min:0'],
         ]);
     }
 
     /**
-     * @param  array{comentario?: ?string, cajero_numero?: ?string, cantidad?: array<int|string, mixed>, propina?: mixed, propina_cantidad?: array<int|string, mixed>}  $datos
+     * @param  array{comentario?: ?string, cajero_numero?: ?string, cantidad?: array<int|string, mixed>, propina?: mixed}  $datos
      */
     private function persistirBorrador(TesoreriaCrownMesa $movimiento, array $datos): ?string
     {
@@ -556,28 +549,16 @@ class TesoreriaCrownMesaController extends Controller
             return $cajero;
         }
         $valoresSala = TesoreriaCrownValor::query()->where('sala_id', $movimiento->sala_id)->where('activo', true)->pluck('id')->all();
-        $propinaBilletes = null;
-        $propina = 0.0;
-        if ($movimiento->tipo === 'F') {
-            [$propinaBilletes, $totalBilletes] = TesoreriaCrownMesaSupport::normalizarPropinaBilletaje(
-                (int) $movimiento->sala_id,
-                (array) ($datos['propina_cantidad'] ?? [])
-            );
-            if ($propinaBilletes !== []) {
-                $propina = $totalBilletes;
-            } else {
-                $propina = round((float) ($datos['propina'] ?? 0), 2);
-            }
-        }
+        $propina = $movimiento->tipo === 'F'
+            ? round((float) ($datos['propina'] ?? 0), 2)
+            : 0.0;
 
-        DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala, $propina, $propinaBilletes) {
+        DB::transaction(function () use ($movimiento, $datos, $cajero, $valoresSala, $propina) {
             $movimiento->comentario = $this->comentario($datos['comentario'] ?? null);
             $movimiento->cajero_crown_id = $cajero?->id;
             $movimiento->propina = $propina;
             if (Schema::hasColumn('tesoreria_crown_mesa', 'propina_billetes')) {
-                $movimiento->propina_billetes = $movimiento->tipo === 'F' && $propinaBilletes !== []
-                    ? $propinaBilletes
-                    : null;
+                $movimiento->propina_billetes = null;
             }
             $movimiento->save();
             EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
@@ -595,41 +576,6 @@ class TesoreriaCrownMesaController extends Controller
         });
 
         return null;
-    }
-
-    /**
-     * @return array<int, int|float>
-     */
-    private function propinaCantidadesParaVista(TesoreriaCrownMesa $movimiento): array
-    {
-        if ($movimiento->tipo !== 'F') {
-            return [];
-        }
-        $guardado = Schema::hasColumn('tesoreria_crown_mesa', 'propina_billetes')
-            ? $movimiento->propina_billetes
-            : null;
-        if (is_array($guardado) && $guardado !== []) {
-            $out = [];
-            foreach ($guardado as $valorId => $cantidad) {
-                $out[(int) $valorId] = (int) $cantidad;
-            }
-
-            return $out;
-        }
-        if ((int) ($movimiento->boveda_id ?? 0) > 0) {
-            $movimiento->loadMissing('boveda.lineas');
-            $out = [];
-            foreach ($movimiento->boveda?->lineas ?? [] as $linea) {
-                $cant = (int) round(abs((float) $linea->cantidad));
-                if ($cant > 0) {
-                    $out[(int) $linea->valor_id] = $cant;
-                }
-            }
-
-            return $out;
-        }
-
-        return [];
     }
 
     private function comentario(mixed $texto): ?string

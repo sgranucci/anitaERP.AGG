@@ -76,7 +76,8 @@ final class TesoreriaCrownBovedaListadoColumnas
             'tipo' => trim(($fila->tipo?->etiqueta() ?? '').($fila->revierte_id ? ' (reversa)' : '')),
             'efecto' => TesoreriaCrownBovedaSupport::efectoTextoConSubtipo(
                 (string) ($fila->tipo->signo ?? '2'),
-                $fila->subtipo->mueve_billetaje ?? null
+                $fila->subtipo->mueve_billetaje ?? null,
+                $fila->subtipo->signo ?? null
             ),
             'estado' => TesoreriaCrownBovedaSupport::estado((string) $fila->estado),
             'valor' => self::textoValor($fila),

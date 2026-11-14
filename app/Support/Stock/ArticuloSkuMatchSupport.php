@@ -57,6 +57,12 @@ final class ArticuloSkuMatchSupport
 
         $candidatos = self::todosPorSku($sku);
         if ($candidatos->isEmpty()) {
+            // Imports / migraciones pueden traer un SKU ya recodificado.
+            $skuDesdeMapeo = ArticuloSkuMapeoSupport::skuActualDesdeAnterior($sku);
+            if ($skuDesdeMapeo !== null && self::normalizar($skuDesdeMapeo) !== self::normalizar($sku)) {
+                return self::resolverCanonico($skuDesdeMapeo);
+            }
+
             return null;
         }
 

@@ -14,6 +14,61 @@ use Illuminate\Support\Facades\DB;
 final class PagoproveedorCuentacorrienteVinculoBackfillSupport
 {
     /**
+     * OPP/OPA referenciadas por créditos CC huérfanos (sin pagoproveedor_id).
+     *
+     * @return array{
+     *   recs: list<int>,
+     *   tipos: list<string>,
+     *   claves: array<string, true>,
+     *   etiquetas: int
+     * }
+     */
+    public static function recsOpHuerfanos(?int $empresaId = null): array
+    {
+        $q = DB::table('proveedor_cuentacorriente as credito')
+            ->join('proveedor_cuentacorriente_aplicacion as app', function ($join) {
+                $join->on('app.proveedor_cuentacorriente_aplicado_id', '=', 'credito.id')
+                    ->orOn('app.proveedor_cuentacorriente_id', '=', 'credito.id');
+            })
+            ->whereNull('credito.pagoproveedor_id')
+            ->whereNull('credito.comprobante_proveedor_id')
+            ->where('credito.total', '<', 0)
+            ->whereNull('app.pagoproveedor_id')
+            ->where(function ($w) {
+                $w->where('app.comprobanteaplicado', 'like', 'OPP%')
+                    ->orWhere('app.comprobanteaplicado', 'like', 'OPA%')
+                    ->orWhere('app.comprobanteaplicado', 'like', 'AOP%')
+                    ->orWhere('app.comprobanteaplicado', 'like', 'OPV%');
+            })
+            ->select(['app.comprobanteaplicado']);
+        if ($empresaId !== null && $empresaId > 0) {
+            $q->where('credito.empresa_id', $empresaId);
+        }
+
+        $recs = [];
+        $tipos = [];
+        $claves = [];
+        $etiquetas = 0;
+        foreach ($q->distinct()->orderBy('app.comprobanteaplicado')->cursor() as $fila) {
+            $parsed = PagoproveedorEtiquetaAnitaSupport::parse((string) ($fila->comprobanteaplicado ?? ''));
+            if ($parsed === null || $parsed['numero'] <= 0) {
+                continue;
+            }
+            $etiquetas++;
+            $recs[$parsed['numero']] = true;
+            $tipos[$parsed['tipo']] = true;
+            $claves[$parsed['tipo'].'|'.$parsed['sucursal'].'|'.$parsed['numero']] = true;
+        }
+
+        return [
+            'recs' => array_map('intval', array_keys($recs)),
+            'tipos' => array_values(array_keys($tipos)),
+            'claves' => $claves,
+            'etiquetas' => $etiquetas,
+        ];
+    }
+
+    /**
      * @return array{
      *   creditos_candidatos: int,
      *   a_vincular: int,

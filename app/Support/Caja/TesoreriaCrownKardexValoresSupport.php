@@ -68,6 +68,7 @@ final class TesoreriaCrownKardexValoresSupport
             'st.codigo as subtipo_codigo',
             'st.nombre as subtipo_nombre',
             'st.mueve_billetaje',
+            'st.signo as subtipo_signo',
             'd.id as deposito_id',
             'd.codigo as deposito_codigo',
             'd.nombre as deposito_nombre',
@@ -106,7 +107,8 @@ final class TesoreriaCrownKardexValoresSupport
         foreach ($filas as $fila) {
             $efecto = TesoreriaCrownBovedaSupport::efectoConSubtipo(
                 (string) $fila->signo,
-                $fila->mueve_billetaje ?? null
+                $fila->mueve_billetaje ?? null,
+                $fila->subtipo_signo ?? null
             );
             $cantidad = (float) $fila->cantidad;
             $entrada = $efecto > 0 ? $cantidad : ($efecto === 0 ? null : null);
@@ -121,7 +123,8 @@ final class TesoreriaCrownKardexValoresSupport
             $fila->monto = $efecto === 0 ? $monto : ($efecto * $monto);
             $fila->efecto_texto = TesoreriaCrownBovedaSupport::efectoTextoConSubtipo(
                 (string) $fila->signo,
-                $fila->mueve_billetaje ?? null
+                $fila->mueve_billetaje ?? null,
+                $fila->subtipo_signo ?? null
             );
             $fila->numero_visible = TesoreriaCrownNumeradorSupport::visible((int) $fila->numero);
             $fila->subtipo_etiqueta = trim(
@@ -158,22 +161,23 @@ final class TesoreriaCrownKardexValoresSupport
         ];
     }
 
-    public static function tipos(int $salaId): Collection
+    public static function tipos(int $salaId, null|string|\Carbon\CarbonInterface $fecha = null): Collection
     {
-        return TesoreriaCrownBovedaTipo::query()
-            ->where('sala_id', $salaId)
-            ->where('activo', true)
-            ->orderBy('codigo')
-            ->get();
+        return TesoreriaCrownBovedaSupport::tiposActivos($salaId, $fecha);
     }
 
-    public static function subtiposDeTipo(int $tipoId): Collection
-    {
-        return TesoreriaCrownBovedaSubtipo::query()
+    public static function subtiposDeTipo(
+        int $tipoId,
+        null|string|\Carbon\CarbonInterface $fecha = null
+    ): Collection {
+        $fechaYmd = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fecha);
+        $q = TesoreriaCrownBovedaSubtipo::query()
+            ->with('tipo')
             ->where('tipo_id', $tipoId)
-            ->where('activo', true)
-            ->orderBy('codigo')
-            ->get();
+            ->where('activo', true);
+        TesoreriaCrownBovedaVigenciaSupport::aplicarVigenteEn($q, $fechaYmd);
+
+        return $q->orderBy('codigo')->get();
     }
 
     public static function depositos(int $salaId): Collection

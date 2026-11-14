@@ -188,6 +188,45 @@ class FlashCrown extends Model implements Auditable
         return (bool) ($this->validado ?? false);
     }
 
+    /**
+     * Flash armado desde Anita (resultado/resulol). No debe pisarse con un
+     * recálculo de jornada abierta vacía (consulta, Daily, export, cron).
+     *
+     * Solo cuenta la fuente `resultado_anita` en detalle_json: origen=auto también
+     * lo usan los huecos vacíos de tesorería/sincronizar y no son réplica Anita.
+     */
+    public function esReplicaAnita(): bool
+    {
+        $detalle = is_array($this->detalle_json) ? $this->detalle_json : [];
+        $fuentes = is_array($detalle['fuentes'] ?? null) ? $detalle['fuentes'] : [];
+        if ($fuentes === [] && is_array($detalle['detalle']['fuentes'] ?? null)) {
+            $fuentes = $detalle['detalle']['fuentes'];
+        }
+
+        return in_array('resultado_anita', $fuentes, true);
+    }
+
+    /**
+     * Candidato a fallback Informix al listar/consultar.
+     * - Sin fuente resultado_anita (hueco local o solo online).
+     * - O réplica Anita vacía de juego/revenue (pull incompleto, ej. CAT en cero).
+     */
+    public function necesitaFallbackAnita(): bool
+    {
+        if ($this->estaValidado()) {
+            return false;
+        }
+        if (! $this->esReplicaAnita()) {
+            return true;
+        }
+
+        return abs((float) $this->win_mesas) < 0.02
+            && abs((float) $this->soft_count) < 0.02
+            && abs((float) $this->ayb) < 0.02
+            && abs((float) $this->hotel) < 0.02
+            && (int) $this->att === 0;
+    }
+
     /** Win de mesas de juego (sin torneos). */
     public function getWinMesasAttribute(): float
     {

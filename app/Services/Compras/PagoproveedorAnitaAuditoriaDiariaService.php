@@ -262,10 +262,11 @@ final class PagoproveedorAnitaAuditoriaDiariaService
             $problemas[] = 'Lectura tesmov Anita: '.$tesmov['error'];
         }
 
-        $lineasCaja = $pago->caja_movimientos
-            ->flatMap(fn ($m) => $m->caja_movimiento_cuentacajas)
-            ->count();
-        if ($lineasCaja > 0 && $tesmov['error'] === null && $tesmov['filas'] === []) {
+        // Aplicación de anticipo (neto 0) deja línea de caja en 0: no hay desembolso ni tesmov.
+        $lineasCajaConImporte = Compare::cantidadLineasCajaConImporte(
+            $pago->caja_movimientos->flatMap(fn ($m) => $m->caja_movimiento_cuentacajas)
+        );
+        if ($lineasCajaConImporte > 0 && $tesmov['error'] === null && $tesmov['filas'] === []) {
             $problemas[] = 'Falta tesmov OPP en Anita';
         }
 
@@ -430,15 +431,26 @@ final class PagoproveedorAnitaAuditoriaDiariaService
             return;
         }
 
+        // numeroasiento reutilizado por otro documento (ej. FAC): no comparar importes ajenos.
+        if ($filas !== [] && $nroAsiento > 0 && ! Compare::ctamovPerteneceAComprobante($filas, $tipo, $nro)) {
+            $problemas[] = 'numeroasiento '.$nroAsiento.' ocupado en Anita por otro documento';
+            $filas = [];
+        }
+
         if ($filas === []) {
-            $letra = (string) config('caja.ingresoegreso_anita_tesmov_letra', ' ');
-            if ($letra === '') {
-                $letra = ' ';
+            if (PagoproveedorAnitaCrownClaveSupport::aplica()) {
+                $letra = PagoproveedorAnitaCrownClaveSupport::letra();
+                $sucursal = PagoproveedorAnitaCrownClaveSupport::sucursal();
+            } else {
+                $letra = (string) config('caja.ingresoegreso_anita_tesmov_letra', ' ');
+                if ($letra === '') {
+                    $letra = ' ';
+                }
+                $sucursalCfg = config('caja.ingresoegreso_anita_tesmov_sucursal');
+                $sucursal = $sucursalCfg === null || $sucursalCfg === ''
+                    ? $empresaAnita
+                    : (int) $sucursalCfg;
             }
-            $sucursalCfg = config('caja.ingresoegreso_anita_tesmov_sucursal');
-            $sucursal = $sucursalCfg === null || $sucursalCfg === ''
-                ? $empresaAnita
-                : (int) $sucursalCfg;
             $porComprobante = $this->listar(
                 $sistema,
                 'ctamov',
@@ -470,22 +482,6 @@ final class PagoproveedorAnitaAuditoriaDiariaService
             }
 
             return;
-        }
-
-        if ($nroAsiento > 0) {
-            foreach ($filas as $fila) {
-                $row = is_array($fila) ? $fila : get_object_vars($fila);
-                $tipoFila = strtoupper(substr(trim((string) ($row['ctav_tipo'] ?? '')), 0, 3));
-                $nroFila = (int) ($row['ctav_nro'] ?? 0);
-                if ($tipoFila !== '' && $tipoFila !== $tipo) {
-                    $problemas[] = 'ctamov tipo '.$tipoFila.' ≠ '.$tipo;
-                    break;
-                }
-                if ($nroFila > 0 && $nroFila !== $nro) {
-                    $problemas[] = 'ctamov nro '.$nroFila.' ≠ OP '.$nro;
-                    break;
-                }
-            }
         }
 
         foreach (Compare::discrepanciasCtamovVsErp($erpTotales, Compare::totalesDesdeCtamov($filas)) as $p) {

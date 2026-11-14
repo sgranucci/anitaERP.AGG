@@ -50,6 +50,23 @@
         overlay.setAttribute('aria-hidden', 'true');
     }
 
+    function cuentaOrigenOk() {
+        var id = parseInt((document.getElementById('cuentacaja_id') || {}).value || '0', 10) || 0;
+        var cbu = String((document.getElementById('cbu_origen') || {}).value || '').replace(/\D+/g, '');
+        return id > 0 && cbu.length === 22;
+    }
+
+    function avisarCuentaOrigen() {
+        alert(
+            'Indique la cuenta de caja origen (filtro / débito Interbanking) con CBU de 22 dígitos. Use F1 o la lupa.'
+        );
+        var codigo = document.getElementById('codigo_cuentacaja');
+        if (codigo) {
+            codigo.classList.add('is-invalid');
+            codigo.focus();
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var all = document.getElementById('ib-envio-check-all');
         if (all) {
@@ -84,6 +101,20 @@
                 actualizarResumen();
             });
         }
+
+        ['form-ib-envio-prov', 'form-ib-envio-retiro'].forEach(function (formId) {
+            var f = document.getElementById(formId);
+            if (!f) {
+                return;
+            }
+            f.addEventListener('submit', function (e) {
+                if (!cuentaOrigenOk()) {
+                    e.preventDefault();
+                    avisarCuentaOrigen();
+                    return false;
+                }
+            });
+        });
 
         var form = document.getElementById('form-ib-envio-enviar');
         var btnEnviar = document.getElementById('ib-envio-enviar');

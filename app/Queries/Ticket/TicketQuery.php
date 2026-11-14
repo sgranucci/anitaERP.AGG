@@ -135,7 +135,7 @@ class TicketQuery implements TicketQueryInterface
                     'clausula' => 'LIKE'];    
         $columns[] = ['columna' => 'usuario.nombre',
                     'clausula' => 'LIKE'];            
-        $columns[] = ['columna' => 'estado_ticket',
+        $columns[] = ['columna' => 'ticket.estado_ticket',
                     'clausula' => 'LIKE'];                                                            
         $columns[] = ['columna' => 'ticket.id',
                     'clausula' => '='];

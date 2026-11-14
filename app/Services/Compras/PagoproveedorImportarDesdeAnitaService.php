@@ -56,12 +56,61 @@ class PagoproveedorImportarDesdeAnitaService
      *   errores_bridge: list<string>
      * }
      */
+    /**
+     * Importa solo las OPP/OPA referenciadas por créditos CC huérfanos (sin rango masivo).
+     *
+     * @return array<string, mixed>
+     */
+    public function importarParaHuerfanosCc(
+        bool $dryRun = true,
+        ?int $usuarioId = null,
+        ?int $empresaId = null,
+    ): array {
+        $meta = \App\Support\Compras\PagoproveedorCuentacorrienteVinculoBackfillSupport::recsOpHuerfanos($empresaId);
+        $tipos = self::normalizarTipos($meta['tipos'] !== [] ? $meta['tipos'] : ['OPP', 'OPA']);
+        $stats = $this->importar(
+            '1970-01-01',
+            '2099-12-31',
+            $dryRun,
+            $usuarioId,
+            $tipos,
+            $meta['recs'],
+            $meta['claves'],
+        );
+        $stats['huerfanos_etiquetas'] = $meta['etiquetas'];
+        $stats['huerfanos_recs'] = count($meta['recs']);
+
+        return $stats;
+    }
+
+    /**
+     * @param  list<int>|null  $soloRecs  Si viene, lee Anita por pag_rec (ignora el volumen del rango).
+     * @param  array<string, true>|null  $soloClavesTipoSucNro  Filtro fino tipo|sucursal|numero.
+     * @return array{
+     *   en_anita: int,
+     *   a_crear: int,
+     *   creados: int,
+     *   omitidos: int,
+     *   sin_proveedor: int,
+     *   sin_empresa: int,
+     *   con_asiento: int,
+     *   sin_asiento: int,
+     *   con_auxpag: int,
+     *   sin_auxpag: int,
+     *   proveedor_varios: int,
+     *   cuenta_corriente: int,
+     *   errores: list<string>,
+     *   errores_bridge: list<string>
+     * }
+     */
     public function importar(
         string $desdeIso,
         string $hastaIso,
         bool $dryRun = true,
         ?int $usuarioId = null,
         ?array $tipos = null,
+        ?array $soloRecs = null,
+        ?array $soloClavesTipoSucNro = null,
     ): array {
         $tipos = self::normalizarTipos($tipos);
         $stats = [
@@ -90,11 +139,22 @@ class PagoproveedorImportarDesdeAnitaService
             return $stats;
         }
 
+        $soloRecs = $soloRecs === null
+            ? null
+            : array_values(array_unique(array_filter(array_map('intval', $soloRecs))));
+        if ($soloRecs !== null && $soloRecs === []) {
+            return $stats;
+        }
+
         $empresasAnita = PagoproveedorAnitaImportEmpresaSupport::empresasAnitaImport();
-        $pagosAnita = $this->reader->listarPagos($empresasAnita, $desde, $hasta, $stats['errores_bridge'], $tipos);
+        $pagosAnita = $soloRecs !== null
+            ? $this->reader->listarPagosPorRecs($empresasAnita, $soloRecs, $stats['errores_bridge'], $tipos)
+            : $this->reader->listarPagos($empresasAnita, $desde, $hasta, $stats['errores_bridge'], $tipos);
         $stats['en_anita'] = count($pagosAnita);
 
-        $auxpags = $this->reader->listarAuxpag($empresasAnita, $desde, $hasta, $stats['errores_bridge'], $tipos);
+        $auxpags = $soloRecs !== null
+            ? $this->reader->listarAuxpagPorRecs($empresasAnita, $soloRecs, $stats['errores_bridge'], $tipos)
+            : $this->reader->listarAuxpag($empresasAnita, $desde, $hasta, $stats['errores_bridge'], $tipos);
         $auxPorClave = [];
         $cuentasBanco = [];
         foreach ($auxpags as $axp) {
@@ -113,23 +173,30 @@ class PagoproveedorImportarDesdeAnitaService
 
         $subPorNro = [];
         $codigosCuenta = [];
-        foreach ($tipos as $tipoSub) {
-            foreach ($this->reader->listarSubdiarioTipo($tipoSub, $desde, $hasta, $stats['errores_bridge']) as $linea) {
-                $nroSub = (int) ($linea->subd_nro ?? 0);
-                if ($nroSub <= 0) {
-                    continue;
-                }
-                $subPorNro[$tipoSub.'|'.$nroSub][] = $linea;
-                $codigo = trim((string) ($linea->subd_cuenta ?? ''));
-                if ($codigo !== '' && $codigo !== '0') {
-                    $codigosCuenta[$codigo] = true;
+        // Subdiario completo solo en import por rango; en modo recs no hace falta para vincular CC.
+        if ($soloRecs === null) {
+            foreach ($tipos as $tipoSub) {
+                foreach ($this->reader->listarSubdiarioTipo($tipoSub, $desde, $hasta, $stats['errores_bridge']) as $linea) {
+                    $nroSub = (int) ($linea->subd_nro ?? 0);
+                    if ($nroSub <= 0) {
+                        continue;
+                    }
+                    $subPorNro[$tipoSub.'|'.$nroSub][] = $linea;
+                    $codigo = trim((string) ($linea->subd_cuenta ?? ''));
+                    if ($codigo !== '' && $codigo !== '0') {
+                        $codigosCuenta[$codigo] = true;
+                    }
                 }
             }
         }
         $nombresCuenta = $this->nombresCuentaPorCodigo(array_keys($codigosCuenta));
-        $asientosPorOp = $this->indexarAsientosSubdiario($desdeIso, $hastaIso, $tipos);
+        $asientosPorOp = $soloRecs !== null
+            ? $this->indexarAsientosPorNumeros($soloRecs, $tipos)
+            : $this->indexarAsientosSubdiario($desdeIso, $hastaIso, $tipos);
 
-        $existentes = $this->indexarPagosExistentes($desdeIso, $hastaIso, $tipos);
+        $existentes = $soloRecs !== null
+            ? $this->indexarPagosExistentesPorRecs($soloRecs, $tipos)
+            : $this->indexarPagosExistentes($desdeIso, $hastaIso, $tipos);
 
         foreach ($pagosAnita as $pago) {
             $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) ($pago->pag_tipo ?? ''));
@@ -141,6 +208,10 @@ class PagoproveedorImportarDesdeAnitaService
             $sucursal = (int) ($pago->pag_sucursal ?? 0);
             $numero = (int) ($pago->pag_rec ?? 0);
             if ($numero <= 0) {
+                continue;
+            }
+            if ($soloClavesTipoSucNro !== null
+                && ! isset($soloClavesTipoSucNro[$tipo.'|'.$sucursal.'|'.$numero])) {
                 continue;
             }
 
@@ -266,7 +337,8 @@ class PagoproveedorImportarDesdeAnitaService
         }
 
         $importaOppOpa = array_intersect($tipos, ['OPP', 'OPA']) !== [];
-        if (! $dryRun && $stats['creados'] > 0 && $importaOppOpa) {
+        // En modo huérfanos no re-backfillear impresión de décadas enteras.
+        if (! $dryRun && $stats['creados'] > 0 && $importaOppOpa && $soloRecs === null) {
             $imp = app(PagoproveedorAnitaImpresionBackfillService::class)
                 ->backfill($desdeIso, $hastaIso, false);
             $stats['impresion_actualizadas'] = $imp['actualizadas'] ?? 0;
@@ -302,6 +374,77 @@ class PagoproveedorImportarDesdeAnitaService
                 (int) $p->sucursal,
                 (int) $p->numerotransaccion,
             )] = true;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $recs
+     * @param  list<string>  $tipos
+     * @return array<string, true>
+     */
+    private function indexarPagosExistentesPorRecs(array $recs, array $tipos): array
+    {
+        $out = [];
+        if ($recs === []) {
+            return $out;
+        }
+        foreach (array_chunk($recs, 400) as $lote) {
+            foreach (Pagoproveedor::query()
+                ->whereIn('tipocomprobante', $tipos)
+                ->whereIn('numerotransaccion', $lote)
+                ->get(['empresa_id', 'tipocomprobante', 'sucursal', 'numerotransaccion']) as $p) {
+                $out[self::claveOp(
+                    (int) $p->empresa_id,
+                    (string) $p->tipocomprobante,
+                    (int) $p->sucursal,
+                    (int) $p->numerotransaccion,
+                )] = true;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $numeros
+     * @param  list<string>  $tipos
+     * @return array<string, int> tipo|numero => asiento_id
+     */
+    private function indexarAsientosPorNumeros(array $numeros, array $tipos): array
+    {
+        $out = [];
+        if ($numeros === []) {
+            return $out;
+        }
+        foreach (array_chunk($numeros, 400) as $lote) {
+            $query = Asiento::query()
+                ->where('anita_origen', 'subdiario')
+                ->where(function ($q) use ($tipos) {
+                    foreach ($tipos as $tipo) {
+                        $q->orWhere('observacion', 'like', '[SUBD] T '.$tipo.' %');
+                    }
+                })
+                ->where(function ($q) use ($lote) {
+                    foreach ($lote as $nro) {
+                        $q->orWhere('observacion', 'like', '% '.$nro.'%');
+                    }
+                });
+            foreach ($query->get(['id', 'observacion']) as $asiento) {
+                $obs = (string) $asiento->observacion;
+                if (! preg_match('/\[SUBD\] T (OPP|OPA|OPV|AOP) (\d+)/', $obs, $m)) {
+                    continue;
+                }
+                if (! in_array($m[1], $tipos, true)) {
+                    continue;
+                }
+                $nro = (int) $m[2];
+                if (! in_array($nro, $lote, true)) {
+                    continue;
+                }
+                $out[$m[1].'|'.$nro] = (int) $asiento->id;
+            }
         }
 
         return $out;

@@ -11,7 +11,22 @@
     $anexosBaseUrl = $anexosBaseUrl ?? route('ver_tesoreria_crown_jornada', $jornada->id);
     $anexosBaseQuery = $anexosBaseQuery ?? [];
     $urlPanelAnexo = function (string $clave) use ($anexosBaseUrl, $anexosBaseQuery): string {
-        return $anexosBaseUrl.'?'.http_build_query(array_merge($anexosBaseQuery, ['panel' => $clave]));
+        $query = array_merge($anexosBaseQuery, ['panel' => $clave]);
+        // I y VIII en menú llevan rango; el resto de anexos del menú usa la fecha hasta.
+        if (in_array($clave, ['anexo', 'anexo8'], true)) {
+            if (! empty($anexosBaseQuery['fecha_desde']) || ! empty($anexosBaseQuery['fecha_hasta'])) {
+                $query['consultar'] = 1;
+            }
+        } else {
+            unset($query['fecha_desde'], $query['fecha_hasta'], $query['consultar']);
+            if (! empty($anexosBaseQuery['fecha_hasta'])) {
+                $query['fecha'] = $anexosBaseQuery['fecha_hasta'];
+            } elseif (! empty($anexosBaseQuery['fecha_desde'])) {
+                $query['fecha'] = $anexosBaseQuery['fecha_desde'];
+            }
+        }
+
+        return $anexosBaseUrl.'?'.http_build_query($query);
     };
 @endphp
 <div class="btn-group btn-group-sm mb-2 flex-wrap tc-anexos-tabs" role="group" aria-label="Anexos del día">

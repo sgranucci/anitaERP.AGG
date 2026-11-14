@@ -36,6 +36,10 @@ use Illuminate\Support\Facades\Schema;
  *
  * Hasta {@see self::ANITA_FUENTE_VERDAD_HASTA}, Anita manda: ante diferencias se reemplazan
  * cabecera/movimientos ERP (se conservan FKs de proceso: venta_id, etc.).
+ *
+ * Subdiario/subhist no crea asiento si el mismo comprobante (tipo/letra/sucursal/nro)
+ * ya está cubierto por una transferencia Crown / venta ERP: el dedupe por numeroasiento
+ * no alcanza porque la transferencia usa la secuencia ERP y Anita el nro_operacion.
  */
 final class AnitaAsientoImportService
 {
@@ -228,6 +232,11 @@ final class AnitaAsientoImportService
             $planes,
         )));
         $existentes = $this->cargarAsientosExistentesPorNumeros($empresaErpId, $numeros);
+        $documentosProceso = $this->cargarDocumentosCubiertosPorProceso(
+            $empresaErpId,
+            $this->ymdAIso($fechaDesdeYmd),
+            $this->ymdAIso($fechaHastaYmd),
+        );
 
         foreach ($planes as $item) {
             $this->resolverPersistencia(
@@ -239,6 +248,7 @@ final class AnitaAsientoImportService
                 $item['origen'],
                 $soloDocumentos,
                 $completarDocumentosLinea,
+                $documentosProceso,
             );
         }
 
@@ -937,11 +947,31 @@ final class AnitaAsientoImportService
         string $origen,
         bool $soloDocumentos = false,
         bool $completarDocumentosLinea = true,
+        array $documentosProceso = [],
     ): void {
         $nro = (int) $asientoPlan['numeroasiento'];
         $existente = $existentes[$nro] ?? null;
 
         if ($existente === null) {
+            $cubierto = $this->documentoYaCubiertoPorProceso($asientoPlan, $documentosProceso);
+            if ($cubierto !== null) {
+                $out['omitidos_documento_proceso']++;
+                $out['omitidos_documento_proceso_detalle'][] = [
+                    'numeroasiento' => $nro,
+                    'empresa_id' => $asientoPlan['empresa_id'] ?? null,
+                    'fecha' => $asientoPlan['fecha'] ?? null,
+                    'origen_anita' => $origen,
+                    'documento' => $cubierto['clave'],
+                    'erp_id' => $cubierto['id'],
+                    'erp_numeroasiento' => $cubierto['numeroasiento'],
+                    'erp_origen' => $cubierto['anita_origen'],
+                    'erp_venta_id' => $cubierto['venta_id'],
+                    'motivo' => 'Comprobante ya asentado por transferencia/venta ERP',
+                ];
+
+                return;
+            }
+
             $out['a_crear']++;
             $out['a_crear_por_origen'][$origen] = ($out['a_crear_por_origen'][$origen] ?? 0) + 1;
             $out['lineas_a_crear'] += count($asientoPlan['movimientos']);
@@ -1744,6 +1774,86 @@ final class AnitaAsientoImportService
     }
 
     /**
+     * Asientos de proceso (transferencia Crown / venta) indexados por comprobante fiscal.
+     * Evita reimportar el mismo FAC/NCD desde subdiario con otro numeroasiento.
+     *
+     * @return array<string, array{id: int, numeroasiento: int, anita_origen: ?string, venta_id: ?int, clave: string}>
+     */
+    private function cargarDocumentosCubiertosPorProceso(int $empresaErpId, string $desdeIso, string $hastaIso): array
+    {
+        if ($desdeIso === '' || $hastaIso === '') {
+            return [];
+        }
+
+        $map = [];
+        Asiento::query()
+            ->where('empresa_id', $empresaErpId)
+            ->whereBetween('fecha', [$desdeIso, $hastaIso])
+            ->where(function ($q) {
+                $q->where(function ($q2) {
+                    $q2->whereNotNull('venta_id')->where('venta_id', '>', 0);
+                })->orWhere('anita_origen', AsientoAnitaMetadatosSupport::ORIGEN_TRANSFERENCIA);
+            })
+            ->whereNotNull('anita_tipo')
+            ->where('anita_sucursal', '>', 0)
+            ->where('anita_nro', '>', 0)
+            ->orderBy('id')
+            ->get([
+                'id', 'numeroasiento', 'anita_origen', 'anita_tipo', 'anita_letra',
+                'anita_sucursal', 'anita_nro', 'venta_id',
+            ])
+            ->each(function (Asiento $asiento) use (&$map) {
+                $clave = AsientoAnitaMetadatosSupport::claveDocumento(
+                    $asiento->anita_tipo,
+                    $asiento->anita_letra,
+                    $asiento->anita_sucursal,
+                    $asiento->anita_nro,
+                );
+                if ($clave === null || isset($map[$clave])) {
+                    return;
+                }
+                $map[$clave] = [
+                    'id' => (int) $asiento->id,
+                    'numeroasiento' => (int) $asiento->numeroasiento,
+                    'anita_origen' => $asiento->anita_origen !== null ? (string) $asiento->anita_origen : null,
+                    'venta_id' => $asiento->venta_id !== null ? (int) $asiento->venta_id : null,
+                    'clave' => $clave,
+                ];
+            });
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, mixed>  $asientoPlan
+     * @param  array<string, array{id: int, numeroasiento: int, anita_origen: ?string, venta_id: ?int, clave: string}>  $documentosProceso
+     * @return array{id: int, numeroasiento: int, anita_origen: ?string, venta_id: ?int, clave: string}|null
+     */
+    private function documentoYaCubiertoPorProceso(array $asientoPlan, array $documentosProceso): ?array
+    {
+        if ($documentosProceso === []) {
+            return null;
+        }
+
+        $origenPlan = strtolower(trim((string) ($asientoPlan['anita_origen'] ?? '')));
+        if (! AsientoAnitaMetadatosSupport::esDetalle($origenPlan)) {
+            return null;
+        }
+
+        $clave = AsientoAnitaMetadatosSupport::claveDocumento(
+            $asientoPlan['anita_tipo'] ?? null,
+            $asientoPlan['anita_letra'] ?? null,
+            $asientoPlan['anita_sucursal'] ?? 0,
+            $asientoPlan['anita_nro'] ?? 0,
+        );
+        if ($clave === null) {
+            return null;
+        }
+
+        return $documentosProceso[$clave] ?? null;
+    }
+
+    /**
      * @param  list<int>  $numeros
      * @return array<int, array<string, mixed>>
      */
@@ -1992,6 +2102,8 @@ final class AnitaAsientoImportService
             'omitidos_sin_numero' => 0,
             'omitidos_sin_tipo' => 0,
             'omitidos_sin_movimientos' => 0,
+            'omitidos_documento_proceso' => 0,
+            'omitidos_documento_proceso_detalle' => [],
             'lineas_sin_importe' => 0,
             'cuentas_faltantes' => [],
             'tipos_faltantes' => [],
@@ -2013,6 +2125,7 @@ final class AnitaAsientoImportService
             'asientos_documento_a_actualizar', 'documentos_linea_a_actualizar', 'documentos_linea_actualizados',
             'duplicados', 'duplicados_dejar', 'duplicados_reemplazar',
             'omitidos_sin_numero', 'omitidos_sin_tipo', 'omitidos_sin_movimientos',
+            'omitidos_documento_proceso',
             'lineas_sin_importe',
         ] as $k) {
             $total[$k] = (int) ($total[$k] ?? 0) + (int) ($bloque[$k] ?? 0);
@@ -2034,6 +2147,7 @@ final class AnitaAsientoImportService
         $this->mergeMuestraAcotada($total, 'pendientes_crear', $bloque['pendientes_crear'] ?? [], 50);
         $this->mergeMuestraAcotada($total, 'pendientes_reemplazar', $bloque['pendientes_reemplazar'] ?? [], 50);
         $this->mergeMuestraAcotada($total, 'duplicados_detalle', $bloque['duplicados_detalle'] ?? [], 50);
+        $this->mergeMuestraAcotada($total, 'omitidos_documento_proceso_detalle', $bloque['omitidos_documento_proceso_detalle'] ?? [], 50);
         $this->mergeMuestraAcotada($total, 'resumen_sin_detalle_detalle', $bloque['resumen_sin_detalle_detalle'] ?? [], 80);
         $total['errores'] = array_merge($total['errores'] ?? [], $bloque['errores'] ?? []);
         $total['timings'] = array_merge($total['timings'] ?? [], $bloque['timings'] ?? []);

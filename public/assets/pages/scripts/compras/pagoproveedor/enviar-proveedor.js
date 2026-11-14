@@ -9,6 +9,7 @@
         $('#op-envio-proveedor-error').addClass('d-none').text('');
         $('#op-envio-proveedor-form-wrap').addClass('d-none');
         $('#op-envio-proveedor-aviso').addClass('d-none').text('');
+        $('#op-envio-proveedor-comprobante-ib').addClass('d-none').removeClass('alert-success alert-warning').addClass('alert-success').text('');
         $('#op-envio-proveedor-advertencia').addClass('d-none').text('');
         $('#op-envio-proveedor-email-error').addClass('d-none').text('');
         $('#op_envio_proveedor_email').val('').removeClass('is-invalid');
@@ -187,6 +188,12 @@
             $('#op_envio_proveedor_email').val(data.email || '');
             if (data.mensaje) {
                 $('#op-envio-proveedor-aviso').removeClass('d-none').text(data.mensaje);
+            }
+            if (data.aviso_comprobante_transferencia) {
+                var $ib = $('#op-envio-proveedor-comprobante-ib');
+                $ib.removeClass('d-none alert-success alert-warning')
+                    .addClass(data.adjunta_comprobante_transferencia ? 'alert-success' : 'alert-warning')
+                    .text(data.aviso_comprobante_transferencia);
             }
             if (data.advertencia_estado) {
                 $('#op-envio-proveedor-advertencia').removeClass('d-none').text(data.advertencia_estado);

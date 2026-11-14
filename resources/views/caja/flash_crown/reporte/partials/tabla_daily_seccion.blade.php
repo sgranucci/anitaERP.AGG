@@ -1,4 +1,5 @@
 @php
+    use App\Support\Caja\Flash\FlashCrownNumeroSupport as N;
     use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport as F;
     use App\Support\Export\ExcelFormatoNumero;
 
@@ -40,27 +41,26 @@
                     @php
                         $clave = $col['clave'] ?? '';
                         $valor = $fila[$clave] ?? '';
-                        if ($clave === 'day' || $clave === 'fecha') {
-                            $texto = (string) $valor;
-                        } elseif ($excel) {
-                            // Número crudo para que Excel sume (máscara en AfterSheet).
-                            if (! empty($col['pct'])) {
-                                $texto = F::nExcelFormato($valor, $formatoNumero, 2);
-                            } elseif (! empty($col['entero'])) {
-                                $texto = F::enteroExcelFormato($valor, $formatoNumero);
-                            } else {
-                                $texto = F::nExcelFormato($valor, $formatoNumero, 2);
-                            }
-                        } elseif (! empty($col['entero'])) {
-                            $texto = F::n($valor, 0);
-                        } elseif (! empty($col['pct'])) {
-                            $texto = F::pct($valor, 2);
-                        } else {
-                            $texto = F::n($valor, 2);
-                        }
+                        $esTexto = $clave === 'day' || $clave === 'fecha';
+                        $negrita = ! empty($fila['es_total']) || ! empty($fila['es_promedio']);
                     @endphp
                     <td style="padding:2px 6px; white-space:nowrap; border:1px solid #D5D8DC; text-align:{{ in_array($clave, ['day', 'fecha'], true) ? 'left' : 'right' }}; {{ $peso }}">
-                        {{ $texto }}
+                        @if ($esTexto)
+                            {{ (string) $valor }}
+                        @elseif ($excel)
+                            {{-- Número crudo: AfterSheet fuerza TYPE_NUMERIC + máscara de miles --}}
+                            @if (! empty($col['entero']))
+                                {{ F::enteroExcelFormato($valor, $formatoNumero) }}
+                            @else
+                                {{ F::nExcelFormato($valor, $formatoNumero, 2) }}
+                            @endif
+                        @elseif (! empty($col['entero']))
+                            {!! N::html($valor, 0, $negrita) !!}
+                        @elseif (! empty($col['pct']))
+                            {!! N::html($valor, 2, $negrita) !!}%
+                        @else
+                            {!! N::html($valor, 2, $negrita) !!}
+                        @endif
                     </td>
                 @endforeach
             </tr>

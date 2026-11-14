@@ -54,7 +54,7 @@
                     @endif
                     <p class="text-muted mb-3">
                         Elegí el tipo. El movimiento se abre para cargar las cantidades.
-                        Para propina de mesa usá <strong>Estado final</strong> (billetaje ARS: total Anexo II + detalle a bóveda PROP/Mesas).
+                        Para propina de mesa usá <strong>Estado final</strong> (solo monto: Anexo II y reporte propinas por casino, sin billetaje).
                     </p>
                     <div class="form-row align-items-end">
                         @include('caja.tesoreria_crown.partials.campo_cajero', [

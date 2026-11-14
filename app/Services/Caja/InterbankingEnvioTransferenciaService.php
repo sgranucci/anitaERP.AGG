@@ -164,10 +164,22 @@ class InterbankingEnvioTransferenciaService
 
         $paramsDebito = InterbankingCuentacajaParametrosSupport::parametrosApiDesdeCuentacaja($cuenta, $empresaId);
         $debitAccount = trim((string) ($cuenta->cuenta_interbanking ?? ''));
+        $debitCbu = CbuSupport::normalizar((string) ($cuenta->cbu ?? ''));
         if ($debitAccount === '' || $paramsDebito === null) {
             return [
                 'ok' => false,
                 'mensaje' => 'La cuenta de caja no tiene número Interbanking / banco configurado para la API.',
+                'envio_id' => null,
+                'resultados' => [],
+                'cantidad_ok' => 0,
+                'cantidad_error' => 0,
+                'cantidad_omitida' => 0,
+            ];
+        }
+        if (strlen($debitCbu) !== 22) {
+            return [
+                'ok' => false,
+                'mensaje' => 'La cuenta de caja origen no tiene CBU válido (22 dígitos) para Confección Interbanking.',
                 'envio_id' => null,
                 'resultados' => [],
                 'cantidad_ok' => 0,
@@ -264,6 +276,7 @@ class InterbankingEnvioTransferenciaService
 
                 $api = $this->interbankingService->crearTransferenciaACbu($empresaId, [
                     'confection_type' => $confectionType,
+                    'debit_cbu' => $debitCbu,
                     'debit_account_number' => $debitAccount,
                     'debit_bank_number' => $paramsDebito['bank_number'],
                     'debit_account_type' => $paramsDebito['account_type'],
@@ -271,6 +284,8 @@ class InterbankingEnvioTransferenciaService
                     'credit_cbu' => $cbu,
                     'amount' => $importe,
                     'concept' => $concept,
+                    'confection_id' => $origenId ?: null,
+                    'request_date' => date('Y-m-d'),
                 ]);
 
                 if (! empty($api['ok'])) {

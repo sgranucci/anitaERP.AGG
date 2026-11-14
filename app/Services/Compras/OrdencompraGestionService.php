@@ -213,6 +213,7 @@ class OrdencompraGestionService
         return [
             'requisicion_id' => $req->id,
             'empresa_id' => $req->empresa_id,
+            'sala_id' => $req->sala_id ? (int) $req->sala_id : null,
             'fecha' => $req->fecha,
             'fechaentrega' => $req->fechaentrega,
             'centrocosto_id' => $req->centrocosto_id,
@@ -373,6 +374,7 @@ class OrdencompraGestionService
 
     public function guardar(Request $request, bool $omitirMarcarRequisicionGeneroOc = false): array
     {
+        $this->sincronizarEmpresaDesdeSala($request);
         $v = Validator::make($request->all(), $this->reglasCabecera());
         if ($v->fails()) {
             return ['mensaje' => 'error', 'errores' => $v->errors()->first()];
@@ -549,6 +551,7 @@ class OrdencompraGestionService
         }
         $contratoAnterior = $this->snapshotContratoSinCom($existente);
 
+        $this->sincronizarEmpresaDesdeSala($request);
         $v = Validator::make($request->all(), $this->reglasCabecera());
         if ($v->fails()) {
             return ['mensaje' => 'error', 'errores' => $v->errors()->first()];
@@ -1416,6 +1419,7 @@ class OrdencompraGestionService
             'fecha' => $payload['fecha'],
             'fechaentrega' => $payload['fechaentrega'],
             'empresa_id' => $payload['empresa_id'],
+            'sala_id' => ! empty($payload['sala_id']) ? (int) $payload['sala_id'] : null,
             'requisicion_id' => ! empty($payload['requisicion_id']) ? (int) $payload['requisicion_id'] : null,
             'centrocosto_id' => $payload['centrocosto_id'],
             'comentario' => $payload['comentario'] ?? '',
@@ -1663,9 +1667,29 @@ class OrdencompraGestionService
     /**
      * @return array<string, string>
      */
+    /**
+     * Crown: la sala define la empresa (mismo criterio que requisición).
+     */
+    private function sincronizarEmpresaDesdeSala(Request $request): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            return;
+        }
+
+        $salaId = (int) $request->input('sala_id', 0);
+        if ($salaId <= 0) {
+            return;
+        }
+
+        $empresaId = (int) (\App\Models\Configuracion\Sala::query()->whereKey($salaId)->value('empresa_id') ?? 0);
+        if ($empresaId > 0) {
+            $request->merge(['empresa_id' => $empresaId]);
+        }
+    }
+
     private function reglasCabecera(): array
     {
-        return [
+        $rules = [
             'fecha' => 'required|date',
             'fechaentrega' => 'required|date',
             'empresa_id' => 'required|integer|exists:empresa,id',
@@ -1704,6 +1728,23 @@ class OrdencompraGestionService
             'contrato_exige_ingresos' => 'nullable|boolean',
             'contrato_minimo_ingresos' => 'nullable|integer|min:1|max:99',
         ];
+
+        if (EntornoEmpresaSupport::esCrown()) {
+            $rules['sala_id'] = [
+                'required',
+                'integer',
+                'exists:sala,id',
+                function (string $attribute, $value, \Closure $fail): void {
+                    if (! \App\Support\Ventas\UsuarioSalaAsignadaSupport::salaIdPermitida((int) $value)) {
+                        $fail('La sala indicada no está asignada a su usuario.');
+                    }
+                },
+            ];
+        } else {
+            $rules['sala_id'] = 'nullable|integer|exists:sala,id';
+        }
+
+        return $rules;
     }
 
     /**

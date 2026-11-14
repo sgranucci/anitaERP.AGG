@@ -37,6 +37,9 @@ class ValidacionTesoreriaCrownBovedaSubtipo extends FormRequest
             'nombre' => ['required', 'string', 'max:60'],
             'activo' => ['required', 'in:0,1'],
             'mueve_billetaje' => ['required', 'in:0,1'],
+            'vigente_desde' => ['nullable', 'date'],
+            'vigente_hasta' => ['nullable', 'date', 'after_or_equal:vigente_desde'],
+            'signo' => ['nullable', 'in:0,1,2'],
         ];
     }
 
@@ -49,6 +52,9 @@ class ValidacionTesoreriaCrownBovedaSubtipo extends FormRequest
             'nombre' => 'nombre',
             'activo' => 'activo',
             'mueve_billetaje' => 'mueve billetaje',
+            'vigente_desde' => 'vigente desde',
+            'vigente_hasta' => 'vigente hasta',
+            'signo' => 'efecto (override)',
         ];
     }
 }

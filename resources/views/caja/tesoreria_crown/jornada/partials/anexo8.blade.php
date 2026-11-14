@@ -8,7 +8,9 @@
         <h3 class="card-title mb-0"><i class="fa fa-university"></i> Anexo VIII — Estado de bóveda</h3>
     </div>
     <div class="card-body pb-2">
-        @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
+        @if (empty($ocultarTabsAnexo))
+            @include('caja.tesoreria_crown.jornada.partials.anexos_tabs')
+        @endif
         <p class="text-muted small mb-2">
             Formato de <code>l-estboveda.c</code>: primero stock de fichas (informativo, no entra al total),
             después efectivo (arqueo del día + slots + drops) + resumen final + FX.

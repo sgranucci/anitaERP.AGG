@@ -45,7 +45,7 @@
                         <label class="col-lg-2 control-label text-right pr-2" for="destinatarios">Destinatarios</label>
                         <div class="col-lg-8">
                             <textarea name="destinatarios" id="destinatarios" class="form-control form-control-sm" rows="6">{{ $destinatarios }}</textarea>
-                            <small class="text-muted">Un mail por línea. Solo hace falta para Enviar / Guardar destinatarios.</small>
+                            <small class="text-muted">Un mail por línea. La lista es propia de cada formato (Flash completo, Gaming revenues, Daily Flash). Enviar / Guardar destinatarios aplica al formato elegido.</small>
                         </div>
                     </div>
                     <div class="form-group row mb-0">
@@ -130,6 +130,19 @@
     var exportAbort = null;
     if (!form || !overlay) {
         return;
+    }
+    var selectFormato = document.getElementById('formato');
+    var textareaDest = document.getElementById('destinatarios');
+    var destinatariosPorFormato = @json($destinatariosPorFormato ?? []);
+    var formatoActual = selectFormato ? selectFormato.value : '';
+    if (selectFormato && textareaDest) {
+        selectFormato.addEventListener('change', function () {
+            if (formatoActual) {
+                destinatariosPorFormato[formatoActual] = textareaDest.value;
+            }
+            formatoActual = selectFormato.value;
+            textareaDest.value = destinatariosPorFormato[formatoActual] || '';
+        });
     }
     function mostrar(titulo, subtitulo) {
         var nodo = document.getElementById('informe-flash-titulo');

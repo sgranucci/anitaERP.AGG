@@ -41,10 +41,8 @@
                 'exportQueryparams' => $filtrosQuery ?? [],
             ])
             <div class="card-body border-bottom py-2">
-                <p class="text-muted mb-0">
-                    Subtipos opcionales por tipo de movimiento de bóveda (p. ej. OEGR → Devolución; PROP → Híbrida / Mesas / Pública).
-                    Si el tipo tiene subtipos activos, al cargar el movimiento hay que elegir uno.
-                    Híbrida no mueve billetaje (solo RRHH); Mesas y Pública sí ingresan billetes.
+                <p class="text-muted mb-2">
+                    Subtipos por tipo de movimiento. Si el tipo tiene subtipos vigentes en la fecha de jornada, al cargar hay que elegir uno.
                     @if ($tipoFiltro ?? null)
                         <span class="d-block mt-1">
                             Filtrado por tipo
@@ -53,6 +51,24 @@
                         </span>
                     @endif
                 </p>
+                @if ($sala)
+                    <form method="get" class="form-inline" action="{{ route('tesoreria_crown_boveda_subtipo') }}">
+                        <input type="hidden" name="sala_id" value="{{ $sala->id }}">
+                        @if (($tipoId ?? 0) > 0)
+                            <input type="hidden" name="tipo_id" value="{{ $tipoId }}">
+                        @endif
+                        <label class="mr-2 mb-0" for="filtro_vigencia_st">Vigencia</label>
+                        <select name="filtro_vigencia" id="filtro_vigencia_st" class="form-control form-control-sm mr-2">
+                            <option value="vigentes" @selected(($filtroVigencia ?? 'vigentes') === 'vigentes')>Vigentes en fecha</option>
+                            <option value="vencidos" @selected(($filtroVigencia ?? '') === 'vencidos')>Vencidos</option>
+                            <option value="futuros" @selected(($filtroVigencia ?? '') === 'futuros')>Futuros</option>
+                            <option value="todos" @selected(($filtroVigencia ?? '') === 'todos')>Todos</option>
+                        </select>
+                        <input type="date" name="fecha_vigencia" class="form-control form-control-sm mr-2"
+                               value="{{ $fechaVigencia ?? now()->toDateString() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-info">Aplicar</button>
+                    </form>
+                @endif
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-sm table-hover table-bordered mb-0" id="tabla-paginada">
@@ -62,6 +78,9 @@
                             <th>Código</th>
                             <th>Nombre</th>
                             <th>Billetaje</th>
+                            <th>Efecto</th>
+                            <th>Vig. desde</th>
+                            <th>Vig. hasta</th>
                             <th>Activo</th>
                             <th class="text-left" style="width:90px;">Acciones</th>
                         </tr>
@@ -73,6 +92,15 @@
                                 <td>{{ $subtipo->codigo }}</td>
                                 <td>{{ $subtipo->nombre }}</td>
                                 <td>{{ ($subtipo->mueve_billetaje ?? true) ? 'Sí' : 'No (informativo)' }}</td>
+                                <td>
+                                    @if ($subtipo->signo !== null && $subtipo->signo !== '')
+                                        {{ \App\Support\Caja\TesoreriaCrownBovedaSupport::efectoTexto((string) $subtipo->signo) }}
+                                    @else
+                                        Hereda
+                                    @endif
+                                </td>
+                                <td>{{ $subtipo->vigente_desde?->format('d/m/Y') }}</td>
+                                <td>{{ $subtipo->vigente_hasta?->format('d/m/Y') }}</td>
                                 <td>{{ $subtipo->activo ? 'Sí' : 'No' }}</td>
                                 <td class="text-left text-nowrap">
                                     @if (can('editar-tesoreria-crown-boveda-subtipo', false))
@@ -93,7 +121,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-3">No hay subtipos en esta sala.</td>
+                                <td colspan="9" class="text-center text-muted py-3">No hay subtipos en esta sala.</td>
                             </tr>
                         @endforelse
                     </tbody>

@@ -49,8 +49,11 @@ use App\Support\Compras\ArticuloProveedorOperativoSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
+use App\Support\Database\DbContencionSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\ArticuloAnitaAbmSupport;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
 use App\Support\Compras\ArticuloSkuCompraAggSupport;
 use App\Support\Compras\RequisicionArticuloCatalogoSupport;
@@ -183,6 +186,10 @@ class ArticuloController extends Controller
             abort(405);
         }
 
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            return redirect()->route('articulo')->with('mensaje', 'En Crown el ABM de artículos no sincroniza con Anita.');
+        }
+
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
         set_time_limit(0);
@@ -306,6 +313,7 @@ class ArticuloController extends Controller
         if (
             $articulos->isEmpty()
             && config('app.anita_sync_articulo_index')
+            && ArticuloAnitaAbmSupport::habilitado()
             && ! ArticuloListadoFiltros::tieneCriteriosAplicados($filtros)
         ) {
             $Articulo = new Articulo;
@@ -1263,13 +1271,15 @@ class ArticuloController extends Controller
 
             $producto = $this->articuloRepository->find($articulo->id);
 
-            // Graba anita
-            $Articulo = new Articulo;
-            $anita = $Articulo->guardarAnita($producto);
+            if (ArticuloAnitaAbmSupport::habilitado()) {
+                // Graba anita
+                $Articulo = new Articulo;
+                $anita = $Articulo->guardarAnita($producto);
 
-            if (isset($anita['error'])) {
-                if ($anita['error'] == 'Error') {
-                    throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+                if (isset($anita['error'])) {
+                    if ($anita['error'] == 'Error') {
+                        throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+                    }
                 }
             }
 
@@ -1461,7 +1471,7 @@ class ArticuloController extends Controller
             ];
             $arbolSvc->evaluarTrasActualizar((int) $id, $antesArbol, $despuesArbol);
 
-            if (! EntornoEmpresaSupport::esFerli()) {
+            if (ArticuloAnitaAbmSupport::habilitado() && ! EntornoEmpresaSupport::esFerli()) {
                 // Lee nuevo precio con relaciones para interface Anita
                 $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')
                     ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
@@ -1540,20 +1550,55 @@ class ArticuloController extends Controller
     {
         can('borrar-articulos');
 
-        $producto = Articulo::select('sku')->where('id', $id)->first();
-
-        // Elimina anita
-        $Articulo = new Articulo;
-        $Articulo->eliminarAnita($producto->sku);
-
-        if ($request->ajax()) {
-            if (Articulo::destroy($id)) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
-            }
-        } else {
+        if (! $request->ajax()) {
             abort(404);
+        }
+
+        $producto = Articulo::select('id', 'sku')->where('id', $id)->first();
+        if (! $producto) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'Artículo no encontrado.'], 404);
+        }
+
+        if (ArticuloAnitaAbmSupport::habilitado()) {
+            $Articulo = new Articulo;
+            $Articulo->eliminarAnita($producto->sku);
+        }
+
+        try {
+            DB::transaction(function () use ($id) {
+                // precio tiene FK RESTRICT; es dato propio del ABM y debe ir con el artículo.
+                EloquentAuditDeleteSupport::each(Precio::query()->where('articulo_id', (int) $id));
+
+                if (! Articulo::destroy($id)) {
+                    throw new Exception('No se pudo eliminar el artículo.');
+                }
+            });
+
+            return response()->json(['mensaje' => 'ok']);
+        } catch (\Throwable $e) {
+            if (DbContencionSupport::esViolacionClaveForanea($e)) {
+                Log::warning('Articulo eliminar: FK', [
+                    'articulo_id' => (int) $id,
+                    'sku' => $producto->sku,
+                    'mensaje' => $e->getMessage(),
+                ]);
+
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => 'El artículo está en uso (movimientos, compras u otras referencias) y no se puede eliminar.',
+                ], 422);
+            }
+
+            Log::warning('Articulo eliminar: '.$e->getMessage(), [
+                'articulo_id' => (int) $id,
+                'sku' => $producto->sku,
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'mensaje' => 'ng',
+                'error' => $e->getMessage(),
+            ], 422);
         }
     }
 

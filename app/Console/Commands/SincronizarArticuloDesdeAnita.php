@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Seguridad\Usuario;
 use App\Services\Stock\ArticuloAnitaSyncService;
+use App\Support\Stock\ArticuloAnitaAbmSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Auth;
 
@@ -23,6 +24,12 @@ class SincronizarArticuloDesdeAnita extends Command
 
     public function handle(ArticuloAnitaSyncService $sync): int
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            $this->warn('En Crown el ABM de artículos no sincroniza con Anita.');
+
+            return self::SUCCESS;
+        }
+
         $usuarioId = $this->option('usuario');
         $usuarioId = ($usuarioId !== null && $usuarioId !== '')
             ? (int) $usuarioId

@@ -5,19 +5,38 @@ namespace App\Support\Caja\Flash;
 use App\Models\Caja\Flash\FlashCrownSuscripcion;
 
 /**
- * Lista de mails del informe manual. Se edita en la pantalla.
- * Si todavía no hay lista guardada, la pantalla muestra la del informe que ya circula.
+ * Lista de mails del informe manual, una por formato (completo / gaming / daily).
+ * Se edita en la pantalla. Si todavía no hay lista del formato, usa la legacy
+ * compartida o el default de circulación.
  */
 final class FlashCrownInformeDestinatariosSupport
 {
     public const NOMBRE = 'Destinatarios informe flash';
 
-    public function textoActual(): string
+    public function textoActual(string $formato): string
     {
-        $fila = $this->fila();
-        $texto = trim((string) ($fila->destinatarios ?? ''));
+        $formato = FlashCrownInformeSupport::normalizarFormato($formato);
+        $texto = trim((string) ($this->fila($formato)?->destinatarios ?? ''));
+        if ($texto !== '') {
+            return $texto;
+        }
 
-        return $texto !== '' ? $texto : $this->textoPorDefecto();
+        $legacy = trim((string) ($this->filaLegacy()?->destinatarios ?? ''));
+
+        return $legacy !== '' ? $legacy : $this->textoPorDefecto();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function textosPorFormato(): array
+    {
+        $out = [];
+        foreach (array_keys(FlashCrownInformeSupport::formatos()) as $formato) {
+            $out[$formato] = $this->textoActual($formato);
+        }
+
+        return $out;
     }
 
     /**
@@ -37,11 +56,12 @@ final class FlashCrownInformeDestinatariosSupport
         return array_values(array_unique($mails));
     }
 
-    public function guardar(string $texto, ?int $usuarioId): FlashCrownSuscripcion
+    public function guardar(string $texto, string $formato, ?int $usuarioId): FlashCrownSuscripcion
     {
-        $fila = $this->fila() ?? new FlashCrownSuscripcion();
+        $formato = FlashCrownInformeSupport::normalizarFormato($formato);
+        $fila = $this->fila($formato) ?? new FlashCrownSuscripcion();
         $fila->fill([
-            'nombre' => self::NOMBRE,
+            'nombre' => $this->nombre($formato),
             'activo' => false,
             'periodicidad' => FlashCrownSuscripcion::PERIODICIDAD_DIARIA,
             'hora' => '00:00',
@@ -58,9 +78,25 @@ final class FlashCrownInformeDestinatariosSupport
         return $fila;
     }
 
-    private function fila(): ?FlashCrownSuscripcion
+    public function nombre(string $formato): string
     {
-        return FlashCrownSuscripcion::query()->where('nombre', self::NOMBRE)->first();
+        $formato = FlashCrownInformeSupport::normalizarFormato($formato);
+
+        return self::NOMBRE.' ['.$formato.']';
+    }
+
+    private function fila(string $formato): ?FlashCrownSuscripcion
+    {
+        return FlashCrownSuscripcion::query()
+            ->where('nombre', $this->nombre($formato))
+            ->first();
+    }
+
+    private function filaLegacy(): ?FlashCrownSuscripcion
+    {
+        return FlashCrownSuscripcion::query()
+            ->where('nombre', self::NOMBRE)
+            ->first();
     }
 
     private function textoPorDefecto(): string

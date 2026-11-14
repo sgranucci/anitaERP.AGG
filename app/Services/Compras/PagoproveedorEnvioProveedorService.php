@@ -3,12 +3,16 @@
 namespace App\Services\Compras;
 
 use App\Mail\Compras\PagoproveedorOrdenPago;
+use App\Models\Caja\InterbankingTransferencia;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Archivo;
 use App\Models\Compras\Pagoproveedor_Correo;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor;
+use App\Support\Caja\InterbankingTransferenciaComprobanteSupport;
+use App\Support\Compras\CbuSupport;
 use App\Support\Compras\PagoproveedorArchivoSupport;
+use App\Support\Compras\PagoproveedorEnvioMasivoClasificacionSupport;
 use App\Support\Mail\EmailsMultiplesSupport;
 use Auth;
 use Illuminate\Http\UploadedFile;
@@ -19,6 +23,7 @@ class PagoproveedorEnvioProveedorService
 {
     public function __construct(
         private PagoproveedorComprobantePdfService $pagoproveedorComprobantePdfService,
+        private InterbankingTransferenciaComprobanteSupport $comprobanteTransferenciaSupport,
     ) {}
 
     /**
@@ -32,14 +37,35 @@ class PagoproveedorEnvioProveedorService
      *     advertencia_estado: string|null,
      *     mensaje: string|null,
      *     archivos_asociados: int,
+     *     adjunta_comprobante_transferencia: bool,
+     *     aviso_comprobante_transferencia: string|null,
      *     envios: list<array{fecha: string, usuario: string, destinatarios: string, mensaje: string, texto_guardado: bool}>
      * }
      */
     public function datosEnvio(int $pagoproveedorId): array
     {
         $pago = Pagoproveedor::query()
-            ->select(['id', 'tipocomprobante', 'sucursal', 'numerotransaccion', 'proveedor_id', 'estado'])
-            ->with(['proveedores:id,nombre,email,emailoc'])
+            ->select([
+                'id',
+                'tipocomprobante',
+                'sucursal',
+                'numerotransaccion',
+                'proveedor_id',
+                'estado',
+                'empresa_id',
+                'fecha',
+                'monto',
+                'cbu_pago',
+                'interbanking_transferencia_id',
+                'anita_impresion_json',
+            ])
+            ->with([
+                'proveedores:id,nombre,email,emailoc,nroinscripcion',
+                'interbanking_transferencias',
+                'cheques:id',
+                'caja_movimientos.cheques:id',
+                'caja_movimientos.caja_movimiento_cuentacajas.cuentacajas:id,nombre,banco_id,cbu,cuenta_interbanking',
+            ])
             ->find($pagoproveedorId);
 
         if (! $pago) {
@@ -53,11 +79,14 @@ class PagoproveedorEnvioProveedorService
                 'advertencia_estado' => null,
                 'mensaje' => 'La orden de pago no existe.',
                 'archivos_asociados' => 0,
+                'adjunta_comprobante_transferencia' => false,
+                'aviso_comprobante_transferencia' => null,
                 'envios' => [],
             ];
         }
 
         $etiqueta = $pago->etiquetaComprobante();
+        $infoTransferencia = $this->infoAdjuntoComprobanteTransferencia($pago);
         $proveedor = $pago->proveedores;
         if (! $proveedor) {
             return [
@@ -70,6 +99,8 @@ class PagoproveedorEnvioProveedorService
                 'advertencia_estado' => null,
                 'mensaje' => 'La orden de pago no tiene proveedor asignado.',
                 'archivos_asociados' => 0,
+                'adjunta_comprobante_transferencia' => $infoTransferencia['adjunta'],
+                'aviso_comprobante_transferencia' => $infoTransferencia['aviso'],
                 'envios' => self::historialEnvios($pagoproveedorId),
             ];
         }
@@ -91,6 +122,8 @@ class PagoproveedorEnvioProveedorService
             'archivos_asociados' => (int) Pagoproveedor_Archivo::query()
                 ->where('pagoproveedor_id', $pago->id)
                 ->count(),
+            'adjunta_comprobante_transferencia' => $infoTransferencia['adjunta'],
+            'aviso_comprobante_transferencia' => $infoTransferencia['aviso'],
             'envios' => self::historialEnvios($pago->id),
         ];
     }
@@ -133,15 +166,30 @@ class PagoproveedorEnvioProveedorService
         }
 
         $pago = Pagoproveedor::query()
-            ->with(['proveedores', 'empresas'])
+            ->with([
+                'proveedores',
+                'empresas',
+                'interbanking_transferencias',
+                'cheques:id',
+                'caja_movimientos.cheques:id',
+                'caja_movimientos.caja_movimiento_cuentacajas.cuentacajas:id,nombre,banco_id,cbu,cuenta_interbanking',
+            ])
             ->find($pagoproveedorId);
         if (! $pago) {
             return ['mensaje' => 'error', 'errores' => 'La orden de pago no existe.'];
         }
 
         $pdf = null;
+        $pdfTransferenciaAuto = null;
         $asociados = [];
         try {
+            if ($adjuntosExtra === []) {
+                $pdfTransferenciaAuto = $this->armarAdjuntoComprobanteTransferencia($pago);
+                if ($pdfTransferenciaAuto !== null) {
+                    $adjuntosExtra[] = $pdfTransferenciaAuto;
+                }
+            }
+
             $pdf = $this->pagoproveedorComprobantePdfService->generarArchivo($pagoproveedorId);
             if ($archivosNuevos !== []) {
                 $asociados = PagoproveedorArchivoSupport::guardarSubidos($pagoproveedorId, $archivosNuevos);
@@ -182,6 +230,9 @@ class PagoproveedorEnvioProveedorService
         } finally {
             if ($pdf !== null && is_file($pdf['ruta'])) {
                 @unlink($pdf['ruta']);
+            }
+            if ($pdfTransferenciaAuto !== null && is_file($pdfTransferenciaAuto['ruta'])) {
+                @unlink($pdfTransferenciaAuto['ruta']);
             }
         }
 
@@ -265,6 +316,191 @@ class PagoproveedorEnvioProveedorService
         }
 
         return null;
+    }
+
+    /**
+     * @return array{adjunta: bool, aviso: string|null, transferencia: ?InterbankingTransferencia}
+     */
+    public function infoAdjuntoComprobanteTransferencia(Pagoproveedor $pago): array
+    {
+        $transferencia = $this->resolverTransferenciaParaAdjunto($pago);
+        if (! $transferencia instanceof InterbankingTransferencia) {
+            $medio = $this->medioEnvio($pago);
+            if ($medio === 'cheque') {
+                return [
+                    'adjunta' => false,
+                    'aviso' => null,
+                    'transferencia' => null,
+                ];
+            }
+            if (in_array($medio, ['transferencia', 'mixto'], true)) {
+                return [
+                    'adjunta' => false,
+                    'aviso' => 'No se encontró el formulario de transferencia Interbanking para adjuntar. Se enviará solo la OP.',
+                    'transferencia' => null,
+                ];
+            }
+
+            return [
+                'adjunta' => false,
+                'aviso' => null,
+                'transferencia' => null,
+            ];
+        }
+
+        $nro = (string) ($transferencia->transfer_id ?? $transferencia->id);
+
+        return [
+            'adjunta' => true,
+            'aviso' => 'Se adjuntará también el formulario/comprobante de transferencia Interbanking nº '.$nro.'.',
+            'transferencia' => $transferencia,
+        ];
+    }
+
+    /**
+     * @return array{ruta: string, nombre: string}|null
+     */
+    public function armarAdjuntoComprobanteTransferencia(Pagoproveedor $pago): ?array
+    {
+        $info = $this->infoAdjuntoComprobanteTransferencia($pago);
+        if (! $info['adjunta'] || ! $info['transferencia'] instanceof InterbankingTransferencia) {
+            return null;
+        }
+
+        return $this->comprobanteTransferenciaSupport->generarPdfTemporal($info['transferencia']);
+    }
+
+    public function resolverTransferenciaParaAdjunto(Pagoproveedor $pago): ?InterbankingTransferencia
+    {
+        $medio = $this->medioEnvio($pago);
+        if ($medio === null || $medio === 'cheque') {
+            return null;
+        }
+
+        $transferenciaId = (int) ($pago->interbanking_transferencia_id ?? 0);
+        if ($transferenciaId > 0) {
+            $transferencia = $pago->relationLoaded('interbanking_transferencias')
+                ? $pago->interbanking_transferencias
+                : InterbankingTransferencia::query()->find($transferenciaId);
+
+            if (! $transferencia instanceof InterbankingTransferencia) {
+                return null;
+            }
+
+            $cbuCredito = $this->comprobanteTransferenciaSupport->cbuCuenta(
+                $transferencia->credit_account_json,
+                $transferencia->credit_account
+            );
+            $asociacion = PagoproveedorEnvioMasivoClasificacionSupport::evaluarAsociacion(
+                $medio,
+                $transferenciaId,
+                true,
+                (int) $pago->empresa_id,
+                (int) $transferencia->empresa_id,
+                (float) $transferencia->amount,
+                $pago->netoAPagar(),
+                (float) $pago->monto,
+                (string) ($pago->cbu_pago ?? ''),
+                $cbuCredito
+            );
+
+            return PagoproveedorEnvioMasivoClasificacionSupport::adjuntaComprobante($asociacion['estado'])
+                ? $transferencia
+                : null;
+        }
+
+        $fechaOp = $pago->fecha ? $pago->fecha->format('Y-m-d') : '';
+        if ($fechaOp === '' || (int) $pago->empresa_id <= 0) {
+            return null;
+        }
+
+        $desde = $pago->fecha->copy()->subDays(7)->format('Y-m-d');
+        $hasta = $pago->fecha->copy()->addDays(7)->format('Y-m-d');
+        $registros = InterbankingTransferencia::query()
+            ->where('empresa_id', (int) $pago->empresa_id)
+            ->whereDate('request_date', '>=', $desde)
+            ->whereDate('request_date', '<=', $hasta)
+            ->orderBy('request_date')
+            ->orderBy('id')
+            ->get();
+
+        $candidatos = [];
+        $modelos = [];
+        foreach ($registros as $transferencia) {
+            $id = (int) $transferencia->id;
+            $modelos[$id] = $transferencia;
+            $resumen = $this->comprobanteTransferenciaSupport->cuentaResumen(
+                $transferencia->credit_account_json,
+                $transferencia->credit_account
+            );
+            $candidatos[] = [
+                'id' => $id,
+                'amount' => (float) $transferencia->amount,
+                'cbu' => (string) ($resumen['cbu'] ?? ''),
+                'cuit' => (string) ($resumen['cuit'] ?? ''),
+                'fecha' => $transferencia->request_date ? $transferencia->request_date->format('Y-m-d') : '',
+            ];
+        }
+
+        $usadas = [];
+        $elegida = PagoproveedorEnvioMasivoClasificacionSupport::elegirPersistida([
+            'neto' => $pago->netoAPagar(),
+            'bruto' => (float) $pago->monto,
+            'cbu' => (string) ($pago->cbu_pago ?? ''),
+            'cuit' => preg_replace('/\D+/', '', (string) ($pago->proveedores->nroinscripcion ?? '')) ?? '',
+            'fecha' => $fechaOp,
+        ], $candidatos, $usadas);
+
+        $elegidaId = (int) ($elegida['transferencia_id'] ?? 0);
+        if ($elegidaId <= 0 || ! isset($modelos[$elegidaId])) {
+            return null;
+        }
+        if (! PagoproveedorEnvioMasivoClasificacionSupport::adjuntaComprobante($elegida['estado'])) {
+            return null;
+        }
+
+        return $modelos[$elegidaId];
+    }
+
+    private function medioEnvio(Pagoproveedor $pago): ?string
+    {
+        $snap = is_array($pago->anita_impresion_json) ? $pago->anita_impresion_json : null;
+        $tieneCheque = ($pago->relationLoaded('cheques') && $pago->cheques->isNotEmpty())
+            || ($pago->relationLoaded('caja_movimientos')
+                && $pago->caja_movimientos->contains(static fn ($mov) => $mov->cheques->isNotEmpty()))
+            || PagoproveedorEnvioMasivoClasificacionSupport::snapshotTieneCheques($snap);
+        $senialTransferencia = (int) ($pago->interbanking_transferencia_id ?? 0) > 0
+            || strlen(CbuSupport::normalizar((string) ($pago->cbu_pago ?? ''))) >= 22
+            || PagoproveedorEnvioMasivoClasificacionSupport::snapshotTieneTransferencia($snap);
+
+        return PagoproveedorEnvioMasivoClasificacionSupport::medio(
+            $tieneCheque,
+            $senialTransferencia,
+            $this->tieneCuentaBancaria($pago)
+        );
+    }
+
+    private function tieneCuentaBancaria(Pagoproveedor $pago): bool
+    {
+        if (! $pago->relationLoaded('caja_movimientos')) {
+            return false;
+        }
+        foreach ($pago->caja_movimientos as $movimiento) {
+            foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
+                $cuenta = $linea->cuentacajas;
+                if ($cuenta === null) {
+                    continue;
+                }
+                if (CbuSupport::normalizar((string) ($cuenta->cbu ?? '')) !== ''
+                    || trim((string) ($cuenta->cuenta_interbanking ?? '')) !== ''
+                    || (int) ($cuenta->banco_id ?? 0) > 0
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public static function normalizarMensaje(?string $mensaje): ?string

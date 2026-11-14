@@ -22,11 +22,17 @@ class TesoreriaCrownBovedaTipo extends Model implements Auditable
         'signo',
         'operacion',
         'activo',
+        'para_reporte_propina',
+        'vigente_desde',
+        'vigente_hasta',
     ];
 
     protected $casts = [
         'codigo' => 'integer',
         'activo' => 'boolean',
+        'para_reporte_propina' => 'boolean',
+        'vigente_desde' => 'date',
+        'vigente_hasta' => 'date',
     ];
 
     public function sala(): BelongsTo

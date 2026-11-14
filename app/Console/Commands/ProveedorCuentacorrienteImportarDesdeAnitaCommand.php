@@ -101,7 +101,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['Aplicaciones planificadas', $stats['aplicaciones_planificadas']],
             ['Aplicaciones creadas', $stats['aplicaciones_creadas']],
             ['Aplicaciones omitidas (ya en ERP)', $stats['aplicaciones_omitidas'] ?? 0],
-            ['Pagos sintéticos CC', $stats['pagos_sinteticos'] ?? 0],
+            ['Pagos sintéticos CC (con OP)', $stats['pagos_sinteticos'] ?? 0],
+            ['Omitidas: crédito sin OP en ERP', $stats['omitidas_pago_sintetico_sin_op'] ?? 0],
         ]);
 
         if ($stats['muestra'] !== []) {

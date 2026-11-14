@@ -570,7 +570,8 @@ final class GastronomiaReplicarVentasAnitaErpService
     private function resolverLetra(Venta $venta): string
     {
         $codigo = trim((string) ($venta->codigo ?? ''));
-        if (preg_match('/\s+([A-Z])-/', $codigo, $m)) {
+        // Gastro: "FAC B-00003-…" | Crown transferencia: "FAC B 00134-…" / "FAC A 00134-…"
+        if (preg_match('/\s+([A-Z])(?:[\s\-]|$)/', $codigo, $m)) {
             return $m[1];
         }
 

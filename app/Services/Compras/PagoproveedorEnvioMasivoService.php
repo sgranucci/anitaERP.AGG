@@ -6,14 +6,15 @@ namespace App\Services\Compras;
 
 use App\Models\Caja\InterbankingTransferencia;
 use App\Models\Compras\Pagoproveedor;
+use App\Models\Compras\Pagoproveedor_Correo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\InterbankingTransferenciaComprobanteSupport;
 use App\Support\Compras\CbuSupport;
 use App\Support\Compras\PagoproveedorEnvioMasivoClasificacionSupport;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class PagoproveedorEnvioMasivoService
 {
@@ -65,6 +66,19 @@ class PagoproveedorEnvioMasivoService
     {
         $empresas = $this->empresaRepository->allFiltrado();
         $filtros = $this->filtrosDesdeRequest($request, $empresas);
+
+        return $this->ejecutarConFiltros($filtros, $ids, $mensaje);
+    }
+
+    /**
+     * Ejecuta el envío con filtros ya validados (request web o job en cola).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $ids
+     * @return array{enviadas: int, errores: list<array{etiqueta: string, mensaje: string}>, detalle: list<array{etiqueta: string, ok: bool, mensaje: string}>}
+     */
+    public function ejecutarConFiltros(array $filtros, array $ids, ?string $mensaje): array
+    {
         $error = $this->validarFiltros($filtros);
         if ($error !== null) {
             return [
@@ -74,7 +88,9 @@ class PagoproveedorEnvioMasivoService
             ];
         }
 
-        session(['empresa_id' => (int) $filtros['empresa_id']]);
+        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
+            session(['empresa_id' => (int) $filtros['empresa_id']]);
+        }
 
         $porId = [];
         foreach ($this->listar($filtros) as $fila) {
@@ -203,10 +219,17 @@ class PagoproveedorEnvioMasivoService
             ->pluck('interbanking_transferencia_id')
             ->mapWithKeys(static fn ($id) => [(int) $id => true])
             ->all();
+        $yaEnviadas = $this->idsYaEnviadasPorCorreo($pagos->pluck('id')->map(static fn ($id) => (int) $id)->all());
 
         $filas = [];
         foreach ($pagos as $pago) {
-            $fila = $this->filaDesdePago($pago, $candidatos, $modelos, $usadas);
+            $fila = $this->filaDesdePago(
+                $pago,
+                $candidatos,
+                $modelos,
+                $usadas,
+                isset($yaEnviadas[(int) $pago->id])
+            );
             if ($fila === null) {
                 continue;
             }
@@ -220,13 +243,50 @@ class PagoproveedorEnvioMasivoService
     }
 
     /**
+     * OP que ya tienen al menos un envío al proveedor (tabla correo o estado legado).
+     *
+     * @param  list<int>  $pagoproveedorIds
+     * @return array<int, true>
+     */
+    private function idsYaEnviadasPorCorreo(array $pagoproveedorIds): array
+    {
+        if ($pagoproveedorIds === []) {
+            return [];
+        }
+
+        $mapa = Pagoproveedor_Correo::query()
+            ->whereIn('pagoproveedor_id', $pagoproveedorIds)
+            ->pluck('pagoproveedor_id')
+            ->mapWithKeys(static fn ($id) => [(int) $id => true])
+            ->all();
+
+        $prefijo = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.'%';
+        $legados = DB::table('pagoproveedor_estado')
+            ->whereIn('pagoproveedor_id', $pagoproveedorIds)
+            ->where('observacion', 'like', $prefijo)
+            ->distinct()
+            ->pluck('pagoproveedor_id');
+
+        foreach ($legados as $id) {
+            $mapa[(int) $id] = true;
+        }
+
+        return $mapa;
+    }
+
+    /**
      * @param  list<array{id: int, amount: float, cbu: string, cuit: string, fecha: string}>  $candidatos
      * @param  array<int, InterbankingTransferencia>  $modelos
      * @param  array<int, true>  $usadas
      * @return array<string, mixed>|null
      */
-    private function filaDesdePago(Pagoproveedor $pago, array $candidatos, array $modelos, array &$usadas): ?array
-    {
+    private function filaDesdePago(
+        Pagoproveedor $pago,
+        array $candidatos,
+        array $modelos,
+        array &$usadas,
+        bool $yaEnviada = false,
+    ): ?array {
         $snap = is_array($pago->anita_impresion_json) ? $pago->anita_impresion_json : null;
         $tieneCheque = $pago->cheques->isNotEmpty()
             || $pago->caja_movimientos->contains(static fn ($mov) => $mov->cheques->isNotEmpty())
@@ -336,11 +396,10 @@ class PagoproveedorEnvioMasivoService
                 ? (float) $transferencia->amount
                 : null,
             'adjunta_comprobante' => PagoproveedorEnvioMasivoClasificacionSupport::adjuntaComprobante($asociacion['estado']),
-            'seleccionada' => PagoproveedorEnvioMasivoClasificacionSupport::seleccionadaPorDefecto(
-                $tieneEmail,
-                $medio,
-                $asociacion['estado']
-            ),
+            'ya_enviada' => $yaEnviada,
+            // Pendiente de mail = tiene email y aún no se envió. La asociación IB no bloquea el tilde.
+            // Las ya enviadas quedan destildadas; se pueden marcar a mano para reenviar.
+            'seleccionada' => $tieneEmail && ! $yaEnviada,
         ];
     }
 
@@ -480,19 +539,7 @@ class PagoproveedorEnvioMasivoService
      */
     private function generarComprobanteTransferencia(InterbankingTransferencia $transferencia): array
     {
-        $datos = $this->comprobanteSupport->datosDesdeModelo($transferencia);
-        $nombre = $this->comprobanteSupport->nombreArchivoPdf($transferencia);
-        $html = view('caja.interbanking.comprobante_transferencia', compact('datos'))->render();
-
-        $dir = storage_path('pdf/pagoproveedor');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-
-        $ruta = $dir.'/ib_'.$transferencia->id.'_'.uniqid('', true).'.pdf';
-        Pdf::loadHTML($html, 'UTF-8')->setPaper('a4', 'portrait')->save($ruta);
-
-        return ['ruta' => $ruta, 'nombre' => $nombre];
+        return $this->comprobanteSupport->generarPdfTemporal($transferencia);
     }
 
     private function fechaValida(string $fecha): bool

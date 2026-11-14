@@ -5,6 +5,7 @@ namespace App\Exports\Caja\Flash;
 use App\Models\Caja\Flash\FlashCrown;
 use App\Support\Caja\Flash\FlashCrownCalculoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Export\ExcelNumericCellsSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -20,6 +21,8 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
     /**
      * @param  list<FlashCrown>  $filas
      */
+    private bool $filaLogo = false;
+
     public function __construct(
         private readonly array $filas,
         private readonly string $fecha,
@@ -30,7 +33,7 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
     {
         $enriquecidas = [];
         foreach ($this->filas as $fila) {
-            $arr = $fila->toArray();
+            $arr = FlashCrownCalculoSupport::baseVistaDesdeFlash($fila);
             $arr['nombre_sala'] = $fila->sala->nombre ?? '';
             $arr['codigo_sala'] = $fila->sala->codigo ?? '';
             $arr['metricas'] = FlashCrownCalculoSupport::metricasDerivadas($arr);
@@ -48,6 +51,7 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
                 ];
             })
         );
+        $this->filaLogo = ! $this->csv && $logos !== [];
 
         return view('exports.caja.flash_crown_dia', [
             'filas' => $enriquecidas,
@@ -59,10 +63,14 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
 
     public function columnFormats(): array
     {
-        return [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'B' => NumberFormat::FORMAT_TEXT,
-        ];
+        $mascara = ExcelFormatoNumero::mascara(2);
+        // A sala (texto); B…Y importes; Z Val. (texto — se excluye en AfterSheet).
+        $out = ['A' => NumberFormat::FORMAT_TEXT];
+        foreach (range('B', 'Y') as $col) {
+            $out[$col] = $mascara;
+        }
+
+        return $out;
     }
 
     public function registerEvents(): array
@@ -70,8 +78,9 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $sheet->freezePane('A4');
-                $headerRow = 3;
+                // Con logo: 1 logos, 2 título, 3 thead, 4+ datos. Sin logo: 1 título, 2 thead, 3+ datos.
+                $headerRow = $this->filaLogo ? 3 : 2;
+                $sheet->freezePane('A'.($headerRow + 1));
                 $lastCol = $sheet->getHighestColumn($headerRow);
                 $sheet->getStyle('A'.$headerRow.':'.$lastCol.$headerRow)->applyFromArray([
                     'fill' => [
@@ -85,7 +94,14 @@ class FlashCrownDiaExport implements FromView, ShouldAutoSize, WithColumnFormatt
                         'size' => 11,
                     ],
                 ]);
-                ExcelNumericCellsSupport::forzarRangoDatos($sheet, $headerRow + 1, 2, [], '#,##0.00');
+                // Números reales con miles; última col (Val.) queda texto.
+                ExcelNumericCellsSupport::forzarRangoDatos(
+                    $sheet,
+                    $headerRow + 1,
+                    2,
+                    [$lastCol],
+                    ExcelFormatoNumero::mascara(2),
+                );
             },
         ];
     }

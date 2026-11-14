@@ -104,6 +104,7 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
             'compra.com_nro_interno AS com_nro_interno',
             'compra.com_empresa AS com_empresa',
             'compra.com_cuit_prov AS com_cuit_prov',
+            'compra.com_es_fce AS com_es_fce',
             'compra.com_nombre_prov AS com_nombre_prov',
             'concmov.concv_concepto AS concv_concepto',
             'concmov.concv_importe AS concv_importe',
@@ -207,6 +208,7 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
             'com_nro_interno',
             'com_empresa',
             'com_cuit_prov',
+            'com_es_fce',
             'com_nombre_prov',
         ]);
 

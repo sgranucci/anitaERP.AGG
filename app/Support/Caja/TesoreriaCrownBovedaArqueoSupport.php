@@ -81,7 +81,8 @@ final class TesoreriaCrownBovedaArqueoSupport
             }
             $efecto = TesoreriaCrownBovedaSupport::efectoConSubtipo(
                 (string) $fila->signo,
-                $fila->mueve_billetaje ?? null
+                $fila->mueve_billetaje ?? null,
+                $fila->subtipo_signo ?? null
             );
             if ($efecto > 0) {
                 $ingresos[$valorId] = ($ingresos[$valorId] ?? 0.0) + $cantidad;
@@ -221,6 +222,7 @@ final class TesoreriaCrownBovedaArqueoSupport
             't.signo',
             't.abreviatura',
             'st.mueve_billetaje',
+            'st.signo as subtipo_signo',
             'b.id',
             'b.numero',
         ]);

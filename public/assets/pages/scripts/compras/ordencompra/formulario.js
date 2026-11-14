@@ -547,30 +547,39 @@ $(function () {
 	}
 
 	function ocCargarModalOrigenPrecio() {
-		var reqId = parseInt($('#requisicion_id').val(), 10);
+		var reqId = parseInt($('#requisicion_id').val(), 10) || 0;
 		var $row = ptrOcOrigenPrecioRow;
-		var reqArtId = parseInt($row.find('.oc-requisicion-articulo-id').val(), 10);
-		var artId = parseInt($row.find('.articulo_id').val(), 10);
-		var provId = parseInt($('#proveedor_id').val(), 10);
+		var reqArtId = parseInt($row.find('.oc-requisicion-articulo-id').val(), 10) || 0;
+		var artId = parseInt($row.find('.articulo_id').val(), 10) || 0;
+		var provId = parseInt($('#proveedor_id').val(), 10) || 0;
 		var fechaRef = $('#fecha').val() || '';
 
 		$('#modalOcOrigenPrecioError').addClass('d-none').text('');
 		$('#modalOcOrigenPrecioOpciones').empty();
 		$('#modalOcOrigenPrecioCargando').removeClass('d-none');
 
-		if (!reqId || !reqArtId || !artId) {
+		if (!artId) {
 			$('#modalOcOrigenPrecioCargando').addClass('d-none');
-			$('#modalOcOrigenPrecioError').removeClass('d-none').text('Esta línea no proviene de una requisición o falta el artículo.');
+			$('#modalOcOrigenPrecioError').removeClass('d-none').text('Indique el artículo de la línea.');
+			return;
+		}
+		if (!provId && !(reqId && reqArtId)) {
+			$('#modalOcOrigenPrecioCargando').addClass('d-none');
+			$('#modalOcOrigenPrecioError').removeClass('d-none').text('Cargue el proveedor de la OC para consultar su lista de precios.');
 			return;
 		}
 
-		$.get(carpetaBase + '/compras/ordencompra/opciones-precio-linea', {
-			requisicion_id: reqId,
-			requisicion_articulo_id: reqArtId,
+		var params = {
 			articulo_id: artId,
 			fecha_referencia: fechaRef,
 			proveedor_id: provId > 0 ? provId : ''
-		})
+		};
+		if (reqId > 0 && reqArtId > 0) {
+			params.requisicion_id = reqId;
+			params.requisicion_articulo_id = reqArtId;
+		}
+
+		$.get(carpetaBase + '/compras/ordencompra/opciones-precio-linea', params)
 			.done(function (data) {
 				$('#modalOcOrigenPrecioCargando').addClass('d-none');
 				if (!data || data.message) {
@@ -580,6 +589,16 @@ $(function () {
 				var sku = (data.articulo && data.articulo.sku) ? data.articulo.sku : '';
 				var desc = (data.articulo && data.articulo.descripcion) ? data.articulo.descripcion : '';
 				$('#modalOcOrigenPrecioSubtitulo').text(sku + ' — ' + desc);
+				if (data.sin_proveedor) {
+					$('#modalOcOrigenPrecioError').removeClass('d-none').text('Cargue el proveedor de la OC para ver listas de precios.');
+				}
+				if (!(data.opcion_requisicion) && !(data.opciones_lista || []).length && !(data.opciones_presupuesto || []).length) {
+					if (!data.sin_proveedor) {
+						$('#modalOcOrigenPrecioError').removeClass('d-none').text(
+							'El proveedor no tiene precio vigente en lista activa para este artículo a la fecha de la OC.'
+						);
+					}
+				}
 
 				var $box = $('#modalOcOrigenPrecioOpciones');
 				var ORQ = 'REQUISICION';
@@ -719,6 +738,9 @@ $(function () {
 			}
 		}
 		var pm = $b.data('ocPrecioMeta');
+		if (tipo === 'LISTA_PROVEEDOR' && pm && typeof pm === 'object' && ocCabeceraPrincipalVacia()) {
+			ocAplicarCabeceraDesdePresupuestoMeta(pm);
+		}
 		if (pm && typeof pm === 'object' && ptrOcOrigenPrecioRow && ptrOcOrigenPrecioRow.length) {
 			ptrOcOrigenPrecioRow.data('ocGrupoMeta', pm);
 		} else if (ptrOcOrigenPrecioRow && ptrOcOrigenPrecioRow.length) {
@@ -3054,6 +3076,14 @@ $(function () {
 		$.get(carpetaBase + '/compras/ordencompra/plantilla-requisicion', { requisicion_id: id }).done(function (pl) {
 			if (pl.empresa_id) {
 				$('#empresa_id').val(pl.empresa_id);
+			}
+			if (pl.sala_id) {
+				var $sala = $('#sala_id');
+				if ($sala.is('select')) {
+					$sala.val(pl.sala_id).trigger('change');
+				} else {
+					$sala.val(pl.sala_id);
+				}
 			}
 			if (pl.fecha) {
 				$('input[name="fecha"]').val(pl.fecha);

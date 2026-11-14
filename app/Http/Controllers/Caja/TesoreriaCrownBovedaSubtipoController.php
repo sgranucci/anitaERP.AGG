@@ -7,6 +7,8 @@ use App\Http\Requests\ValidacionTesoreriaCrownBovedaSubtipo;
 use App\Models\Caja\TesoreriaCrownBovedaSubtipo;
 use App\Models\Caja\TesoreriaCrownBovedaTipo;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownBovedaSupport;
+use App\Support\Caja\TesoreriaCrownBovedaVigenciaSupport;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownSalaSupport;
 use Illuminate\Http\Request;
@@ -22,8 +24,12 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
         $salas = TesoreriaCrownSalaSupport::salas();
         $sala = TesoreriaCrownSalaSupport::pedida($request, $salas);
         $tipoId = (int) $request->input('tipo_id', 0);
-        $filtrosQuery = $this->filtrosQuery($sala?->id, $tipoId);
-        $subtipos = $this->consultaSala((int) ($sala->id ?? 0), $tipoId);
+        $filtroVigencia = (string) $request->input('filtro_vigencia', 'vigentes');
+        $fechaVigencia = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha_vigencia')
+        );
+        $filtrosQuery = $this->filtrosQuery($sala?->id, $tipoId, $filtroVigencia, $fechaVigencia);
+        $subtipos = $this->consultaSala((int) ($sala->id ?? 0), $tipoId, $filtroVigencia, $fechaVigencia);
 
         return view('caja.tesoreria_crown.boveda_subtipo.index', [
             'salas' => $salas,
@@ -31,6 +37,8 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             'subtipos' => $subtipos,
             'tipoId' => $tipoId,
             'filtrosQuery' => $filtrosQuery,
+            'filtroVigencia' => $filtroVigencia,
+            'fechaVigencia' => $fechaVigencia,
             'tipoFiltro' => $tipoId > 0
                 ? TesoreriaCrownBovedaTipo::query()
                     ->where('sala_id', (int) ($sala->id ?? 0))
@@ -54,7 +62,11 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             return redirect()->route('tesoreria_crown_boveda_subtipo');
         }
         $tipoId = (int) $request->input('tipo_id', 0);
-        $coleccion = $this->consultaSala((int) $sala->id, $tipoId);
+        $filtroVigencia = (string) $request->input('filtro_vigencia', 'vigentes');
+        $fechaVigencia = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha_vigencia')
+        );
+        $coleccion = $this->consultaSala((int) $sala->id, $tipoId, $filtroVigencia, $fechaVigencia);
         $sala->loadMissing('empresas');
         $nombreEmpresa = $sala->empresas->nombre ?? config('app.empresa');
         foreach ($coleccion as $fila) {
@@ -73,11 +85,14 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             'archivo' => 'subtipos_movimiento_tesoreria_crown',
             'titulo_corto' => 'Subtipos movimiento',
             'columnas' => [
-                ['label' => 'Tipo', 'ancho' => 36, 'wrap' => true],
-                ['label' => 'Código', 'ancho' => 14, 'texto' => true],
-                ['label' => 'Nombre', 'ancho' => 36, 'wrap' => true],
-                ['label' => 'Billetaje', 'ancho' => 16],
-                ['label' => 'Activo', 'ancho' => 12],
+                ['label' => 'Tipo', 'ancho' => 28, 'wrap' => true],
+                ['label' => 'Código', 'ancho' => 10, 'texto' => true],
+                ['label' => 'Nombre', 'ancho' => 24, 'wrap' => true],
+                ['label' => 'Billetaje', 'ancho' => 10],
+                ['label' => 'Efecto', 'ancho' => 12],
+                ['label' => 'Vig. desde', 'ancho' => 12],
+                ['label' => 'Vig. hasta', 'ancho' => 12],
+                ['label' => 'Activo', 'ancho' => 10],
             ],
             'filas' => $coleccion->map(function (TesoreriaCrownBovedaSubtipo $subtipo) {
                 return [
@@ -85,6 +100,11 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
                     $subtipo->codigo,
                     $subtipo->nombre,
                     ($subtipo->mueve_billetaje ?? true) ? 'Sí' : 'No',
+                    $subtipo->signo !== null && $subtipo->signo !== ''
+                        ? TesoreriaCrownBovedaSupport::efectoTexto((string) $subtipo->signo)
+                        : 'Hereda',
+                    $subtipo->vigente_desde?->format('d/m/Y') ?? '',
+                    $subtipo->vigente_hasta?->format('d/m/Y') ?? '',
                     $subtipo->activo ? 'Sí' : 'No',
                 ];
             })->all(),
@@ -96,7 +116,10 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             return $respuesta;
         }
 
-        return redirect()->route('tesoreria_crown_boveda_subtipo', $this->filtrosQuery($sala?->id, $tipoId));
+        return redirect()->route(
+            'tesoreria_crown_boveda_subtipo',
+            $this->filtrosQuery($sala?->id, $tipoId, $filtroVigencia, $fechaVigencia)
+        );
     }
 
     public function crear(Request $request)
@@ -212,14 +235,24 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
     /**
      * @return array<string, int>
      */
-    private function filtrosQuery(?int $salaId, int $tipoId = 0): array
-    {
+    private function filtrosQuery(
+        ?int $salaId,
+        int $tipoId = 0,
+        string $filtroVigencia = 'vigentes',
+        ?string $fechaVigencia = null
+    ): array {
         $out = [];
         if ($salaId && $salaId > 0) {
             $out['sala_id'] = $salaId;
         }
         if ($tipoId > 0) {
             $out['tipo_id'] = $tipoId;
+        }
+        if ($filtroVigencia !== '' && $filtroVigencia !== 'todos') {
+            $out['filtro_vigencia'] = $filtroVigencia;
+        }
+        if ($fechaVigencia) {
+            $out['fecha_vigencia'] = $fechaVigencia;
         }
 
         return $out;
@@ -241,18 +274,24 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
     /**
      * @return Collection<int, TesoreriaCrownBovedaSubtipo>
      */
-    private function consultaSala(int $salaId, int $tipoId = 0): Collection
-    {
+    private function consultaSala(
+        int $salaId,
+        int $tipoId = 0,
+        string $filtroVigencia = 'vigentes',
+        ?string $fechaVigencia = null
+    ): Collection {
         if ($salaId <= 0) {
             return collect();
         }
 
+        $fecha = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fechaVigencia);
         $query = TesoreriaCrownBovedaSubtipo::query()
             ->with('tipo')
             ->where('sala_id', $salaId);
         if ($tipoId > 0) {
             $query->where('tipo_id', $tipoId);
         }
+        TesoreriaCrownBovedaVigenciaSupport::aplicarFiltroAbm($query, $filtroVigencia, $fecha);
 
         return $query
             ->orderBy(
@@ -275,6 +314,10 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             ->where('sala_id', $sala->id)
             ->whereKey((int) $datos['tipo_id'])
             ->firstOrFail();
+        $signo = $datos['signo'] ?? null;
+        if ($signo === '' || $signo === null) {
+            $signo = null;
+        }
 
         return [
             'sala_id' => (int) $sala->id,
@@ -283,6 +326,9 @@ class TesoreriaCrownBovedaSubtipoController extends Controller
             'nombre' => trim((string) $datos['nombre']),
             'activo' => TesoreriaCrownAcceso::marcado($datos['activo']),
             'mueve_billetaje' => TesoreriaCrownAcceso::marcado($datos['mueve_billetaje'] ?? 1),
+            'vigente_desde' => $datos['vigente_desde'] ?? null,
+            'vigente_hasta' => $datos['vigente_hasta'] ?? null,
+            'signo' => $signo,
         ];
     }
 }

@@ -572,9 +572,13 @@ class InterbankingArchivoPagoService
         );
         $valCbu = CbuSupport::validarConMensaje($cuenta ? (string) $cuenta->cbu : '');
         if ($cuenta === null || ! $valCbu['ok']) {
+            $motivo = (int) ($filtros['cuentacaja_id'] ?? 0) <= 0
+                ? 'Falta la cuenta de caja origen (filtro).'
+                : 'La cuenta de caja origen no tiene CBU válido.';
+
             return [
                 'ok' => false,
-                'mensaje' => 'Seleccione una cuenta de caja con CBU válido. '.($valCbu['mensaje'] ?? ''),
+                'mensaje' => $motivo.' '.trim((string) ($valCbu['mensaje'] ?? '')),
                 'filas' => [],
                 'omitidas' => [],
                 'total_importe' => 0.0,

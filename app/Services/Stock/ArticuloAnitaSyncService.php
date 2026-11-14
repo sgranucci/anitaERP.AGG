@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Unidadmedida;
+use App\Support\Stock\ArticuloAnitaAbmSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
@@ -41,6 +42,10 @@ class ArticuloAnitaSyncService
      */
     public function sincronizarSkuDesdeAnita(string $sku, ?int $empresaId = null): array
     {
+        if (! ArticuloAnitaAbmSupport::habilitado()) {
+            throw new \RuntimeException('En Crown el ABM de artículos no sincroniza con Anita.');
+        }
+
         $sku = trim($sku);
         if ($sku === '') {
             throw new \InvalidArgumentException('Debe indicar el SKU del artículo.');

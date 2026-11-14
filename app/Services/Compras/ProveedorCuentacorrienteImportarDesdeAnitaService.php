@@ -44,6 +44,8 @@ use Throwable;
  * - OPA pendientes: pagoproveedor + CC negativa.
  * - Nunca alinea ni borra apps de CC con pagoproveedor_id (crédito OP/OPA ERP).
  * - Al alinear deuda documento solo borra apps sintéticas (sin pagoproveedor_id).
+ * - No crea créditos de CC sin `pagoproveedor_id` (huérfanos que descuadran ficha vs deuda).
+ * - No duplica aplicaciones si el par de CC ya tiene vínculo (ERP u otro import).
  * No escribe Anita.
  */
 class ProveedorCuentacorrienteImportarDesdeAnitaService
@@ -376,6 +378,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             $stats['aplicaciones_creadas'] = $apl['creadas'];
             $stats['aplicaciones_omitidas'] = $apl['omitidas'];
             $stats['pagos_sinteticos'] = $apl['pagos_sinteticos'];
+            $stats['omitidas_pago_sintetico_sin_op'] = $apl['omitidas_sin_op'];
             foreach ($apl['errores'] as $e) {
                 $stats['errores'][] = $e;
             }
@@ -1766,13 +1769,14 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     /**
      * @param  list<array<string, mixed>>  $pares
      * @param  array<string, list<array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}>>  $ccPorClave
-     * @return array{creadas:int,pagos_sinteticos:int,omitidas:int,errores:list<string>}
+     * @return array{creadas:int,pagos_sinteticos:int,omitidas:int,omitidas_sin_op:int,errores:list<string>}
      */
     private function persistirAplicaciones(array $pares, array &$ccPorClave, array &$topePorCc = []): array
     {
         $creadas = 0;
         $pagos = 0;
         $omitidas = 0;
+        $omitidasSinOp = 0;
         $errores = [];
 
         $montoPorCreditoPago = [];
@@ -1809,6 +1813,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                 continue;
             }
             $deudaId = (int) $deuda['id'];
+            if ($this->ccYaCubiertaPorAplicacionErp($deudaId, $monto)) {
+                $omitidas++;
+
+                continue;
+            }
             if (array_key_exists($deudaId, $topePorCc)) {
                 $cupo = round((float) $topePorCc[$deudaId], 4);
                 if ($cupo <= 0.02) {
@@ -1840,10 +1849,24 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     continue;
                 }
                 $credito = $this->crearCcPagoSintetico($par, $deuda, $proveedorId, $montoCc);
+                if ($credito === null) {
+                    $omitidasSinOp++;
+                    $omitidas++;
+                    $errores[] = 'Sin OP en ERP para crédito '.$par['etiqueta_credito']
+                        .' (no se crea CC huérfana). Importá la OP y reintentá.';
+
+                    continue;
+                }
                 $ccPorClave[$claveCredito][] = $credito;
                 $pagos++;
             }
             if ($credito === null) {
+                $omitidas++;
+
+                continue;
+            }
+
+            if ($this->aplicacionYaExisteEntreCcs((int) $deuda['id'], (int) $credito['id'])) {
                 $omitidas++;
 
                 continue;
@@ -1906,6 +1929,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'creadas' => $creadas,
             'pagos_sinteticos' => $pagos,
             'omitidas' => $omitidas,
+            'omitidas_sin_op' => $omitidasSinOp,
             'errores' => $errores,
         ];
     }
@@ -1944,39 +1968,43 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
+     * Solo crea (o reusa) CC de pago si existe la OP en ERP.
+     * Sin `pagoproveedor_id` el crédito baja la ficha y no entra en deuda → descuadre.
+     *
      * @param  array<string, mixed>  $par
      * @param  array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}  $deuda
-     * @return array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}
+     * @return array{id:int,saldo:float,moneda_id:int,cotizacion:float,empresa_id:int,comprobante_id:?int}|null
      */
-    private function crearCcPagoSintetico(array $par, array $deuda, int $proveedorId, float $montoTotalCredito): array
+    private function crearCcPagoSintetico(array $par, array $deuda, int $proveedorId, float $montoTotalCredito): ?array
     {
         $credito = $par['credito'] ?? [];
         $pago = $this->buscarPagoproveedorParaCredito($proveedorId, $credito);
-
-        if ($pago !== null) {
-            $existente = Proveedor_Cuentacorriente::query()
-                ->where('pagoproveedor_id', (int) $pago->id)
-                ->orderBy('id')
-                ->first();
-            if ($existente !== null) {
-                $saldo = abs((float) $existente->total);
-                $aplicado = abs((float) Proveedor_Cuentacorriente_Aplicacion::query()
-                    ->where('proveedor_cuentacorriente_id', (int) $existente->id)
-                    ->sum('total'));
-                $saldoLibre = max(0, round($saldo - $aplicado, 4));
-
-                return [
-                    'id' => (int) $existente->id,
-                    'saldo' => $saldoLibre > 0.0001 ? $saldoLibre : $saldo,
-                    'moneda_id' => (int) $existente->moneda_id,
-                    'cotizacion' => (float) $existente->cotizacion,
-                    'empresa_id' => (int) $existente->empresa_id,
-                    'comprobante_id' => null,
-                ];
-            }
+        if ($pago === null) {
+            return null;
         }
 
-        $montoPago = $pago !== null ? abs((float) $pago->monto) : 0.0;
+        $existente = Proveedor_Cuentacorriente::query()
+            ->where('pagoproveedor_id', (int) $pago->id)
+            ->orderBy('id')
+            ->first();
+        if ($existente !== null) {
+            $saldo = abs((float) $existente->total);
+            $aplicado = abs((float) Proveedor_Cuentacorriente_Aplicacion::query()
+                ->where('proveedor_cuentacorriente_id', (int) $existente->id)
+                ->sum('total'));
+            $saldoLibre = max(0, round($saldo - $aplicado, 4));
+
+            return [
+                'id' => (int) $existente->id,
+                'saldo' => $saldoLibre > 0.0001 ? $saldoLibre : $saldo,
+                'moneda_id' => (int) $existente->moneda_id,
+                'cotizacion' => (float) $existente->cotizacion,
+                'empresa_id' => (int) $existente->empresa_id,
+                'comprobante_id' => null,
+            ];
+        }
+
+        $montoPago = abs((float) $pago->monto);
         $monto = round(max($montoPago, abs($montoTotalCredito), abs((float) $par['monto'])), 4);
         $cc = Proveedor_Cuentacorriente::query()->create([
             'fecha' => $par['fecha'],
@@ -1986,12 +2014,12 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'moneda_id' => $deuda['moneda_id'],
             'cotizacion' => $this->cotizacionCc(
                 (int) $deuda['moneda_id'],
-                $pago !== null ? (float) $pago->cotizacion : 0.0,
+                (float) $pago->cotizacion,
                 (float) ($deuda['cotizacion'] ?? 0),
                 (string) $par['fecha'],
             ),
-            'empresa_id' => $pago !== null ? (int) $pago->empresa_id : $deuda['empresa_id'],
-            'pagoproveedor_id' => $pago !== null ? (int) $pago->id : null,
+            'empresa_id' => (int) $pago->empresa_id,
+            'pagoproveedor_id' => (int) $pago->id,
         ]);
 
         return [
@@ -2002,6 +2030,44 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'empresa_id' => (int) $cc->empresa_id,
             'comprobante_id' => null,
         ];
+    }
+
+    /**
+     * Ya hay un vínculo entre estas dos CC (ERP u import previo): no crear otro par.
+     */
+    private function aplicacionYaExisteEntreCcs(int $ccA, int $ccB): bool
+    {
+        if ($ccA <= 0 || $ccB <= 0) {
+            return false;
+        }
+
+        return Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where(function ($q) use ($ccA, $ccB) {
+                $q->where(function ($q2) use ($ccA, $ccB) {
+                    $q2->where('proveedor_cuentacorriente_id', $ccA)
+                        ->where('proveedor_cuentacorriente_aplicado_id', $ccB);
+                })->orWhere(function ($q2) use ($ccA, $ccB) {
+                    $q2->where('proveedor_cuentacorriente_id', $ccB)
+                        ->where('proveedor_cuentacorriente_aplicado_id', $ccA);
+                });
+            })
+            ->exists();
+    }
+
+    /**
+     * La deuda ya tiene aplicaciones de una OP ERP que cubren este monto.
+     */
+    private function ccYaCubiertaPorAplicacionErp(int $ccId, float $monto): bool
+    {
+        if ($ccId <= 0 || $monto <= 0) {
+            return false;
+        }
+        $aplicadoErp = abs((float) Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where('proveedor_cuentacorriente_id', $ccId)
+            ->where('pagoproveedor_id', '>', 0)
+            ->sum('total'));
+
+        return $aplicadoErp + 0.02 >= abs($monto);
     }
 
     /**
@@ -2259,6 +2325,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'aplicaciones_creadas' => 0,
             'aplicaciones_omitidas' => 0,
             'pagos_sinteticos' => 0,
+            'omitidas_pago_sintetico_sin_op' => 0,
             'muestra' => [],
             'errores' => [],
             'modo' => '',

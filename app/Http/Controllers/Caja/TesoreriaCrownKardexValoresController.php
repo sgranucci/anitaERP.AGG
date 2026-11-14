@@ -273,13 +273,22 @@ class TesoreriaCrownKardexValoresController extends Controller
             abort(403);
         }
         $tipoId = (int) $request->input('tipo_id');
-        $filas = TesoreriaCrownKardexValoresSupport::subtiposDeTipo($tipoId)
+        $fecha = \App\Support\Caja\TesoreriaCrownBovedaVigenciaSupport::normalizarFecha(
+            $request->input('fecha', $request->input('fecha_jornada'))
+        );
+        $filas = TesoreriaCrownKardexValoresSupport::subtiposDeTipo($tipoId, $fecha)
             ->map(fn ($s) => [
                 'id' => $s->id,
                 'codigo' => $s->codigo,
                 'nombre' => $s->nombre,
                 'etiqueta' => $s->etiqueta(),
                 'mueve_billetaje' => (bool) ($s->mueve_billetaje ?? true),
+                'signo' => $s->signo,
+                'efecto' => \App\Support\Caja\TesoreriaCrownBovedaSupport::efectoTextoConSubtipo(
+                    (string) ($s->tipo->signo ?? '2'),
+                    $s->mueve_billetaje ?? null,
+                    $s->signo
+                ),
             ]);
 
         return response()->json(['data' => $filas]);

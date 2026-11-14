@@ -61,6 +61,95 @@ final class PagosSabanaAnitaBridgeReader
     }
 
     /**
+     * Pagos por número (pag_rec), sin filtro de fecha. Para import acotado a huérfanos CC.
+     *
+     * @param  list<int>  $empresasAnita
+     * @param  list<int>  $recs
+     * @param  list<string>  $errores
+     * @param  list<string>  $tipos
+     * @return list<object>
+     */
+    public function listarPagosPorRecs(
+        array $empresasAnita,
+        array $recs,
+        array &$errores,
+        array $tipos = ['OPP', 'OPA'],
+    ): array {
+        $empresasAnita = array_values(array_unique(array_map('intval', $empresasAnita)));
+        $recs = array_values(array_unique(array_filter(array_map('intval', $recs))));
+        if ($empresasAnita === [] || $recs === []) {
+            return [];
+        }
+        $tiposSql = self::tiposSql($tipos);
+        if ($tiposSql === '') {
+            return [];
+        }
+
+        $out = [];
+        foreach (array_chunk($recs, 80) as $lote) {
+            $where = ' WHERE pag_empresa IN ('.implode(',', $empresasAnita).')'
+                .' AND pag_tipo IN ('.$tiposSql.')'
+                .' AND pag_rec IN ('.implode(',', $lote).')';
+            foreach ($this->listar('che_ban', 'pago', self::PAGO_CAMPOS, $where, $errores, 'pagos-por-rec') as $fila) {
+                $out[] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Auxpag por número de OP (axp_rec), sin filtro de fecha.
+     *
+     * @param  list<int>  $empresasAnita
+     * @param  list<int>  $recs
+     * @param  list<string>  $errores
+     * @param  list<string>  $tipos
+     * @return list<object>
+     */
+    public function listarAuxpagPorRecs(
+        array $empresasAnita,
+        array $recs,
+        array &$errores,
+        array $tipos = ['OPP', 'OPA'],
+    ): array {
+        $tieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
+        $empresasAnita = array_values(array_unique(array_map('intval', $empresasAnita)));
+        $recs = array_values(array_unique(array_filter(array_map('intval', $recs))));
+        if ($recs === [] || ($tieneEmpresa && $empresasAnita === [])) {
+            return [];
+        }
+
+        $campos = $tieneEmpresa
+            ? self::AUXPAG_CAMPOS
+            : 'axp_fecha,axp_tipo,axp_rec,axp_pro,axp_nro,axp_tipo_ap,'
+                .'axp_monto_ap,axp_cod_mon_co,axp_banco,axp_letra_comp,axp_sucursal,axp_sucursal_cob,'
+                .'axp_nro_interno,axp_fecha_co';
+        $tiposSql = self::tiposSql($tipos);
+        if ($tiposSql === '') {
+            return [];
+        }
+
+        $out = [];
+        foreach (array_chunk($recs, 80) as $lote) {
+            $where = $tieneEmpresa
+                ? ' WHERE axp_empresa IN ('.implode(',', $empresasAnita).')'
+                    .' AND axp_tipo IN ('.$tiposSql.')'
+                    .' AND axp_rec IN ('.implode(',', $lote).')'
+                : ' WHERE axp_tipo IN ('.$tiposSql.')'
+                    .' AND axp_rec IN ('.implode(',', $lote).')';
+            foreach ($this->listar('che_ban', 'auxpag', $campos, $where, $errores, 'auxpag-por-rec') as $fila) {
+                if (! $tieneEmpresa && ! isset($fila->axp_empresa)) {
+                    $fila->axp_empresa = 0;
+                }
+                $out[] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * OPP/OPA anuladas en Anita: existe un AOP con el mismo pag_rec (la anulación
      * puede ser otro día, por eso no se filtra por fecha).
      *

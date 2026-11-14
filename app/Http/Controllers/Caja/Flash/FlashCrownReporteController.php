@@ -38,7 +38,10 @@ class FlashCrownReporteController extends Controller
 
         $fecha = $this->fechaPedida($request);
         $formato = FlashCrownInformeSupport::normalizarFormato($request->input('formato'));
-        $destinatarios = $this->textoDestinatarios($request);
+        $destinatariosPorFormato = $this->destinatariosSupport->textosPorFormato();
+        if ($request->exists('destinatarios')) {
+            $destinatariosPorFormato[$formato] = (string) $request->input('destinatarios');
+        }
         $informe = null;
         if ($request->boolean('consultar')) {
             ini_set('memory_limit', '512M');
@@ -49,7 +52,8 @@ class FlashCrownReporteController extends Controller
             'fecha' => $fecha->toDateString(),
             'formato' => $formato,
             'formatos' => FlashCrownInformeSupport::formatos(),
-            'destinatarios' => $destinatarios,
+            'destinatarios' => $destinatariosPorFormato[$formato] ?? '',
+            'destinatariosPorFormato' => $destinatariosPorFormato,
             'informe' => $informe,
             'puedeEnviar' => can('administrar-flash-reporte-crown', false),
         ]);
@@ -62,7 +66,7 @@ class FlashCrownReporteController extends Controller
 
         $fecha = $this->fechaPedida($request);
         $formato = FlashCrownInformeSupport::normalizarFormato($request->input('formato'));
-        $texto = $this->textoDestinatarios($request);
+        $texto = $this->textoDestinatarios($request, $formato);
         $destinatarios = $this->destinatariosSupport->parsear($texto);
         if ($destinatarios === []) {
             return redirect()
@@ -72,7 +76,7 @@ class FlashCrownReporteController extends Controller
 
         ini_set('memory_limit', '512M');
         $informe = $this->informeSupport->armar($formato, $fecha);
-        $this->destinatariosSupport->guardar($texto, Auth::id() ? (int) Auth::id() : null);
+        $this->destinatariosSupport->guardar($texto, $formato, Auth::id() ? (int) Auth::id() : null);
 
         try {
             Mail::to($destinatarios)->send(new FlashCrownInforme($informe, $formato));
@@ -92,21 +96,21 @@ class FlashCrownReporteController extends Controller
         $this->assertCrown();
         can('administrar-flash-reporte-crown');
 
+        $formato = FlashCrownInformeSupport::normalizarFormato($request->input('formato'));
+        $fecha = $this->fechaPedida($request);
         $texto = trim((string) $request->input('destinatarios', ''));
         if ($this->destinatariosSupport->parsear($texto) === []) {
             return redirect()
-                ->route('flash_reporte_crown')
+                ->route('flash_reporte_crown', $this->queryInforme($fecha, $formato))
                 ->with('mensaje_error', 'No hay mails válidos para guardar.');
         }
 
-        $this->destinatariosSupport->guardar($texto, Auth::id() ? (int) Auth::id() : null);
+        $this->destinatariosSupport->guardar($texto, $formato, Auth::id() ? (int) Auth::id() : null);
+        $etiqueta = FlashCrownInformeSupport::formatos()[$formato] ?? $formato;
 
         return redirect()
-            ->route('flash_reporte_crown', [
-                'fecha' => $this->fechaPedida($request)->toDateString(),
-                'formato' => FlashCrownInformeSupport::normalizarFormato($request->input('formato')),
-            ])
-            ->with('mensaje', 'Destinatarios guardados.');
+            ->route('flash_reporte_crown', $this->queryInforme($fecha, $formato))
+            ->with('mensaje', 'Destinatarios guardados para '.$etiqueta.'.');
     }
 
     public function exportarInforme(Request $request): BinaryFileResponse
@@ -212,13 +216,13 @@ class FlashCrownReporteController extends Controller
         return Carbon::parse($raw)->startOfDay();
     }
 
-    private function textoDestinatarios(Request $request): string
+    private function textoDestinatarios(Request $request, string $formato): string
     {
         if ($request->exists('destinatarios')) {
             return (string) $request->input('destinatarios');
         }
 
-        return $this->destinatariosSupport->textoActual();
+        return $this->destinatariosSupport->textoActual($formato);
     }
 
     /**

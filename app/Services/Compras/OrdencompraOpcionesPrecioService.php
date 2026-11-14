@@ -20,6 +20,43 @@ class OrdencompraOpcionesPrecioService
     public const ORIGEN_REQUISICION = 'REQUISICION';
 
     /**
+     * OC sin requisición: solo listas activas del proveedor para el artículo.
+     *
+     * @return array<string, mixed>
+     */
+    public function opcionesLineaLibre(int $articuloId, ?int $proveedorId, string $fechaRef): array
+    {
+        if ($articuloId <= 0) {
+            return ['message' => 'Indique un artículo.'];
+        }
+
+        $art = \App\Models\Stock\Articulo::query()
+            ->select('id', 'sku', 'descripcion')
+            ->find($articuloId);
+        if (! $art) {
+            return ['message' => 'Artículo no encontrado.'];
+        }
+
+        $filasLista = [];
+        if ($proveedorId !== null && $proveedorId > 0) {
+            $filasLista = $this->filasListaPrecioProveedorArticulo($articuloId, $proveedorId, $fechaRef);
+        }
+
+        return [
+            'articulo' => [
+                'id' => $articuloId,
+                'sku' => (string) ($art->sku ?? ''),
+                'descripcion' => (string) ($art->descripcion ?? ''),
+            ],
+            'requisicion_articulo_id' => null,
+            'opcion_requisicion' => null,
+            'opciones_lista' => $filasLista,
+            'opciones_presupuesto' => [],
+            'sin_proveedor' => ! ($proveedorId !== null && $proveedorId > 0),
+        ];
+    }
+
+    /**
      * Los parámetros de condiciones se conservan en la firma por compatibilidad con la ruta HTTP; ya no filtran el listado de presupuestos.
      *
      * @return array<string, mixed>
@@ -120,12 +157,15 @@ class OrdencompraOpcionesPrecioService
             ->leftJoin('proveedor as prov', 'prov.id', '=', 'lp.proveedor_id')
             ->leftJoin('moneda as mon', 'mon.id', '=', 'lp.moneda_id')
             ->whereIn('lpa.id', $lineIds)
-            ->where('lp.estado', 'ACTIVA')
+            ->whereRaw('UPPER(TRIM(lp.estado)) IN (?, ?)', ['ACTIVA', 'A'])
             ->where('lp.proveedor_id', $proveedorId)
             ->select([
                 'lpa.id as linea_lista_id',
                 'lp.id as lista_id',
                 'lp.nombre as lista_nombre',
+                'lp.condicioncompra_id',
+                'lp.condicionentrega_id',
+                'lp.condicionpago_id',
                 'mon.id as moneda_id',
                 'mon.abreviatura as moneda_abreviatura',
                 'lpa.precio',
@@ -155,9 +195,9 @@ class OrdencompraOpcionesPrecioService
                 'etiqueta' => 'Lista proveedor: '.($r->lista_nombre ?? '').' (vig. '.substr((string) $r->linea_fechavigencia, 0, 10).')',
                 'ref_id' => (int) $r->linea_lista_id,
                 'proveedor_id' => $proveedorId,
-                'condicioncompra_id' => 0,
-                'condicionentrega_id' => 0,
-                'condicionpago_id' => 0,
+                'condicioncompra_id' => $r->condicioncompra_id ? (int) $r->condicioncompra_id : 0,
+                'condicionentrega_id' => $r->condicionentrega_id ? (int) $r->condicionentrega_id : 0,
+                'condicionpago_id' => $r->condicionpago_id ? (int) $r->condicionpago_id : 0,
             ];
         }
 
