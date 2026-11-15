@@ -149,4 +149,11 @@
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'ie-pdf-ia-overlay',
+    'tituloId' => 'ie-pdf-ia-overlay-titulo',
+    'subtituloId' => 'ie-pdf-ia-overlay-subtitulo',
+    'titulo' => 'Leyendo PDF con OCR/IA…',
+    'subtitulo' => 'Puede demorar según el PDF. No cierre ni recargue la página.',
+])
 @endsection

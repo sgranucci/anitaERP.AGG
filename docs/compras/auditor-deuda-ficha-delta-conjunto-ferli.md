@@ -12,19 +12,51 @@ El número que se controla es el **delta conjunto** = delta proveedores + delta 
 
 | Corte | Delta proveedores | Delta anticipos | **Delta conjunto** |
 |---|---:|---:|---:|
-| **14/11/2026** | 312.720.614,72 | 1.941.669,28 | **314.662.284,00** |
+| **15/11/2026** | 312.720.614,72 | 1.941.669,28 | **314.662.284,00** |
 
-Detalle por cuenta al 14/11/2026 (tras corregir FAC ANDINA y con los tres despachos de importación):
+Detalle por cuenta al 15/11/2026 (mismo número que la base aceptada post-ANDINA del 14/11):
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
 | 211100001 PROVEEDORES | 203.569.131,95 | 150.601.960,66 | −52.967.171,29 |
 | 211100002 PROVEEDORES DEL EXTERIOR | 0,00 | 365.687.786,01 | 365.687.786,01 |
-| 114110001 ANTICIPO PROVEEDORES | −1.635.853,71 | 307.815,57 | 1.941.669,28 |
+| 114110001 ANTICIPO PROVEEDORES | −1.633.853,71 | 307.815,57 | 1.941.669,28 |
 
-Variación del conjunto 13→14 (después de ANDINA): **+175.702.535,00** · solo **211100002**. El delta de proveedores locales y el de anticipos quedan iguales a la base del 13/11. Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
 
-Base anterior documentada: **13/11/2026** = 138.959.749,00.
+Base anterior documentada: **14/11/2026** aceptada post-ANDINA = 314.662.284,00 (el cron del 14/11 a las 07:50 había grabado 314.396.084,00, antes de la corrección).
+
+---
+
+## Alerta 15/11/2026 — no es salto nuevo (catch-up ANDINA)
+
+| | Snapshot cron 14/11 07:50 | 15/11/2026 | Variación |
+|---|---:|---:|---:|
+| Delta proveedores | 312.454.414,72 | 312.720.614,72 | +266.200,00 |
+| Delta anticipos | 1.941.669,28 | 1.941.669,28 | 0,00 |
+| **Delta conjunto** | **314.396.084,00** | **314.662.284,00** | **+266.200,00** |
+
+Ficha deuda vs ficha: **cuadrada** (0 diferencias). La alerta del mail fue solo por el delta.
+
+### Cuenta que movió el conjunto
+
+Solo **211100001 PROVEEDORES** — el mayor subió 266.200 (deuda sin cambio):
+
+| | Cron 14/11 | 15/11 | Variación |
+|---|---:|---:|---:|
+| Deuda | 203.569.131,95 | 203.569.131,95 | 0,00 |
+| Mayor | 150.335.760,66 | 150.601.960,66 | +266.200,00 |
+| Delta | −53.233.371,29 | −52.967.171,29 | **+266.200,00** |
+
+### Origen
+
+Es la corrección de FAC A-1-100 ANDINA documentada el 14/11 (línea Haber mov **587688** → cuenta **211100001**). El cron del 14/11 midió **antes** de esa corrección; el del 15/11 midió **después**. El número del 15/11 coincide con la base ya aceptada post-ANDINA.
+
+### Lectura
+
+- **No es descuadre de ficha** ni un hueco nuevo.
+- **No hay movimiento operativo del 14→15** distinto de esa corrección.
+- El conjunto **314.662.284,00** se **reafirma como base vigente** al 15/11/2026.
 
 ---
 

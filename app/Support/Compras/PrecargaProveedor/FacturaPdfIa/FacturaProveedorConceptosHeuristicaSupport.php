@@ -117,22 +117,24 @@ final class FacturaProveedorConceptosHeuristicaSupport
             return null;
         }
 
-        $importe = $this->importeDeRotulo($fila);
-        if ($importe === null || abs($importe) < 0.01) {
-            return null;
-        }
-        if ($this->importeParser->pareceCuitNumerico(abs($importe))) {
-            return null;
-        }
-
         $definiciones = $this->definicionesConcepto();
 
         foreach ($definiciones as $def) {
             if (preg_match($def['patron'], $filaLower)) {
+                // «IVA: (21%) $X TOTAL: $Y» — el importe del rótulo IVA, no el TOTAL al final.
+                $filaImporte = $this->filaParaImporteDeConcepto($fila, (string) $def['tipo']);
+                $importeConcepto = $this->importeDeRotulo($filaImporte);
+                if ($importeConcepto === null || abs($importeConcepto) < 0.01) {
+                    return null;
+                }
+                if ($this->importeParser->pareceCuitNumerico(abs($importeConcepto))) {
+                    return null;
+                }
+
                 $alicuota = $def['alicuota'] ?? $this->inferirAlicuotaEnTexto($fila);
                 $linea = [
-                    'descripcion' => $this->limpiarDescripcion($fila),
-                    'importe' => abs($importe),
+                    'descripcion' => $this->limpiarDescripcion($filaImporte),
+                    'importe' => abs($importeConcepto),
                     'alicuota_iva' => $alicuota,
                     'tipo' => $def['tipo'],
                 ];
@@ -149,6 +151,33 @@ final class FacturaProveedorConceptosHeuristicaSupport
         }
 
         return null;
+    }
+
+    /**
+     * Si el pie mete IVA y TOTAL en la misma línea, cortar antes de TOTAL
+     * para no tomar el bruto como IVA (ni sumarlo luego con el IVA real).
+     */
+    private function filaParaImporteDeConcepto(string $fila, string $tipo): string
+    {
+        if ($tipo !== 'iva' && $tipo !== 'neto' && $tipo !== 'subtotal' && $tipo !== 'gravado') {
+            return $fila;
+        }
+
+        if (! preg_match('/\btotal(?:es)?\b/iu', $fila)) {
+            return $fila;
+        }
+
+        // Neto/subtotal en la misma línea que TOTAL: conservar hasta TOTAL.
+        if ($tipo === 'neto' || $tipo === 'subtotal' || $tipo === 'gravado') {
+            $cortada = preg_replace('/\btotal(?:es)?\b.*/iu', '', $fila);
+
+            return is_string($cortada) && trim($cortada) !== '' ? $cortada : $fila;
+        }
+
+        // IVA … TOTAL: dejar solo el tramo del IVA.
+        $cortada = preg_replace('/\btotal(?:es)?\b.*/iu', '', $fila);
+
+        return is_string($cortada) && trim($cortada) !== '' ? $cortada : $fila;
     }
 
     /**
@@ -306,6 +335,23 @@ final class FacturaProveedorConceptosHeuristicaSupport
                     || (($linea['alicuota_iva'] ?? null) !== null && ($mapa[$clave]['alicuota_iva'] ?? null) === null);
                 if ($quedarseConNuevo) {
                     $mapa[$clave] = $linea;
+                }
+
+                continue;
+            }
+
+            // IVA duplicado (pie con TOTAL en la misma línea + IVA limpio): no sumar.
+            // Quedarse con el menor: el mayor suele ser el TOTAL mal leído como IVA.
+            $tipoClave = strtolower((string) ($linea['tipo'] ?? ''));
+            if (str_contains($tipoClave, 'iva')
+                && ! str_contains($tipoClave, 'percepcion')
+                && ! str_contains($tipoClave, 'retencion')) {
+                if ($nuevo < $actual) {
+                    $mapa[$clave] = $linea;
+                } elseif ($nuevo === $actual
+                    && ($mapa[$clave]['alicuota_iva'] ?? null) === null
+                    && ($linea['alicuota_iva'] ?? null) !== null) {
+                    $mapa[$clave]['alicuota_iva'] = $linea['alicuota_iva'];
                 }
 
                 continue;

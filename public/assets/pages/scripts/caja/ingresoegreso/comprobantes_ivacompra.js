@@ -1994,6 +1994,30 @@
         });
     }
 
+    function mostrarOverlayPdfIa(titulo) {
+        var overlay = document.getElementById('ie-pdf-ia-overlay');
+        if (!overlay) {
+            return;
+        }
+        var tituloEl = document.getElementById('ie-pdf-ia-overlay-titulo');
+        if (tituloEl && titulo) {
+            tituloEl.textContent = titulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultarOverlayPdfIa() {
+        var overlay = document.getElementById('ie-pdf-ia-overlay');
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
     function procesarPdf() {
         var file = $('#ie-cp-pdf-archivo')[0].files[0];
         var empresaId = $('#empresa_id').val();
@@ -2008,6 +2032,8 @@
         fd.append('_token', $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val());
 
         $('#ie-cp-pdf-procesar').prop('disabled', true);
+        $('#ie-cp-pdf-error, #ie-cp-pdf-advertencias').addClass('d-none').empty();
+        mostrarOverlayPdfIa('Leyendo PDF con OCR/IA…');
         $.ajax({
             url: url,
             method: 'POST',
@@ -2070,6 +2096,7 @@
             var msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al procesar PDF';
             $('#ie-cp-pdf-error').removeClass('d-none').text(msg);
         }).always(function () {
+            ocultarOverlayPdfIa();
             $('#ie-cp-pdf-procesar').prop('disabled', false);
         });
     }
@@ -2267,12 +2294,16 @@
         });
 
         $('#ie-btn-pdf-ia-comprobante').on('click', function () {
+            ocultarOverlayPdfIa();
             $('#ie-cp-pdf-archivo').val('');
             $('#ie-cp-pdf-error, #ie-cp-pdf-advertencias').addClass('d-none').empty();
             $('#modal-ie-comprobante-iva-pdf').modal('show');
         });
 
         $('#ie-cp-pdf-procesar').on('click', procesarPdf);
+        window.addEventListener('pageshow', function () {
+            ocultarOverlayPdfIa();
+        });
         $('#ie-cp-btn-excel').on('click', function () {
             $('#ie-cp-excel-archivo').val('');
             $('#ie-cp-excel-error').addClass('d-none').text('');

@@ -27,6 +27,11 @@ var brutoSpIe = 0;
 			$(this).closest('.ie-archivo-item').remove();
 		});
 
+		// admin/crear.js monta jQuery Validate y no ignora .modal: los required de
+		// liquidación tarjeta (dentro de #form-general) disparaban «Falta: Tarjeta»
+		// aunque la OPP ya se grababa por AJAX.
+		reforzarIgnoreModalesValidateIe();
+
 		flCrear = document.getElementById("crear");
 		flModificaAsiento = false;
 		montoPendienteSp = parseFloat($('#solicitudpago_monto_pendiente').val() || '0') || 0;
@@ -1427,12 +1432,20 @@ var brutoSpIe = 0;
 		}
 	}
 
-	$("#form-general").submit(function (e) {
+	$("#form-general").on('submit.ieGrabarAjax', function (e) {
 		e.preventDefault();
-		if ($(this).data('ie-ajax-enviado')) {
+		e.stopImmediatePropagation();
+		reforzarIgnoreModalesValidateIe();
+		var $form = $(this);
+		var validator = $form.data('validator');
+		if (validator && typeof validator.form === 'function' && !validator.form()) {
+			liberarBannerGrabacionIe();
 			return;
 		}
-		$(this).data('ie-ajax-enviado', true);
+		if ($form.data('ie-ajax-enviado')) {
+			return;
+		}
+		$form.data('ie-ajax-enviado', true);
 		if (!window.ieGrabacionEnCurso) {
 			iniciarBannerGrabacionIe();
 		}
@@ -1448,7 +1461,7 @@ var brutoSpIe = 0;
 			complete: CompleteFunc,
 		});
 
-		var parametros=new FormData($(this)[0])
+		var parametros=new FormData($form[0])
 
 		parametros.append('_token', token);
 
@@ -1469,6 +1482,12 @@ var brutoSpIe = 0;
 					// Overlay fuera ya: si el redirect tarda o el PDF abre otra pestaña,
 					// el banner no debe quedar girando. ie-ajax-enviado sigue true.
 					liberarBannerGrabacionIe({ mantenerBloqueoEnvio: true });
+					if (window.AnitaGrabacion && typeof AnitaGrabacion.ocultar === 'function') {
+						AnitaGrabacion.ocultar();
+					}
+					if (window.toastr && typeof toastr.clear === 'function') {
+						toastr.clear();
+					}
 					alert("Se grabó transacción de caja con éxito");
 					if (data.url_comprobante_pdf) {
 						window.open(data.url_comprobante_pdf, '_blank');
@@ -1519,6 +1538,45 @@ var brutoSpIe = 0;
 			}
 		});
 	});
+	priorizarHandlerSubmitIeGrabar();
+
+	function reforzarIgnoreModalesValidateIe()
+	{
+		var $form = $('#form-general');
+		var validator = $form.data('validator');
+		if (!validator || !validator.settings) {
+			return;
+		}
+		var extra = '.modal :input, .modal select, .modal textarea';
+		var actual = String(validator.settings.ignore || '');
+		if (actual.indexOf('.modal') === -1) {
+			validator.settings.ignore = actual ? (actual + ', ' + extra) : extra;
+		}
+	}
+
+	/** El handler AJAX de I/E debe correr antes que jQuery Validate. */
+	function priorizarHandlerSubmitIeGrabar()
+	{
+		var form = document.getElementById('form-general');
+		if (!form || !($ && $._data)) {
+			return;
+		}
+		var eventos = $._data(form, 'events');
+		if (!eventos || !eventos.submit || eventos.submit.length < 2) {
+			return;
+		}
+		var lista = eventos.submit;
+		var idx = -1;
+		for (var i = 0; i < lista.length; i++) {
+			if (lista[i] && lista[i].namespace === 'ieGrabarAjax') {
+				idx = i;
+				break;
+			}
+		}
+		if (idx > 0) {
+			lista.unshift(lista.splice(idx, 1)[0]);
+		}
+	}
 	
 	function iniciarBannerGrabacionIe()
 	{

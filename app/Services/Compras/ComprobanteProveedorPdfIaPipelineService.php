@@ -294,14 +294,71 @@ final class ComprobanteProveedorPdfIaPipelineService
         $sumaOld = round(array_sum(array_column($conceptos, 'importe')), 2);
         $total = (float) ($pie['total'] ?? 0);
 
-        if ($total > 0 && abs($sumaPie - $total) <= 0.05) {
-            return $lineasPie;
-        }
-        if ($sumaPie > $sumaOld + 0.05) {
+        if ($this->pieLineasPreferibles($lineasPie, $sumaPie, $total, $sumaOld)) {
             return $lineasPie;
         }
 
         return $conceptos;
+    }
+
+    /**
+     * El pie manda si cierra contra el total, si está más cerca del total que la
+     * heurística inflada, o si neto+IVA cierran por tasa aunque el TOTAL OCR
+     * venga corrido unos pesos (Genius Scan / tesseract).
+     *
+     * @param  list<array<string, mixed>>  $lineasPie
+     */
+    private function pieLineasPreferibles(array $lineasPie, float $sumaPie, float $total, float $sumaOld): bool
+    {
+        if ($sumaPie <= 0) {
+            return false;
+        }
+
+        if ($total > 0 && abs($sumaPie - $total) <= max(1.0, $total * 0.002)) {
+            return true;
+        }
+
+        if ($total > 0 && abs($sumaPie - $total) < abs($sumaOld - $total)) {
+            return true;
+        }
+
+        if ($sumaOld > $sumaPie + 0.05 && $this->pieCierraPorTasa($lineasPie)) {
+            return true;
+        }
+
+        return $sumaPie > $sumaOld + 0.05;
+    }
+
+    /** @param  list<array<string, mixed>>  $lineas */
+    private function pieCierraPorTasa(array $lineas): bool
+    {
+        $neto = 0.0;
+        $iva = 0.0;
+        foreach ($lineas as $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+            $tipo = strtolower((string) ($linea['tipo'] ?? ''));
+            $importe = abs((float) ($linea['importe'] ?? 0));
+            if (str_contains($tipo, 'neto') || str_contains($tipo, 'subtotal') || str_contains($tipo, 'gravado')) {
+                $neto += $importe;
+            } elseif (str_contains($tipo, 'iva')
+                && ! str_contains($tipo, 'percepcion')
+                && ! str_contains($tipo, 'retencion')) {
+                $iva += $importe;
+            }
+        }
+        if ($neto <= 0 || $iva <= 0) {
+            return false;
+        }
+        $ratio = $iva / $neto;
+        foreach ([0.105, 0.21, 0.27] as $tasa) {
+            if (abs($ratio - $tasa) <= 0.005) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -338,11 +395,21 @@ final class ComprobanteProveedorPdfIaPipelineService
         }
 
         $lineasPie = is_array($pie['lineas'] ?? null) ? $pie['lineas'] : [];
-        if ($lineasPie !== [] && $totalPie > 0) {
+        if ($lineasPie !== []) {
             $sumaPie = round(array_sum(array_column($lineasPie, 'importe')), 2);
-            if (abs($sumaPie - $totalPie) <= 0.05) {
+            $sumaActual = round(array_sum(array_map(
+                static fn ($l): float => abs((float) (is_array($l) ? ($l['importe'] ?? 0) : 0)),
+                is_array($resultado['lineas'] ?? null) ? $resultado['lineas'] : []
+            )), 2);
+            if ($this->pieLineasPreferibles($lineasPie, $sumaPie, $totalPie > 0 ? $totalPie : $sumaPie, $sumaActual)) {
                 $resultado['lineas'] = $lineasPie;
                 $resultado['_meta']['lineas_origen'] = $pie['origen'] ?? 'pie';
+                // Si el TOTAL OCR está corrido pero neto+IVA cierran por tasa, usar la suma del pie.
+                if ($sumaPie > 0 && ($totalPie <= 0 || abs($sumaPie - $totalPie) > 0.05)
+                    && $this->pieCierraPorTasa($lineasPie)) {
+                    $resultado['total'] = $sumaPie;
+                    $resultado['_meta']['total_origen'] = 'suma_pie_tasa';
+                }
             }
         }
 
@@ -480,7 +547,7 @@ final class ComprobanteProveedorPdfIaPipelineService
     {
         $total = (float) ($pie['total'] ?? 0);
         $lineas = is_array($pie['lineas'] ?? null) ? $pie['lineas'] : [];
-        if ($total <= 0 || $lineas === []) {
+        if ($lineas === []) {
             return false;
         }
 
@@ -489,7 +556,11 @@ final class ComprobanteProveedorPdfIaPipelineService
             $lineas
         )), 2);
 
-        return abs($suma - $total) <= 0.05;
+        if ($total > 0 && abs($suma - $total) <= max(1.0, $total * 0.002)) {
+            return true;
+        }
+
+        return $this->pieCierraPorTasa($lineas);
     }
 
     private function extraerTexto(string $rutaAbsoluta, string $mime): string

@@ -99,7 +99,10 @@
                                     'label' => 'Tarjeta',
                                     'inputName' => 'ie_liquidacion_cuentacaja_id',
                                     'inputId' => 'ie-lt-cuentacaja-id',
-                                    'required' => true,
+                                    // Sin HTML required: el modal vive dentro de #form-general y
+                                    // disparaba «Falta: Tarjeta» al Guardar la OPP (la validación
+                                    // real está en liquidacion_tarjeta.js al aceptar el DTC).
+                                    'required' => false,
                                     'mostrar_editar' => true,
                                     'ayuda' => 'La cuenta marcada como tarjeta. Los cupones se acreditan en su cuenta contable.',
                                 ])
@@ -111,7 +114,7 @@
                                     'label' => 'Cuenta de caja',
                                     'inputName' => 'ie_liquidacion_caja_deposito_id',
                                     'inputId' => 'ie-lt-caja-id',
-                                    'required' => true,
+                                    'required' => false,
                                     'mostrar_editar' => true,
                                     'ayuda' => 'Donde entra el neto. Al armar el DTC se carga en la pantalla principal.',
                                 ])

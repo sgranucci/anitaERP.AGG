@@ -1067,8 +1067,9 @@ final class FacturaProveedorPieTotalesSupport
      */
     private function ivasDiscriminados(string $texto): array
     {
+        // Acepta «IVA (21.00%): $1630819.56» (EN) y «I.V.A. 21% 1.630.819,56» (AR).
         if (! preg_match_all(
-            '/I\.?\s*V\.?\s*A\.?\s*(10[.,]5|27|21|2[.,]5|5)(?:[.,]\d+)?\s*%\s*[:.]?\s*(?:u\$s|U\$S|USD|US\$|\$)?\s*((?:\d{1,3}(?:\.\d{3})+|\d+),\d{2})/iu',
+            '/I\.?\s*V\.?\s*A\.?\s*[:.]?\s*\(?\s*(10[.,]5|27|21|2[.,]5|5)(?:[.,]\d+)?\s*%\s*\)?\s*[:.]?\s*(?:u\$s|U\$S|USD|US\$|\$)?\s*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu',
             $texto,
             $matches,
             PREG_SET_ORDER

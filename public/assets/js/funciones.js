@@ -8,8 +8,12 @@ var Biblioteca = function () {
                 errorElement: 'span', //default input error message container
                 errorClass: 'help-block help-block-error', // default input error message class
                 focusInvalid: false, // do not focus the last invalid input
-                // Hidden solapas sí se validan; templates y renglones vacíos de grilla no.
-                ignore: "template :input, template select, template textarea, .erp-fila-vacia :input, .erp-fila-vacia select, .erp-fila-vacia textarea",
+                // Hidden solapas sí se validan; templates, renglones vacíos y campos de
+                // modales (ej. liquidación tarjeta dentro de #form-general) no.
+                // Sin :hidden: las solapas ocultas del form sí se validan.
+                // Sí se ignoran templates, renglones vacíos y campos dentro de .modal
+                // (ej. liquidación tarjeta dentro de #form-general).
+                ignore: "template :input, template select, template textarea, .erp-fila-vacia :input, .erp-fila-vacia select, .erp-fila-vacia textarea, .modal :input, .modal select, .modal textarea",
                 highlight: function (element, errorClass, validClass) { // hightlight error inputs
                     $(element).closest('.form-group').addClass('has-error'); // set error class to the control group
                 },
