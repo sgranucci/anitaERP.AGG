@@ -27,6 +27,10 @@ final class GastronomiaCrownCajaAbiertaSupport
         string $fechaYmd,
         ?int $salaId = null,
     ): void {
+        if (! self::controlHabilitado()) {
+            return;
+        }
+
         if ($tipoCobro === GastroCrownCuenta::COBRO_HOTEL) {
             return;
         }
@@ -36,6 +40,15 @@ final class GastronomiaCrownCajaAbiertaSupport
         }
 
         throw new InvalidArgumentException('No tiene caja abierta en tesorería.');
+    }
+
+    /** Flag de pruebas: false omite HAB conforme / caja abierta en tesorería. */
+    public static function controlHabilitado(): bool
+    {
+        return filter_var(
+            config('gastronomia.crown.exigir_caja_abierta_tesoreria', true),
+            FILTER_VALIDATE_BOOLEAN,
+        );
     }
 
     public static function tieneCajaAbierta(

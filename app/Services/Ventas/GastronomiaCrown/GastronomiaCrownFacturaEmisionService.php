@@ -15,6 +15,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\GastronomiaCobranzaService;
+use App\Services\Ventas\Gastronomia\GastronomiaFacturaTicketService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturacionService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaConsumoService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
@@ -27,6 +28,7 @@ use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaCrown\GastronomiaCrownCuentacajaEfectivoSalaSupport;
 use App\Support\Ventas\GastronomiaFormulaOpcionalSeleccion;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
+use App\Support\Ventas\NcjetdirectSalidaSupport;
 use App\Support\Ventas\PuntoventaEmisionLock;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Illuminate\Database\QueryException;
@@ -57,6 +59,7 @@ final class GastronomiaCrownFacturaEmisionService
         private readonly GastronomiaReceptorFacturacionService $receptorFacturacionService,
         private readonly GastronomiaCobranzaService $cobranzaGastronomiaService,
         private readonly GastronomiaJornadaService $jornadaService,
+        private readonly GastronomiaFacturaTicketService $facturaTicketService,
     ) {
     }
 
@@ -300,6 +303,8 @@ final class GastronomiaCrownFacturaEmisionService
         }
 
         $resultado = $this->completarAnitaPostCommit($resultado);
+        // Misma impresión térmica post-emisión que AGG (sin CuentaGastronomia: ticket arma desde la venta).
+        $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg);
 
         $facturaTxt = trim((string) ($resultado['factura'] ?? ''));
         $resultado['mensaje'] = 'Factura '.$facturaTxt.' emitida correctamente.';
@@ -309,6 +314,43 @@ final class GastronomiaCrownFacturaEmisionService
             'total' => $totales['total'],
             'pct' => $totales['pct'],
         ];
+
+        return $resultado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function aplicarImpresionTicketTrasEmision(
+        array $resultado,
+        ConfiguracionPuntoventaGastronomia $cfg,
+    ): array {
+        $ventaId = (int) ($resultado['venta_id'] ?? 0);
+        if ($ventaId <= 0) {
+            return $resultado;
+        }
+
+        $imp = $this->facturaTicketService->imprimirTrasEmisionEncolado($ventaId, $cfg, null);
+        if (! empty($imp['omitida'])) {
+            return $resultado;
+        }
+
+        if (! empty($imp['ok'])) {
+            $resultado['impresion_ticket'] = ! empty($imp['encolada']) ? 'encolada' : 'ok';
+            if (empty($imp['encolada'])) {
+                $resultado = NcjetdirectSalidaSupport::anexarAvisoWarnSinConfirmacionPapel($resultado, $imp);
+            }
+
+            return $resultado;
+        }
+
+        $mensaje = trim((string) ($imp['mensaje'] ?? 'No se pudo imprimir el ticket térmico.'));
+        $resultado['impresion_ticket'] = 'error';
+        $resultado['impresion_ticket_mensaje'] = $mensaje;
+        $warnPrevio = trim((string) ($resultado['warn'] ?? ''));
+        $avisoTicket = 'Factura emitida; impresión térmica: '.$mensaje;
+        $resultado['warn'] = $warnPrevio !== '' ? $warnPrevio."\n\n".$avisoTicket : $avisoTicket;
 
         return $resultado;
     }

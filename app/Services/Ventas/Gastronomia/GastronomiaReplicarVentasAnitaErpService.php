@@ -291,6 +291,19 @@ final class GastronomiaReplicarVentasAnitaErpService
             throw new \RuntimeException('Error Anita: '.$detalle);
         }
 
+        if ($modoMinimo) {
+            $salaCodigo = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::salaCodigoDesdeVenta($venta);
+            \App\Support\Ventas\GastronomiaCrown\GastronomiaAnitaResvtaCrownSupport::grabarTrasVenta(
+                (int) $venta->id,
+                [
+                    'puntoventa_codigo' => (int) ($puntoventa->codigo ?? 0),
+                    'path_sistema' => \App\Support\Ventas\PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa->codigo ?? 0),
+                    'sala_codigo' => $salaCodigo,
+                    'ifx_server' => \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura($salaCodigo)['ifx_server'] ?? null,
+                ],
+            );
+        }
+
         if ($replicarInsumos) {
             $cfg = $this->resolverConfiguracionPv($venta);
             if ($cfg !== null) {

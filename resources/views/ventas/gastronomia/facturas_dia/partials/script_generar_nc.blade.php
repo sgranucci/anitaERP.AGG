@@ -18,7 +18,8 @@
     var token = csrfMeta ? csrfMeta.getAttribute('content') : '';
 
     function refrescarCsrfToken() {
-        return fetch('{{ url('csrf-token') }}', {
+        var csrfUrl = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/csrf-token';
+        return fetch(csrfUrl, {
             method: 'GET',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin',
@@ -37,7 +38,8 @@
     }
 
     function postNotaCreditoBody(ventaId, tokenActual, payload) {
-        return fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/generar-nota-credito', {
+        var base = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/ventas/gastronomia/facturas-dia';
+        return fetch(base + '/' + ventaId + '/generar-nota-credito', {
             method: 'POST',
             headers: {
                 'X-CSRF-TOKEN': tokenActual,
@@ -143,8 +145,13 @@
                         $('#modal-fd-generar-nc').modal('hide');
                     }
                     var txt = res.body.mensaje || 'Nota de crédito generada.';
+                    if (res.body.impresion_ticket === 'ok' && !res.body.warn) {
+                        txt += ' Ticket enviado a la impresora.';
+                    }
                     if (typeof toastr !== 'undefined') {
-                        if (res.body.warn) toastr.warning(res.body.warn);
+                        if (res.body.warn || res.body.impresion_ticket === 'error') {
+                            toastr.warning(res.body.warn || (res.body.impresion_ticket_mensaje || 'NC ok; falló impresión térmica.'));
+                        }
                         toastr.success(txt);
                     } else {
                         alert((res.body.warn ? res.body.warn + '\n\n' : '') + txt);

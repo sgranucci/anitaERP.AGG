@@ -132,15 +132,18 @@
         </div>
     </div>
 
-    <div class="modal fade" id="gc-modal-mozo" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-sm" role="document">
-            <div class="modal-content">
-                <div class="modal-header py-2">
-                    <h5 class="modal-title">Ingreso de mozo</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+    {{-- Login mozo al entrar (paridad canjes AGG / COMAND_pide_mozo) --}}
+    <div class="modal fade" id="gc-modal-mozo" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static" data-keyboard="false">
+        <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+            <div class="modal-content gc-mozo-modal">
+                <div class="modal-header gc-mozo-header py-3">
+                    <div>
+                        <h5 class="modal-title mb-0"><i class="fa fa-user-circle mr-1"></i> Ingreso de mozo</h5>
+                        <div class="gc-mozo-sub">Código y clave para operar el POS</div>
+                    </div>
                 </div>
                 <div class="modal-body">
-                    <form id="gc-form-mozo" data-enter-campos="1" autocomplete="off">
+                    <form id="gc-form-mozo" autocomplete="off" onsubmit="return false;">
                         <div class="form-group mb-2">
                             <label for="gc-mozo-codigo" class="mb-0">Código</label>
                             <input type="text" id="gc-mozo-codigo" class="form-control form-control-sm" inputmode="numeric" autocomplete="off" required>
@@ -150,10 +153,13 @@
                             <input type="password" id="gc-mozo-clave" class="form-control form-control-sm" autocomplete="new-password" required>
                         </div>
                     </form>
+                    <div class="alert alert-danger d-none mt-2 mb-0 py-2" id="gc-mozo-error"></div>
                 </div>
-                <div class="modal-footer py-2">
-                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary btn-sm" id="gc-mozo-confirmar">Ingresar</button>
+                <div class="modal-footer py-2 d-flex flex-wrap justify-content-between">
+                    <a href="{{ route('inicio') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa fa-sign-out"></i> Salir al menú
+                    </a>
+                    <button type="button" class="btn btn-sm gc-mozo-btn-ingresar" id="gc-mozo-confirmar">Ingresar</button>
                 </div>
             </div>
         </div>
@@ -323,6 +329,7 @@
                                 @endif
                                 <div class="input-group-append">
                                     <button type="button"
+                                            id="gc-btn-lupa-articulo"
                                             class="btn btn-outline-secondary consultaarticulo"
                                             data-solo-facturable="1"
                                             data-requiere-precio="1"

@@ -13,7 +13,12 @@
     <link rel="stylesheet" href="{{ asset("assets/$themeV/plugins/datatables-buttons/css/buttons.bootstrap4.min.css") }}">
     <link rel="stylesheet" href="{{ asset('assets/css/datatable.css') }}">
     <link rel="stylesheet" href="{{ asset("assets/$themeV/dist/css/adminlte.min.css") }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    @include('includes.assets_externos_head', [
+        'incluirIonicons' => false,
+        'incluirFuentes' => false,
+        'incluirToastr' => true,
+        'incluirIeShims' => false,
+    ])
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
     @stack('styles')
     {!! \App\Support\Http\ZiggyRutasScript::html() !!}
@@ -65,8 +70,7 @@
     @yield('scriptsPlugins')
     <script src="{{ asset('assets/js/jquery-validation/jquery.validate.min.js') }}"></script>
     <script src="{{ asset('assets/js/jquery-validation/localization/messages_es.min.js') }}"></script>
-    <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    @include('includes.assets_externos_scripts')
     <script src="{{ asset('assets/js/scripts.js') }}"></script>
     <script src="{{ asset('assets/js/funciones.js') }}"></script>
     <script src="{{ asset('assets/js/grabacion-bloqueo-submit.js') }}?v={{ @filemtime(public_path('assets/js/grabacion-bloqueo-submit.js')) ?: time() }}"></script>

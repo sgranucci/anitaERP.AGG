@@ -261,6 +261,8 @@ class FacturacionService
 	protected $coeficienteExtraCliente;
 	protected $flDivide;
 	protected $flGrabaComprobanteDividido;
+	/** @var string|null IFX_SERVER bridge para escritura/borrado del comprobante actual (Crown: cncadmin). */
+	protected $anitaIfxServerComprobante = null;
 	/** @var list<string> Tablas Anita ya presentes: no reinsertar (regrabación selectiva). */
 	protected $anitaOmitirTablas = [];
 	protected $tasaImpuesto;
@@ -1976,6 +1978,17 @@ class FacturacionService
 		$path = PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($sucursal);
 		if ($path !== null) {
 			$data['path_sistema'] = $path;
+		}
+		$ifx = is_string($this->anitaIfxServerComprobante) ? trim($this->anitaIfxServerComprobante) : '';
+		if ($ifx === '') {
+			return;
+		}
+		$data['ifx_server'] = $ifx;
+		if (! isset($data['path_sistema']) || trim((string) $data['path_sistema']) === '') {
+			$bridge = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura();
+			if ($bridge !== null) {
+				$data['path_sistema'] = $bridge['path_sistema'];
+			}
 		}
 	}
 
@@ -5804,6 +5817,7 @@ class FacturacionService
 
 					if ($deferAnitaAhora) {
 						$ret['anita_pendiente'] = [
+							'venta_id' => (int) $vta->id,
 							'puntoventa_codigo' => $puntoventa->codigo,
 							'letra' => $letra,
 							'puntoventaremito_codigo' => $codigoPuntoventaRemito,
@@ -5826,17 +5840,32 @@ class FacturacionService
 							'omitir_numera_anita_fin' => $omitirNumeraAnitaFin,
 							'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
 							'path_sistema' => PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa->codigo),
+							'ifx_server' => (\App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura()['ifx_server'] ?? null),
 						];
 					} else {
 						$replicacionAnitaIntentada = true;
 						PedidoFacturacionProfiler::etapa('anita_graba_inicio');
+						$ifxCrown = $modoMinimoAnita
+							? (\App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura()['ifx_server'] ?? null)
+							: null;
 						// Graba anita
 						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $codigoPuntoventaRemito, $numeroRemitoGrabado,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
 									true, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
-									$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente,
+									$empresa->codigo, null, $ifxCrown, $modoMinimoAnita, $omitirCuentaCorriente,
 									$omitirStkmovAnita, $omitirNumeraAnitaFin, $puntoventa->modofacturacion ?? null);
+						if ($modoMinimoAnita && ! (is_array($anita) && isset($anita['error']))) {
+							\App\Support\Ventas\GastronomiaCrown\GastronomiaAnitaResvtaCrownSupport::grabarTrasVenta(
+								(int) $vta->id,
+								[
+									'puntoventa_codigo' => $puntoventa->codigo,
+									'codigo_centrocosto' => $codigoCentrocosto,
+									'path_sistema' => PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa->codigo),
+									'ifx_server' => $ifxCrown,
+								],
+							);
+						}
 
 						PedidoFacturacionProfiler::etapa('anita_graba_fin');
 
@@ -6063,15 +6092,26 @@ class FacturacionService
 			}
 		}
 
-		self::borraAnita(
-			substr($codigo, 0, 3),
-			$letra,
-			$puntoventa->codigo,
-			$venta->numerocomprobante,
-			$empresa->codigo,
-			$omitirContabilidadAnita,
-			$puntoventa->modofacturacion ?? null,
-		);
+		$prevIfx = $this->anitaIfxServerComprobante;
+		if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+			$bridge = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscrituraDesdeVenta($venta);
+			if ($bridge !== null) {
+				$this->anitaIfxServerComprobante = $bridge['ifx_server'];
+			}
+		}
+		try {
+			self::borraAnita(
+				substr($codigo, 0, 3),
+				$letra,
+				$puntoventa->codigo,
+				$venta->numerocomprobante,
+				$empresa->codigo,
+				$omitirContabilidadAnita,
+				$puntoventa->modofacturacion ?? null,
+			);
+		} finally {
+			$this->anitaIfxServerComprobante = $prevIfx;
+		}
 	}
 
 	/**
@@ -6110,6 +6150,10 @@ class FacturacionService
 			'total' => abs((float) ($ventaArray['total'] ?? 0)),
 		]];
 
+		$ifxCrown = $modoMinimoAnita
+			? (\App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura()['ifx_server'] ?? null)
+			: null;
+
 		return $this->grabaAnitaConReintentoPorDuplicado(
 			$puntoventa->codigo,
 			$letra,
@@ -6129,7 +6173,7 @@ class FacturacionService
 			'',
 			$empresa->codigo,
 			null,
-			null,
+			$ifxCrown,
 			$modoMinimoAnita,
 			$sinCuentaCorrienteAnita,
 			$omitirStkmovAnita,
@@ -6594,6 +6638,40 @@ class FacturacionService
 	}
 
 	public function grabaAnita($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
+								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
+								$codigoTipoTransaccion, $pedido_id,
+								$flGrabaStock, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura, 
+								$servidor = null, $ifx_server = null, bool $modoMinimoAnita = false,
+								bool $sinCuentaCorrienteAnita = false, bool $omitirStkmovAnita = false,
+								bool $omitirNumeraAnitaFin = false, ?string $modoFacturacionPuntoventa = null)
+	{
+		$prevIfx = $this->anitaIfxServerComprobante;
+		$ifxTrim = is_string($ifx_server) ? trim($ifx_server) : '';
+		if ($ifxTrim !== '') {
+			$this->anitaIfxServerComprobante = $ifxTrim;
+		} elseif ($modoMinimoAnita && \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+			$bridge = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura();
+			if ($bridge !== null) {
+				$this->anitaIfxServerComprobante = $bridge['ifx_server'];
+			}
+		}
+
+		try {
+			return $this->grabaAnitaBody(
+				$puntoventa, $letra, $puntoventaremito, $numeroremito, $venta,
+				$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo,
+				$codigoTipoTransaccion, $pedido_id,
+				$flGrabaStock, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura,
+				$servidor, $ifx_server, $modoMinimoAnita,
+				$sinCuentaCorrienteAnita, $omitirStkmovAnita,
+				$omitirNumeraAnitaFin, $modoFacturacionPuntoventa
+			);
+		} finally {
+			$this->anitaIfxServerComprobante = $prevIfx;
+		}
+	}
+
+	private function grabaAnitaBody($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
 								$codigoTipoTransaccion, $pedido_id,
 								$flGrabaStock, $numeroOrdenventa, $codigoCentrocosto, $referenciaFactura, 
@@ -8889,6 +8967,10 @@ class FacturacionService
 		}
 
 		PedidoFacturacionProfiler::etapa('anita_graba_inicio');
+		$ifxPendiente = trim((string) ($anitaPendiente['ifx_server'] ?? ''));
+		if ($ifxPendiente === '' && ! empty($anitaPendiente['modo_minimo_anita'])) {
+			$ifxPendiente = (string) (\App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::parametrosEscritura()['ifx_server'] ?? '');
+		}
 		$anita = $this->grabaAnitaConReintentoPorDuplicado(
 			$anitaPendiente['puntoventa_codigo'] ?? 0,
 			(string) ($anitaPendiente['letra'] ?? ''),
@@ -8908,7 +8990,7 @@ class FacturacionService
 			(string) ($anitaPendiente['referencia_factura'] ?? ''),
 			$anitaPendiente['empresa_codigo'] ?? '',
 			null,
-			null,
+			$ifxPendiente !== '' ? $ifxPendiente : null,
 			! empty($anitaPendiente['modo_minimo_anita']),
 			! empty($anitaPendiente['omitir_cuenta_corriente_anita']),
 			! empty($anitaPendiente['omitir_stkmov_anita']),
@@ -8925,6 +9007,17 @@ class FacturacionService
 			$detalle = trim((string) ($anita['mensaje'] ?? $anita['error'] ?? 'Error desconocido'));
 
 			throw new \RuntimeException('Error en grabación Anita: '.$detalle);
+		}
+
+		// Crown: resumen POS en resvta (a-comandera), además de venta/vengrav/vencae.
+		if (! empty($anitaPendiente['modo_minimo_anita'])) {
+			$ventaIdResvta = (int) ($anitaPendiente['venta_id'] ?? $venta['id'] ?? 0);
+			if ($ventaIdResvta > 0) {
+				\App\Support\Ventas\GastronomiaCrown\GastronomiaAnitaResvtaCrownSupport::grabarTrasVenta(
+					$ventaIdResvta,
+					$anitaPendiente,
+				);
+			}
 		}
 	}
 
@@ -9008,6 +9101,15 @@ class FacturacionService
 				venc_sucursal = '".$puntoventa."' AND
 				venc_nro = '".$numero."'
 		", $puntoventa);
+
+		if ($omitirContabilidadAnita || \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+			$this->borraAnitaDeleteSeguro('resvta', 'resvta delete', 'ventas', "
+				WHERE resv_tipo = '".$tipo."' AND
+					resv_letra = '".$letra."' AND
+					resv_sucursal = '".$puntoventa."' AND
+					resv_nro = '".$numero."'
+			", $puntoventa);
+		}
 
 		$tipoVentaAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge($tipo, $puntoventa, $empresa, $modoFacturacionPuntoventa);
 

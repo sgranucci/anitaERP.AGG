@@ -2,6 +2,9 @@
 # Envía un ticket ESC/POS (binario) a impresora térmica en red (puerto raw, habitual 9100).
 # Uso en tabla salida.comando:
 #   /var/www/html/anitaERP/bin/gastronomia-print-ticket.sh "%s" IP_IMPRESORA [PUERTO]
+#
+# netcat-traditional: -q 0 cierra al terminar de enviar (sin esperar que la impresora
+# cierre el socket; sin eso nc puede colgar ~20s y el ticket parece “no imprimir”).
 set -euo pipefail
 
 FILE="${1:?falta ruta del archivo ticket}"
@@ -14,7 +17,13 @@ if [[ ! -f "$FILE" ]]; then
 fi
 
 if command -v nc >/dev/null 2>&1; then
-  nc -w 10 "$HOST" "$PORT" < "$FILE"
+  if nc -h 2>&1 | grep -q -- '-q'; then
+    nc -q 0 -w 10 "$HOST" "$PORT" < "$FILE"
+  elif nc -h 2>&1 | grep -q -- '-N'; then
+    nc -N -w 10 "$HOST" "$PORT" < "$FILE"
+  else
+    nc -w 10 "$HOST" "$PORT" < "$FILE"
+  fi
 elif command -v bash >/dev/null 2>&1; then
   exec 3<>/dev/tcp/"$HOST"/"$PORT"
   cat "$FILE" >&3

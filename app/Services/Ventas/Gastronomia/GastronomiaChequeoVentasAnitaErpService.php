@@ -908,6 +908,7 @@ final class GastronomiaChequeoVentasAnitaErpService
         string $tipo,
         int $numero,
         string $letra = 'B',
+        ?string $salaCodigo = null,
     ): array {
         if ($sucursal <= 0 || $tipo === '' || $numero <= 0) {
             return ['cabecera' => null, 'error_lectura' => null];
@@ -919,7 +920,7 @@ final class GastronomiaChequeoVentasAnitaErpService
             ." AND ven_nro = '".$numero."'"
             ." AND ven_letra = '".addslashes($letra)."' ";
 
-        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+        $payload = [
             'acc' => 'list',
             'tabla' => 'venta',
             'campos' => implode(',', [
@@ -928,7 +929,11 @@ final class GastronomiaChequeoVentasAnitaErpService
                 'ven_monto', 'ven_gravado', 'ven_exento', 'ven_impuesto1', 'ven_monto_desc',
             ]),
             'whereArmado' => $where,
-        ]));
+        ];
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+            $payload = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::mergePayload($payload, $salaCodigo);
+        }
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($payload));
 
         return [
             'cabecera' => $parsed['filas'][0] ?? null,
@@ -989,7 +994,9 @@ final class GastronomiaChequeoVentasAnitaErpService
             return ['cabecera' => null, 'error_lectura' => 'Código de comprobante ERP no reconocido'];
         }
 
-        return $this->consultarCabeceraAnitaDesdeClaveErp($clave, $puntoventa);
+        $salaCodigo = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::salaCodigoDesdeVenta($venta);
+
+        return $this->consultarCabeceraAnitaDesdeClaveErp($clave, $puntoventa, $salaCodigo);
     }
 
     private function tipoAnitaConsultaDesdeErp(string $tipoErp, Puntoventa $puntoventa): string
@@ -1124,7 +1131,7 @@ final class GastronomiaChequeoVentasAnitaErpService
     /**
      * @return array{cabecera: ?object, error_lectura: ?string}
      */
-    private function consultarCabeceraAnitaDesdeClaveErp(string $clave, Puntoventa $puntoventa): array
+    private function consultarCabeceraAnitaDesdeClaveErp(string $clave, Puntoventa $puntoventa, ?string $salaCodigo = null): array
     {
         $partes = GastronomiaAnitaComprobantePkSupport::parseClaveVenta($clave);
         if ($partes === null) {
@@ -1140,6 +1147,7 @@ final class GastronomiaChequeoVentasAnitaErpService
                 $tipo,
                 $partes['numero'],
                 $partes['letra'],
+                $salaCodigo,
             );
             if ($consulta['error_lectura'] !== null) {
                 $ultimoError = $consulta['error_lectura'];

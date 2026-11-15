@@ -72,6 +72,14 @@ final class EscPosTicketWriter
         return $this;
     }
 
+    /** Solo doble alto (GS ! 0x01): un paso más grande sin achicar el ancho útil. */
+    public function dobleAlto(bool $on = true): self
+    {
+        $this->buffer .= $on ? "\x1d\x21\x01" : "\x1d\x21\x00";
+
+        return $this;
+    }
+
     public function texto(string $linea): self
     {
         $this->buffer .= $this->codificar($linea);
@@ -125,6 +133,20 @@ final class EscPosTicketWriter
         $this->alinearCentro();
         $this->negrita(true);
         $this->linea($this->truncar($texto, $this->ancho));
+        $this->negrita(false);
+        $this->alinearIzquierda();
+
+        return $this;
+    }
+
+    /** Negrita centrada + doble alto (nombres largos tipo Crown siguen entrando a ancho completo). */
+    public function textoCentradoNegritaDobleAlto(string $texto): self
+    {
+        $this->alinearCentro();
+        $this->negrita(true);
+        $this->dobleAlto(true);
+        $this->linea($this->truncar($texto, $this->ancho));
+        $this->dobleAlto(false);
         $this->negrita(false);
         $this->alinearIzquierda();
 

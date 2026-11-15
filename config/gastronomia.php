@@ -168,6 +168,7 @@ return [
 
     /**
      * Gastronomía: en Anita venta + vengrav + vencae; omite comprob, compaux, venibr, climov.
+     * Crown: además resvta (resumen POS, paridad a-comandera.c) vía GastronomiaAnitaResvtaCrownSupport.
      * stkmov por plato: anita_omitir_stkmov (solo gastronomía; Ventas/administración no usa esta clave).
      * Insumos por fórmula: anita_replicar_insumos_al_facturar.
      */
@@ -453,6 +454,9 @@ return [
 
     /** Tamaño del QR en impresora Epson (1–8). */
     'ticket_qr_size' => max(1, min(8, (int) env('GASTRONOMIA_TICKET_QR_SIZE', 6))),
+
+    /** Líneas en blanco tras el QR antes del corte (evita QR cortado al saltar el papel). */
+    'ticket_feed_final' => max(3, (int) env('GASTRONOMIA_TICKET_FEED_FINAL', 5)),
 
     /** Timeout del comando de salida (segundos). */
     'ticket_comando_timeout_segundos' => max(5, (int) env('GASTRONOMIA_TICKET_COMANDO_TIMEOUT', 30)),
@@ -973,6 +977,15 @@ return [
          */
         'emision_fiscal_habilitada' => filter_var(
             env('GASTRONOMIA_CROWN_EMISION_FISCAL_HABILITADA', true),
+            FILTER_VALIDATE_BOOLEAN,
+        ),
+
+        /**
+         * true: al cobrar exige habilitación conforme / caja abierta en tesorería (COMAND_verifica_caja_abierta).
+         * false: omite el control (pruebas POS sin HAB). Volver a true en operación real.
+         */
+        'exigir_caja_abierta_tesoreria' => filter_var(
+            env('GASTRONOMIA_CROWN_EXIGIR_CAJA_ABIERTA_TESORERIA', false),
             FILTER_VALIDATE_BOOLEAN,
         ),
 

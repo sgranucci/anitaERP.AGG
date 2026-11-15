@@ -239,8 +239,9 @@ final class GastronomiaFacturaTicketService
         $letra = $this->letraComprobante($venta);
         $codigoAfip = $this->codigoComprobanteAfip($venta, $letra);
 
-        // —— Cabecera emisor (como ticket de referencia) ——
-        $w->titulo($nombreEmpresa);
+        // —— Cabecera emisor ——
+        // Doble alto (no doble ancho): "Emprendimientos Crown SA" entra entero a 42 cols.
+        $w->textoCentradoNegritaDobleAlto($nombreEmpresa);
 
         $lineaDomicilio = $this->lineaDomicilioTicket($pv, $empresa);
         if ($lineaDomicilio !== '') {
@@ -396,7 +397,7 @@ final class GastronomiaFacturaTicketService
             Log::warning('gastronomia.ticket_factura.qr', ['venta_id' => $venta->id, 'msg' => $e->getMessage()]);
         }
 
-        $w->feed(3);
+        $w->feed(max(3, (int) config('gastronomia.ticket_feed_final', 5)));
         $w->cortar();
 
         $this->ultimaVistaPreviaTexto = $w->textoPlanoVistaPrevia();

@@ -640,7 +640,8 @@
             var ventaId = btnTicket.getAttribute('data-venta-id');
             if (!ventaId || btnTicket.disabled) return;
             btnTicket.disabled = true;
-            fetch('{{ route('gastronomia_facturas_dia_reimprimir_ticket', ['ventaId' => $venta->id]) }}', {
+            var base = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/ventas/gastronomia/facturas-dia';
+            fetch(base + '/' + ventaId + '/reimprimir-ticket', {
                 method: 'POST',
                 headers: {
                     'X-CSRF-TOKEN': csrf,

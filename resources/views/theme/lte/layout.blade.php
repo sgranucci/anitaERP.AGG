@@ -27,15 +27,14 @@
   	<link rel="stylesheet" href="{{asset("assets/$theme/plugins/datatables-responsive/css/responsive.bootstrap4.min.css")}}">
   	<link rel="stylesheet" href="{{asset("assets/$theme/plugins/datatables-buttons/css/buttons.bootstrap4.min.css")}}">
 	<link rel="stylesheet" href="{{asset("assets/css/datatable.css")}}">
-    <!-- Ionicons -->
-    <link rel="stylesheet" href="https://code.ionicframework.com/ionicons/2.0.1/css/ionicons.min.css">
     <!-- Theme style -->
     <link rel="stylesheet" href="{{asset("assets/$theme/dist/css/adminlte.min.css")}}">
-    <!-- AdminLTE Skins. Choose a skin from the css/skins -->
-    <!-- Google Font: Source Sans Pro -->
-    <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700" rel="stylesheet">
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    @include('includes.assets_externos_head', [
+        'incluirIonicons' => true,
+        'incluirFuentes' => true,
+        'incluirToastr' => true,
+        'incluirIeShims' => true,
+    ])
 
     @yield("styles")
 
@@ -57,15 +56,6 @@
     @endauth
 
     {!! \App\Support\Http\ZiggyRutasScript::html() !!}
-    <!-- HTML5 Shim and Respond.js IE8 support of HTML5 elements and media queries -->
-    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
-    <!--[if lt IE 9]>
-      <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
-      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
-      <![endif]-->
-
-    <!-- Google Font -->
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}{{ $modoEmbed ? ' modo-embed' : '' }}">
@@ -228,8 +218,7 @@
     @yield("scriptsPlugins")
     <script src="{{asset("assets/js/jquery-validation/jquery.validate.min.js")}}"></script>
     <script src="{{asset("assets/js/jquery-validation/localization/messages_es.min.js")}}"></script>
-    <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    @include('includes.assets_externos_scripts')
     <script src="{{ asset('assets/js/scripts.js') }}?v={{ @filemtime(public_path('assets/js/scripts.js')) ?: time() }}"></script>
     <script src="{{ asset('assets/js/funciones.js') }}?v={{ @filemtime(public_path('assets/js/funciones.js')) ?: time() }}"></script>
     <script src="{{ asset('assets/pages/scripts/ventas/cliente/politica-comercial.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/politica-comercial.js')) ?: time() }}"></script>

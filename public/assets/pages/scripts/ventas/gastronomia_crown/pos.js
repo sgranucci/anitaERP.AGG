@@ -45,36 +45,87 @@
         btnOut.removeClass('d-none');
     }
 
+    function esErrorSesionMozo(mensaje) {
+        var m = String(mensaje || '').toLowerCase();
+        return m.indexOf('sesi') !== -1 && m.indexOf('mozo') !== -1;
+    }
+
+    /** Igual que canjes AGG: modal al body + foco en código. */
+    function mostrarLoginMozo(opts) {
+        opts = opts || {};
+        var $m = $('#gc-modal-mozo');
+        if ($m.length && !$m.parent().is('body')) {
+            $m.appendTo('body');
+        }
+        $('#gc-mozo-error').addClass('d-none').text('');
+        if (!opts.conservarForm) {
+            var form = document.getElementById('gc-form-mozo');
+            if (form) {
+                form.reset();
+            }
+        }
+        $m.modal({ backdrop: 'static', keyboard: false, show: true });
+        setTimeout(function () { $('#gc-mozo-codigo').trigger('focus'); }, 200);
+    }
+
     function exigirMozoSesion() {
         if (estado.mozo && estado.mozo.id) {
             return true;
         }
         toast('Ingrese el mozo (código y clave) para operar.', 'warning');
-        $('#gc-modal-mozo').modal('show');
-        setTimeout(function () { $('#gc-mozo-codigo').trigger('focus'); }, 200);
+        mostrarLoginMozo();
         return false;
+    }
+
+    /**
+     * Paridad canjes AGG: al terminar una tarea (cobrar / cerrar) limpia cuenta,
+     * desconecta mozo y vuelve al login.
+     */
+    function volverLoginMozoTrasTarea() {
+        aplicarCuenta(null);
+        estado.lineaSeleccionadaId = null;
+        if (cfg.urls.mozoLogout) {
+            post(cfg.urls.mozoLogout, {}).always(function () {
+                pintarMozoSesion(null);
+                mostrarLoginMozo();
+            });
+            return;
+        }
+        pintarMozoSesion(null);
+        mostrarLoginMozo();
     }
 
     function confirmarLoginMozo() {
         var codigo = String($('#gc-mozo-codigo').val() || '').trim();
         var clave = String($('#gc-mozo-clave').val() || '');
-        if (!codigo || !clave) {
-            toast('Complete código y clave.', 'warning');
+        var $err = $('#gc-mozo-error');
+        $err.addClass('d-none').text('');
+        if (!codigo) {
+            $err.removeClass('d-none').text('Indique el código del mozo.');
+            $('#gc-mozo-codigo').trigger('focus');
+            return;
+        }
+        if (!clave) {
+            $err.removeClass('d-none').text('Indique la clave.');
+            $('#gc-mozo-clave').trigger('focus');
             return;
         }
         post(cfg.urls.mozoLogin, { codigo: codigo, clave: clave })
             .done(function (res) {
                 if (!res || !res.ok) {
-                    toast((res && res.mensaje) || 'No se pudo ingresar', 'error');
+                    $err.removeClass('d-none').text((res && res.mensaje) || 'No se pudo ingresar');
                     return;
                 }
                 pintarMozoSesion(res.mozo);
                 $('#gc-modal-mozo').modal('hide');
                 $('#gc-form-mozo')[0].reset();
                 toast('Mozo en sesión: ' + (res.mozo.nombre || ''), 'success');
+                $('#gc-codigo-articulo').trigger('focus');
             })
             .fail(function (xhr) {
-                toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo ingresar', 'error');
+                $err.removeClass('d-none').text(
+                    (xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo ingresar'
+                );
             });
     }
 
@@ -126,12 +177,33 @@
         }, segundos * 1000);
     }
 
-    function toast(msg, tipo) {
-        if (window.toastr) {
-            toastr[tipo || 'info'](msg);
+    /** Avisos post-emisión (CAEA / impresora): solo toast, nunca modal ni alert (paridad AGG). */
+    function esAvisoInformativoPostEmision(msg) {
+        var s = String(msg || '').toLowerCase();
+        return /modo caea|contingencia arca|no se consult[aó] el web service en línea|enviado a la impresora|reimprimir ticket|impresión térmica|impresion termica|sin confirmación de papel|sin confirmacion de papel/i.test(s);
+    }
+
+    function toast(msg, tipo, opts) {
+        opts = opts || {};
+        var t = tipo || 'info';
+        var texto = String(msg || '');
+        if (!texto) {
             return;
         }
-        window.alert(msg);
+        // Nunca alert/modal para avisos del POS (AGG usa toast; modal solo en casos graves AGG).
+        if (window.toastr) {
+            var toastrOpts = {
+                closeButton: true,
+                timeOut: opts.soloToast || esAvisoInformativoPostEmision(texto) ? 12000 : 5000,
+                extendedTimeOut: 4000,
+                progressBar: true
+            };
+            toastr[t](texto, '', toastrOpts);
+            return;
+        }
+        if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[POS Crown]', t, texto);
+        }
     }
 
     function money(n) {
@@ -151,6 +223,12 @@
             method: 'POST',
             data: data || {},
             headers: { 'X-CSRF-TOKEN': csrf() }
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) || '';
+            if (esErrorSesionMozo(msg)) {
+                pintarMozoSesion(null);
+                mostrarLoginMozo();
+            }
         });
     }
 
@@ -159,6 +237,9 @@
     }
 
     function requiereCuenta() {
+        if (!exigirMozoSesion()) {
+            return false;
+        }
         if (!estado.cuentaId) {
             toast('Seleccione o abra una mesa/cuenta.', 'warning');
             return false;
@@ -223,6 +304,7 @@
         }
         pintarPlanos();
         actualizarBotonesCierreCuenta();
+        sincronizarLupaCargaArticulo();
         $('#gc-codigo-articulo').trigger('focus');
         $('.gc-pos-topbar').addClass('gc-pulse');
         setTimeout(function () { $('.gc-pos-topbar').removeClass('gc-pulse'); }, 450);
@@ -719,8 +801,8 @@
                     return;
                 }
                 toast(resp.mensaje || 'Cuenta cerrada', 'success');
-                aplicarCuenta(null);
                 cargarMesasOCuentas();
+                volverLoginMozoTrasTarea();
             })
             .fail(function (xhr) {
                 toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo cerrar', 'error');
@@ -747,7 +829,7 @@
                     return;
                 }
                 toast(resp.mensaje || ((resp.cerradas || 0) + ' cuentas cerradas'), 'success');
-                aplicarCuenta(null);
+                volverLoginMozoTrasTarea();
                 cargarMesasOCuentas();
             })
             .fail(function (xhr) {
@@ -1388,13 +1470,81 @@
             });
     }
 
+    function hayCuentaActiva() {
+        return !!estado.cuentaId;
+    }
+
+    /** Sin cuenta/mesa: lupa del cuadro de carga deshabilitada. Con cuenta: habilitada. */
+    function sincronizarLupaCargaArticulo() {
+        var $lupa = $('#gc-btn-lupa-articulo');
+        if (!$lupa.length) {
+            return;
+        }
+        if (hayCuentaActiva()) {
+            $lupa.prop('disabled', false).removeClass('disabled').attr('title', 'Consulta artículos (F1)');
+            return;
+        }
+        $lupa.prop('disabled', true).addClass('disabled')
+            .attr('title', 'Abrí una mesa o cuenta para buscar con la lupa. Usá F1 Consulta para consultar artículos.');
+    }
+
+    /** Abre el modal (barra F1 Consulta / herramienta). Sin cuenta también: solo consulta. */
     function consultarArticulo() {
-        var $btn = $('#gc-campo-articulo .consultaarticulo');
+        var $btn = $('#gc-btn-lupa-articulo');
+        if (!$btn.length) {
+            $btn = $('#gc-campo-articulo .consultaarticulo');
+        }
         if (!$btn.length) {
             return;
         }
         $('#gc-campo-articulo .codigoarticulo').val($.trim($('#gc-codigo-articulo').val()));
+        // El botón lupa puede estar disabled: abrir el modal a mano con los mismos data-*.
+        if ($btn.prop('disabled')) {
+            abrirModalConsultaArticuloDesdeBoton($btn);
+            return;
+        }
         $btn.trigger('click');
+    }
+
+    function abrirModalConsultaArticuloDesdeBoton($btn) {
+        if (typeof window.activa_eventos_consultaarticulo !== 'function' && !$('#consultaarticuloModal').length) {
+            return;
+        }
+        // Reutiliza el click handler de consulta.js sin depender del disabled del control.
+        var el = $btn.get(0);
+        if (!el) {
+            return;
+        }
+        $btn.prop('disabled', false);
+        try {
+            $btn.trigger('click');
+        } finally {
+            sincronizarLupaCargaArticulo();
+        }
+    }
+
+    function agregarLineaDesdeArticuloElegido(data) {
+        if (!data || !data.sku) {
+            return;
+        }
+        if (!hayCuentaActiva()) {
+            toast('Seleccioná mesa o cuenta para cargar el artículo.', 'warning');
+            return;
+        }
+        var areaId = $('#gc-area-kds').val();
+        var payload = {
+            sku: String(data.sku),
+            cantidad: parseFloat($('#gc-cantidad').val()) || 1,
+            prepara: $('#gc-prepara').is(':checked') ? 1 : 0
+        };
+        if (areaId) {
+            payload.area_comanda_gastronomia_id = parseInt(areaId, 10);
+        }
+        if (data.descripcion) {
+            setDescCarga(data.descripcion);
+        }
+        $('#gc-codigo-articulo').val(sufijoVisible(data.sku));
+        agregarLinea(payload);
     }
 
     function descuentoMesa() {
@@ -1822,10 +1972,11 @@
                 }
                 toast(resp.mensaje || ('Cobrado: ' + money((resp.totales && resp.totales.total) || total)), 'success');
                 if (resp.warn) {
-                    toast(resp.warn, 'warning');
+                    // CAEA / impresora: toast informativo (como AGG esAvisoInformativoPostEmision).
+                    toast(resp.warn, 'warning', { soloToast: true });
                 }
-                aplicarCuenta(null);
                 cargarMesasOCuentas();
+                volverLoginMozoTrasTarea();
             })
             .fail(function (xhr) {
                 toast((xhr.responseJSON && xhr.responseJSON.mensaje) || 'Error al cobrar', 'error');
@@ -1917,6 +2068,10 @@
         var key = e.key;
         if (key === 'F1') {
             e.preventDefault();
+            // Sin cuenta/mesa: F1 desde el cuadro de carga no abre. Usar botón F1 Consulta.
+            if (!hayCuentaActiva() && $(e.target).closest('#gc-campo-articulo, #gc-codigo-articulo').length) {
+                return;
+            }
             $('#gc-btn-f1').trigger('click');
             return;
         }
@@ -2040,20 +2195,10 @@
             $('#gc-f8-autorizante-codigo').trigger('focus');
         });
 
-        $('#gc-campo-articulo .consultaarticulo').on('click', function () {
+        // Lupa del cuadro: sin cuenta queda disabled (sincronizarLupaCargaArticulo).
+        // Clic real solo con cuenta; F1 Consulta abre el modal aunque la lupa esté disabled.
+        $('#gc-campo-articulo').on('click', '#gc-btn-lupa-articulo', function () {
             $('#gc-campo-articulo .codigoarticulo').val($.trim($('#gc-codigo-articulo').val()));
-        });
-
-        $(document).on('click', '#consultaarticuloModal .eligeconsultaarticulo', function () {
-            var $fila = $(this).closest('tr');
-            var sku = $.trim($fila.find('.sku').text());
-            var nombre = $.trim($fila.find('.descripcion').text());
-            if (sku) {
-                $('#gc-codigo-articulo').val(sufijoVisible(sku));
-            }
-            if (nombre) {
-                setDescCarga(nombre);
-            }
         });
 
         var alElegirArticuloPrevio = window.onArticuloSeleccionado;
@@ -2064,27 +2209,40 @@
             if (!$('#gc-campo-articulo').length || !data || !data.sku) {
                 return;
             }
-            $('#gc-codigo-articulo').val(sufijoVisible(data.sku));
-            if (data.descripcion) {
-                setDescCarga(data.descripcion);
-            }
-            $('#gc-codigo-articulo').trigger('blur');
-            $('#gc-codigo-articulo').trigger('focus');
+            // Elegir en el modal → alta en la grilla de la cuenta/mesa activa.
+            agregarLineaDesdeArticuloElegido(data);
         };
+
+        sincronizarLupaCargaArticulo();
 
         $('#gc-btn-refresh-mesas').on('click', cargarMesasOCuentas);
         $('#gc-btn-nueva-cuenta').on('click', abrirCuentaLibre);
         $('#gc-btn-cerrar-cuenta').on('click', cerrarCuentaActivaSinFacturar);
         $('#gc-btn-cerrar-todas').on('click', cerrarTodasCuentasSinFacturar);
+        if ($('#gc-modal-mozo').length && !$('#gc-modal-mozo').parent().is('body')) {
+            $('#gc-modal-mozo').appendTo('body');
+        }
+        $('#gc-modal-mozo')
+            .off('shown.bs.modal.gcMozo')
+            .on('shown.bs.modal.gcMozo', function () {
+                $('#gc-mozo-codigo').trigger('focus');
+            })
+            .off('hidden.bs.modal.gcMozo')
+            .on('hidden.bs.modal.gcMozo', function () {
+                // Igual canjes: si cerró sin mozo, volver a pedir login.
+                if (!estado.mozo || !estado.mozo.id) {
+                    setTimeout(function () { mostrarLoginMozo(); }, 80);
+                }
+            });
         $('#gc-btn-mozo-login').on('click', function () {
-            $('#gc-modal-mozo').modal('show');
-            setTimeout(function () { $('#gc-mozo-codigo').trigger('focus'); }, 200);
+            mostrarLoginMozo();
         });
         $('#gc-btn-mozo-logout').on('click', function () {
             post(cfg.urls.mozoLogout, {})
                 .done(function () {
                     pintarMozoSesion(null);
                     toast('Mozo desconectado', 'info');
+                    mostrarLoginMozo();
                 });
         });
         $('#gc-mozo-confirmar').on('click', confirmarLoginMozo);
@@ -2092,13 +2250,54 @@
             e.preventDefault();
             confirmarLoginMozo();
         });
+        // Enter: código → clave → ingresar (paridad canjes AGG; sin data-enter-campos).
+        var codigoMozoEl = document.getElementById('gc-mozo-codigo');
+        if (codigoMozoEl) {
+            codigoMozoEl.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.keyCode !== 13) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) {
+                    e.stopImmediatePropagation();
+                }
+                var cod = String($('#gc-mozo-codigo').val() || '').trim();
+                var $err = $('#gc-mozo-error');
+                if (!cod) {
+                    $err.removeClass('d-none').text('Indique el código del mozo.');
+                    return;
+                }
+                $err.addClass('d-none').text('');
+                $('#gc-mozo-clave').trigger('focus').trigger('select');
+            }, true);
+        }
+        var claveMozoEl = document.getElementById('gc-mozo-clave');
+        if (claveMozoEl) {
+            claveMozoEl.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.keyCode !== 13) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) {
+                    e.stopImmediatePropagation();
+                }
+                confirmarLoginMozo();
+            }, true);
+        }
+        // Al entrar al POS: siempre pedir mozo (paridad canjes AGG — no reutilizar sesión).
         if (cfg.urls.config) {
-            $.getJSON(cfg.urls.config)
-                .done(function (resp) {
-                    if (resp && resp.ok) {
-                        pintarMozoSesion(resp.mozo || null);
-                    }
-                });
+            $.getJSON(cfg.urls.config);
+        }
+        pintarMozoSesion(null);
+        if (cfg.urls.mozoLogout) {
+            post(cfg.urls.mozoLogout, {}).always(function () {
+                pintarMozoSesion(null);
+                mostrarLoginMozo();
+            });
+        } else {
+            mostrarLoginMozo();
         }
 
         $('#gc-panel-mesas, #gc-panel-cuentas').on('click', '.gc-mesa-btn', function () {

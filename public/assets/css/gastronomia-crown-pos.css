@@ -599,9 +599,12 @@
     z-index: 2060 !important;
 }
 
-/* Cobranza multi-medio + F8 (solo POS Crown) */
+/* Cobranza multi-medio + F8 + login mozo (solo POS Crown) */
 .gc-cobro-modal .modal-content,
-.gc-f8-modal .modal-content {
+.gc-f8-modal .modal-content,
+.modal-content.gc-cobro-modal,
+.modal-content.gc-f8-modal,
+.modal-content.gc-mozo-modal {
     border: 0;
     border-radius: 1rem;
     overflow: hidden;
@@ -609,11 +612,42 @@
 }
 
 .gc-cobro-header,
-.gc-f8-header {
+.gc-f8-header,
+.gc-mozo-header {
     background: linear-gradient(115deg, #0d2137 0%, #1a6b9a 55%, #c45c26 140%);
     color: #f8fbff;
     border: 0;
     align-items: flex-start;
+}
+
+.gc-mozo-sub {
+    opacity: 0.82;
+    font-size: 0.82rem;
+    margin-top: 0.2rem;
+}
+
+.gc-mozo-modal .modal-body {
+    background: #f3f6f9;
+}
+
+.gc-mozo-modal .modal-footer {
+    background: #eef3f8;
+    border-top: 1px solid #c5d4e2;
+}
+
+.gc-mozo-btn-ingresar {
+    background: linear-gradient(180deg, #1a6b9a 0%, #15587f 100%);
+    border: 1px solid #0d2137;
+    color: #f8fbff;
+    font-weight: 600;
+    min-width: 6.5rem;
+}
+
+.gc-mozo-btn-ingresar:hover,
+.gc-mozo-btn-ingresar:focus {
+    background: linear-gradient(180deg, #2080b5 0%, #1a6b9a 100%);
+    border-color: #0d2137;
+    color: #fff;
 }
 
 .gc-cobro-sub {

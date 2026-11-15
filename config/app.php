@@ -21,6 +21,12 @@ return [
     'app_carpeta' => env('APP_CARPETA', '/anitaERP/public'),
 
     /*
+    | CSS/JS de layout (toastr, sweetalert, fuentes, ionicons): true = CDN; false = estáticos locales.
+    | Default true (AGG y resto). Crown sin salida a Internet: ASSETS_CDN=false.
+    */
+    'assets_cdn' => filter_var(env('ASSETS_CDN', true), FILTER_VALIDATE_BOOLEAN),
+
+    /*
     | When true, opening the stock article list runs Anita sync in the same HTTP request, which can
     | exceed reverse-proxy limits and return 504 Gateway Timeout.
     */

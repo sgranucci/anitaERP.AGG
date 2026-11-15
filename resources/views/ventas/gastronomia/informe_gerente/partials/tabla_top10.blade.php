@@ -14,8 +14,8 @@
                 <td>{{ $i + 1 }}</td>
                 <td>{{ $fila['sku'] }}</td>
                 <td>{{ $fila['descripcion'] }}</td>
-                <td class="text-right">{{ number_format($fila['cantidad'], 2, ',', '.') }}</td>
-                <td class="text-right">${{ number_format($fila['importe'], 2, ',', '.') }}</td>
+                <td class="text-right">{{ number_format((float) ($fila['cantidad'] ?? 0), 2, ',', '.') }}</td>
+                <td class="text-right">${{ number_format((float) ($fila['importe'] ?? 0), 2, ',', '.') }}</td>
             </tr>
         @empty
             <tr><td colspan="5" class="text-center text-muted">Sin ventas en el período.</td></tr>

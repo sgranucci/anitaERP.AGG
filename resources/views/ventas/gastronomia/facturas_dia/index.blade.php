@@ -14,6 +14,11 @@
 (function () {
     var csrfToken = document.querySelector('meta[name="csrf-token"]');
     var token = csrfToken ? csrfToken.getAttribute('content') : '';
+    // Misma origen que la barra del navegador (no APP_URL): si se entra por alias
+    // (anita / server1ng) un url() absoluto a 192.168.1.3 pierde la cookie de sesión.
+    function fdApiBase() {
+        return (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/ventas/gastronomia/facturas-dia';
+    }
 
     function leerRespuesta(r) {
         return r.text().then(function (txt) {
@@ -37,7 +42,7 @@
     }
 
     function refrescarCsrfToken() {
-        return fetch('{{ route('csrf_token_refresh') }}', {
+        return fetch((typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/csrf-token', {
             headers: { 'Accept': 'application/json' },
             credentials: 'same-origin',
             cache: 'no-store',
@@ -72,7 +77,7 @@
             if (typeof $ !== 'undefined') {
                 $('#modal-fd-tickets-tarjeta').modal('show');
             }
-            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/tickets-tarjeta', {
+            fetch(fdApiBase() + '/' + ventaId + '/tickets-tarjeta', {
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
@@ -131,7 +136,7 @@
             if (typeof $ !== 'undefined') {
                 $('#modal-fd-canjes-fidelidad').modal('show');
             }
-            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/canjes-fidelidad', {
+            fetch(fdApiBase() + '/' + ventaId + '/canjes-fidelidad', {
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
@@ -192,7 +197,7 @@
             if (typeof $ !== 'undefined') {
                 $('#modal-fd-canjes-premio').modal('show');
             }
-            fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/canjes-premio', {
+            fetch(fdApiBase() + '/' + ventaId + '/canjes-premio', {
                 headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 credentials: 'same-origin',
             })
@@ -243,7 +248,7 @@
             if (!ventaId || btn.disabled) return;
             btn.disabled = true;
             function enviarReimpresion() {
-                return fetch('{{ url('ventas/gastronomia/facturas-dia') }}/' + ventaId + '/reimprimir-ticket', {
+                return fetch(fdApiBase() + '/' + ventaId + '/reimprimir-ticket', {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': token,
@@ -318,9 +323,6 @@
             · Fecha calendario <strong>{{ $fecha_calendario ?? \Illuminate\Support\Carbon::today()->format('Y-m-d') }}</strong>
             @if (! empty($jornada['jornada_abierta']))
                 · jornada abierta
-                @if (! request()->filled('fecha'))
-                    (filtro por defecto)
-                @endif
             @elseif ($jornada !== null)
                 · sin jornada abierta para esta empresa
             @endif
@@ -360,9 +362,9 @@
             </div>
         @endif
         <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Facturas gastronomía del día</h3>
-                <div class="card-tools">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Facturas gastronomía del día</h3>
+                <div class="card-tools text-right mb-0">
                     @if ($tiene_cfg_pv ?? false)
                         <small class="text-muted">
                             Empresa: <strong>{{ $empresa_nombre }}</strong>
@@ -372,97 +374,105 @@
                         <small class="text-muted">Terminal: <strong>{{ $identificador_pc }}</strong></small>
                     @endif
                 </div>
-                <div class="d-md-flex justify-content-md-end align-items-md-end flex-wrap">
-                    <form action="{{ route('gastronomia_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end mb-2 mb-md-0">
-                        @if (($empresa_query ?? collect())->count() > 1)
-                            <div class="form-group mb-0 mr-2">
-                                @include('includes.listado.filtro_empresa_asignada_inline', [
-                                    'empresa_query' => $empresa_query,
-                                    'empresa_id' => $empresa_id ?? 0,
-                                    'id' => 'empresa_id_fd',
-                                    'required' => true,
-                                    'permite_todas' => false,
-                                    'mostrar_opcion_vacia' => false,
-                                    'select_class' => 'form-control form-control-sm',
-                                    'label_class' => 'small text-muted mb-0 d-block',
-                                    'label' => 'Empresa',
-                                ])
-                            </div>
-                        @elseif (($empresa_query ?? collect())->count() === 1)
-                            <input type="hidden" name="empresa_id" value="{{ $empresa_query->first()->id }}">
+            </div>
+            <div class="card-body py-2 border-bottom bg-light">
+                <form action="{{ route('gastronomia_facturas_dia') }}" method="GET" class="d-flex flex-wrap align-items-end gastro-fd-filtros-form">
+                    @if (($empresa_query ?? collect())->count() > 1)
+                        <div class="form-group mb-1 mb-md-0 mr-2">
+                            @include('includes.listado.filtro_empresa_asignada_inline', [
+                                'empresa_query' => $empresa_query,
+                                'empresa_id' => $empresa_id ?? 0,
+                                'id' => 'empresa_id_fd',
+                                'required' => true,
+                                'permite_todas' => false,
+                                'mostrar_opcion_vacia' => false,
+                                'select_class' => 'form-control form-control-sm',
+                                'label_class' => 'small text-muted mb-0 d-block',
+                                'label' => 'Empresa',
+                            ])
+                        </div>
+                    @elseif (($empresa_query ?? collect())->count() === 1)
+                        <input type="hidden" name="empresa_id" value="{{ $empresa_query->first()->id }}">
+                    @endif
+                    <div class="form-group mb-1 mb-md-0 mr-2">
+                        <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha jornada</label>
+                        <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
+                    </div>
+                    <div class="form-group mb-1 mb-md-0 mr-2">
+                        <label for="articulo_sku_fd" class="small text-muted mb-0 d-block">Ítem facturado (SKU)</label>
+                        <input type="text" id="articulo_sku_fd" name="articulo_sku" class="form-control form-control-sm gastro-fd-campo-sku"
+                               placeholder="SKU o descripción" value="{{ $articulo_sku ?? '' }}"
+                               title="Filtra facturas que incluyan este artículo y muestra sus insumos">
+                        @if ($articulo_filtro ?? null)
+                            <input type="hidden" name="articulo_id" value="{{ $articulo_filtro->id }}">
                         @endif
-                        <div class="form-group mb-0 mr-2">
-                            <label for="fecha_fd" class="small text-muted mb-0 d-block">Fecha jornada</label>
-                            <input type="date" id="fecha_fd" name="fecha" value="{{ $fecha }}" class="form-control form-control-sm">
+                    </div>
+                    @if (count($mozos_selector ?? []) > 0)
+                        <div class="form-group mb-1 mb-md-0 mr-2">
+                            <label for="mozo_gastronomia_id" class="small text-muted mb-0 d-block">Mozo</label>
+                            <select name="mozo_gastronomia_id" id="mozo_gastronomia_id" class="form-control form-control-sm gastro-fd-campo-mozo">
+                                <option value="">Todos</option>
+                                @foreach ($mozos_selector as $mozoOp)
+                                    <option value="{{ $mozoOp['id'] }}" @selected((int) ($mozo_gastronomia_id ?? 0) === (int) $mozoOp['id'])>
+                                        {{ $mozoOp['nombre'] }}@if (! empty($mozoOp['codigo'])) ({{ $mozoOp['codigo'] }})@endif
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
-                        <div class="form-group mb-0 mr-2">
-                            <label for="articulo_sku_fd" class="small text-muted mb-0 d-block">Ítem facturado (SKU)</label>
-                            <input type="text" id="articulo_sku_fd" name="articulo_sku" class="form-control form-control-sm" style="min-width:140px;"
-                                   placeholder="SKU o descripción" value="{{ $articulo_sku ?? '' }}"
-                                   title="Filtra facturas que incluyan este artículo y muestra sus insumos">
-                            @if ($articulo_filtro ?? null)
-                                <input type="hidden" name="articulo_id" value="{{ $articulo_filtro->id }}">
-                            @endif
-                        </div>
-                        <div class="form-group mb-0 mr-2">
-                            <label class="small text-muted mb-0 d-block">&nbsp;</label>
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="todas_pc" name="todas_pc" value="1" @checked($todas_pc ?? false)>
-                                <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs de la misma empresa en el día">Todas las terminales</label>
-                            </div>
-                        </div>
-                        @if (count($mozos_selector ?? []) > 0)
-                            <div class="form-group mb-0 mr-2">
-                                <label for="mozo_gastronomia_id" class="small text-muted mb-0 d-block">Mozo</label>
-                                <select name="mozo_gastronomia_id" id="mozo_gastronomia_id" class="form-control form-control-sm" style="min-width:160px;">
-                                    <option value="">Todos</option>
-                                    @foreach ($mozos_selector as $mozoOp)
-                                        <option value="{{ $mozoOp['id'] }}" @selected((int) ($mozo_gastronomia_id ?? 0) === (int) $mozoOp['id'])>
-                                            {{ $mozoOp['nombre'] }}@if (! empty($mozoOp['codigo'])) ({{ $mozoOp['codigo'] }})@endif
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </div>
-                        @endif
-                        @if ($requiere_habilitacion_turno ?? false)
-                            <div class="form-group mb-0 mr-2">
-                                <label for="turno_filtro" class="small text-muted mb-0 d-block">Turno</label>
-                                <select name="turno_filtro" id="turno_filtro" class="form-control form-control-sm" style="min-width:220px;"
-                                        title="Todo el día, turno activo o un turno cerrado de esta terminal">
-                                    <option value="0" @selected(($turno_filtro_val ?? '0') === '0')>Todo el día</option>
-                                    @if ($turno_activo ?? null)
-                                        <option value="activo" @selected(($turno_filtro_val ?? '') === 'activo')>
-                                            Turno activo — {{ $turno_activo->turno?->nombre ?? 'Turno' }}
-                                            ({{ $turno_activo->habilitacion_en?->format('Y-m-d H:i') ?? '—' }})
+                    @endif
+                    @if ($requiere_habilitacion_turno ?? false)
+                        <div class="form-group mb-1 mb-md-0 mr-2">
+                            <label for="turno_filtro" class="small text-muted mb-0 d-block">Turno</label>
+                            <select name="turno_filtro" id="turno_filtro" class="form-control form-control-sm gastro-fd-campo-turno"
+                                    title="Todo el día, turno activo o un turno cerrado de esta terminal">
+                                <option value="0" @selected(($turno_filtro_val ?? '0') === '0')>Todo el día</option>
+                                @if ($turno_activo ?? null)
+                                    <option value="activo" @selected(($turno_filtro_val ?? '') === 'activo')>
+                                        Turno activo — {{ $turno_activo->turno?->nombre ?? 'Turno' }}
+                                        ({{ $turno_activo->habilitacion_en?->format('Y-m-d H:i') ?? '—' }})
+                                    </option>
+                                @endif
+                                @foreach ($turnos_selector ?? [] as $op)
+                                    @if (! ($op['es_activo'] ?? false))
+                                        <option value="{{ $op['id'] }}" @selected((string) ($turno_filtro_val ?? '') === (string) $op['id'])>
+                                            {{ $op['label'] }}
                                         </option>
                                     @endif
-                                    @foreach ($turnos_selector ?? [] as $op)
-                                        @if (! ($op['es_activo'] ?? false))
-                                            <option value="{{ $op['id'] }}" @selected((string) ($turno_filtro_val ?? '') === (string) $op['id'])>
-                                                {{ $op['label'] }}
-                                            </option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                            </div>
-                        @endif
-                        <div class="btn-group mr-2">
-                            <input type="text" name="busqueda" class="form-control form-control-sm" placeholder="Nº venta, cliente…" value="{{ $busqueda ?? '' }}">
-                            <button type="submit" class="btn btn-default btn-sm" title="Buscar">
-                                <span class="fa fa-search"></span>
-                            </button>
+                                @endforeach
+                            </select>
                         </div>
-                        @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '' || ($mozo_gastronomia_id ?? null))
+                    @endif
+                    <div class="form-group mb-1 mb-md-0 mr-2">
+                        <label for="busqueda_fd" class="small text-muted mb-0 d-block">Buscar</label>
+                        <div class="input-group input-group-sm gastro-fd-campo-busqueda">
+                            <input type="text" id="busqueda_fd" name="busqueda" class="form-control form-control-sm" placeholder="Nº venta, cliente…" value="{{ $busqueda ?? '' }}">
+                            <div class="input-group-append">
+                                <button type="submit" class="btn btn-default btn-sm" title="Buscar">
+                                    <span class="fa fa-search"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group mb-1 mb-md-0 mr-2">
+                        <label class="small text-muted mb-0 d-block">&nbsp;</label>
+                        <div class="custom-control custom-checkbox pt-1">
+                            <input type="checkbox" class="custom-control-input" id="todas_pc" name="todas_pc" value="1" @checked($todas_pc ?? false)>
+                            <label class="custom-control-label small" for="todas_pc" title="Incluye facturas emitidas desde otras PCs de la misma empresa en el día">Todas las terminales</label>
+                        </div>
+                    </div>
+                    @if (($articulo_filtro ?? null) || ($busqueda ?? '') !== '' || ($mozo_gastronomia_id ?? null))
+                        <div class="form-group mb-1 mb-md-0">
+                            <label class="small text-muted mb-0 d-block">&nbsp;</label>
                             <a href="{{ route('gastronomia_facturas_dia', array_filter([
                                 'fecha' => $fecha,
                                 'empresa_id' => ($empresa_id ?? null) ?: null,
                                 'todas_pc' => ($todas_pc ?? false) ? '1' : null,
                                 'turno_filtro' => ($turno_filtro_val ?? '0') !== '0' ? ($turno_filtro_val ?? '0') : null,
                             ])) }}"
-                               class="btn btn-outline-secondary btn-sm ml-1 mb-0" title="Quitar filtros de texto">Limpiar</a>
-                        @endif
-                    </form>
-                </div>
+                               class="btn btn-outline-secondary btn-sm" title="Quitar filtros de texto">Limpiar</a>
+                        </div>
+                    @endif
+                </form>
             </div>
             @if ($articulo_filtro ?? null)
                 <div class="card-body py-2 border-bottom bg-light">
@@ -521,7 +531,7 @@
                 <div class="table-responsive">
                 @php
                     $colInsumos = ($articulo_filtro ?? null) !== null;
-                    $colSpanEmpty = 11 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
+                    $colSpanEmpty = 10 + (($todas_pc ?? false) ? 1 : 0) + ($colInsumos ? 3 : 0);
                 @endphp
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead>
@@ -529,7 +539,6 @@
                             @if ($colInsumos)
                                 <th style="width:2rem;" data-orderable="false"></th>
                             @endif
-                            <th>Venta ID</th>
                             @if ($todas_pc ?? false)
                                 <th>PC emisión</th>
                             @endif
@@ -538,7 +547,7 @@
                             <th>Comprobante</th>
                             <th>Cliente</th>
                             <th>Mozo</th>
-                            <th>Punto de venta</th>
+                            <th style="min-width:9rem;">Punto de venta</th>
                             <th class="text-right">Total</th>
                             @if ($colInsumos)
                                 <th class="text-right" title="Cantidad facturada del ítem filtrado">Cant. ítem</th>
@@ -591,7 +600,6 @@
                                         @endif
                                     </td>
                                 @endif
-                                <td>{{ $r->venta_id }}</td>
                                 @if ($todas_pc ?? false)
                                     <td><small>{{ $r->identificador_pc ?? '—' }}</small></td>
                                 @endif

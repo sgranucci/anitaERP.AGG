@@ -235,10 +235,21 @@ class GastronomiaFacturasDiaController extends Controller
             return response()->json(['ok' => false, 'error' => 'La venta no corresponde a una emisión gastronomía.'], 404);
         }
 
+        \Illuminate\Support\Facades\Log::info('gastronomia.facturas_dia.reimprimir_ticket', [
+            'venta_id' => $ventaId,
+            'usuario_id' => auth()->id(),
+            'host' => request()->getHost(),
+        ]);
+
         $resultado = $this->facturaTicketService->reimprimirTicketVenta($ventaId);
 
         if (! empty($resultado['ok'])) {
-            return response()->json(['ok' => true, 'mensaje' => 'Ticket enviado a la impresora.']);
+            $mensaje = 'Ticket enviado a la impresora.';
+            if (! empty($resultado['aviso_sin_confirmacion_papel'])) {
+                $mensaje = \App\Support\Ventas\NcjetdirectSalidaSupport::mensajeAvisoSinConfirmacionPapel();
+            }
+
+            return response()->json(['ok' => true, 'mensaje' => $mensaje]);
         }
 
         return response()->json([

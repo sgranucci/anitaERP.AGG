@@ -163,15 +163,20 @@ class GastronomiaArticulosVendidosQuery
 
         $this->aplicarExclusionInsumos($rows);
 
+        $cantidadExpr = self::cantidadExpr();
+        $importeExpr = self::importeExpr();
+
         $rows = $rows
             ->select([
                 've.articulo_id',
                 'a.sku',
                 'a.descripcion',
             ])
-            ->selectRaw('SUM('.self::cantidadExpr().') as cantidad_total')
-            ->selectRaw('SUM('.self::importeExpr().') as importe_total')
+            ->selectRaw('SUM('.$cantidadExpr.') as cantidad_total')
+            ->selectRaw('SUM('.$importeExpr.') as importe_total')
             ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion')
+            // FAC − NC: no listar artículos con neto ~0 (se veían “sin cantidad / sin importe”).
+            ->havingRaw('ABS(SUM('.$cantidadExpr.')) > 0.0001')
             ->orderByDesc($orderCol)
             ->orderBy('a.sku')
             ->limit(max(1, min(50, $limit)))
@@ -179,12 +184,17 @@ class GastronomiaArticulosVendidosQuery
 
         $out = [];
         foreach ($rows as $row) {
+            $cantidad = round((float) $row->cantidad_total, 4);
+            $importe = round((float) $row->importe_total, 2);
+            if (abs($cantidad) <= 0.0001 && abs($importe) <= 0.0001) {
+                continue;
+            }
             $out[] = [
                 'articulo_id' => (int) $row->articulo_id,
                 'sku' => trim((string) $row->sku),
                 'descripcion' => trim((string) $row->descripcion),
-                'cantidad' => round((float) $row->cantidad_total, 4),
-                'importe' => round((float) $row->importe_total, 2),
+                'cantidad' => $cantidad,
+                'importe' => $importe,
             ];
         }
 

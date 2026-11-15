@@ -7,7 +7,9 @@ namespace App\Support\Ventas\GastronomiaAnitaImport;
 use App\ApiAnita;
 
 /**
- * Cabeceras Anita con fila en resvta provienen del POS legacy (Anita), no de AnitaERP gastronomía.
+ * Cabeceras Anita con fila en resvta: POS legacy (Anita) o réplica Crown ERP
+ * ({@see \App\Support\Ventas\GastronomiaCrown\GastronomiaAnitaResvtaCrownSupport}).
+ * En AGG (sin Crown) el ERP gastronomía no escribe resvta.
  */
 final class GastronomiaAnitaImportResvtaSupport
 {
