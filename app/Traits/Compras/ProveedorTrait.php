@@ -24,8 +24,10 @@ trait ProveedorTrait {
 
 	/**
 	 * Estados de proveedor habilitados para elegir en compras (requisición, OC, modales).
-	 * Literales (no self::CONST): en PHP 8.3+ acceder a la propiedad vía el trait
-	 * (ProveedorTrait::$estados…) falla con "Cannot access trait constant self::… directly".
+	 * Literales (no self::CONST): en PHP 8.3+ una propiedad estática del trait con
+	 * self::CONST revienta al leerse ("Cannot access trait constant self::… directly").
+	 *
+	 * @var list<string>
 	 */
 	public static $estadosHabilitadosOperacion = [
 		'Activo',
@@ -33,9 +35,15 @@ trait ProveedorTrait {
 	];
 
 	/** @return list<string> */
+	public static function estadosHabilitadosOperacion(): array
+	{
+		return ['Activo', 'Regularizado'];
+	}
+
+	/** @return list<string> */
 	public static function estadosHabilitadosOperacionCodigosYTextos(): array
 	{
-		return ['0', '3', self::ESTADO_ACTIVO, self::ESTADO_REGULARIZADO];
+		return ['0', '3', 'Activo', 'Regularizado'];
 	}
 
 	public static function estaHabilitadoParaOperacion(?string $estado): bool
@@ -45,7 +53,7 @@ trait ProveedorTrait {
 
 	public static function esRegularizado(?string $estado): bool
 	{
-		return in_array((string) ($estado ?? ''), ['3', self::ESTADO_REGULARIZADO], true);
+		return in_array((string) ($estado ?? ''), ['3', 'Regularizado'], true);
 	}
 
 	public static $enumTipoAlta = [

@@ -124,7 +124,7 @@ class ProveedorQuery implements ProveedorQueryInterface
         $consulta = trim((string) $consulta);
         $limite = 250;
         $filtroEmpresaAplicado = config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0;
-        $estados = Proveedor::$estadosHabilitadosOperacion;
+        $estados = Proveedor::estadosHabilitadosOperacion();
         if ($incluirSuspendidos) {
             $estados[] = 'Suspendido';
         }
