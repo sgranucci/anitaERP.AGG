@@ -60,13 +60,31 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 $debitos = [];
             }
             $empresaComp = (int) ($comprobante['empresa_id'] ?? $empresaId ?? 0) ?: null;
+            $detalle = self::detalleLibreLeyenda((string) ($comprobante['leyenda'] ?? ''));
 
             foreach (self::lineasDebeDesdeConceptos($conceptos, $centrocostoId, $empresaComp, $debitos) as $linea) {
+                if ($detalle !== '' && (string) ($linea['origen'] ?? '') !== 'impuesto') {
+                    $obs = trim((string) ($linea['observacion'] ?? ''));
+                    $linea['observacion'] = $obs === '' || $obs === $detalle
+                        ? $detalle
+                        : $obs.' — '.$detalle;
+                }
                 $lineas[] = $linea;
             }
         }
 
         return $lineas;
+    }
+
+    /** Texto libre de leyenda (sin marca LT:id:bruto de liquidación tarjeta). */
+    public static function detalleLibreLeyenda(string $leyenda): string
+    {
+        $texto = trim($leyenda);
+        if ($texto === '') {
+            return '';
+        }
+
+        return trim((string) preg_replace('/^LT:\d+:\d+(?:\.\d+)?\s*/', '', $texto));
     }
 
     /**

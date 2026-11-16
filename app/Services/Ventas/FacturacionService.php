@@ -60,6 +60,7 @@ use App\Models\Stock\Lote;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\TransferenciaCrown\CrownFacturaAsientoFechaSupport;
 use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
 use App\Support\Contable\CuentacontableInhabilitadaSupport;
@@ -10289,6 +10290,15 @@ class FacturacionService
 			$opcionesCierre['fechajornada'] = $fechaJornada;
 		}
 
+		// Crown POS (gastronomía/estacionamiento): asiento por jornada; admin/ARCA: fecha física.
+		$fechaAsiento = CrownFacturaAsientoFechaSupport::resolver(
+			(string) $fecha,
+			$fechaJornada,
+			CrownFacturaAsientoFechaSupport::usarJornadaEnEmisionPos(
+				is_array($opcionesEmision) ? $opcionesEmision : null
+			),
+		);
+
 		PeriodoContableCierreSupport::assertOperacionPermitida(
 			(int) $empresa_id,
 			(string) $fecha,
@@ -10306,7 +10316,7 @@ class FacturacionService
 			throw new Exception('Error en grabacion, no existe tipo de asiento de ventas');
 
 		$data['empresa_id'] = $empresa_id;
-		$data['fecha'] = $fecha;
+		$data['fecha'] = $fechaAsiento;
 		$data['venta_id'] = $venta_id;
 		$data['observacion'] = $observacion;
 

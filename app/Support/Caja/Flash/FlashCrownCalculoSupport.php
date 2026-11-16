@@ -118,17 +118,18 @@ final class FlashCrownCalculoSupport
     }
 
     /**
-     * Réplica Anita sin resulol aún: completar coin_in/slot_r desde tesorería resultado_online
-     * sin pisar soft_count/mesas/ayb/hotel de Anita.
+     * Slots desde tesorería resultado_online (GST) sobre flash Anita / hueco.
+     * - Sin resulol de Anita: completa o refresca coin_in/out/pago_manual/slot_r
+     *   (correcciones posteriores cuando GST falló y se cargó a mano).
+     * - Con resulol Anita y slots ya cargados: no pisa (Anita manda).
+     * No toca soft_count / mesas / ayb / hotel.
      *
      * @param  array<string, mixed>  $base
      * @return array<string, mixed>
      */
     public static function completarSlotsVaciosDesdeResultadoOnline(array $base, int $salaId, string $fechaYmd): array
     {
-        $tieneSlots = abs((float) ($base['coin_in'] ?? 0)) >= 0.02
-            || abs((float) ($base['slot_r'] ?? 0)) >= 0.02;
-        if ($tieneSlots || $salaId <= 0) {
+        if ($salaId <= 0 || ! self::puedeRefrescarSlotsDesdeResultadoOnline($base)) {
             return $base;
         }
 
@@ -152,8 +153,9 @@ final class FlashCrownCalculoSupport
         $base['coin_out'] = $coinOut;
         $base['pago_manual'] = $pagoManual;
         $base['slot_r'] = $slotR;
-        if ((int) ($base['cant_slots'] ?? 0) === 0) {
-            $base['cant_slots'] = (int) ($online->cantidad_slots ?? 0);
+        $cantOnline = (int) ($online->cantidad_slots ?? 0);
+        if ($cantOnline > 0) {
+            $base['cant_slots'] = $cantOnline;
         }
 
         $detalle = is_array($base['detalle'] ?? null) ? $base['detalle'] : [];
@@ -169,6 +171,92 @@ final class FlashCrownCalculoSupport
         $base['detalle_json'] = $detalle;
 
         return $base;
+    }
+
+    /**
+     * ¿Se puede completar/refrescar coin_in/slot_r desde resultado_online?
+     * True si Anita no trajo resulol, o si el flash aún no tiene slots.
+     *
+     * @param  array<string, mixed>  $base
+     */
+    public static function puedeRefrescarSlotsDesdeResultadoOnline(array $base): bool
+    {
+        $tieneSlots = abs((float) ($base['coin_in'] ?? 0)) >= 0.02
+            || abs((float) ($base['slot_r'] ?? 0)) >= 0.02;
+        if (! $tieneSlots) {
+            return true;
+        }
+
+        return ! self::slotFuenteEsResulolAnita($base);
+    }
+
+    /**
+     * Jornada a medias (abierta o mal cargada): att/drop vacíos o win distinto
+     * sin cashdrop, mientras el flash ya tiene el día (Anita / carga previa).
+     * Evita el bug Daily CIP 1/11 (Wheel −42M, Att 0, Drop 0).
+     *
+     * @param  array<string, mixed>  $calc
+     * @param  array<string, mixed>  $stored
+     */
+    public static function vivoJornadaIncompletoRespectoFlash(array $calc, array $stored): bool
+    {
+        $attStored = (int) ($stored['att'] ?? 0);
+        $attCalc = (int) ($calc['att'] ?? 0);
+        $dropStored = abs((float) ($stored['cashdrop'] ?? 0));
+        $dropCalc = abs((float) ($calc['cashdrop'] ?? 0));
+        $mesaStored = abs((float) self::metricasDerivadas($stored)['win_mesas']);
+        $mesaCalc = abs((float) self::metricasDerivadas($calc)['win_mesas']);
+        $cajaStored = abs((float) ($stored['caja_empleado'] ?? 0));
+        $cajaCalc = abs((float) ($calc['caja_empleado'] ?? 0));
+
+        if ($attStored > 0 && $attCalc === 0) {
+            return true;
+        }
+        if ($dropStored >= 0.02 && $dropCalc < 0.02 && $mesaStored >= 0.02) {
+            return true;
+        }
+        if ($mesaStored >= 0.02 && $dropCalc < 0.02 && abs($mesaCalc - $mesaStored) >= 0.02) {
+            return true;
+        }
+        if ($cajaStored >= 0.02 && $cajaCalc < 0.02 && $attStored > 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Campos de juego/clientes/caja emp. a restaurar desde el flash persistido.
+     *
+     * @return list<string>
+     */
+    public static function camposJuegoConservarDesdeFlash(): array
+    {
+        return [
+            'cashdrop', 'cant_mesas', 'caja_empleado', 'att',
+            'wheel_r', 'baccarat_r', 'blackjack_r', 'multi_r', 'crap_r',
+            'caribbean_r', 'poker_r', 'seven_r', 'super_peek_r',
+            'torneo_poker', 'master_cup', 'inscripcion', 'premio',
+            'ruleta_el_d', 'ruleta_el_r', 'soft_rul_el', 'cant_rul_el', 'coin_in_rul',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $base
+     */
+    public static function slotFuenteEsResulolAnita(array $base): bool
+    {
+        $detalle = is_array($base['detalle'] ?? null) ? $base['detalle'] : [];
+        if ($detalle === [] && isset($base['detalle_json']) && is_array($base['detalle_json'])) {
+            $detalle = $base['detalle_json'];
+        }
+        $fuentes = is_array($detalle['fuentes'] ?? null) ? $detalle['fuentes'] : [];
+        if (in_array('resulol', $fuentes, true)) {
+            return true;
+        }
+        $anita = is_array($detalle['anita'] ?? null) ? $detalle['anita'] : [];
+
+        return ($anita['slot_fuente'] ?? '') === 'resulol';
     }
 
     /**

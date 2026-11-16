@@ -24,16 +24,20 @@ final class ConceptoIvacompraFormulaSupport
             return null;
         }
 
-        // con(2)*0.21  |  con(205)*0.105  |  CON(11) * 0,27
+        // con(2)*0.21  |  con(205)*0.105  |  CON(11) * 0,27  |  con(73)*.21 (Anita sin el 0)
         if (! preg_match(
-            '/^con\s*\(\s*([0-9]+)\s*\)\s*\*\s*([0-9]+(?:[.,][0-9]+)?)\s*$/i',
+            '/^con\s*\(\s*([0-9]+)\s*\)\s*\*\s*([0-9]*[.,]?[0-9]+)\s*$/i',
             $raw,
             $m
         )) {
             return null;
         }
 
-        $coef = (float) str_replace(',', '.', $m[2]);
+        $coefRaw = str_replace(',', '.', $m[2]);
+        if ($coefRaw !== '' && str_starts_with($coefRaw, '.')) {
+            $coefRaw = '0'.$coefRaw;
+        }
+        $coef = (float) $coefRaw;
         if ($coef <= 0) {
             return null;
         }

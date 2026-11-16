@@ -65,11 +65,14 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             ? Cliente::query()->with('tipodocumentos')->where('codigo', (string) $clienteCodigo)->first()
             : null;
 
+        // Misma regla que ArcaCaeaInformeDatosDesdeVentaSupport: FB/CF → DocTipo 99 / DocNro 0.
+        // Fallback viejo a CUIT (80) con doc 0 lo rechaza ARCA (error 1419).
         $doc = preg_replace('/\D+/', '', (string) ($cliente?->numerodocumento ?? '')) ?? '';
         $tipodoc = (int) ($cliente?->tipodocumentos?->codigoexterno ?? 0);
-        if ($doc === '' || $tipodoc <= 0) {
-            $tipodoc = 80;
-            $doc = $doc !== '' ? $doc : '0';
+        $esConsumidorFinal = $doc === '' || (int) $doc <= 0 || $tipodoc <= 0 || $tipodoc === 99;
+        if ($esConsumidorFinal) {
+            $tipodoc = (int) config('arca_wsfe.receptor.consumidor_final_tipo_documento', 99);
+            $doc = '0';
         }
 
         $gravado = abs((float) ($cab['ven_gravado'] ?? 0));
@@ -159,7 +162,9 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             'letra' => $letra,
             'tipodoc' => $tipodoc,
             'numerodocumento' => $doc,
-            'condicioniva_id' => (int) ($cliente?->condicioniva_id ?? 1),
+            'condicioniva_id' => $esConsumidorFinal
+                ? (int) config('arca_wsfe.receptor.consumidor_final_condicion_iva_id', 3)
+                : (int) ($cliente?->condicioniva_id ?? 1),
             'numerocomprobante' => $numero,
             'fechacomprobante' => $fecha,
             'fechavencimiento' => $fechaVto !== '' ? $fechaVto : $fecha,

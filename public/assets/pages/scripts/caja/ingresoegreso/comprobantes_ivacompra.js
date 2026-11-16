@@ -186,9 +186,23 @@
     }
 
     var TIPOS_NUMERO_AUTOMATICO = { ICO: true, IDO: true, DTC: true };
+    /** ICO/IDO son internos: no piden detalle libre por comprobante. */
+    var TIPOS_SIN_DETALLE = { ICO: true, IDO: true };
 
     function esNumeracionAutomatica() {
         return !!TIPOS_NUMERO_AUTOMATICO[abreviaturaTipoActual()];
+    }
+
+    function pideDetalleComprobante() {
+        return !TIPOS_SIN_DETALLE[abreviaturaTipoActual()];
+    }
+
+    function actualizarVisibilidadDetalle() {
+        var pide = pideDetalleComprobante();
+        $('#ie-cp-detalle-grupo').toggleClass('d-none', !pide);
+        if (!pide) {
+            $('#ie-cp-detalle').val('');
+        }
     }
 
     function esGastoBanco() {
@@ -298,6 +312,7 @@
         var auto = esNumeracionAutomatica();
         $('#ie-cp-numero-manual').toggleClass('d-none', auto);
         $('#ie-cp-numero-auto').toggleClass('d-none', !auto);
+        actualizarVisibilidadDetalle();
         if (!auto) {
             return;
         }
@@ -343,6 +358,15 @@
         return texto !== '' ? texto : cod;
     }
 
+    /** Texto libre de leyenda (sin marca LT:id:bruto de liquidación tarjeta). */
+    function detalleLibreLeyenda(leyenda) {
+        var texto = $.trim(String(leyenda || ''));
+        if (!texto) {
+            return '';
+        }
+        return $.trim(texto.replace(/^LT:\d+:\d+(?:\.\d+)?\s*/, ''));
+    }
+
     function renderGrilla() {
         var $tbody = $('#tbody-comprobantes-iva-ie');
         $tbody.empty();
@@ -352,12 +376,14 @@
             total += parseFloat(c.total) || 0;
             var tipoLabel = etiquetaTipoTesoreria(c.tipo_tesoreria);
             var prov = c.proveedor_nombre || c.proveedor_nombre_eventual || '—';
+            var detalle = detalleLibreLeyenda(c.leyenda);
             var pdfBadge = (c.tiene_pdf || c.pdf_temp_id) ? ' <i class="fa fa-file-pdf text-danger" title="PDF adjunto"></i>' : '';
             $tbody.append(
                 '<tr>' +
                 '<td>' + tipoLabel + '</td>' +
                 '<td>' + etiquetaComprobante(c) + pdfBadge + '</td>' +
                 '<td>' + $('<div>').text(prov).html() + '</td>' +
+                '<td>' + $('<div>').text(detalle || '—').html() + '</td>' +
                 '<td>' + (c.fechaiva || '') + '</td>' +
                 '<td class="text-right">' + formatoNumero(c.total) + '</td>' +
                 '<td class="text-center text-nowrap">' +
@@ -681,7 +707,7 @@
         agregarFilaConcepto(null);
         $('#ie-cp-tipo-tesoreria').val('FONDO_FIJO');
         aplicarTipoComprobanteEnModal(0, false);
-        $('#ie-cp-letra, #ie-cp-sucursal, #ie-cp-numero, #ie-cp-total, #ie-cp-cae').val('');
+        $('#ie-cp-letra, #ie-cp-sucursal, #ie-cp-numero, #ie-cp-total, #ie-cp-cae, #ie-cp-detalle').val('');
         $('#ie-cp-tipo-autorizacion').val('');
         actualizarFilaAutorizacion();
         $('#ie-cp-proveedor-id, #ie-cp-proveedor-codigo, #ie-cp-proveedor-nombre').val('');
@@ -1019,6 +1045,7 @@
             aplicarTopeFechaIvaIe(c.id ? (c.fechaiva || '') : '');
             $('#ie-cp-total').val(c.total || 0);
             $('#ie-cp-moneda-id').val(c.moneda_id || 1);
+            $('#ie-cp-detalle').val(pideDetalleComprobante() ? detalleLibreLeyenda(c.leyenda) : '');
             $('#ie-cp-cae').val(c.numerocae || '');
             $('#ie-cp-tipo-autorizacion').val(c.tipo_autorizacion || (c.numerocae ? 'CAE' : ''));
             actualizarFilaAutorizacion();
@@ -1427,6 +1454,10 @@
         return n.toFixed(3);
     }
 
+    function esIvaNoComputableNombre(nombre) {
+        return /n\s*\/\s*c/i.test(String(nombre || ''));
+    }
+
     function aplicarIvaDesdeGravados() {
         enriquecerMetaGravadosDesdeFormulas();
         var gravados = [];
@@ -1437,7 +1468,8 @@
             var id = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
             var meta = conceptosMeta[String(id)] || {};
             var tipo = String(meta.tipoconcepto || '').toUpperCase();
-            var codigo = String($row.find('.codigo_concepto_ivacompra').val() || '').trim();
+            var codigo = String($row.find('.codigo_concepto_ivacompra').val() || meta.codigo || '').trim();
+            var nombre = String(meta.nombre || $row.find('.nombre_concepto_ivacompra').val() || '');
             var tasa = parseFloat(meta.impuesto_tasa || 0) || 0;
             var monto = parseFloat($row.find('.ie-cp-monto').val() || '0') || 0;
             if (codigo) {
@@ -1453,8 +1485,18 @@
                     tasa: tasa,
                     codigoFormula: String(meta.formula_codigo_base || '').trim(),
                     coef: parseFloat(meta.formula_coeficiente || 0) || 0,
+                    noComputable: esIvaNoComputableNombre(nombre),
                     $monto: $row.find('.ie-cp-monto'),
                 });
+            }
+        });
+
+        // Gravados ya tomados por un IVA con fórmula (p. ej. 421 ← 51): el fallback
+        // por alícuota no debe volver a liquidarlos en el IVA normal (74).
+        var gravadosUsadosPorFormula = {};
+        ivas.forEach(function (iva) {
+            if (iva.codigoFormula && codigosEnGrilla[iva.codigoFormula] && iva.coef > 0) {
+                gravadosUsadosPorFormula[iva.codigoFormula] = true;
             }
         });
 
@@ -1471,6 +1513,9 @@
             } else {
                 coef = iva.tasa / 100;
                 gravados.forEach(function (g) {
+                    if (gravadosUsadosPorFormula[g.codigo]) {
+                        return;
+                    }
                     if (tasaKeyConcepto(g.tasa) === tasaKeyConcepto(iva.tasa)) {
                         base += g.monto;
                     }
@@ -1484,6 +1529,38 @@
                 return;
             }
             iva.$monto.val(montoIva.toFixed(2));
+        });
+
+        // FNS/N/C: si conviven IVA N/C e IVA normal a la misma alícuota, manda el N/C.
+        var porTasa = {};
+        ivas.forEach(function (iva) {
+            var k = tasaKeyConcepto(iva.tasa);
+            if (!porTasa[k]) {
+                porTasa[k] = [];
+            }
+            porTasa[k].push(iva);
+        });
+        Object.keys(porTasa).forEach(function (k) {
+            var grupo = porTasa[k];
+            if (grupo.length < 2) {
+                return;
+            }
+            var nc = grupo.filter(function (i) { return i.noComputable; });
+            var normales = grupo.filter(function (i) { return !i.noComputable; });
+            if (!nc.length || !normales.length) {
+                return;
+            }
+            var ncConMonto = nc.some(function (i) {
+                return Math.abs(parseFloat(i.$monto.val() || '0') || 0) >= 0.0001;
+            });
+            if (!ncConMonto) {
+                return;
+            }
+            normales.forEach(function (i) {
+                if (String(i.$monto.val() || '') !== '') {
+                    i.$monto.val('');
+                }
+            });
         });
     }
 
@@ -1777,6 +1854,7 @@
             total: parseFloat($('#ie-cp-total').val() || '0'),
             moneda_id: parseInt($('#ie-cp-moneda-id').val() || '1', 10),
             cotizacion: cotizacionComprobanteDesdeCaja(),
+            leyenda: pideDetalleComprobante() ? $.trim($('#ie-cp-detalle').val() || '') : '',
             numerocae: $('#ie-cp-cae').val() || null,
             tipo_autorizacion: $('#ie-cp-tipo-autorizacion').val() || null,
             pdf_temp_id: ($('#ie-cp-pdf-temp-id').val() || '').trim() || null,
@@ -2406,7 +2484,14 @@
                 'ie-cp-numero': 'ie-cp-fecha-comprobante',
                 'ie-cp-fecha-comprobante': 'ie-cp-fecha-iva',
                 'ie-cp-fecha-iva': 'ie-cp-total',
+                'ie-cp-total': 'ie-cp-detalle',
             };
+            if (id === 'ie-cp-detalle') {
+                e.preventDefault();
+                e.stopPropagation();
+                focoPrimerImporteConcepto();
+                return;
+            }
             if (id === 'ie-cp-total') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -2416,7 +2501,11 @@
                     focoCampoIe('ie-cp-total');
                     return;
                 }
-                focoPrimerImporteConcepto();
+                if (pideDetalleComprobante()) {
+                    focoCampoIe('ie-cp-detalle');
+                } else {
+                    focoPrimerImporteConcepto();
+                }
                 return;
             }
             if (!siguiente[id]) {
@@ -2473,7 +2562,7 @@
             iaDecisionPendienteModal = false;
         });
 
-        $(document).on('change input', '#ie-cp-tbody-conceptos .concepto_ivacompra_id, #ie-cp-tbody-conceptos .ie-cp-monto, #ie-cp-total', function () {
+        $(document).on('change input', '#ie-cp-tbody-conceptos .concepto_ivacompra_id, #ie-cp-tbody-conceptos .ie-cp-monto, #ie-cp-total, #ie-cp-detalle', function () {
             var $row = $(this).closest('.ie-cp-fila-concepto');
             if ($row.length && $(this).hasClass('ie-cp-monto')) {
                 var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;

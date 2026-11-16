@@ -190,7 +190,7 @@ class FlashCrown extends Model implements Auditable
 
     /**
      * Flash armado desde Anita (resultado/resulol). No debe pisarse con un
-     * recálculo de jornada abierta vacía (consulta, Daily, export, cron).
+     * recálculo de jornada (abierta o cerrada: mismo criterio).
      *
      * Solo cuenta la fuente `resultado_anita` en detalle_json: origen=auto también
      * lo usan los huecos vacíos de tesorería/sincronizar y no son réplica Anita.
@@ -204,6 +204,26 @@ class FlashCrown extends Model implements Auditable
         }
 
         return in_array('resultado_anita', $fuentes, true);
+    }
+
+    /**
+     * Ya tiene el día cargado (Anita, validado o importes). No pisar con vivo
+     * de jornada salvo Recalcular / --forzar. Abierta o cerrada: igual.
+     */
+    public function tieneDiaCargado(): bool
+    {
+        if ($this->estaValidado() || $this->esReplicaAnita()) {
+            return true;
+        }
+
+        return (int) $this->att > 0
+            || abs((float) $this->cashdrop) >= 0.02
+            || abs((float) $this->win_mesas) >= 0.02
+            || abs((float) $this->slot_r) >= 0.02
+            || abs((float) $this->soft_count) >= 0.02
+            || abs((float) $this->ayb) >= 0.02
+            || abs((float) $this->hotel) >= 0.02
+            || abs((float) $this->caja_empleado) >= 0.02;
     }
 
     /**

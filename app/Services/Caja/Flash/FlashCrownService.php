@@ -80,8 +80,9 @@ final class FlashCrownService
     }
 
     /**
-     * Listado / consulta de pantalla: no pisa Anita si no hay jornada de tesorería.
-     * Sin flash y sin jornada → intenta armar desde Anita (resultado + resulol).
+     * Listado / consulta: si el flash ya tiene el día, no lo pisa la jornada
+     * (abierta o cerrada: mismo criterio). Solo Recalcular / forzar regenera desde tesorería.
+     * Sin flash y sin jornada → intenta Anita (resultado + resulol).
      * Online (Del Río/Betsur/Apuestas) no se persiste: se lee vivo al consolidar/vista.
      */
     public function obtenerParaConsulta(int $salaId, string $fechaYmd, bool $forzarRecalcTesoreria = false): FlashCrown
@@ -93,13 +94,8 @@ final class FlashCrownService
             ->whereDate('fecha', $fecha)
             ->first();
 
-        if ($existente && $existente->estaValidado() && ! $forzarRecalcTesoreria) {
-            return $this->completarSlotsVaciosPersistiendo($existente, $fecha);
-        }
-
-        // Réplica Anita real (fuentes resultado_anita): no pisar mesas/ayb por jornada;
-        // sí completar slots si Anita aún no tiene resulol y ya hay resultado_online.
-        if ($existente && ! $forzarRecalcTesoreria && $existente->esReplicaAnita()) {
+        // Día ya cargado: conservar; solo completar slots si Anita no trajo resulol.
+        if ($existente && ! $forzarRecalcTesoreria && $existente->tieneDiaCargado()) {
             return $this->completarSlotsVaciosPersistiendo($existente, $fecha);
         }
 
@@ -167,9 +163,9 @@ final class FlashCrownService
             return $existente;
         }
 
-        // Punto único: réplica Anita no se recalcula por jornada (export/cron/consulta)
-        // salvo --forzar / Recalcular online explícito. Sí completa slots vacíos desde online.
-        if ($existente && $existente->esReplicaAnita() && ! $forzar) {
+        // Día ya cargado: no recalcular por jornada (abierta o cerrada) salvo --forzar /
+        // Recalcular. Sí completa/refresca slots desde resultado_online si corresponde.
+        if ($existente && $existente->tieneDiaCargado() && ! $forzar) {
             return $this->completarSlotsVaciosPersistiendo($existente, $fecha);
         }
 
@@ -178,7 +174,7 @@ final class FlashCrownService
             ->whereDate('fecha', $fecha)
             ->exists();
 
-        // Sin jornada: no recalcular desde tesorería vacía (borra mesas Anita).
+        // Sin jornada: no recalcular desde tesorería vacía (borra mesas ya cargadas).
         if ($existente && ! $tieneJornada && ! $forzar) {
             return $existente->loadMissing(['sala', 'empresa']);
         }
@@ -334,9 +330,38 @@ final class FlashCrownService
         return $tot;
     }
 
+    /**
+     * Tras corregir resultado_online (GST): empuja slots al flash del día
+     * si no está validado ni facturado. No toca mesas/ayb/hotel Anita.
+     */
+    public function aplicarResultadoOnlineEnFlashSiCorresponde(int $salaId, string $fechaYmd): ?FlashCrown
+    {
+        $fecha = Carbon::parse($fechaYmd)->toDateString();
+        $flash = FlashCrown::query()
+            ->where('sala_id', $salaId)
+            ->whereDate('fecha', $fecha)
+            ->first();
+        if ($flash === null || $flash->estaValidado()) {
+            return $flash;
+        }
+        foreach (['proc_slot', 'venta_slot_id', 'asiento_slot_id'] as $campo) {
+            $valor = $flash->{$campo} ?? null;
+            if ($campo === 'proc_slot' && trim((string) $valor) === '*') {
+                return $flash;
+            }
+            if (in_array($campo, ['venta_slot_id', 'asiento_slot_id'], true) && (int) $valor > 0) {
+                return $flash;
+            }
+        }
+
+        return $this->completarSlotsVaciosPersistiendo($flash, $fecha);
+    }
+
     private function completarSlotsVaciosPersistiendo(FlashCrown $flash, string $fechaYmd): FlashCrown
     {
         $antesIn = (float) $flash->coin_in;
+        $antesOut = (float) $flash->coin_out;
+        $antesPm = (float) $flash->pago_manual;
         $antesSlot = (float) $flash->slot_r;
         $base = FlashCrownCalculoSupport::completarSlotsVaciosDesdeResultadoOnline(
             $flash->toArray(),
@@ -344,15 +369,20 @@ final class FlashCrownService
             $fechaYmd,
         );
         $nuevoIn = (float) ($base['coin_in'] ?? 0);
+        $nuevoOut = (float) ($base['coin_out'] ?? 0);
+        $nuevoPm = (float) ($base['pago_manual'] ?? 0);
         $nuevoSlot = (float) ($base['slot_r'] ?? 0);
-        if (abs($nuevoIn - $antesIn) < 0.02 && abs($nuevoSlot - $antesSlot) < 0.02) {
+        if (abs($nuevoIn - $antesIn) < 0.02
+            && abs($nuevoOut - $antesOut) < 0.02
+            && abs($nuevoPm - $antesPm) < 0.02
+            && abs($nuevoSlot - $antesSlot) < 0.02) {
             return $flash->loadMissing(['sala', 'empresa']);
         }
 
         $flash->fill([
             'coin_in' => $nuevoIn,
-            'coin_out' => (float) ($base['coin_out'] ?? 0),
-            'pago_manual' => (float) ($base['pago_manual'] ?? 0),
+            'coin_out' => $nuevoOut,
+            'pago_manual' => $nuevoPm,
             'slot_r' => $nuevoSlot,
             'cant_slots' => (int) ($base['cant_slots'] ?? $flash->cant_slots),
             'detalle_json' => $base['detalle_json'] ?? $flash->detalle_json,
@@ -472,23 +502,20 @@ final class FlashCrownService
      */
     private function conservarJuegoAnitaSiVivoVacio(array $calc, FlashCrown $stored): array
     {
+        $storedArr = $stored->toArray();
         $mesaCalc = (float) FlashCrownCalculoSupport::metricasDerivadas($calc)['win_mesas'];
-        $mesaStored = (float) FlashCrownCalculoSupport::metricasDerivadas($stored->toArray())['win_mesas'];
+        $mesaStored = (float) FlashCrownCalculoSupport::metricasDerivadas($storedArr)['win_mesas'];
         $slotCalc = (float) ($calc['slot_r'] ?? 0);
         $slotStored = (float) ($stored->slot_r ?? 0);
+        $vivoIncompleto = FlashCrownCalculoSupport::vivoJornadaIncompletoRespectoFlash($calc, $storedArr);
 
-        if (! $stored->esReplicaAnita()) {
+        // Réplica Anita o jornada a medias: no pisar juego/clientes/caja emp. del flash.
+        if (! $stored->esReplicaAnita() && ! $vivoIncompleto) {
             return $calc;
         }
 
-        if (abs($mesaStored) >= 0.02 && abs($mesaCalc - $mesaStored) >= 0.02) {
-            foreach ([
-                'cashdrop', 'cant_mesas', 'caja_empleado', 'att',
-                'wheel_r', 'baccarat_r', 'blackjack_r', 'multi_r', 'crap_r',
-                'caribbean_r', 'poker_r', 'seven_r', 'super_peek_r',
-                'torneo_poker', 'master_cup', 'inscripcion', 'premio',
-                'ruleta_el_d', 'ruleta_el_r', 'soft_rul_el', 'cant_rul_el', 'coin_in_rul',
-            ] as $campo) {
+        if ((abs($mesaStored) >= 0.02 && abs($mesaCalc - $mesaStored) >= 0.02) || $vivoIncompleto) {
+            foreach (FlashCrownCalculoSupport::camposJuegoConservarDesdeFlash() as $campo) {
                 $calc[$campo] = $stored->{$campo};
             }
         }

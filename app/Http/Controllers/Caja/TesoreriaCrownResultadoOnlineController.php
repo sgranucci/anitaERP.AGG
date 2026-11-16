@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
+use App\Models\Caja\Flash\FlashCrown;
 use App\Models\Caja\TesoreriaCrownResultadoOnline;
 use App\Models\Configuracion\Sala;
+use App\Services\Caja\Flash\FlashCrownService;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownListadoDocumento;
 use App\Support\Caja\TesoreriaCrownPoderPublicoGenerador;
@@ -211,9 +213,29 @@ class TesoreriaCrownResultadoOnlineController extends Controller
             $avisoPp = ' El poder público del día no se regeneró: '.$e->getMessage();
         }
 
+        $avisoFlash = '';
+        try {
+            $fechaFlash = $fila->fecha->format('Y-m-d');
+            $flashPrev = FlashCrown::query()
+                ->where('sala_id', (int) $fila->sala_id)
+                ->whereDate('fecha', $fechaFlash)
+                ->first();
+            $coinAntes = $flashPrev !== null ? (float) $flashPrev->coin_in : null;
+            $flash = app(FlashCrownService::class)->aplicarResultadoOnlineEnFlashSiCorresponde(
+                (int) $fila->sala_id,
+                $fechaFlash
+            );
+            if ($flash !== null && $coinAntes !== null
+                && abs((float) $flash->coin_in - $coinAntes) >= 0.02) {
+                $avisoFlash = ' Flash Crown del día actualizado con los slots.';
+            }
+        } catch (Throwable $e) {
+            $avisoFlash = ' El Flash Crown del día no se actualizó: '.$e->getMessage();
+        }
+
         return redirect()
             ->route('tesoreria_crown_resultado_online', ['sala_id' => $sala->id])
-            ->with('mensaje', 'Resultado online del '.$fila->fecha->format('d/m/Y').' guardado.'.$avisoPp);
+            ->with('mensaje', 'Resultado online del '.$fila->fecha->format('d/m/Y').' guardado.'.$avisoPp.$avisoFlash);
     }
 
     public function eliminar(int $id)

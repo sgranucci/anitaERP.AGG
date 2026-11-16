@@ -1,26 +1,30 @@
 @php
-    use App\Support\Caja\Flash\FlashCajaLFlashFormatoSupport as F;
+    use App\Support\Caja\Flash\FlashCrownInformeSupport;
 
     $excel = ! empty($modo_excel);
-    $columnas = $informe['columnas'] ?? \App\Support\Caja\Flash\FlashCrownInformeSupport::columnasDaily();
     $secciones = isset($seccion) && is_array($seccion)
         ? [$seccion]
         : ($informe['secciones'] ?? []);
     $conSolapas = ! empty($con_solapas) && ! $excel && count($secciones) > 1;
-    $grupos = [];
-    foreach ($columnas as $col) {
-        $g = (string) ($col['grupo'] ?? '');
-        if ($g === '') {
-            $grupos[] = ['titulo' => '', 'span' => 1];
-            continue;
+
+    $armarGruposDaily = static function (array $columnas): array {
+        $grupos = [];
+        foreach ($columnas as $col) {
+            $g = (string) ($col['grupo'] ?? '');
+            if ($g === '') {
+                $grupos[] = ['titulo' => '', 'span' => 1];
+                continue;
+            }
+            $ultimo = $grupos[count($grupos) - 1] ?? null;
+            if ($ultimo && ($ultimo['titulo'] ?? null) === $g) {
+                $grupos[count($grupos) - 1]['span']++;
+            } else {
+                $grupos[] = ['titulo' => $g, 'span' => 1];
+            }
         }
-        $ultimo = $grupos[count($grupos) - 1] ?? null;
-        if ($ultimo && ($ultimo['titulo'] ?? null) === $g) {
-            $grupos[count($grupos) - 1]['span']++;
-        } else {
-            $grupos[] = ['titulo' => $g, 'span' => 1];
-        }
-    }
+
+        return $grupos;
+    };
 @endphp
 
 @if ($conSolapas)
@@ -53,6 +57,11 @@
     </div>
     <div class="tab-content" id="tabs-daily-flash-content">
         @foreach ($secciones as $idx => $sec)
+            @php
+                $columnasSec = $sec['columnas']
+                    ?? FlashCrownInformeSupport::columnasDailyParaSeccion($sec['codigo'] ?? null);
+                $gruposSec = $armarGruposDaily($columnasSec);
+            @endphp
             <div class="tab-pane fade {{ $idx === 0 ? 'show active' : '' }}"
                  id="tab-daily-{{ $idx }}"
                  role="tabpanel"
@@ -60,8 +69,8 @@
                 <p class="font-weight-bold mb-2">{{ $sec['titulo'] ?? '' }}</p>
                 @include('caja.flash_crown.reporte.partials.tabla_daily_seccion', [
                     'seccion' => $sec,
-                    'columnas' => $columnas,
-                    'grupos' => $grupos,
+                    'columnas' => $columnasSec,
+                    'grupos' => $gruposSec,
                     'excel' => false,
                 ])
             </div>
@@ -69,13 +78,18 @@
     </div>
 @else
     @foreach ($secciones as $sec)
+        @php
+            $columnasSec = $sec['columnas']
+                ?? FlashCrownInformeSupport::columnasDailyParaSeccion($sec['codigo'] ?? null);
+            $gruposSec = $armarGruposDaily($columnasSec);
+        @endphp
         @if (! $excel)
             <h6 class="mt-3 mb-1 font-weight-bold">{{ $sec['titulo'] ?? '' }}</h6>
         @endif
         @include('caja.flash_crown.reporte.partials.tabla_daily_seccion', [
             'seccion' => $sec,
-            'columnas' => $columnas,
-            'grupos' => $grupos,
+            'columnas' => $columnasSec,
+            'grupos' => $gruposSec,
             'excel' => $excel,
         ])
     @endforeach

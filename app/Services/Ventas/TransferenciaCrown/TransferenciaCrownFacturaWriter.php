@@ -18,6 +18,7 @@ use App\Models\Ventas\Venta_Impuesto;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Ventas\TransferenciaCrown\CrownFacturaAsientoFechaSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownImputacionSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownImpuestoConceptos;
@@ -29,6 +30,8 @@ use RuntimeException;
  *
  * Solo ERP (MySQL). No pide CAE, no llama al bridge Anita y no escribe ctamov/subdiario/venta
  * en Informix: el comprobante ya existe en la sala o en ARCA.
+ *
+ * Casino/gastronomía: asiento por fechajornada. ARCA: asiento por fecha física.
  */
 final class TransferenciaCrownFacturaWriter
 {
@@ -159,8 +162,13 @@ final class TransferenciaCrownFacturaWriter
         if ($jornada === '') {
             $jornada = $fecha;
         }
+        $fechaAsiento = CrownFacturaAsientoFechaSupport::resolver(
+            $fecha,
+            $jornada,
+            CrownFacturaAsientoFechaSupport::usarJornadaEnTransferencia($fila),
+        );
         if (PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, PeriodoContableCierreSupport::ALCANCE_FACTURACION)
-            || PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, PeriodoContableCierreSupport::ALCANCE_CONTABLE)) {
+            || PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fechaAsiento, PeriodoContableCierreSupport::ALCANCE_CONTABLE)) {
             throw new RuntimeException('La fecha está dentro de un período cerrado.');
         }
 
@@ -188,7 +196,7 @@ final class TransferenciaCrownFacturaWriter
 
         return DB::transaction(function () use (
             $fila, $usuarioId, $leyenda, $lineas, $tipo, $puntoventa, $empresaId,
-            $fecha, $jornada, $cliente, $signo, $total, $monedaId, $cotizacion, $nombre, $codigo, $neto, $cuit
+            $fecha, $jornada, $fechaAsiento, $cliente, $signo, $total, $monedaId, $cotizacion, $nombre, $codigo, $neto, $cuit
         ): array {
             $venta = Venta::query()->create([
                 'fecha' => $fecha,
@@ -228,7 +236,7 @@ final class TransferenciaCrownFacturaWriter
             ]);
 
             $this->grabarImpuestos((int) $venta->id, $fila);
-            $asiento = $this->crearAsiento($venta, $fila, $usuarioId, $leyenda, $lineas, $empresaId, $fecha, $monedaId, $cotizacion, $codigo);
+            $asiento = $this->crearAsiento($venta, $fila, $usuarioId, $leyenda, $lineas, $empresaId, $fechaAsiento, $monedaId, $cotizacion, $codigo);
 
             return [
                 'venta_id' => (int) $venta->id,
@@ -267,8 +275,22 @@ final class TransferenciaCrownFacturaWriter
         $puntoventa = $this->punto((int) $fila['sucursal']);
         $empresaId = (int) $puntoventa->empresa_id;
         $fecha = (string) ($venta->fecha ?? $fila['fecha']);
+        $jornada = trim((string) ($venta->fechajornada ?? $fila['fechajornada'] ?? ''));
+        if ($jornada === '') {
+            $jornada = $fecha;
+        }
+        $filaConOrigen = $fila;
+        if (! array_key_exists('asiento_usa_jornada', $filaConOrigen)) {
+            $filaConOrigen['asiento_usa_jornada'] = ! str_starts_with($leyenda, 'Importación ARCA')
+                && ! str_starts_with($leyenda, 'Importacion ARCA');
+        }
+        $fechaAsiento = CrownFacturaAsientoFechaSupport::resolver(
+            $fecha,
+            $jornada,
+            CrownFacturaAsientoFechaSupport::usarJornadaEnTransferencia($filaConOrigen),
+        );
         if (PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, PeriodoContableCierreSupport::ALCANCE_FACTURACION)
-            || PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, PeriodoContableCierreSupport::ALCANCE_CONTABLE)) {
+            || PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fechaAsiento, PeriodoContableCierreSupport::ALCANCE_CONTABLE)) {
             throw new RuntimeException('La fecha está dentro de un período cerrado.');
         }
 
@@ -280,7 +302,7 @@ final class TransferenciaCrownFacturaWriter
         $codigo = TransferenciaCrownComprobante::codigoVisible($fila);
 
         return DB::transaction(function () use (
-            $fila, $usuarioId, $leyenda, $lineas, $venta, $empresaId, $fecha, $monedaId, $cotizacion, $codigo
+            $fila, $filaConOrigen, $usuarioId, $leyenda, $lineas, $venta, $empresaId, $fechaAsiento, $monedaId, $cotizacion, $codigo
         ): array {
             $venta = Venta::query()->whereKey((int) $venta->id)->lockForUpdate()->first();
             if ($venta === null) {
@@ -298,7 +320,7 @@ final class TransferenciaCrownFacturaWriter
                 }
                 $venta->save();
             }
-            $asiento = $this->crearAsiento($venta, $fila, $usuarioId, $leyenda, $lineas, $empresaId, $fecha, $monedaId, $cotizacion, $codigo);
+            $asiento = $this->crearAsiento($venta, $filaConOrigen, $usuarioId, $leyenda, $lineas, $empresaId, $fechaAsiento, $monedaId, $cotizacion, $codigo);
 
             return [
                 'venta_id' => (int) $venta->id,

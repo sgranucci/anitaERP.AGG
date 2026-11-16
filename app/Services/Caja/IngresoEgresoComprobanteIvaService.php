@@ -262,10 +262,19 @@ class IngresoEgresoComprobanteIvaService
             );
             $totalDebe = round(array_sum(array_column($armado['lineas'], 'importe')), 2);
 
+            $detalle = IngresoEgresoComprobanteIvaAsientoSupport::detalleLibreLeyenda(
+                (string) ($payload['leyenda'] ?? '')
+            );
             $lineas = [];
             foreach ($armado['lineas'] as $linea) {
                 $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
                 $cuenta = $cuentaId > 0 ? $this->cuentacontableRepository->find($cuentaId) : null;
+                $observacion = (string) ($linea['observacion'] ?? '');
+                if ($detalle !== '' && (string) ($linea['origen'] ?? '') !== 'impuesto') {
+                    $observacion = $observacion === '' || $observacion === $detalle
+                        ? $detalle
+                        : trim($observacion.' — '.$detalle);
+                }
                 $lineas[] = [
                     'cuentacontable_id' => $cuentaId,
                     'codigo' => $cuenta?->codigo ?? '',
@@ -273,7 +282,7 @@ class IngresoEgresoComprobanteIvaService
                     'centrocosto_id' => (int) ($linea['centrocosto_id'] ?? 0),
                     'debe' => $linea['importe'],
                     'haber' => 0,
-                    'observacion' => $linea['observacion'],
+                    'observacion' => $observacion,
                     'origen' => $linea['origen'],
                     'editable_cuenta' => (bool) $linea['editable_cuenta'],
                     'editable_importe' => (bool) $linea['editable_importe'],

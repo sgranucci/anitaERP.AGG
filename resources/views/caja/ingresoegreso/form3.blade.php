@@ -32,6 +32,7 @@
                         <th>Tipo</th>
                         <th>Comprobante</th>
                         <th>Proveedor</th>
+                        <th>Detalle</th>
                         <th>Fecha IVA</th>
                         <th class="text-right">Total</th>
                         <th class="text-center">Acciones</th>

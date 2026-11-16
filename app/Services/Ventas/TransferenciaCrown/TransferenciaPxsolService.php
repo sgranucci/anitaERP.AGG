@@ -176,6 +176,11 @@ final class TransferenciaPxsolService
         $fila['estado'] = 'nuevo';
         $fila['mensaje'] = '';
         $fila['asiento_origen'] = 'generado';
+        // ARCA: asiento por fecha física (no jornada de casino).
+        $fila['asiento_usa_jornada'] = false;
+        if (empty($fila['fechajornada'])) {
+            $fila['fechajornada'] = (string) ($fila['fecha'] ?? '');
+        }
         $fila['nro_operacion'] = 0;
         $fila['lineas_asiento'] = [];
 

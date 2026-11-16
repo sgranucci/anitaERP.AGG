@@ -27,8 +27,8 @@ final class FlashCrownInformeSupport
     private array $flashPorClave = [];
 
     /**
-     * Solo jornada de tesorería fuerza recálculo vivo.
-     * resultado_online NO debe pisar mesas/slots ya importados de Anita en flash_crown.
+     * Hay jornada (abierta o cerrada: mismo criterio). Solo se usa el vivo si
+     * no hay flash usable; si el flash ya tiene el día, manda el persistido.
      *
      * @var array<string, true>
      */
@@ -207,12 +207,15 @@ final class FlashCrownInformeSupport
         foreach ($salas as $sala) {
             $filas = $this->filasDailySala((int) $sala->id, $mtdDesde, $fecha);
             $filasPorSala[(int) $sala->id] = $filas;
+            $codigoSala = (string) $sala->codigo;
             $secciones[] = [
                 'titulo' => (string) $sala->nombre,
-                'codigo' => (string) $sala->codigo,
+                'codigo' => $codigoSala,
                 'filas' => $filas,
                 'total' => $this->totalDaily($filas),
                 'promedio' => $this->promedioDaily($filas),
+                // Online (DRO / Betsur / Apuestas) se carga en adm: solo Resumen, no hojas de sala.
+                'columnas' => self::columnasDailyParaSeccion($codigoSala),
             ];
         }
 
@@ -223,6 +226,7 @@ final class FlashCrownInformeSupport
             'filas' => $resumenFilas,
             'total' => $this->totalDaily($resumenFilas),
             'promedio' => $this->promedioDaily($resumenFilas),
+            'columnas' => self::columnasDailyParaSeccion('RESUMEN'),
         ]);
 
         return [
@@ -232,6 +236,16 @@ final class FlashCrownInformeSupport
             'columnas' => self::columnasDaily(),
             'secciones' => $secciones,
         ];
+    }
+
+    /**
+     * Grupos de juego online (empresa / adm). Van en Resumen, no en hojas de sucursal.
+     *
+     * @return list<string>
+     */
+    public static function gruposOnlineDaily(): array
+    {
+        return ['ON-LINE', 'BETSUR', 'APUESTAS'];
     }
 
     /**
@@ -278,6 +292,33 @@ final class FlashCrownInformeSupport
             ['clave' => 'combinado_ant', 'titulo' => 'Comb. Ant.', 'grupo' => ''],
             ['clave' => 'var_pct', 'titulo' => 'Var. %', 'grupo' => '', 'pct' => true],
         ];
+    }
+
+    /**
+     * Columnas de hoja de sucursal: sin ON-LINE / BETSUR / APUESTAS (vacías ahí; viven en Resumen).
+     *
+     * @return list<array{clave: string, titulo: string, grupo: string, entero?: bool, pct?: bool}>
+     */
+    public static function columnasDailySala(): array
+    {
+        $omitir = array_flip(self::gruposOnlineDaily());
+
+        return array_values(array_filter(
+            self::columnasDaily(),
+            static fn (array $col): bool => ! isset($omitir[(string) ($col['grupo'] ?? '')])
+        ));
+    }
+
+    /**
+     * @return list<array{clave: string, titulo: string, grupo: string, entero?: bool, pct?: bool}>
+     */
+    public static function columnasDailyParaSeccion(?string $codigo): array
+    {
+        if (strcasecmp(trim((string) $codigo), 'RESUMEN') === 0) {
+            return self::columnasDaily();
+        }
+
+        return self::columnasDailySala();
     }
 
     /**
@@ -765,10 +806,9 @@ final class FlashCrownInformeSupport
         $tieneJornada = isset($this->conJornada[$clave]);
         $tieneOnlineSlots = isset($this->conOnlineSlots[$clave]);
 
-        // Réplica Anita / validado: manda el flash persistido (jornada abierta no debe
-        // pisar coin_in/slot_r/mesas con un vivo vacío — bug Daily CIP 1/11).
-        if ($stored instanceof FlashCrown
-            && ($stored->estaValidado() || ! $tieneJornada || $stored->esReplicaAnita())) {
+        // Flash con el día cargado: manda siempre (jornada abierta o cerrada = igual).
+        // El vivo no pisa el persistido (bug Daily CIP 1/11: Wheel −42M, Att 0, Drop 0).
+        if ($stored instanceof FlashCrown && $stored->tieneDiaCargado()) {
             $base = FlashCrownCalculoSupport::completarSlotsVaciosDesdeResultadoOnline(
                 $stored->toArray(),
                 $salaId,
@@ -784,7 +824,7 @@ final class FlashCrownInformeSupport
         }
 
         $calc = FlashCrownCalculoSupport::deSalaFecha($salaId, $fechaYmd);
-        // Jornada sin gastro/slots: conservar réplica ya cargada.
+        // Hueco de flash + jornada: si igual había algo parcial, no borrar con vivo vacío.
         if ($stored instanceof FlashCrown) {
             foreach (['ayb', 'hotel', 'caja_empleado', 'coin_in', 'coin_out', 'pago_manual', 'slot_r', 'soft_count', 'hard_count', 'cant_slots', 'slot_d'] as $campo) {
                 if (abs((float) ($calc[$campo] ?? 0)) < 0.001
@@ -811,32 +851,23 @@ final class FlashCrownInformeSupport
      */
     private function conservarMesasDesdeFlash(array $calc, FlashCrown $stored): array
     {
-        $mesaCalc = (float) FlashCrownCalculoSupport::metricasDerivadas($calc)['win_mesas'];
-        $mesaStored = (float) FlashCrownCalculoSupport::metricasDerivadas($stored->toArray())['win_mesas'];
-        if (abs($mesaStored) < 0.02) {
+        $storedArr = $stored->toArray();
+        $mesaStored = (float) FlashCrownCalculoSupport::metricasDerivadas($storedArr)['win_mesas'];
+        if (abs($mesaStored) < 0.02
+            && (int) ($storedArr['att'] ?? 0) === 0
+            && abs((float) ($storedArr['cashdrop'] ?? 0)) < 0.02) {
             return $calc;
         }
 
-        $esAnita = $stored->esReplicaAnita();
-
-        // Flash Anita / auto: no reemplazar mesas por un vivo de jornada vacío o distinto.
-        if (! $esAnita && abs($mesaCalc) >= 0.02) {
-            return $calc;
-        }
-        if (! $esAnita && abs($mesaCalc) < 0.02) {
-            // sin Anita: solo rellenar si el vivo no trae mesas
-        } elseif ($esAnita && abs($mesaCalc - $mesaStored) < 0.02) {
-            return $calc;
+        // Mismo criterio abierta/cerrada: si el vivo está a medias vs el flash, conservar.
+        if (! FlashCrownCalculoSupport::vivoJornadaIncompletoRespectoFlash($calc, $storedArr)) {
+            $mesaCalc = (float) FlashCrownCalculoSupport::metricasDerivadas($calc)['win_mesas'];
+            if (abs($mesaCalc) >= 0.02) {
+                return $calc;
+            }
         }
 
-        foreach ([
-            'cashdrop', 'cant_mesas', 'caja_empleado',
-            'wheel_r', 'baccarat_r', 'blackjack_r', 'multi_r', 'crap_r',
-            'caribbean_r', 'poker_r', 'seven_r', 'super_peek_r',
-            'torneo_poker', 'master_cup', 'inscripcion', 'premio',
-            'ruleta_el_d', 'ruleta_el_r', 'soft_rul_el', 'cant_rul_el', 'coin_in_rul',
-            'att',
-        ] as $campo) {
+        foreach (FlashCrownCalculoSupport::camposJuegoConservarDesdeFlash() as $campo) {
             $calc[$campo] = $stored->{$campo};
         }
 

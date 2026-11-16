@@ -173,7 +173,7 @@
                             </div>
                             <div class="form-group col-md-2 mb-2">
                                 <label class="ie-cp-label text-right" for="ie-cp-total">Total</label>
-                                <input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-right font-weight-bold" id="ie-cp-total" title="Total de la factura. Enter lo valida y pasa al primer importe">
+                                <input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-right font-weight-bold" id="ie-cp-total" title="Total de la factura. Enter lo valida y pasa al detalle">
                             </div>
                             <div class="form-group col-md-2 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-moneda-id">Moneda</label>
@@ -182,6 +182,13 @@
                                         <option value="{{ $moneda->id }}">{{ $moneda->abreviatura }}</option>
                                     @endforeach
                                 </select>
+                            </div>
+                            <div class="form-group col-md-2 mb-2" id="ie-cp-detalle-grupo">
+                                <label class="ie-cp-label" for="ie-cp-detalle">Detalle</label>
+                                <input type="text" class="form-control form-control-sm" id="ie-cp-detalle"
+                                    maxlength="255" autocomplete="off"
+                                    placeholder="combustible…"
+                                    title="Descripci&oacute;n de este comprobante. Enter valida y sigue al primer importe">
                             </div>
                         </div>
                         <div class="form-row d-none" id="ie-cp-fila-autorizacion">

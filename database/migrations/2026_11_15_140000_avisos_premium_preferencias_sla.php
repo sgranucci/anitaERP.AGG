@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -48,16 +49,14 @@ return new class extends Migration
                 }
             });
 
-            if (Schema::hasColumn('user_task', 'escalado_a_usuario_id')) {
-                $fk = collect(DB::select("SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_task'
-                    AND CONSTRAINT_NAME = 'fk_user_task_escalado_usuario'"))->isNotEmpty();
-                if (! $fk) {
-                    Schema::table('user_task', function (Blueprint $table) {
-                        $table->foreign('escalado_a_usuario_id', 'fk_user_task_escalado_usuario')
-                            ->references('id')->on('usuario')->onDelete('set null');
-                    });
-                }
+            if (
+                Schema::hasColumn('user_task', 'escalado_a_usuario_id')
+                && ! MigrationDialectSupport::tieneForeignKey('user_task', 'fk_user_task_escalado_usuario')
+            ) {
+                Schema::table('user_task', function (Blueprint $table) {
+                    $table->foreign('escalado_a_usuario_id', 'fk_user_task_escalado_usuario')
+                        ->references('id')->on('usuario')->onDelete('set null');
+                });
             }
         }
 

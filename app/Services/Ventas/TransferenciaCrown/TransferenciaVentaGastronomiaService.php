@@ -250,6 +250,7 @@ final class TransferenciaVentaGastronomiaService
             'estado' => 'nuevo',
             'mensaje' => '',
             'asiento_origen' => 'generado',
+            'asiento_usa_jornada' => true,
             'nro_operacion' => 0,
             'lineas_asiento' => [],
             'sala' => $sala['nombre'],
