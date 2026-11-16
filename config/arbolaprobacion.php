@@ -90,6 +90,24 @@ return [
     |--------------------------------------------------------------------------
     | Flag: articulo.aprobacion_alta.habilitado / ARTICULO_APROBACION_ALTA.
     | Entra a Mis aprobaciones vía movimientos de árbol (fuente arbol), no
-    | requiere FUENTE_ARTICULO aparte. Tabla user_task persistida: diferida.
+    | requiere FUENTE_ARTICULO aparte.
+    | user_task: tabla persistida + sync periódico (user-task:sincronizar).
+    | La bandeja en vivo sigue siendo la fuente de verdad operativa.
     */
+    'user_task_sync_habilitado' => filter_var(env('USER_TASK_SYNC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    | Si true, Mis aprobaciones lista desde user_task (índice sync).
+    | Default false: bandeja viva (fuente de verdad operativa).
+    */
+    'user_task_bandeja_desde_tabla' => filter_var(env('USER_TASK_BANDEJA_DESDE_TABLA', false), FILTER_VALIDATE_BOOLEAN),
+
+    // Horas hasta vence_en al abrir una user_task (si el tipo no define sla_horas).
+    'user_task_sla_horas' => max(1, (int) env('USER_TASK_SLA_HORAS', 48)),
+
+    // IDs de usuarios que reciben copia al escalar SLA vencido (vacío = solo titular).
+    'user_task_escalamiento_usuario_ids' => array_values(array_filter(array_map(
+        'intval',
+        explode(',', (string) env('USER_TASK_ESCALAMIENTO_USUARIO_IDS', ''))
+    ))),
 ];

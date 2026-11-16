@@ -463,11 +463,10 @@ class IngresoEgresoComprobanteIvaService
                 (float) ($payload['cotizacion'] ?? 1),
             ),
             'numerocae' => $payload['numerocae'] ?? null,
-            'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
-                $payload['tipo_autorizacion'] ?? null
-            ) ?? (filled($payload['numerocae'] ?? null)
-                ? ComprobanteProveedorTipoAutorizacion::CAE
-                : null),
+            'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::resolverAlGrabar(
+                $payload['tipo_autorizacion'] ?? null,
+                $payload['numerocae'] ?? null,
+            ),
             'fechavencimientocae' => $payload['fechavencimientocae'] ?? null,
             'modo_carga' => ComprobanteProveedorModoCarga::SIN_RECEPCION,
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO,
@@ -662,11 +661,10 @@ class IngresoEgresoComprobanteIvaService
             return null;
         }
 
-        $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::normalizar(
-            $payload['tipo_autorizacion'] ?? null
-        ) ?? (filled($payload['numerocae'] ?? null)
-            ? ComprobanteProveedorTipoAutorizacion::CAE
-            : null);
+        $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::resolverAlGrabar(
+            $payload['tipo_autorizacion'] ?? null,
+            $payload['numerocae'] ?? null,
+        );
 
         try {
             ComprobanteProveedorUnicidadSupport::assertUnico(

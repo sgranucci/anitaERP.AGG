@@ -90,6 +90,137 @@ final class AiMcpBridgeSupport
             'auto_aplicar_score' => 0,
         ];
 
+        $consultaOn = (bool) config('ai.skills.consultar_contexto_operativo.habilitada', true);
+        $tools[] = [
+            'name' => 'cash_position',
+            'description' => 'Cash position ERP: saldos IB vs deuda vencida vs propuestas (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'ap_aging',
+            'description' => 'Aging proveedores / top deuda vencida (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'max_lineas' => ['type' => 'integer'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'brief_dia',
+            'description' => 'Arma snapshot del brief del día (solo lectura; no escribe sesión ni notifica).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'asistente_rol' => ['type' => 'string'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'liquidaciones_periodo',
+            'description' => 'Corridas de liquidación de sueldos de un período AAAAMM (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'periodo' => ['type' => 'string', 'description' => 'AAAAMM o texto (este mes / noviembre 2026)'],
+                    'max_lineas' => ['type' => 'integer'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'tickets_abiertos',
+            'description' => 'Tickets Pendiente / En ejecución por antigüedad (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'max_lineas' => ['type' => 'integer'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'cheque_aging',
+            'description' => 'Aging cartera CHT: vencidos / por vencer (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'fecha_hasta' => ['type' => 'string'],
+                    'bucket' => ['type' => 'string'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'stock_critico',
+            'description' => 'Insumos con saldo bajo / crítico (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'umbral' => ['type' => 'number'],
+                    'deposito_codigo' => ['type' => 'string'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'ar_aging',
+            'description' => 'Aging clientes / top deudores AR (solo lectura).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'max_lineas' => ['type' => 'integer'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+        $tools[] = [
+            'name' => 'liquidaciones_pendientes_cierre',
+            'description' => 'Corridas de liquidación editables (borrador/calculada/revisada).',
+            'inputSchema' => [
+                'type' => 'object',
+                'properties' => [
+                    'empresa_id' => ['type' => 'integer'],
+                    'periodo' => ['type' => 'string'],
+                    'max_lineas' => ['type' => 'integer'],
+                ],
+            ],
+            'habilitada' => $consultaOn,
+            'permiso' => 'ejecutar-consulta-ia',
+            'auto_aplicar_score' => 0,
+        ];
+
         return ['tools' => $tools];
     }
 
@@ -106,6 +237,20 @@ final class AiMcpBridgeSupport
 
         if ($name === 'consultar_contexto_operativo_nl') {
             return $this->llamarConsultaNl($arguments);
+        }
+
+        if (in_array($name, [
+            'cash_position',
+            'ap_aging',
+            'brief_dia',
+            'liquidaciones_periodo',
+            'tickets_abiertos',
+            'cheque_aging',
+            'stock_critico',
+            'ar_aging',
+            'liquidaciones_pendientes_cierre',
+        ], true)) {
+            return $this->llamarIntentTipado($name, $arguments);
         }
 
         if (! $this->registry->tiene($name)) {
@@ -154,6 +299,52 @@ final class AiMcpBridgeSupport
                 ],
                 'error' => $resultado->ok ? null : ($resultado->error ?? 'Error skill'),
                 'decision_id' => $decision?->id ?? $resultado->decisionId,
+            ];
+        } catch (Throwable $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Tools tipadas de solo lectura (mismo grounding que el FAB).
+     *
+     * @param  array<string,mixed>  $arguments
+     * @return array{ok: bool, content?: mixed, error?: string, decision_id?: int|null}
+     */
+    private function llamarIntentTipado(string $intent, array $arguments): array
+    {
+        if (! filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', true), FILTER_VALIDATE_BOOLEAN)) {
+            return ['ok' => false, 'error' => 'consultar_contexto_operativo deshabilitada'];
+        }
+
+        $params = $arguments;
+        unset($params['payload']);
+        if (isset($arguments['payload']) && is_array($arguments['payload'])) {
+            $params = array_merge($params, $arguments['payload']);
+        }
+        $params['_mcp_bridge'] = true;
+        if ($intent === 'brief_dia') {
+            $params['accion'] = 'armar';
+        }
+
+        try {
+            $resultado = AiConsultaOperativaSupport::consultar($intent, $params);
+            $decision = $this->logger->registrar([
+                'skill' => 'consultar_contexto_operativo',
+                'accion' => ($resultado['ok'] ?? false) ? AiDecision::ACCION_SUGERIDA : AiDecision::ACCION_ERROR,
+                'score' => $resultado['score'] ?? null,
+                'payload' => [
+                    'origen' => 'mcp',
+                    'tool' => $intent,
+                    'intent' => $intent,
+                ],
+            ]);
+
+            return [
+                'ok' => (bool) ($resultado['ok'] ?? false),
+                'content' => $resultado,
+                'error' => ($resultado['ok'] ?? false) ? null : ($resultado['error'] ?? 'Consulta fallida'),
+                'decision_id' => $decision?->id,
             ];
         } catch (Throwable $e) {
             return ['ok' => false, 'error' => $e->getMessage()];

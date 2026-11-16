@@ -326,6 +326,7 @@
                 </div>
 
                 <div class="card-body">
+                    @include('compras.comprobante_proveedor.partials.panel_importacion')
                     @include('compras.contrato_validacion_abono.partials.banner')
                     @php
                         $avisosIniciales = $asientoPreview['avisos'] ?? [];
@@ -536,6 +537,8 @@
 @include('includes.compras.modalconsultaconcepto_ivacompra')
 @include('includes.compras.modalconsultatipotransaccioncompra')
 @include('includes.contable.modalconsultacuentacontable')
+@include('includes.compras.modalconsulta_importacion_carpeta')
+@include('includes.compras.modalconsulta_importacion_gasto_tipo')
 @if ($mostrarSolapaArticulos ?? false)
 @include('includes.stock.modalconsultaarticulo')
 @endif

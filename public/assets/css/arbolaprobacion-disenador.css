@@ -1,0 +1,177 @@
+/* Diseñador gráfico del árbol de aprobación */
+
+.anita-arbol-diseno .anita-diseno-shell {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 0.85rem;
+    align-items: stretch;
+    min-height: 70vh;
+}
+
+@media (max-width: 991px) {
+    .anita-arbol-diseno .anita-diseno-shell {
+        grid-template-columns: 1fr;
+    }
+}
+
+.anita-diseno-canvas-wrap {
+    border: 1px solid rgba(16, 36, 51, 0.12);
+    border-radius: 12px;
+    background: #eef3f6;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    min-height: 70vh;
+}
+
+.anita-diseno-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    background: #fff;
+    border-bottom: 1px solid rgba(16, 36, 51, 0.1);
+}
+
+.anita-diseno-status {
+    font-size: 0.8rem;
+    color: #1a7a6d;
+    font-weight: 600;
+}
+
+.anita-diseno-viewport {
+    position: relative;
+    flex: 1;
+    overflow: auto;
+    cursor: grab;
+    background:
+        linear-gradient(rgba(12, 59, 82, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(12, 59, 82, 0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+}
+
+.anita-diseno-viewport.is-panning {
+    cursor: grabbing;
+}
+
+.anita-diseno-stage {
+    position: relative;
+    min-width: 1400px;
+    min-height: 900px;
+    transform-origin: 0 0;
+}
+
+.anita-diseno-edges {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 1;
+}
+
+.anita-diseno-edges path {
+    fill: none;
+    stroke: #0c3b52;
+    stroke-width: 2;
+    stroke-opacity: 0.55;
+    marker-end: url(#anita-arrow);
+}
+
+.anita-diseno-lane-label {
+    position: absolute;
+    z-index: 2;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #5a6b7a;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(16, 36, 51, 0.1);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.anita-diseno-node {
+    position: absolute;
+    z-index: 3;
+    width: 220px;
+    min-height: 112px;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid rgba(12, 59, 82, 0.18);
+    box-shadow: 0 6px 18px rgba(7, 38, 54, 0.08);
+    cursor: grab;
+    user-select: none;
+    padding: 0.55rem 0.65rem 0.6rem;
+}
+
+.anita-diseno-node:active {
+    cursor: grabbing;
+}
+
+.anita-diseno-node.is-selected {
+    border-color: #1a7a6d;
+    box-shadow: 0 0 0 2px rgba(26, 122, 109, 0.35), 0 8px 20px rgba(7, 38, 54, 0.12);
+}
+
+.anita-diseno-node.is-auto {
+    border-style: dashed;
+    background: #f7fbfa;
+}
+
+.anita-diseno-node-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.35rem;
+}
+
+.anita-diseno-node-nivel {
+    font-weight: 800;
+    color: #0c3b52;
+    font-size: 0.95rem;
+}
+
+.anita-diseno-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-radius: 999px;
+    padding: 0.12rem 0.4rem;
+    background: rgba(12, 59, 82, 0.08);
+    color: #0c3b52;
+}
+
+.anita-diseno-badge.is-auto {
+    background: rgba(26, 122, 109, 0.14);
+    color: #1a7a6d;
+}
+
+.anita-diseno-badge.is-doble {
+    background: rgba(183, 121, 31, 0.16);
+    color: #8a5a12;
+}
+
+.anita-diseno-node-user {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: #102433;
+    line-height: 1.25;
+    margin-bottom: 0.25rem;
+}
+
+.anita-diseno-node-meta {
+    font-size: 0.75rem;
+    color: #5a6b7a;
+    line-height: 1.3;
+}
+
+.anita-diseno-panel {
+    height: 100%;
+}

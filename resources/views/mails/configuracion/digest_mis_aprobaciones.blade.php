@@ -32,6 +32,7 @@
                 <th align="left">Documento</th>
                 <th align="right">Monto</th>
                 <th align="center">Días</th>
+                <th align="center">Abrir</th>
             </tr>
         </thead>
         <tbody>
@@ -49,6 +50,9 @@
                         @endif
                     </td>
                     <td align="center">{{ $item['dias_pendiente'] ?? 0 }}</td>
+                    <td align="center">
+                        <a href="{{ $item['url_abs'] ?? $linkBandeja }}" style="color:#0f3d56;font-weight:600;">Ir</a>
+                    </td>
                 </tr>
             @endforeach
         </tbody>

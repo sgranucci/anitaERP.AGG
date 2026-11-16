@@ -8,6 +8,7 @@ use App\Support\Manuales\Escenas\CajaEscenas;
 use App\Support\Manuales\Escenas\CanjesMarketingEscenas;
 use App\Support\Manuales\Escenas\CierresRendicionesEscenas;
 use App\Support\Manuales\Escenas\ComprasEscenas;
+use App\Support\Manuales\Escenas\ConciliacionBancariaEscenas;
 use App\Support\Manuales\Escenas\ContableEscenas;
 use App\Support\Manuales\Escenas\GastronomiaEscenas;
 use App\Support\Manuales\Escenas\PropuestaPagoEscenas;
@@ -196,6 +197,7 @@ final class ManualMockupGeneradorService
             'caja' => CajaEscenas::todas(),
             'cierres-rendiciones' => CierresRendicionesEscenas::todas(),
             'tesoreria-crown' => TesoreriaCrownEscenas::todas(),
+            'conciliacion-bancaria' => ConciliacionBancariaEscenas::todas(),
             default => throw new InvalidArgumentException('Sin escenas para: '.$manual),
         };
     }

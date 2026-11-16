@@ -133,4 +133,57 @@ class PaisController extends Controller
             );
         }
     }
+
+    public function consultaPais(Request $request)
+    {
+        $consulta = trim((string) $request->input('consulta', ''));
+        $q = Pais::query()->orderBy('nombre');
+        if ($consulta !== '') {
+            $q->where(function ($w) use ($consulta) {
+                $w->where('codigo', 'like', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'like', '%'.$consulta.'%')
+                    ->orWhere('id', 'like', '%'.$consulta.'%');
+            });
+        }
+        $html = '';
+        foreach ($q->limit(80)->get() as $row) {
+            $html .= '<tr data-id="'.(int) $row->id.'" data-codigo="'.e((string) $row->codigo).'" data-nombre="'.e((string) $row->nombre).'">';
+            $html .= '<td class="d-none">'.$row->id.'</td>';
+            $html .= '<td>'.e((string) $row->codigo).'</td>';
+            $html .= '<td>'.e((string) $row->nombre).'</td>';
+            $html .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultapais">Elegir</a>';
+            if (can('editar-paises', false) || can('listar-paises', false)) {
+                $url = route('editar_pais', [
+                    'id' => $row->id,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+                $html .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        return response()->json([
+            'data' => $html !== '' ? $html : '<tr><td colspan="4" class="text-muted">Sin resultados</td></tr>',
+        ]);
+    }
+
+    public function leerPorCodigo(string $codigo)
+    {
+        $cod = trim($codigo);
+        $row = Pais::query()
+            ->whereRaw('UPPER(codigo) = ?', [strtoupper($cod)])
+            ->orWhere('id', ctype_digit($cod) ? (int) $cod : 0)
+            ->first();
+
+        if (! $row) {
+            return response()->json([]);
+        }
+
+        return response()->json([
+            'id' => $row->id,
+            'codigo' => $row->codigo,
+            'nombre' => $row->nombre,
+        ]);
+    }
 }

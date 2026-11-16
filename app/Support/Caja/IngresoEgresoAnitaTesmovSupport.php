@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Log;
  * - auxpag TES + tesmov por retenciones RGP/RIP/RSP/RTP (pago.c inserta_valores + graba_auxpag TES)
  * - auxpag FAC por factura aplicada (pago.c graba_auxpag(FAC))
  * - si hay cheques propios emitidos: cpromae + auxpag CHP + tesmov CHP
+ * - anulación de cheque propio: tesmov ACP sin copiar tesv_conciliado/nro_conc/fecha_conc del CHP
  * - OP sin caja (monto 0 / solo aplicación de anticipos): pago + auxpag FAC, sin tesmov
  */
 final class IngresoEgresoAnitaTesmovSupport
@@ -72,6 +73,12 @@ final class IngresoEgresoAnitaTesmovSupport
         'OPP' => 'AOP',
         'OPA' => 'AOP',
     ];
+
+    /**
+     * Anulación de cheque propio en tesmov (Anita a-tesmov / Tesorería).
+     * No reutilizar CHP ni copiar tesv_conciliado / nro_conc / fecha_conc del original.
+     */
+    public const TIPO_TESMOV_ANULA_CHEQUE = 'ACP';
 
     /**
      * Clave Anita (tipo+nro) para cruzar tesmov/pago con un IE ERP.
@@ -1799,6 +1806,18 @@ final class IngresoEgresoAnitaTesmovSupport
         ], 'caja IE tesmov');
 
         self::assertOk($raw, 'tesmov', (int) $nro);
+
+        // AOP / ACP: nunca deben quedar conciliados por herencia del movimiento original.
+        if (in_array($tipo, ['AOP', self::TIPO_TESMOV_ANULA_CHEQUE], true)) {
+            self::forzarTesmovSinConciliacion(
+                ' WHERE tesv_tipo = '.self::escSql($tipo)
+                    .' AND tesv_nro = '.$nro
+                    .' AND tesv_cuenta = '.self::escSql(str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT))
+                    .' AND tesv_fecha_mov = '.self::escSql((string) $ctx['fecha'])
+                    .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']),
+                'tesmov '.$tipo.' limpia conc '.$nro
+            );
+        }
     }
 
     /** @param  array<string, mixed>  $ctx */
@@ -1977,10 +1996,21 @@ final class IngresoEgresoAnitaTesmovSupport
 
         $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
 
-        self::deleteWhere('tesmov', " WHERE tesv_tipo = 'CHP' AND tesv_nro = ".$nroCheque
+        $filtroEmpresa = CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']);
+        $whereCheque = ' AND tesv_nro = '.$nroCheque
             .' AND tesv_cuenta = '.self::escSql($cuentaPad)
-            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']),
-            'caja IE tesmov CHP delete '.$cheque->id);
+            .$filtroEmpresa;
+
+        self::deleteWhere(
+            'tesmov',
+            " WHERE tesv_tipo = 'CHP'".$whereCheque,
+            'caja IE tesmov CHP delete '.$cheque->id
+        );
+        self::deleteWhere(
+            'tesmov',
+            ' WHERE tesv_tipo = '.self::escSql(self::TIPO_TESMOV_ANULA_CHEQUE).$whereCheque,
+            'caja IE tesmov ACP delete '.$cheque->id
+        );
 
         self::deleteWhere('cpromae', ' WHERE cpro_cuenta = '.self::escSql($cuentaPad)
             .' AND cpro_nro_cheque = '.$nroCheque,
@@ -2115,8 +2145,8 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
-     * Reversión: marca fecha de anulación en cpromae y graba tesmov/auxpag CHP con signo invertido
-     * bajo el nro de la OP de anulación.
+     * Reversión: marca fecha de anulación en cpromae, auxpag CHP con signo invertido
+     * y tesmov ACP (no CHP) sin heredar conciliación del cheque original.
      *
      * @param  array<string, mixed>  $ctx
      */
@@ -2135,7 +2165,8 @@ final class IngresoEgresoAnitaTesmovSupport
         $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
         $fechaAnula = (string) ($ctx['fecha'] ?? date('Ymd'));
         self::marcarFechaAnulaCpromae($cheque, $fechaAnula);
-        $importe = round(abs((float) $cheque->monto) * (float) ($ctx['factor'] ?? -1), 2);
+        $importeAuxpag = round(abs((float) $cheque->monto) * (float) ($ctx['factor'] ?? -1), 2);
+        $importeAcp = self::importeTesmovAnulaChequePropio((float) $cheque->monto);
         $cotizacion = (float) ($cheque->cotizacion ?: 1);
         $monedaId = (int) ($cheque->moneda_id ?: 1);
 
@@ -2181,7 +2212,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".self::esc($ctx['tipo'])."',
                 '".$nroCheque."',
                 'CHP',
-                '".$importe."',
+                '".$importeAuxpag."',
                 '".$monedaId."',
                 '".$ctx['fecha']."',
                 '".$cuentaPad."',
@@ -2198,6 +2229,7 @@ final class IngresoEgresoAnitaTesmovSupport
             (int) $ctx['empresa'],
             $monedaId
         );
+        $tipoAcp = self::TIPO_TESMOV_ANULA_CHEQUE;
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'tesmov',
             'acc' => 'insert',
@@ -2219,17 +2251,65 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$cuentaPad."',
                 '".$ctx['fecha']."',
                 '".$ctx['fecha']."',
-                'CHP',
+                '".self::esc($tipoAcp)."',
                 ' ',
                 '".$ctx['sucursal']."',
                 '".$nroCheque."',
-                '".$importe."',
+                '".$importeAcp."',
                 '".$cotizacion."',
                 '".self::esc(self::recortar((string) ($ctx['detalle'] ?? 'ANULA CHP'), 30))."',
                 ' ',
                 'S/C'".$extraTes['valores'],
-        ], 'caja IE tesmov CHP anula '.$cheque->id);
-        self::assertOk($raw, 'tesmov CHP anula', $cheque->id);
+        ], 'caja IE tesmov ACP anula '.$cheque->id);
+        self::assertOk($raw, 'tesmov ACP anula', $cheque->id);
+
+        // Defensa: si Anita/bridge heredara conciliación del CHP, la limpiamos.
+        self::forzarTesmovSinConciliacion(
+            ' WHERE tesv_tipo = '.self::escSql($tipoAcp)
+                .' AND tesv_nro = '.$nroCheque
+                .' AND tesv_cuenta = '.self::escSql($cuentaPad)
+                .' AND tesv_fecha_mov = '.self::escSql((string) $ctx['fecha'])
+                .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']),
+            'tesmov ACP anula limpia conc '.$cheque->id
+        );
+    }
+
+    /** Importe ACP: absoluto; Anita no usa signo negativo en anulación de cheque propio. */
+    public static function importeTesmovAnulaChequePropio(float $montoCheque): float
+    {
+        return round(abs($montoCheque), 2);
+    }
+
+    /**
+     * SET de update para dejar el tesmov pendiente de conciliar (nunca hereda del original).
+     */
+    public static function setSqlTesmovSinConciliacion(): string
+    {
+        $partes = ["tesv_conciliado = ' '"];
+        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+            $partes[] = 'tesv_nro_conc = 0';
+            $partes[] = 'tesv_fecha_conc = 0';
+        }
+
+        return implode(', ', $partes);
+    }
+
+    private static function forzarTesmovSinConciliacion(string $whereArmado, string $contexto): void
+    {
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'tabla' => 'tesmov',
+            'acc' => 'update',
+            'sistema' => self::sistema(),
+            'valores' => self::setSqlTesmovSinConciliacion(),
+            'whereArmado' => $whereArmado,
+        ], $contexto);
+        $err = ApiAnita::extraerMensajeError($raw);
+        if ($err !== null) {
+            Log::warning('caja.ie.anita.tesmov_limpia_conc_fail', [
+                'contexto' => $contexto,
+                'error' => $err,
+            ]);
+        }
     }
 
     public static function esTransferenciaTipo(string $tipo): bool

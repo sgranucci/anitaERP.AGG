@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.0',
+    'version' => '2.1',
     'titulo' => 'Manual de Plataforma IA',
     'subtitulo' => 'Anita ERP — Inteligencia Artificial embebida (estilo SAP / mejores sistemas)',
 

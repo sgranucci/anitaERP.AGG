@@ -1,0 +1,118 @@
+/* Workspace conciliación bancaria manual (Fase 0) */
+
+.conciliacion-manual-workspace .cm-cabezal-contable {
+    background: #1B4F72;
+    color: #fff;
+}
+
+.conciliacion-manual-workspace .cm-cabezal-banco {
+    background: #148F77;
+    color: #fff;
+}
+
+.conciliacion-manual-workspace .cm-cabezal-detalle {
+    background: #2E4053;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.conciliacion-manual-workspace .cm-lista {
+    height: 58vh;
+    overflow: auto;
+    background: #fff;
+}
+
+.conciliacion-manual-workspace .cm-detalle {
+    min-height: 58vh;
+    background: #FBFCFC;
+}
+
+.conciliacion-manual-workspace .cm-fila {
+    cursor: pointer;
+    border-bottom: 1px solid #E5E8E8;
+}
+
+.conciliacion-manual-workspace .cm-fila:hover {
+    background: #EBF5FB;
+}
+
+.conciliacion-manual-workspace .cm-fila.cm-activo {
+    background: #D6EAF8;
+}
+
+.conciliacion-manual-workspace .cm-fila.cm-sugerido:not(.cm-activo) {
+    background: #FDEBD0;
+}
+
+.conciliacion-manual-workspace .cm-fila .cm-check {
+    width: 1.1rem;
+    margin-right: 0.35rem;
+    flex-shrink: 0;
+}
+
+.conciliacion-manual-workspace .cm-totales {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #EAF2F8;
+    border: 1px solid #AED6F1;
+    border-radius: 4px;
+    align-items: flex-end;
+}
+
+.conciliacion-manual-workspace .cm-total-item {
+    min-width: 110px;
+}
+
+.conciliacion-manual-workspace .cm-total-label {
+    display: block;
+    font-size: 0.75rem;
+    color: #566573;
+}
+
+.conciliacion-manual-workspace .cm-total-item strong {
+    font-size: 1.05rem;
+    color: #1B4F72;
+}
+
+.conciliacion-manual-workspace .cm-diff-ok {
+    color: #196F3D !important;
+}
+
+.conciliacion-manual-workspace .cm-diff-mal {
+    color: #922B21 !important;
+}
+
+.conciliacion-manual-workspace .cm-chips .cm-chip {
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
+
+.conciliacion-manual-workspace .cm-detalle-kv {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 4px 8px;
+    font-size: 0.875rem;
+}
+
+.conciliacion-manual-workspace .cm-detalle-kv dt {
+    color: #566573;
+    margin: 0;
+    font-weight: 500;
+}
+
+.conciliacion-manual-workspace .cm-detalle-kv dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.conciliacion-manual-workspace kbd {
+    padding: 0.1rem 0.35rem;
+    font-size: 0.75rem;
+    background: #EEF2F5;
+    border: 1px solid #CCD1D1;
+    border-radius: 3px;
+}

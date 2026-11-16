@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Recepción de proveedores y movimientos de stock',
-    'version' => '1.1',
+    'version' => '1.2',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -339,11 +339,12 @@ return [
                 'Recuento de inventario: ajustes por conteo físico; genera movimientos RCAJP/RCAJN visibles en kardex.',
                 'Préstamo entre depósitos: préstamo con aprobación; aparece en historial de movimientos al confirmarse.',
                 'Recepción proveedor: ingreso desde compras; al confirmar aparece como movimiento de entrada en el depósito.',
-                'Comprobante proveedor (Compras): puede vincular recepciones COM confirmadas de la misma OC para facturar contra provisión.',
+                'Comprobante proveedor (Compras): puede vincular recepciones COM confirmadas de la misma OC para facturar contra provisión (cuenta FAR). Si la factura supera la COM, una nota de crédito del mismo legajo forma un «cupo NC» que permite contabilizar sin asignar la NC a la COM. Detalle con importes en el Manual de Compras, capítulo 13.',
             ],
             'items' => [
                 'Use el icono kardex en líneas de movimiento para ver entradas/salidas del artículo en un depósito.',
                 'Enlaces azules en reportes abren el ABM en nueva pestaña si tiene permiso (origen=modal_consulta).',
+                'Devolución física de mercadería: use el circuito de devolución de recepción / salida de stock. La NC de compra no reemplaza ese movimiento; en la bandeja la NC figura «sin COM».',
             ],
         ],
         [
@@ -361,6 +362,10 @@ return [
                     ['TRCONT desde Movimientos de Stock', 'No permitido. Use Stock → Transferencia con tipo (contabilidad).'],
                     ['Falta centro costo destino TRCONT', 'Complete el selector antes de Transferir; precarga el CC del usuario.'],
                     ['No aparece botón Nuevo', 'Falta permiso crear-recepcion-proveedor o crear-movimientos-de-stock.'],
+                    [
+                        'CxP no puede asentar la FC (diferencia vs COM)',
+                        'Si hay NC en el mismo legajo, el cupo debe dejar FC vs COM+NC dentro del 5%. Ver Manual de Compras §13. No hace falta vincular la NC a esta COM.',
+                    ],
                 ],
             ],
         ],

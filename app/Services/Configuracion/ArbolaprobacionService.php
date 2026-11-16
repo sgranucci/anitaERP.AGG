@@ -1341,7 +1341,13 @@ class ArbolaprobacionService
                         'detiene_arbol' => 'requisicion_en_compras',
                     ]);
 
-                    return $this->commitAprobacion($tipocomprobante);
+                    return $this->finalizarAprobacionExitosa(
+                        (string) $tipocomprobante,
+                        (int) $comprobante_id,
+                        (int) $aprobacion_id,
+                        (int) $usuario_id,
+                        (string) $reqActual->estado
+                    );
                 }
             }
 
@@ -1349,7 +1355,13 @@ class ArbolaprobacionService
                 $reqSalaActual = app(\App\Repositories\Sala\RequisicionSalaRepositoryInterface::class)->find($comprobante_id);
                 $nombreEnLaboratorioSala = \App\Models\Sala\RequisicionSalaEstado::$enumEstado[array_search('5', array_column(\App\Models\Sala\RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'];
                 if ($reqSalaActual && $reqSalaActual->estado === $nombreEnLaboratorioSala) {
-                    return $this->commitAprobacion($tipocomprobante);
+                    return $this->finalizarAprobacionExitosa(
+                        (string) $tipocomprobante,
+                        (int) $comprobante_id,
+                        (int) $aprobacion_id,
+                        (int) $usuario_id,
+                        (string) ($reqSalaActual->estado ?? '')
+                    );
                 }
             }
 
@@ -1367,16 +1379,23 @@ class ArbolaprobacionService
                     ->asegurarEstadoTrasProcesarArbol((int) $comprobante_id);
             }
 
+            $estadoDocumento = $this->estadoDocumentoTrasAprobacion($tipocomprobante, (int) $comprobante_id);
             $this->logArbolAprobacion('aprobacion_ok', [
                 'tipocomprobante' => $tipocomprobante,
                 'comprobante_id' => (int) $comprobante_id,
                 'movimiento_id' => (int) $aprobacion_id,
                 'nivel' => (int) $movimientoPre->nivel,
                 'usuario_id' => (int) $usuario_id,
-                'estado_documento' => $this->estadoDocumentoTrasAprobacion($tipocomprobante, (int) $comprobante_id),
+                'estado_documento' => $estadoDocumento,
             ]);
 
-            return $this->commitAprobacion($tipocomprobante);
+            return $this->finalizarAprobacionExitosa(
+                (string) $tipocomprobante,
+                (int) $comprobante_id,
+                (int) $aprobacion_id,
+                (int) $usuario_id,
+                $estadoDocumento
+            );
         } catch (\Exception $e) {
             DB::rollback();
             if ($tipocomprobante === 'RS') {
@@ -1406,6 +1425,59 @@ class ArbolaprobacionService
             'mensaje' => 'ok',
             'transferencias_sala' => RequisicionSalaTransferenciaLaboratorioDeferred::procesarPendientes(),
         ];
+    }
+
+    /**
+     * @return array{mensaje: string, transferencias_sala?: mixed}
+     */
+    private function finalizarAprobacionExitosa(
+        string $tipocomprobante,
+        int $comprobanteId,
+        int $aprobacionId,
+        int $usuarioId,
+        ?string $estado = null
+    ): array {
+        $resultado = $this->commitAprobacion($tipocomprobante);
+        $this->emitEventoBusArbol(
+            'configuracion.arbol.aprobado',
+            $tipocomprobante,
+            $comprobanteId,
+            $aprobacionId,
+            $usuarioId,
+            $estado
+        );
+
+        return $resultado;
+    }
+
+    private function emitEventoBusArbol(
+        string $evento,
+        string $tipocomprobante,
+        int $comprobanteId,
+        int $aprobacionId,
+        int $usuarioId,
+        ?string $estado = null
+    ): void {
+        try {
+            $empresaId = 0;
+            $documento = $this->cargarDocumentoArbol($tipocomprobante, $comprobanteId);
+            if ($documento && isset($documento->empresa_id)) {
+                $empresaId = (int) $documento->empresa_id;
+            }
+            app(ModuloAvisoEventBus::class)->emit($evento, [
+                'entity_id' => $comprobanteId,
+                'empresa_id' => $empresaId,
+                'fuente' => $tipocomprobante,
+                'estado' => $estado,
+                'usuario_id' => $usuarioId > 0 ? $usuarioId : null,
+                'url' => url('mis-aprobaciones/detalle/arbol/'.$aprobacionId),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => $evento,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -2227,6 +2299,14 @@ class ArbolaprobacionService
             }
 
             DB::commit();
+            $this->emitEventoBusArbol(
+                'configuracion.arbol.rechazado',
+                (string) $tipocomprobante,
+                (int) $comprobante_id,
+                (int) $aprobacion_id,
+                (int) $usuario_id,
+                $nombreRechazado
+            );
         } catch (\Exception $e) {
             DB::rollback();
 

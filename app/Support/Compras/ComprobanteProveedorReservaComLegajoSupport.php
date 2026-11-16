@@ -442,11 +442,16 @@ final class ComprobanteProveedorReservaComLegajoSupport
             if ($asignado <= $provision) {
                 continue;
             }
-            $efectivo = ComprobanteProveedorCupoNcLegajoSupport::asignadoEfectivoTrasCupo(
-                $asignado,
-                (float) ($cupoAplicadoPorCom[$rid] ?? 0),
+            // Misma base que NC vinculada / cupo del asiento: provisión = COM + cupo aplicado.
+            $provisionEfectiva = round(
+                $provision + (float) ($cupoAplicadoPorCom[$rid] ?? 0),
+                2
             );
-            if (! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($efectivo, $provision, $toleranciaPct)) {
+            if (! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
+                $asignado,
+                $provisionEfectiva,
+                $toleranciaPct
+            )) {
                 continue;
             }
 

@@ -6,7 +6,7 @@ Archivos servidos solo autenticados vía `route('guia_paso_a_paso', ['slug' => '
 |------|---------|-----------|
 | `ingreso-proveedores` | `ingreso-proveedores.html` | Seguridad → Ingreso de proveedores |
 | `autorizacion-ingresos` | `autorizacion-ingresos.html` | Pendientes de autorizar / Control de ingreso |
-| `bandeja-legajos` | `bandeja-legajos.html` | Compras → Bandeja de legajos |
+| `bandeja-legajos` | `bandeja-legajos.html` | Compras → Bandeja de legajos (incluye cupo NC) |
 
 Catálogo PHP: `App\Support\Ayuda\GuiaPasoAPasoCatalogo`.
 Controller: `App\Http\Controllers\Ayuda\GuiaPasoAPasoController`.

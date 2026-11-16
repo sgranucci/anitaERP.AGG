@@ -434,6 +434,53 @@
                         value="{{ old('lugarentrega', (isset($data) && $data) ? ($data->lugarentrega ?? '') : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
                 </div>
             </div>
+
+            @php
+                $ocIncoterm = (isset($data) && $data) ? ($data->incoterm ?? null) : null;
+                $ocImportacion = (isset($data) && $data) ? ($data->importaciones->first() ?? null) : null;
+                $ocImportacionIdOld = old('importacion_id', $ocImportacion->id ?? '');
+                $ocImportacionCodigoOld = old('importacion_codigo', $ocImportacion->codigo ?? '');
+                $ocImportacionEstadoOld = old(
+                    'importacion_estado',
+                    $ocImportacion
+                        ? \App\Support\Compras\ImportacionEstados::etiqueta((string) $ocImportacion->estado)
+                        : ''
+                );
+            @endphp
+
+            <div class="{{ ! empty($soloLectura) ? 'pe-none' : '' }}">
+                @include('ventas.partials.campo_consulta_incoterm', [
+                    'prefix' => 'oc',
+                    'incotermId' => old('incoterm_id', $ocIncoterm->id ?? ''),
+                    'codigo' => old('incoterm_codigo', $ocIncoterm->abreviatura ?? ''),
+                    'nombre' => old('incoterm_nombre', $ocIncoterm->nombre ?? ''),
+                    'inputName' => 'incoterm_id',
+                    'inputId' => 'incoterm_oc_id',
+                    'col_label' => 'col-lg-4 control-label text-right pr-2',
+                    'col_input' => 'col-lg-8',
+                ])
+            </div>
+
+            @include('compras.partials.campo_consulta_importacion', [
+                'prefix' => 'oc',
+                'importacionId' => $ocImportacionIdOld,
+                'codigo' => $ocImportacionCodigoOld,
+                'estado' => $ocImportacionEstadoOld,
+                'inputName' => 'importacion_id',
+                'inputId' => 'importacion_oc_id',
+                'col_label' => 'col-lg-4 control-label text-right pr-2',
+                'col_input' => 'col-lg-8',
+                'readonly' => ! empty($soloLectura),
+            ])
+
+            <div class="form-group row">
+                <label class="col-lg-4 control-label text-right pr-2">Moneda</label>
+                <div class="col-lg-8">
+                    <p class="form-control-plaintext mb-0 text-muted">
+                        Por rengl&oacute;n en la solapa <strong>Art&iacute;culos</strong> (columna Moneda / cotizaci&oacute;n).
+                    </p>
+                </div>
+            </div>
             </div>
         </div>
     </div>

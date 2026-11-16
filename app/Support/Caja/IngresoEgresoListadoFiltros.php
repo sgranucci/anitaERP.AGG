@@ -68,6 +68,10 @@ class IngresoEgresoListadoFiltros
         'concepto' => ['column' => 'conceptogasto.nombre', 'type' => 'texto', 'label' => 'Concepto'],
         'detalle' => ['column' => 'caja_movimiento.detalle', 'type' => 'texto', 'label' => 'Detalle'],
         'ordenservicio' => ['column' => 'caja_movimiento.ordenservicio_id', 'type' => 'entero', 'label' => 'Orden de servicio'],
+        // FKs para cruces de Consulta Inteligente.
+        'pagoproveedor_id' => ['column' => 'caja_movimiento.pagoproveedor_id', 'type' => 'entero', 'label' => 'ID OP'],
+        'proveedor_id' => ['column' => 'caja_movimiento.proveedor_id', 'type' => 'entero', 'label' => 'ID proveedor'],
+        'cliente_id' => ['column' => 'caja_movimiento.cliente_id', 'type' => 'entero', 'label' => 'ID cliente'],
     ];
 
     /** @var list<string> */

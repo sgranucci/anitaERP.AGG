@@ -73,7 +73,11 @@ return [
     /** Import masivo CHT: insertar también en Anita ctermae. */
     'import_push_anita' => filter_var(env('CHEQUE_IMPORT_PUSH_ANITA', true), FILTER_VALIDATE_BOOLEAN),
 
-    /** Aviso diario aging cartera (vencidos + próximos). Ferli no lo envía. */
+    /**
+     * Aviso diario aging cartera (vencidos + próximos). Ferli no lo envía.
+     * Horario / destinatarios / días próximos: Configuración → Avisos por módulo (caja / cheques_aging).
+     * Estos env quedan como fallback (habilitado, emails si el catálogo está vacío).
+     */
     'aging_aviso' => [
         'habilitado' => filter_var(env('CHEQUE_AGING_AVISO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         'dias_proximos' => max(0, (int) env('CHEQUE_AGING_AVISO_DIAS_PROXIMOS', 7)),

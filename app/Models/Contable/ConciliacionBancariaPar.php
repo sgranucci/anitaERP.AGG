@@ -24,6 +24,9 @@ class ConciliacionBancariaPar extends Model implements Auditable
         'fecha_contable',
         'fecha_banco',
         'importe',
+        'origen',
+        'score',
+        'clearing_json',
         'conciliado_por_usuario_id',
         'conciliado_at',
     ];
@@ -33,6 +36,7 @@ class ConciliacionBancariaPar extends Model implements Auditable
         return [
             'contable_json' => 'array',
             'banco_json' => 'array',
+            'clearing_json' => 'array',
             'fecha_contable' => 'date',
             'fecha_banco' => 'date',
             'importe' => 'decimal:2',

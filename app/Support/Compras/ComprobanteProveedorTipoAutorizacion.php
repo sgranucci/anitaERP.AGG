@@ -31,6 +31,20 @@ final class ComprobanteProveedorTipoAutorizacion
     }
 
     /**
+     * Tipo a persistir. Sin dígitos de autorización no hay CAE/CAEA/CAI:
+     * un tipo "CAE" con el número vacío (facturas de servicio) no se graba.
+     */
+    public static function resolverAlGrabar(?string $tipo, mixed $numerocae): ?string
+    {
+        $nro = preg_replace('/\D/', '', trim((string) $numerocae)) ?? '';
+        if ($nro === '') {
+            return null;
+        }
+
+        return self::normalizar($tipo) ?? self::CAE;
+    }
+
+    /**
      * Si conviene exigir unicidad del número de autorización (CAE/CAI).
      * CAEA y vacío sin número no suman control por código.
      */

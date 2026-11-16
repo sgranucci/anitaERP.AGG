@@ -36,9 +36,10 @@ class Kernel extends ConsoleKernel
             ->dailyAt($horaCotizacion)
             ->appendOutputTo(storage_path('logs/cotizacion-leeapi.log'));
 
-        $schedule->command('compras:enviar-listados-programados')
-            ->dailyAt('07:05')
-            ->withoutOverlapping(30);
+        // listado.envios_workbench / consulta_inteligente.envios_programados
+        // → avisos:despachar-programados (08:05 / 08:10 en ModuloAvisoTipo).
+        // $schedule->command('compras:enviar-listados-programados')->dailyAt('08:05');
+        // $schedule->command('direccion:enviar-consultas-inteligentes')->dailyAt('08:10');
 
         $horaReclasificacionCheques = (string) config('caja.reclasificar_cheques_diferidos_hora', '06:30');
         $schedule->command('caja:reclasificar-cheques-diferidos')
@@ -235,10 +236,7 @@ class Kernel extends ConsoleKernel
             ->when(fn () => ! EntornoEmpresaSupport::esFerli()
                 && (bool) config('arca.caea.presentacion_automatica', true));
 
-        $schedule->command('arca:avisar-vencimiento-certificados')
-            ->dailyAt((string) config('arca.certificado_aviso.hora', '08:10'))
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/arca-certificado-vencimiento.log'));
+        // arca:avisar-vencimiento-certificados → avisos:despachar-programados (arca.certificado_vencimiento)
 
         $schedule->command('facturacion:cargar-huecos-arca')
             ->dailyAt((string) config('arca.huecos_facturacion.hora', '07:10'))
@@ -265,7 +263,7 @@ class Kernel extends ConsoleKernel
             ->when(fn () => filter_var(config('wigos.habilitado', false), FILTER_VALIDATE_BOOLEAN)
                 && filter_var(config('wigos.monitor_servidor_activo.habilitado', true), FILTER_VALIDATE_BOOLEAN));
 
-        $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
+        // prestamo:recordatorios → avisos:despachar-programados (stock.prestamo_recordatorio)
 
         // Reemplazo firmante: vence_el = último día inclusive → restaura a las 00:05 del día siguiente.
         $schedule->command('configuracion:restaurar-reemplazos-firmante-vencidos')
@@ -309,33 +307,9 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/ventas-deuda-ficha-auditor-schedule.log'))
             ->when(fn () => (bool) config('ventas.deuda_ficha_auditor.habilitada', true));
 
-        $schedule->command('compras:alertas-ordencompra-abiertas')
-            ->dailyAt((string) config('compras.oc_alertas_abiertas.hora', '08:15'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/compras-oc-alertas-abiertas-schedule.log'))
-            ->when(fn () => (bool) config('compras.oc_alertas_abiertas.habilitado', true));
-
-        $schedule->command('compras:avisar-entrega-dia-sin-recepcion')
-            ->dailyAt((string) config('compras.entrega_dia_sin_recepcion.hora', '13:00'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/compras-entrega-dia-sin-recepcion-schedule.log'))
-            ->when(fn () => (bool) config('compras.entrega_dia_sin_recepcion.habilitado', true));
-
-        $schedule->command('compras:alertas-contratos-vencimiento')
-            ->dailyAt((string) config('compras.contratos_vencimiento.hora', '08:30'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/compras-contratos-vencimiento-schedule.log'))
-            ->when(fn () => (bool) config('compras.contratos_vencimiento.habilitado', true));
-
-        $schedule->command('compras:alertas-suscripcion-comprobantes')
-            ->dailyAt((string) config('compras.suscripcion_comprobantes.hora', '08:45'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/compras-suscripcion-comprobantes-schedule.log'))
-            ->when(fn () => (bool) config('compras.suscripcion_comprobantes.habilitado', true));
+        // Batch Compras → avisos:despachar-programados (ordencompra_alertas_abiertas,
+        // entrega_dia_sin_recepcion, ordencompra_contrato_vencimiento,
+        // suscripcion_comprobante_faltante, comprobante_proveedor_borrador_pendiente).
 
         $schedule->command('compras:recordatorio-legajo-gastronomia')
             ->dailyAt((string) config('compras.legajo.recordatorio_hora', '09:15'))
@@ -344,18 +318,11 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-legajo-recordatorio-schedule.log'))
             ->when(fn () => (bool) config('compras.legajo.recordatorio_habilitado', true));
 
-        $schedule->command('arbolaprobacion:recordatorios')
-            ->dailyAt((string) config('arbolaprobacion.recordatorio_hora', '09:00'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/arbolaprobacion-recordatorios-schedule.log'));
-
-        $schedule->command('arbolaprobacion:digest-pendientes')
-            ->dailyAt((string) config('arbolaprobacion.digest.hora', '08:30'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/arbolaprobacion-digest-schedule.log'))
-            ->when(fn () => (bool) config('arbolaprobacion.digest.habilitado', true));
+        // arbolaprobacion.* / ai.* → avisos:despachar-programados (ModuloAvisoTipo).
+        // $schedule->command('arbolaprobacion:recordatorios')->dailyAt(...);
+        // $schedule->command('arbolaprobacion:digest-pendientes')->dailyAt(...);
+        // $schedule->command('ai:digest-brief --ejecutar')->dailyAt(...);
+        // $schedule->command('ai:alerta-umbral --ejecutar')->dailyAt(...);
 
         $schedule->command('anita-notificacion:purge')
             ->dailyAt((string) config('anita_notificacion.retencion.hora_purge', '03:45'))
@@ -364,13 +331,6 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/anita-notificacion-purge-schedule.log'))
             ->when(fn () => (bool) config('anita_notificacion.retencion.habilitado', true));
 
-        $schedule->command('compras:avisar-comprobantes-borrador')
-            ->dailyAt((string) config('compras.factura_borrador_aviso.hora', '09:30'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/compras-factura-borrador-aviso-schedule.log'))
-            ->when(fn () => (bool) config('compras.factura_borrador_aviso.habilitado', true));
-
         $schedule->command('ventas:avisar-contratos-venta-vencimiento')
             ->dailyAt((string) config('facturacion.contrato_venta_aviso.hora', '09:20'))
             ->runInBackground()
@@ -378,13 +338,7 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/ventas-contrato-venta-aviso-schedule.log'))
             ->when(fn () => (bool) config('facturacion.contrato_venta_aviso.habilitado', true));
 
-        $schedule->command('caja:avisar-cheques-aging')
-            ->dailyAt((string) config('cheque.aging_aviso.hora', '09:25'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/caja-cheque-aging-aviso-schedule.log'))
-            ->when(fn () => ! EntornoEmpresaSupport::esFerli()
-                && (bool) config('cheque.aging_aviso.habilitado', true));
+        // caja:avisar-cheques-aging → avisos:despachar-programados (caja.cheques_aging)
 
         // Interforming: PDF semanal auditoría notas CRM (todos los vendedores, últimos 7 días).
         $schedule->command('suitecrm:auditoria-notas-semanal')
@@ -399,12 +353,9 @@ class Kernel extends ConsoleKernel
                 && (bool) config('suitecrm.habilitado', false)
                 && (bool) config('suitecrm.auditoria_semanal.habilitada', true));
 
-        $schedule->command('seguridad:recordatorio-tickets-ingreso')
-            ->dailyAt((string) config('ingreso_proveedor.recordatorio_hora', '08:45'))
-            ->runInBackground()
-            ->withoutOverlapping(30)
-            ->appendOutputTo(storage_path('logs/seguridad-recordatorio-tickets-ingreso.log'))
-            ->when(fn () => (bool) config('ingreso_proveedor.recordatorio_habilitado', true));
+        // seguridad:recordatorio-tickets-ingreso → avisos:despachar-programados
+        // (seguridad.ingreso_proveedor_recordatorio). Abono mensual queda en Kernel
+        // (frecuencia día-del-mes no cubierta por programación Lun–Dom).
 
         $schedule->command('seguridad:alerta-abono-sin-ingresos')
             ->monthlyOn((int) config('ingreso_proveedor.abono_alerta_dia', 25), (string) config('ingreso_proveedor.abono_alerta_hora', '09:00'))
@@ -420,22 +371,9 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/contable-saldos-integridad-schedule.log'))
             ->when(fn () => (bool) config('contable.saldos_cuenta_mes.integridad_diaria.habilitada', true));
 
-        // Corre cada hora: cada suscripción define su propio día y hora de envío.
-        $schedule->command('contable:distribuir-reportes-definibles')
-            ->hourly()
-            ->runInBackground()
-            ->withoutOverlapping(120)
-            ->appendOutputTo(storage_path('logs/contable-reporte-definible-distribucion.log'))
-            ->when(fn () => (bool) config('contable.reporte_definible.distribucion.habilitada', true));
-
-        // Cada suscripción de Sueldos define su frecuencia y horario. El comando
-        // mantiene un snapshot auditable y segmenta destinatarios sin mezclar nóminas.
-        $schedule->command('sueldos:distribuir-reportes-definibles', ['--ejecutar' => true])
-            ->hourly()
-            ->runInBackground()
-            ->withoutOverlapping(120)
-            ->appendOutputTo(storage_path('logs/sueldos-reporte-definible-distribucion.log'))
-            ->when(fn () => (bool) config('sueldos.reporte_definible.distribucion.habilitada', true));
+        // contable.reportes_definibles / sueldos.reportes_definibles → Programador (cada pasada).
+        // $schedule->command('contable:distribuir-reportes-definibles')->hourly();
+        // $schedule->command('sueldos:distribuir-reportes-definibles', ['--ejecutar' => true])->hourly();
 
         // Día y hora de cada aviso: Configuración → Avisos por módulo.
         $schedule->command('avisos:despachar-programados')
@@ -443,6 +381,20 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(10)
             ->appendOutputTo(storage_path('logs/modulo-aviso-programados.log'))
             ->when(fn () => (bool) config('modulo_aviso.programados_habilitado', true));
+
+        // Índice persistido de Mis aprobaciones (user_task).
+        $schedule->command('user-task:sincronizar')
+            ->everyTenMinutes()
+            ->withoutOverlapping(8)
+            ->appendOutputTo(storage_path('logs/user-task-sync.log'))
+            ->when(fn () => (bool) config('arbolaprobacion.user_task_sync_habilitado', true));
+
+        // SLA: escala user_task vencidas (notifica + marca).
+        $schedule->command('user-task:escalar-vencidos')
+            ->hourly()
+            ->withoutOverlapping(10)
+            ->appendOutputTo(storage_path('logs/user-task-sla.log'))
+            ->when(fn () => (bool) config('arbolaprobacion.user_task_sync_habilitado', true));
 
         $schedule->command('gastronomia:auditoria-anita-diaria')
             ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '06:30'))
@@ -747,25 +699,9 @@ class Kernel extends ConsoleKernel
                 ->when(fn () => (bool) config('solicitudpago.generar_cuotas.habilitado', false));
         }
 
-        // Flash Report AGG: cada suscripción define día y hora. Cada 15 min para
-        // reintentar si Office 365 no respondió en el turno programado.
-        $schedule->command('flash:distribuir-reportes')
-            ->everyFifteenMinutes()
-            ->runInBackground()
-            ->withoutOverlapping(20)
-            ->appendOutputTo(storage_path('logs/flash-reporte-agg-distribucion.log'))
-            ->when(fn () => EntornoEmpresaSupport::esAgg()
-                && (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
-
-        // Flash Report Crown: el informe lo dispara el usuario. El cron queda apagado
-        // (FLASH_REPORTE_CROWN_DISTRIBUCION=false) por si queda alguna suscripción vieja.
-        $schedule->command('flash-crown:distribuir-reportes')
-            ->everyFifteenMinutes()
-            ->runInBackground()
-            ->withoutOverlapping(20)
-            ->appendOutputTo(storage_path('logs/flash-reporte-crown-distribucion.log'))
-            ->when(fn () => EntornoEmpresaSupport::esCrown()
-                && (bool) config('caja.flash_reporte_crown.distribucion_habilitada', true));
+        // flash.* / flash_crown.* distribución → Programador (cada pasada, gate AGG/Crown).
+        // $schedule->command('flash:distribuir-reportes')->everyFifteenMinutes();
+        // $schedule->command('flash-crown:distribuir-reportes')->everyFifteenMinutes();
 
         // El Bierzo: Anita → ERP pedidos del día (todos los repartos).
         $schedule->command('ventas:importar-pedido-anita --ejecutar')
@@ -818,13 +754,8 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esCrown()
                 && (bool) config('caja.flash_crown_calculo_diario.habilitado', true));
 
-        // Bandeja de avisos de auditoría Crown: últimos 7 días, control de ayer contra Anita y resumen por mail.
-        $schedule->command('tesoreria-crown:avisos --ejecutar --anita --mail')
-            ->dailyAt(EntornoEmpresaSupport::esCrown() ? TesoreriaCrownAvisoSupport::hora() : '07:30')
-            ->runInBackground()
-            ->withoutOverlapping(60)
-            ->appendOutputTo(storage_path('logs/tesoreria-crown-avisos-schedule.log'))
-            ->when(fn () => EntornoEmpresaSupport::esCrown() && TesoreriaCrownAvisoSupport::disponible());
+        // tesoreria_crown.avisos → Programador (solo Crown).
+        // $schedule->command('tesoreria-crown:avisos --ejecutar --anita --mail')->dailyAt(...);
 
         $schedule->command('ventas:reenviar-impresion-pendiente --ejecutar')
             ->dailyAt((string) config('impresion_comprobante.cron_hora', '06:20'))

@@ -44,10 +44,12 @@ Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se so
 | Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `manual:generar-mockups solicitudpago` |
 | Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | `manual:generar-mockups propuesta-pago` |
 | Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `manual:generar-mockups contable` |
+| Contable (conciliación bancaria premium v2.0) | `config/manual_conciliacion_bancaria.php` | `public/docs/manual-conciliacion-bancaria/img/` | `manual:generar-mockups conciliacion-bancaria` |
 | Contaduría (cierres de rendiciones) | `config/manual_cierres_rendiciones.php` | `public/docs/manual-cierres-rendiciones/img/` | `manual:generar-mockups cierres-rendiciones` |
 | UIF | `config/manual_uif.php` | `public/docs/manual-uif/img/` | `manual:generar-mockups uif` |
 | Reportes contables definibles | `config/manual_reporte_definible.php` | `public/docs/manual-reporte-definible/img/` | `manual:generar-mockups reporte-definible` |
 | Consultas de pagos (QBE y visual) | `config/manual_consultas_qbe.php` | `docs/manual-consultas-qbe/` | sin mockups (texto y tablas). `php docs/manual-consultas-qbe/generar.php` |
+| Avisos por módulo (premium) | `config/manual_modulo_aviso.php` | `docs/manual-modulo-aviso/` | sin mockups (texto y tablas). `php docs/manual-modulo-aviso/generar.php` |
 
 Manual IA: sin capturas de pantalla activas (no generar mockups artificiales).
 
@@ -77,6 +79,7 @@ php docs/manual-sueldos/generar.php
 php docs/manual-solicitudpago/generar.php
 php docs/manual-propuesta-pago/generar.php
 php docs/manual-contable/generar.php
+php docs/manual-conciliacion-bancaria/generar.php
 php docs/manual-cierres-rendiciones/generar.php
 php docs/manual-uif/generar.php
 php docs/manual-reporte-definible/generar.php

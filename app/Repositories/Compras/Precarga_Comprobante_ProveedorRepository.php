@@ -40,11 +40,10 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
     {
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
-        $data['tipo_autorizacion'] = ComprobanteProveedorTipoAutorizacion::normalizar(
-            $data['tipo_autorizacion'] ?? null
-        ) ?? (filled($data['numerocae'] ?? null)
-            ? ComprobanteProveedorTipoAutorizacion::CAE
-            : null);
+        $data['tipo_autorizacion'] = ComprobanteProveedorTipoAutorizacion::resolverAlGrabar(
+            $data['tipo_autorizacion'] ?? null,
+            $data['numerocae'] ?? null,
+        );
 
         ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             (int) $data['empresa_id'],
@@ -83,11 +82,10 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         $data['pararevisar'] = $this->normalizarParaRevisar($data);
 
         if (array_key_exists('tipo_autorizacion', $data) || array_key_exists('numerocae', $data)) {
-            $data['tipo_autorizacion'] = ComprobanteProveedorTipoAutorizacion::normalizar(
-                $data['tipo_autorizacion'] ?? null
-            ) ?? (filled($data['numerocae'] ?? null)
-                ? ComprobanteProveedorTipoAutorizacion::CAE
-                : null);
+            $data['tipo_autorizacion'] = ComprobanteProveedorTipoAutorizacion::resolverAlGrabar(
+                $data['tipo_autorizacion'] ?? null,
+                $data['numerocae'] ?? null,
+            );
         }
 
         ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(

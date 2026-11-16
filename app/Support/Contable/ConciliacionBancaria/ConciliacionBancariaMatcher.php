@@ -11,6 +11,7 @@ final class ConciliacionBancariaMatcher
      * @param  array<string, true>  $hashesBancoConciliados
      * @return array{
      *   pares: list<array{contable: array<string,mixed>, banco: array<string,mixed>, score: int}>,
+     *   grupos: list<array{contables: list<array<string,mixed>>, bancos: list<array<string,mixed>>, score: int}>,
      *   contables_pendientes: list<array<string,mixed>>,
      *   banco_pendientes: list<array<string,mixed>>
      * }
@@ -21,8 +22,8 @@ final class ConciliacionBancariaMatcher
         array $hashesContablesConciliados = [],
         array $hashesBancoConciliados = [],
     ): array {
-        $tolerancia = (float) config('conciliacion_bancaria.tolerancia_importe', 0.05);
-        $diasTol = max(0, (int) config('conciliacion_bancaria.dias_tolerancia_fecha', 3));
+        $tolerancia = ConciliacionBancariaReglasSupport::toleranciaImporte();
+        $diasTol = ConciliacionBancariaReglasSupport::diasToleranciaFecha();
 
         [$contablesLibres, $bancoLibre] = self::filtrarLibres(
             $contables,
@@ -32,6 +33,7 @@ final class ConciliacionBancariaMatcher
         );
 
         $pares = [];
+        $grupos = [];
         $usadosCont = [];
         $usadosBanco = [];
 
@@ -65,6 +67,17 @@ final class ConciliacionBancariaMatcher
             $usadosBanco,
         );
 
+        if (ConciliacionBancariaReglasSupport::multiMatchAuto()) {
+            self::emparejarMultiPorSuma(
+                $contablesLibres,
+                $bancoLibre,
+                $tolerancia,
+                $grupos,
+                $usadosCont,
+                $usadosBanco,
+            );
+        }
+
         $contPend = [];
         foreach ($contablesLibres as $ic => $c) {
             if (! isset($usadosCont[$ic])) {
@@ -81,6 +94,7 @@ final class ConciliacionBancariaMatcher
 
         return [
             'pares' => $pares,
+            'grupos' => $grupos,
             'contables_pendientes' => $contPend,
             'banco_pendientes' => $bancoPend,
         ];
@@ -275,8 +289,8 @@ final class ConciliacionBancariaMatcher
         array &$usadosBanco,
     ): void {
         $diasMax = max(
-            (int) config('conciliacion_bancaria.dias_tolerancia_fecha_pago', 7),
-            (int) config('conciliacion_bancaria.dias_tolerancia_fecha_unico', 15),
+            ConciliacionBancariaReglasSupport::entero(ConciliacionBancariaReglasSupport::CLAVE_DIAS_PAGO),
+            ConciliacionBancariaReglasSupport::entero(ConciliacionBancariaReglasSupport::CLAVE_DIAS_UNICO),
         );
 
         $idxContPorImporte = [];
@@ -333,6 +347,163 @@ final class ConciliacionBancariaMatcher
             $usadosCont[$ic] = true;
             $usadosBanco[$ib] = true;
         }
+    }
+
+    /**
+     * N:1 (varios contables → un banco) y 1:N (un contable → varios bancos) por suma.
+     *
+     * @param  list<array<string, mixed>>  $contablesLibres
+     * @param  list<array<string, mixed>>  $bancoLibre
+     * @param  list<array{contables: list<array<string,mixed>>, bancos: list<array<string,mixed>>, score: int}>  $grupos
+     * @param  array<int, true>  $usadosCont
+     * @param  array<int, true>  $usadosBanco
+     */
+    private static function emparejarMultiPorSuma(
+        array $contablesLibres,
+        array $bancoLibre,
+        float $tolerancia,
+        array &$grupos,
+        array &$usadosCont,
+        array &$usadosBanco,
+    ): void {
+        $dias = ConciliacionBancariaReglasSupport::multiDias();
+        $maxN = ConciliacionBancariaReglasSupport::multiMaxMiembros();
+
+        // N:1 — varios contables suman un movimiento de banco (depósitos / acreditaciones).
+        foreach ($bancoLibre as $ib => $b) {
+            if (isset($usadosBanco[$ib])) {
+                continue;
+            }
+            $impB = ConciliacionBancariaHashSupport::importeFirmadoBanco($b);
+            if (abs($impB) < 0.005) {
+                continue;
+            }
+            $cands = [];
+            foreach ($contablesLibres as $ic => $c) {
+                if (isset($usadosCont[$ic])) {
+                    continue;
+                }
+                $impC = ConciliacionBancariaHashSupport::importeFirmadoContable($c);
+                if (abs($impC) < 0.005) {
+                    continue;
+                }
+                if (($impC > 0) !== ($impB > 0) && abs($impC + $impB) > $tolerancia) {
+                    // Mismo signo preferido; si suman al objetivo se aceptan.
+                }
+                if (abs($impC) > abs($impB) + $tolerancia) {
+                    continue;
+                }
+                if (! self::fechasCompatibles($c, $b, $dias)) {
+                    continue;
+                }
+                $cands[] = ['i' => $ic, 'imp' => $impC, 'mov' => $c];
+            }
+            $subset = self::buscarSubconjuntoSuma($cands, $impB, $tolerancia, $maxN);
+            if ($subset === null || count($subset) < 2) {
+                continue;
+            }
+            $grupos[] = [
+                'contables' => array_map(static fn (array $x) => $x['mov'], $subset),
+                'bancos' => [$b],
+                'score' => 40 + count($subset) * 5,
+            ];
+            $usadosBanco[$ib] = true;
+            foreach ($subset as $x) {
+                $usadosCont[$x['i']] = true;
+            }
+        }
+
+        // 1:N — un contable se liquida en varios movimientos de banco.
+        foreach ($contablesLibres as $ic => $c) {
+            if (isset($usadosCont[$ic])) {
+                continue;
+            }
+            $impC = ConciliacionBancariaHashSupport::importeFirmadoContable($c);
+            if (abs($impC) < 0.005) {
+                continue;
+            }
+            $cands = [];
+            foreach ($bancoLibre as $ib => $b) {
+                if (isset($usadosBanco[$ib])) {
+                    continue;
+                }
+                $impB = ConciliacionBancariaHashSupport::importeFirmadoBanco($b);
+                if (abs($impB) < 0.005 || abs($impB) > abs($impC) + $tolerancia) {
+                    continue;
+                }
+                if (! self::fechasCompatibles($c, $b, $dias)) {
+                    continue;
+                }
+                $cands[] = ['i' => $ib, 'imp' => $impB, 'mov' => $b];
+            }
+            $subset = self::buscarSubconjuntoSuma($cands, $impC, $tolerancia, $maxN);
+            if ($subset === null || count($subset) < 2) {
+                continue;
+            }
+            $grupos[] = [
+                'contables' => [$c],
+                'bancos' => array_map(static fn (array $x) => $x['mov'], $subset),
+                'score' => 40 + count($subset) * 5,
+            ];
+            $usadosCont[$ic] = true;
+            foreach ($subset as $x) {
+                $usadosBanco[$x['i']] = true;
+            }
+        }
+    }
+
+    /**
+     * Busca 2..maxN candidatos cuya suma de imp ≈ objetivo.
+     *
+     * @param  list<array{i: int, imp: float, mov: array<string,mixed>}>  $cands
+     * @return list<array{i: int, imp: float, mov: array<string,mixed>}>|null
+     */
+    private static function buscarSubconjuntoSuma(array $cands, float $objetivo, float $tolerancia, int $maxN): ?array
+    {
+        if (count($cands) < 2) {
+            return null;
+        }
+        usort($cands, static fn ($a, $b) => abs($b['imp']) <=> abs($a['imp']));
+        $cands = array_slice($cands, 0, min(24, count($cands)));
+        $n = count($cands);
+
+        for ($i = 0; $i < $n; $i++) {
+            for ($j = $i + 1; $j < $n; $j++) {
+                $suma2 = $cands[$i]['imp'] + $cands[$j]['imp'];
+                if (abs($suma2 - $objetivo) <= $tolerancia) {
+                    return [$cands[$i], $cands[$j]];
+                }
+                if ($maxN < 3) {
+                    continue;
+                }
+                for ($k = $j + 1; $k < $n; $k++) {
+                    $suma3 = $suma2 + $cands[$k]['imp'];
+                    if (abs($suma3 - $objetivo) <= $tolerancia) {
+                        return [$cands[$i], $cands[$j], $cands[$k]];
+                    }
+                    if ($maxN < 4) {
+                        continue;
+                    }
+                    for ($l = $k + 1; $l < $n; $l++) {
+                        $suma4 = $suma3 + $cands[$l]['imp'];
+                        if (abs($suma4 - $objetivo) <= $tolerancia) {
+                            return [$cands[$i], $cands[$j], $cands[$k], $cands[$l]];
+                        }
+                        if ($maxN < 5) {
+                            continue;
+                        }
+                        for ($m = $l + 1; $m < $n; $m++) {
+                            $suma5 = $suma4 + $cands[$m]['imp'];
+                            if (abs($suma5 - $objetivo) <= $tolerancia) {
+                                return [$cands[$i], $cands[$j], $cands[$k], $cands[$l], $cands[$m]];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

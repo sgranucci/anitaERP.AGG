@@ -8,6 +8,7 @@ namespace App\Support\Ai;
 final class AiConsultaOperativaRouterSupport
 {
     /**
+     * @param  array<string,mixed>|null  $contextoPrevio  Último turno (multi-turn)
      * @return array{
      *   ok: bool,
      *   intent?: string,
@@ -17,10 +18,11 @@ final class AiConsultaOperativaRouterSupport
      *   clarification?: string,
      *   fuente?: string,
      *   sugerencias?: list<string>,
-     *   error?: string
+     *   error?: string,
+     *   seguimiento?: bool
      * }
      */
-    public static function interpretar(string $pregunta): array
+    public static function interpretar(string $pregunta, ?array $contextoPrevio = null): array
     {
         $texto = trim(preg_replace('/\s+/u', ' ', $pregunta) ?? '');
         $texto = self::normalizarTyposNl($texto);
@@ -31,6 +33,22 @@ final class AiConsultaOperativaRouterSupport
                 'fuente' => 'reglas',
                 'sugerencias' => self::ejemplos(),
             ];
+        }
+
+        // Seguimiento multi-turn («y el mes pasado», «de biyemas»)
+        if ($contextoPrevio !== null
+            && AiConsultaOperativaContextoSupport::habilitado()
+            && AiConsultaOperativaContextoSupport::pareceSeguimiento($texto, $contextoPrevio)) {
+            $seg = self::interpretarSeguimiento($texto, $contextoPrevio);
+            if ($seg['ok'] ?? false) {
+                $validado = AiConsultaOperativaSchemaSupport::validarPlan($seg);
+                if ($validado['ok'] ?? false) {
+                    $validado['fuente'] = 'seguimiento';
+                    $validado['seguimiento'] = true;
+
+                    return $validado;
+                }
+            }
         }
 
         $porReglas = self::interpretarPorReglas($texto);
@@ -45,7 +63,7 @@ final class AiConsultaOperativaRouterSupport
 
         // Ambiguo / falta dato / no matcheó → LLM si está habilitado
         if (AiConsultaOperativaLlmRouterSupport::habilitado()) {
-            $porLlm = AiConsultaOperativaLlmRouterSupport::interpretar($texto);
+            $porLlm = AiConsultaOperativaLlmRouterSupport::interpretar($texto, $contextoPrevio);
             if (($porLlm['ok'] ?? false) || ! empty($porLlm['needs_clarification'])) {
                 return $porLlm;
             }
@@ -72,6 +90,53 @@ final class AiConsultaOperativaRouterSupport
             'error' => 'No pude interpretar la consulta. Use un ejemplo o un atajo de abajo.',
             'fuente' => 'reglas',
             'sugerencias' => self::ejemplos(),
+        ];
+    }
+
+    /**
+     * Reusa intent del turno anterior y fusiona filtros (período, empresa, CC…).
+     *
+     * @param  array<string,mixed>  $contexto
+     * @return array<string,mixed>
+     */
+    public static function interpretarSeguimiento(string $texto, array $contexto): array
+    {
+        $intent = strtolower(trim((string) ($contexto['intent'] ?? '')));
+        if ($intent === '' || ! array_key_exists($intent, AiConsultaOperativaSupport::intentsEtiquetas())) {
+            return ['ok' => false, 'error' => 'Sin contexto previo válido.'];
+        }
+
+        $norm = mb_strtolower($texto, 'UTF-8');
+        $norm = strtr($norm, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
+        ]);
+
+        $extras = self::extraerParamsPeriodoYExtras($texto, $norm);
+        $extras = array_merge($extras, self::extraerFiltrosEmpresa($texto));
+        if (preg_match('/\bcc\s*(\d{1,6})\b/u', $norm, $mCc)) {
+            $extras['centrocosto_codigo'] = $mCc[1];
+        }
+        if (self::contieneAlguno($norm, ['sin centro de costo', 'sin centrocosto', 'sin cc'])) {
+            $extras['sin_centrocosto'] = true;
+        }
+        if (self::contieneAlguno($norm, ['solo deuda', 'deuda pendiente'])) {
+            $extras['solo_deuda'] = true;
+        }
+        if (preg_match('/deposit[oa]\s+(\d{1,6}|[a-z0-9\.\-]+)/u', $norm, $mDep)) {
+            $extras['deposito_codigo'] = $mDep[1];
+        }
+
+        $params = AiConsultaOperativaContextoSupport::fusionarParams(
+            is_array($contexto['params'] ?? null) ? $contexto['params'] : [],
+            $extras
+        );
+
+        return [
+            'ok' => true,
+            'intent' => $intent,
+            'params' => $params,
+            'interpretacion' => 'Continuación: '.($contexto['interpretacion'] ?? $intent).' · '.$texto,
+            'seguimiento' => true,
         ];
     }
 
@@ -186,6 +251,37 @@ final class AiConsultaOperativaRouterSupport
         $rutaComprasKpi = self::interpretarComprasKpi($texto, $norm);
         if ($rutaComprasKpi !== null) {
             return $rutaComprasKpi;
+        }
+
+        // Decisiones premium (cash / AP aging / brief / cheques / stock / HITL)
+        // Antes de ficha proveedor/cliente para no capturar «aging de proveedores».
+        $decisionTemprana = self::interpretarDecisiones($texto, $norm);
+        if ($decisionTemprana !== null) {
+            return $decisionTemprana;
+        }
+
+        // Pack A: proyección pagos / contratos / precio x proveedor / existencias
+        $packA = self::interpretarPackA($texto, $norm);
+        if ($packA !== null) {
+            return $packA;
+        }
+
+        // Historial precios de costo / últimas N compras — antes de fórmula y ficha SKU
+        $historialPrecios = self::interpretarHistorialPreciosCompra($texto, $norm);
+        if ($historialPrecios !== null) {
+            return $historialPrecios;
+        }
+
+        // Patrones analíticos (duplicados / localidad) — antes de ficha proveedor/cliente
+        $patron = self::interpretarPatronAnalitico($texto, $norm);
+        if ($patron !== null) {
+            return $patron;
+        }
+
+        // Dolor por entidad (plantillas CI) — antes de ficha puntual OC/factura/SKU
+        $dolorTemprano = self::interpretarDolorEntidades($texto, $norm);
+        if ($dolorTemprano !== null) {
+            return $dolorTemprano;
         }
 
         // Plan agente HITL (antes que intents puntuales)
@@ -396,11 +492,12 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
-        // Factura de venta
-        if (self::contieneAlguno($norm, [
-            'factura de venta', 'factura venta', 'factura de cliente', 'factura cliente',
-            'comprobante de venta', 'fc venta',
-        ]) || (str_contains($norm, 'factura') && ! str_contains($norm, 'proveedor') && ! str_contains($norm, 'compra'))) {
+        // Factura de venta (ficha por número; listados «sin remito» van por entidad_dolor)
+        if (! self::contieneAlguno($norm, ['sin remito', 'pendientes de remito', 'este mes'])
+            && (self::contieneAlguno($norm, [
+                'factura de venta', 'factura venta', 'factura de cliente', 'factura cliente',
+                'comprobante de venta', 'fc venta',
+            ]) || (str_contains($norm, 'factura') && ! str_contains($norm, 'proveedor') && ! str_contains($norm, 'compra')))) {
             $numero = self::extraerTokenTrasEtiqueta($texto, [
                 'factura', 'venta', 'cliente', 'comprobante', 'fc', 'de', 'del', 'la', 'el', 'nro', 'numero',
             ]);
@@ -455,8 +552,10 @@ final class AiConsultaOperativaRouterSupport
             ];
         }
 
-        // Proveedor (CT vs ficha)
-        if (self::contieneAlguno($norm, ['proveedor', 'cuit proveedor'])) {
+        // Proveedor (CT vs ficha) — excluye patrones duplicados / por localidad
+        if (self::contieneAlguno($norm, ['proveedor', 'cuit proveedor'])
+            && ! self::contieneAlguno($norm, ['duplicad', 'de lanus', 'localidad', 'partido', 'ciudad'])
+        ) {
             $codigo = self::extraerTokenCodigo($texto, [
                 'proveedor', 'codigo', 'cuit', 'saldo', 'cuenta', 'corriente', 'ficha',
                 'de', 'del', 'la', 'el', 'un', 'una',
@@ -465,7 +564,12 @@ final class AiConsultaOperativaRouterSupport
                 return [
                     'ok' => false,
                     'error' => 'Indique el código del proveedor (ej.: «saldo del proveedor 475»).',
-                    'sugerencias' => ['saldo del proveedor 475', 'ficha del proveedor 350'],
+                    'sugerencias' => [
+                        'saldo del proveedor 475',
+                        'ficha del proveedor 350',
+                        'proveedores con cuit duplicado',
+                        'proveedores de Lanús',
+                    ],
                 ];
             }
             $pideCt = self::contieneAlguno($norm, [
@@ -618,13 +722,22 @@ final class AiConsultaOperativaRouterSupport
 
         if (preg_match('/\boc\s*[#:]?\s*([A-Za-z0-9\-\/]+)/ui', $texto, $m) === 1) {
             $numero = trim($m[1]);
+            // Evitar capturar «OC estado pendiente» / «OC aprobadas» como número de OC.
+            $stop = ['estado', 'pendiente', 'pendientes', 'aprobada', 'aprobadas', 'vencida', 'vencidas', 'sin', 'firma', 'recepcion', 'recepción'];
+            if (! in_array(mb_strtolower($numero, 'UTF-8'), $stop, true)) {
+                return [
+                    'ok' => true,
+                    'intent' => AiConsultaOperativaSupport::INTENT_ORDENCOMPRA,
+                    'params' => ['numero' => $numero, 'valor' => $numero],
+                    'interpretacion' => 'Estado de la orden de compra '.$numero,
+                ];
+            }
+        }
 
-            return [
-                'ok' => true,
-                'intent' => AiConsultaOperativaSupport::INTENT_ORDENCOMPRA,
-                'params' => ['numero' => $numero, 'valor' => $numero],
-                'interpretacion' => 'Estado de la orden de compra '.$numero,
-            ];
+        // Explorador Consulta Inteligente (cheques, pagos, remitos, listados QBE)
+        $ci = self::interpretarConsultaInteligente($texto, $norm);
+        if ($ci !== null) {
+            return $ci;
         }
 
         return [
@@ -634,10 +747,732 @@ final class AiConsultaOperativaRouterSupport
         ];
     }
 
+    /**
+     * Snapshots de decisión (aging, cashflow, stock crítico, brief del día).
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function interpretarDecisiones(string $texto, string $norm): ?array
+    {
+        $params = self::extraerParamsPeriodoYExtras($texto, $norm);
+        $params = array_merge($params, self::extraerFiltrosEmpresa($texto));
+        $params = array_merge($params, self::extraerParamsDeposito($texto, $norm));
+
+        if (self::contieneAlguno($norm, [
+            'cola hitl', 'cola de agentes', 'eventos hitl', 'eventos pendientes ia',
+            'pendientes hitl', 'agentes pendientes', 'cola de ia',
+        ]) || (str_contains($norm, 'hitl') && self::contieneAlguno($norm, [
+            'cola', 'evento', 'pendiente', 'agente',
+        ]))) {
+            $params['estado'] = 'abiertos';
+            if (self::contieneAlguno($norm, ['resuelto', 'resueltos'])) {
+                $params['estado'] = 'resuelto';
+            } elseif (self::contieneAlguno($norm, ['descartado', 'descartados'])) {
+                $params['estado'] = 'descartado';
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_COLA_HITL,
+                'params' => $params,
+                'interpretacion' => 'Cola HITL de agentes',
+            ];
+        }
+
+        // Listado por estado (borrador/exportadas) → entidad_dolor; acá el resumen KPI.
+        if (! self::contieneAlguno($norm, ['borrador', 'exportad', 'listado de propuestas'])
+            && (self::contieneAlguno($norm, [
+                'propuestas de pago', 'propuesta de pago', 'propuestas pago',
+                'resumen propuestas', 'propuestas ap', 'cuentas a pagar propuestas',
+                'propuestas pendientes de pago',
+            ]) || (str_contains($norm, 'propuesta') && self::contieneAlguno($norm, [
+                'pago', 'pagos', 'ap',
+            ])))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_PROPUESTA_PAGO_RESUMEN,
+                'params' => $params,
+                'interpretacion' => 'Resumen de propuestas de pago',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'mis aprobaciones', 'mis pendientes de firma', 'que tengo que firmar',
+            'qué tengo que firmar', 'bandeja de aprobaciones', 'pendientes de aprobacion',
+            'pendientes de aprobación', 'para aprobar', 'aprobar pendientes',
+        ]) || (str_contains($norm, 'aprobacion') && self::contieneAlguno($norm, [
+            'mias', 'mías', 'bandeja', 'firmar', 'pendiente',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_MIS_APROBACIONES,
+                'params' => $params,
+                'interpretacion' => 'Mis aprobaciones pendientes',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'cash position', 'cashposition', 'posicion de caja', 'posición de caja',
+            'posicion de tesoreria', 'posición de tesorería', 'saldos interbanking',
+            'disponible vs deuda', 'ib vs deuda',
+        ])) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_CASH_POSITION,
+                'params' => $params,
+                'interpretacion' => 'Cash position',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'aging de proveedores', 'aging proveedores', 'aging proveedor',
+            'deuda vencida proveedores', 'deuda vencida de proveedores',
+            'top deuda proveedores', 'proveedores vencidos',
+        ]) || (str_contains($norm, 'aging') && self::contieneAlguno($norm, [
+            'proveedor', 'proveedores', 'ap',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_AP_AGING,
+                'params' => $params,
+                'interpretacion' => 'Aging proveedores (deuda vencida)',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'aging de clientes', 'aging clientes', 'aging cliente',
+            'deuda vencida clientes', 'deuda vencida de clientes',
+            'top deudores', 'top deudores clientes', 'cartera vencida clientes',
+            'aging ar', 'aging de ar', 'cuentas a cobrar vencidas',
+        ]) || (str_contains($norm, 'aging') && self::contieneAlguno($norm, [
+            'cliente', 'clientes', 'deudor', 'deudores', 'ar',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_AR_AGING,
+                'params' => $params,
+                'interpretacion' => 'Aging clientes / top deudores (AR)',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'tickets vencidos', 'tickets antiguos', 'tickets sla', 'tickets con sla',
+            'tickets viejos', 'tickets demorados', 'tickets atrasados',
+            'tickets abiertos', 'tickets pendientes', 'tickets en curso',
+            'tickets por antiguedad', 'tickets por antigüedad',
+        ]) || (str_contains($norm, 'ticket') && self::contieneAlguno($norm, [
+            'vencid', 'antigu', 'sla', 'demorad', 'atrasad',
+            'abierto', 'abiertos', 'pendiente', 'pendientes', 'antiguedad', 'antigüedad',
+        ]) && ! self::contieneAlguno($norm, ['resumen', 'kpi', 'por estado']))) {
+            // Proxy de “SLA”: antigüedad mínima (sin columnas SLA en ticket).
+            $tieneDias = preg_match(
+                '/(?:hace\s+(?:mas|más)\s+de\s+|mas\s+de\s+|más\s+de\s+|>=\s*|≥\s*|>\s*)?(\d{1,3})\s*d[ií]?as?\b/u',
+                $norm,
+                $mDias
+            ) === 1;
+            $pideAntiguedad = self::contieneAlguno($norm, [
+                'vencid', 'antigu', 'sla', 'demorad', 'atrasad', 'viejos',
+            ]);
+            if ($tieneDias) {
+                $params['dias_min'] = max(1, (int) $mDias[1]);
+            } elseif ($pideAntiguedad) {
+                $params['dias_min'] = $params['dias_min'] ?? 7;
+            }
+
+            $interp = isset($params['dias_min'])
+                ? 'Tickets abiertos ≥ '.((int) $params['dias_min']).' días'
+                : 'Tickets abiertos por antigüedad';
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_TICKETS_ABIERTOS,
+                'params' => $params,
+                'interpretacion' => $interp,
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'resumen de tickets', 'kpi de tickets',
+            'tickets por estado', 'estado de tickets',
+        ]) || (str_contains($norm, 'ticket') && self::contieneAlguno($norm, [
+            'resumen', 'kpi', 'estado',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_TICKETS_KPI,
+                'params' => $params,
+                'interpretacion' => 'Resumen de tickets por estado',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'precargas pendientes', 'precargas de factura', 'facturas precargadas pendientes',
+            'precarga pendientes', 'facturas pendientes de cargar', 'precargas factura',
+        ]) || (str_contains($norm, 'precarga') && self::contieneAlguno($norm, [
+            'pendiente', 'pendientes', 'factura',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_PRECARGA_PENDIENTES,
+                'params' => $params,
+                'interpretacion' => 'Precargas de factura pendientes',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'empleados ingresados', 'empleados del mes', 'altas de empleados',
+            'ingresos de empleados', 'empleados nuevos', 'ingresos del mes sueldos',
+        ]) || (str_contains($norm, 'empleados') && self::contieneAlguno($norm, [
+            'ingres', 'alta', 'nuevos', 'periodo', 'período', 'mes',
+        ]))) {
+            $params['valor'] = $params['valor'] ?? $texto;
+            $params['periodo'] = $params['periodo'] ?? $texto;
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_EMPLEADOS_INGRESADOS,
+                'params' => $params,
+                'interpretacion' => 'Empleados ingresados en el período',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'recepciones pendientes', 'recepciones en borrador', 'com en borrador',
+            'recepciones borrador', 'recepciones por confirmar',
+            'recepciones pendientes de confirmar',
+        ]) || (str_contains($norm, 'recepcion') && self::contieneAlguno($norm, [
+            'borrador', 'pendiente', 'pendientes', 'confirmar',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_RECEPCION_BORRADORES,
+                'params' => $params,
+                'interpretacion' => 'Recepciones COM en borrador',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'transferencias pendientes', 'tm pendientes', 'tm abiertas',
+            'transferencias abiertas', 'transferencias por recibir',
+            'pendientes de recepcion tm', 'pendientes de recepción tm',
+        ]) || ((str_contains($norm, 'transferencia') || str_contains($norm, 'tm '))
+            && self::contieneAlguno($norm, ['pendiente', 'pendientes', 'abierta', 'abiertas']))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_TM_PENDIENTES,
+                'params' => $params,
+                'interpretacion' => 'Transferencias pendientes de recepción',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'ingresos y egresos', 'ingresos egresos', 'movimientos de caja del periodo',
+            'movimientos de caja del período', 'ingresos de caja este mes',
+            'egresos de caja este mes', 'caja del periodo', 'caja del período',
+        ]) || (self::contieneAlguno($norm, ['ingreso', 'ingresos', 'egreso', 'egresos'])
+            && self::contieneAlguno($norm, ['caja', 'periodo', 'período', 'mes']))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_INGRESO_EGRESO_PERIODO,
+                'params' => $params,
+                'interpretacion' => 'Ingresos / egresos de caja (período)',
+            ];
+        }
+
+        if (preg_match('/\b(?:empleado|legajo)\s+(?:legajo\s+)?(\d{1,8})\b/u', $norm, $mEmp) === 1
+            || preg_match('/\bficha\s+(?:del?\s+)?(?:empleado\s+)?(?:legajo\s+)?(\d{1,8})\b/u', $norm, $mEmp) === 1
+        ) {
+            $params['legajo'] = (int) $mEmp[1];
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_EMPLEADO_LEGAJO,
+                'params' => $params,
+                'interpretacion' => 'Ficha empleado legajo '.$params['legajo'],
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'liquidaciones pendientes', 'liquidaciones pendientes de cierre',
+            'corridas en borrador', 'liquidaciones en borrador',
+            'liquidaciones abiertas', 'liquidaciones sin cerrar',
+            'corridas pendientes', 'pendientes de cierre sueldos',
+            'que falta cerrar', 'qué falta cerrar',
+        ]) || (str_contains($norm, 'liquidaciones') && self::contieneAlguno($norm, [
+            'pendiente', 'pendientes', 'borrador', 'abiertas', 'sin cerrar',
+        ]))) {
+            $params['valor'] = $params['valor'] ?? $texto;
+            $params['periodo'] = $params['periodo'] ?? $texto;
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_LIQUIDACIONES_PENDIENTES_CIERRE,
+                'params' => $params,
+                'interpretacion' => 'Liquidaciones pendientes de cierre',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'liquidaciones del mes', 'liquidaciones este mes', 'liquidaciones del periodo',
+            'liquidaciones del período', 'liquidaciones de', 'corridas de liquidacion',
+            'corridas de liquidación', 'liquidaciones periodo', 'liquidaciones período',
+        ]) || (str_contains($norm, 'liquidaciones') && self::contieneAlguno($norm, [
+            'mes', 'periodo', 'período', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+            'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre', '20',
+        ]))) {
+            $params['valor'] = $params['valor'] ?? $texto;
+            $params['periodo'] = $params['periodo'] ?? $texto;
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_LIQUIDACIONES_PERIODO,
+                'params' => $params,
+                'interpretacion' => 'Liquidaciones del período',
+            ];
+        }
+
+        if (preg_match('/\b(?:liquidaci[oó]n|liq)\s+(?:nro\.?\s*|numero\s+|n[uú]mero\s+)?(\d{1,8})\b/u', $norm, $mLiq) === 1
+            || preg_match('/\bresumen\s+(?:de\s+)?liquidaci[oó]n\s+(\d{1,8})\b/u', $norm, $mLiq) === 1
+        ) {
+            $params['numero'] = (int) $mLiq[1];
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_LIQUIDACION_RESUMEN,
+                'params' => $params,
+                'interpretacion' => 'Resumen liquidación '.$params['numero'],
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'armar brief', 'generar brief', 'brief del dia', 'brief del día',
+            'brief de reunion', 'brief de reunión', 'resumen para la reunion',
+            'resumen para la reunión', 'armar el brief', 'mostrar brief',
+            'ver brief', 'limpiar brief', 'borrar brief', 'vaciar brief',
+        ]) || (str_contains($norm, 'brief') && self::contieneAlguno($norm, [
+            'dia', 'día', 'reunion', 'reunión', 'armar', 'mostrar', 'limpiar',
+        ]))) {
+            $accion = 'armar';
+            if (self::contieneAlguno($norm, ['mostrar', 'ver', 'listar'])) {
+                $accion = 'mostrar';
+            } elseif (self::contieneAlguno($norm, ['limpiar', 'borrar', 'vaciar', 'reset'])) {
+                $accion = 'limpiar';
+            }
+            $params['accion'] = $accion;
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_BRIEF_DIA,
+                'params' => $params,
+                'interpretacion' => 'Brief del día ('.$accion.')',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'aging de cheques', 'aging cheques', 'aging cartera', 'aging de cartera',
+            'cheques vencidos', 'cartera vencida', 'tramos de cartera',
+            'cheques por vencer', 'vencidos de cartera',
+        ]) || (str_contains($norm, 'aging') && str_contains($norm, 'cheque'))) {
+            if (preg_match('/\bbucket\s*[:=]?\s*(vencido|0_7|8_15|16_30|31_60|61_mas)\b/u', $norm, $mBucket) === 1) {
+                $params['bucket'] = $mBucket[1];
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_CHEQUE_AGING,
+                'params' => $params,
+                'interpretacion' => 'Aging cartera de cheques',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'cashflow de cheques', 'cashflow cheques', 'cash flow cheques',
+            'flujo de cheques', 'semanas de cheques', 'cht chp',
+        ]) || (str_contains($norm, 'cashflow') && str_contains($norm, 'cheque'))) {
+            if (preg_match('/\b(\d{1,2})\s*semanas?\b/u', $norm, $mSem) === 1) {
+                $params['semanas'] = (int) $mSem[1];
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_CHEQUE_CASHFLOW,
+                'params' => $params,
+                'interpretacion' => 'Cashflow semanal de cheques',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'stock critico', 'stock crítico', 'insumos criticos', 'insumos críticos',
+            'insumos sin stock', 'insumos en cero', 'faltante de insumos',
+            'quiebre de stock', 'stock bajo insumos',
+        ]) || (str_contains($norm, 'stock') && self::contieneAlguno($norm, [
+            'critico', 'crítico', 'quiebre', 'faltante',
+        ]) && self::contieneAlguno($norm, ['insumo', 'insumos', 'gastronomia', 'gastronomía']))) {
+            if (preg_match('/\bumbral\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)\b/u', $norm, $mUmbral) === 1) {
+                $params['umbral'] = (float) str_replace(',', '.', $mUmbral[1]);
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_STOCK_CRITICO,
+                'params' => $params,
+                'interpretacion' => 'Stock crítico de insumos',
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Pack A: proyección, contratos, precio por proveedor, existencias depósito.
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function interpretarPackA(string $texto, string $norm): ?array
+    {
+        if (self::contieneAlguno($norm, [
+            'proyeccion de pagos', 'proyección de pagos', 'proyeccion pagos',
+            'que vence para pagar', 'qué vence para pagar', 'pagos a vencer',
+            'deuda a vencer', 'pagos por vencer', 'calendario de pagos',
+        ]) || (self::contieneAlguno($norm, ['proyeccion', 'proyección'])
+            && self::contieneAlguno($norm, ['pago', 'pagos', 'proveedor']))) {
+            $params = array_merge(
+                self::extraerParamsPeriodoYExtras($texto, $norm),
+                self::extraerFiltrosEmpresa($texto)
+            );
+            if (self::contieneAlguno($norm, ['vencido', 'vencidos', 'antiguedad', 'antigüedad'])) {
+                $params['vencidos'] = true;
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_PROYECCION_PAGOS,
+                'params' => $params,
+                'interpretacion' => ! empty($params['vencidos'])
+                    ? 'Proyección de pagos · vencidos'
+                    : 'Proyección de pagos · a vencer',
+            ];
+        }
+
+        if (self::contieneAlguno($norm, [
+            'contratos por vencer', 'contratos a vencer', 'contratos vencidos',
+            'oc por vencer', 'oc a vencer', 'suscripciones por vencer',
+            'contratos que vencen', 'vigencia de contratos',
+        ]) || (self::contieneAlguno($norm, ['contrato', 'contratos', 'suscripcion', 'suscripción'])
+            && self::contieneAlguno($norm, ['vencer', 'vence', 'vencidos', 'vigencia', 'renovacion', 'renovación']))) {
+            $params = array_merge(
+                self::extraerFiltrosEmpresa($texto),
+                ['valor' => $texto]
+            );
+            if (preg_match('/(?:a|en|horizonte|proximos?|próximos?)\s+(\d{1,4})\s*dias/u', $norm, $mH) === 1) {
+                $params['dias_horizonte'] = (int) $mH[1];
+            } elseif (preg_match('/(\d{1,4})\s*dias/u', $norm, $mH) === 1) {
+                $params['dias_horizonte'] = (int) $mH[1];
+            }
+            if (self::contieneAlguno($norm, ['vencido', 'vencidos'])) {
+                $params['tipo_alerta'] = 'VENCIDO';
+            } elseif (self::contieneAlguno($norm, ['preaviso'])) {
+                $params['tipo_alerta'] = 'PREAVISO';
+            } elseif (self::contieneAlguno($norm, ['por vencer', 'a vencer', 'que vencen'])) {
+                $params['tipo_alerta'] = 'POR_VENCER';
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_CONTRATOS_POR_VENCER,
+                'params' => $params,
+                'interpretacion' => 'Contratos / OC por vencer'
+                    .(isset($params['dias_horizonte']) ? ' · '.$params['dias_horizonte'].' días' : ''),
+            ];
+        }
+
+        $pidePrecioProv = self::contieneAlguno($norm, [
+            'precio por proveedor', 'precios por proveedor', 'precio segun proveedor',
+            'precio según proveedor', 'comparar precios', 'comparar proveedores',
+            'quien vende mas barato', 'quién vende más barato', 'mejor precio proveedor',
+            'ultimo precio por proveedor', 'último precio por proveedor',
+        ]);
+        if ($pidePrecioProv) {
+            $sku = self::extraerSkuPackA($texto, $norm);
+            if ($sku === null || $sku === '') {
+                return [
+                    'ok' => false,
+                    'error' => 'Indique el SKU o insumo (ej.: «precio por proveedor del sku 3048»).',
+                    'sugerencias' => [
+                        'precio por proveedor del sku 3048',
+                        'comparar precios del insumo tomate',
+                    ],
+                ];
+            }
+            $params = ['sku' => $sku, 'valor' => $sku];
+            if (self::pideSoloInsumo($norm, $texto)) {
+                $params['solo_insumo'] = true;
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_PRECIO_POR_PROVEEDOR,
+                'params' => $params,
+                'interpretacion' => 'Precio de costo por proveedor · '.$sku,
+            ];
+        }
+
+        $pideExist = self::contieneAlguno($norm, [
+            'existencias por deposito', 'existencias por depósito',
+            'saldos por deposito', 'saldos por depósito',
+            'stock por deposito', 'stock por depósito',
+            'existencia por deposito', 'existencia por depósito',
+        ]) || (self::contieneAlguno($norm, ['existencia', 'existencias', 'saldos'])
+            && self::contieneAlguno($norm, ['deposito', 'depósito', 'depositos', 'depósitos']));
+        if ($pideExist) {
+            $sku = self::extraerSkuPackA($texto, $norm);
+            if ($sku === null || $sku === '') {
+                return [
+                    'ok' => false,
+                    'error' => 'Indique el SKU (ej.: «existencias por depósito del sku 3048»).',
+                    'sugerencias' => [
+                        'existencias por deposito del sku 3048',
+                        'saldos por deposito del insumo muzarella',
+                    ],
+                ];
+            }
+            $params = ['sku' => $sku, 'valor' => $sku];
+            if (self::pideSoloInsumo($norm, $texto)) {
+                $params['solo_insumo'] = true;
+            }
+
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_EXISTENCIAS_DEPOSITO,
+                'params' => $params,
+                'interpretacion' => 'Existencias por depósito · '.$sku,
+            ];
+        }
+
+        return null;
+    }
+
+    private static function extraerSkuPackA(string $texto, string $norm): ?string
+    {
+        $sku = null;
+        if (preg_match('/(?:insumo|articulo|artículo|sku)\s+(.+)$/ui', $texto, $m) === 1) {
+            $sku = self::limpiarTextoEntidad(trim($m[1]));
+        }
+        if ($sku === null || $sku === '') {
+            $sku = self::extraerTokenCodigo($texto, [
+                'precio', 'precios', 'proveedor', 'proveedores', 'comparar', 'mejor', 'barato',
+                'existencias', 'existencia', 'saldos', 'saldo', 'stock', 'deposito', 'depósito',
+                'insumo', 'articulo', 'artículo', 'sku', 'por', 'del', 'de', 'la', 'el', 'un', 'una',
+            ]);
+        }
+        if (($sku === null || $sku === '') && preg_match('/(?:del|de)\s+([A-Za-z0-9][A-Za-z0-9\.\-\/]{1,40})\s*$/ui', $texto, $m) === 1) {
+            $sku = trim($m[1]);
+        }
+
+        return $sku !== null && $sku !== '' ? $sku : null;
+    }
+
+    /**
+     * Precios de costo / saltos en las últimas N compras (COM) de un artículo.
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function interpretarHistorialPreciosCompra(string $texto, string $norm): ?array
+    {
+        $pidePrecio = self::contieneAlguno($norm, [
+            'historial de precios', 'historial precios', 'precios de costo', 'precio de costo',
+            'precio de compra', 'precios de compra', 'variacion de precio', 'variacion de precios',
+            'variacion precio', 'saltaron los precios', 'salto de precio', 'saltaron precios',
+            'como saltaron', 'evolucion de precios', 'evolucion del precio', 'como evoluciono el precio',
+            'como evoluciona el precio', 'precio costo',
+        ]);
+        $pideUltimasCompras = preg_match('/ultimas?\s+\d{1,2}\s+compras/u', $norm) === 1;
+        $contextoCompra = self::contieneAlguno($norm, [
+            'precio', 'precios', 'costo', 'costos', 'variacion', 'salto', 'saltaron',
+            'compra', 'compras', 'com', 'recepcion', 'recepciones',
+        ]);
+
+        if (! $pidePrecio && ! ($pideUltimasCompras && $contextoCompra)) {
+            return null;
+        }
+        // Evitar robar «artículos de compra del sku» (fórmula)
+        if (self::contieneAlguno($norm, ['articulos de compra', 'articulo de compra'])
+            && ! $pidePrecio
+            && ! $pideUltimasCompras) {
+            return null;
+        }
+
+        $limite = AiConsultaHistorialPreciosCompraSupport::LIMITE_DEFAULT;
+        if (preg_match('/ultimas?\s+(\d{1,2})\s+compras/u', $norm, $mLim) === 1) {
+            $limite = (int) $mLim[1];
+        } elseif (preg_match('/(?:ultimas?|ultimos?)\s+(\d{1,2})\b/u', $norm, $mLim) === 1
+            && self::contieneAlguno($norm, ['precio', 'precios', 'costo', 'compra', 'compras'])) {
+            $limite = (int) $mLim[1];
+        }
+        $limite = max(
+            AiConsultaHistorialPreciosCompraSupport::LIMITE_MIN,
+            min(AiConsultaHistorialPreciosCompraSupport::LIMITE_MAX, $limite)
+        );
+
+        $sku = null;
+        if (preg_match('/(?:insumo|articulo|artículo|sku)\s+(.+)$/ui', $texto, $m) === 1) {
+            $sku = self::limpiarTextoEntidad(trim($m[1]));
+        }
+        if ($sku === null || $sku === '') {
+            $sku = self::extraerTokenTrasEtiqueta($texto, [
+                'historial', 'precios', 'precio', 'costo', 'costos', 'compra', 'compras',
+                'saltaron', 'salto', 'variacion', 'variación', 'evolucion', 'evolución',
+                'ultimas', 'últimas', 'ultimos', 'últimos', 'como', 'cómo',
+                'insumo', 'articulo', 'artículo', 'sku',
+                'de', 'del', 'la', 'el', 'un', 'una', 'los', 'las', 'en', 'las',
+            ]);
+        }
+        if ($sku === null || $sku === '') {
+            $sku = self::extraerTokenCodigo($texto, [
+                'historial', 'precios', 'precio', 'costo', 'costos', 'compra', 'compras',
+                'saltaron', 'salto', 'variacion', 'insumo', 'articulo', 'sku',
+                'ultimas', 'últimas', 'como', 'cómo', 'de', 'del', 'la', 'el', 'un', 'una',
+            ]);
+        }
+        // Quitar basura tipo "en las ultimas 3 compras" si quedó pegada
+        if (is_string($sku) && $sku !== '') {
+            $sku = trim(preg_replace(
+                '/\b(?:en\s+las?\s+)?ultimas?\s+\d{1,2}\s+compras?\b/ui',
+                '',
+                $sku
+            ) ?? $sku);
+            $sku = self::limpiarTextoEntidad($sku);
+        }
+
+        if ($sku === null || $sku === '') {
+            return [
+                'ok' => false,
+                'error' => 'Indique el insumo o SKU (ej.: «precios de costo del insumo muzarella en las últimas 3 compras»).',
+                'sugerencias' => [
+                    'precios de costo del insumo muzarella en las ultimas 3 compras',
+                    'como saltaron los precios del sku 111 en las ultimas 3 compras',
+                    'historial de precios del articulo 111',
+                ],
+            ];
+        }
+
+        $soloInsumo = self::pideSoloInsumo($norm, $texto);
+        $params = [
+            'sku' => $sku,
+            'valor' => $sku,
+            'limite' => $limite,
+        ];
+        if ($soloInsumo) {
+            $params['solo_insumo'] = true;
+        }
+
+        return [
+            'ok' => true,
+            'intent' => AiConsultaOperativaSupport::INTENT_HISTORIAL_PRECIOS_COMPRA,
+            'params' => $params,
+            'interpretacion' => 'Precios de costo · últimas '.$limite.' compras de '.$sku,
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private static function interpretarPatronAnalitico(string $texto, string $norm): ?array
+    {
+        $match = AiConsultaPatronAnaliticoSupport::resolverDesdeNorm($norm, $texto);
+        if ($match === null) {
+            return null;
+        }
+
+        $params = [
+            'patron' => $match['patron'],
+            'entidad' => $match['entidad'],
+            'valor' => $texto,
+            'pregunta' => $texto,
+        ];
+        if (! empty($match['campo'])) {
+            $params['campo'] = $match['campo'];
+        }
+        if (! empty($match['valor'])) {
+            $params['valor'] = $match['valor'];
+            $params['localidad'] = $match['valor'];
+        }
+
+        return [
+            'ok' => true,
+            'intent' => AiConsultaOperativaSupport::INTENT_PATRON_ANALITICO,
+            'params' => $params,
+            'interpretacion' => $match['interpretacion'],
+        ];
+    }
+
+    /**
+     * Plantillas de dolor CI (preview tabular) — tiene prioridad sobre el puente CI genérico.
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function interpretarDolorEntidades(string $texto, string $norm): ?array
+    {
+        $match = AiConsultaDolorEntidadesSupport::resolverDesdeNorm($norm);
+        if ($match === null) {
+            return null;
+        }
+
+        return [
+            'ok' => true,
+            'intent' => AiConsultaOperativaSupport::INTENT_ENTIDAD_DOLOR,
+            'params' => [
+                'entidad' => $match['entidad'],
+                'plantilla' => $match['plantilla'],
+                'valor' => $texto,
+                'pregunta' => $texto,
+            ],
+            'interpretacion' => 'Listado · '.($match['titulo'] ?? ($match['entidad'].'/'.$match['plantilla'])),
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private static function interpretarConsultaInteligente(string $texto, string $norm): ?array
+    {
+        if (self::contieneAlguno($norm, [
+            'consulta inteligente', 'explorador inteligente', 'abrir explorador',
+            'listado de cheques', 'listar cheques', 'ver cheques',
+            'listado de pagos', 'ordenes de pago', 'órdenes de pago',
+            'listado de remitos', 'ingresos y egresos', 'listado de cobranzas',
+            'empleados de sueldos', 'listado de empleados',
+            'listado de importaciones', 'listado capex',
+        ]) || (str_contains($norm, 'cheque') && self::contieneAlguno($norm, [
+            'listar', 'listado', 'explorar', 'recibido',
+        ])) || (str_contains($norm, 'pago') && self::contieneAlguno($norm, [
+            'listar', 'listado', 'explorar',
+        ]))) {
+            return [
+                'ok' => true,
+                'intent' => AiConsultaOperativaSupport::INTENT_CONSULTA_INTELIGENTE,
+                'params' => [
+                    'valor' => $texto,
+                    'pregunta' => $texto,
+                ],
+                'interpretacion' => 'Consulta Inteligente: '.$texto,
+            ];
+        }
+
+        return null;
+    }
+
     /** @return list<string> */
     public static function ejemplos(): array
     {
         return [
+            'proyeccion de pagos',
+            'contratos por vencer a 60 dias',
+            'precio por proveedor del sku 3048',
+            'existencias por deposito del sku 3048',
+            'precios de costo del insumo muzarella en las ultimas 3 compras',
+            'como saltaron los precios del sku 111 en las ultimas 3 compras',
+            'historial de precios del articulo 111',
             'articulos de compra del sku 111',
             'en que formulas aparece el insumo 111',
             'movimientos sin centro de costo este mes',
@@ -671,6 +1506,51 @@ final class AiConsultaOperativaRouterSupport
             'cómo cargo una orden de compra',
             'manual de gastronomía cierres',
             'pedido consumo CC 93 depósito 12 últimos 60 días',
+            'cheques para depositar',
+            'cheques en cartera',
+            'aging de cheques',
+            'cashflow de cheques 8 semanas',
+            'stock crítico de insumos',
+            'armar brief del día',
+            'cola HITL',
+            'propuestas de pago',
+            'cash position',
+            'aging de proveedores',
+            'aging de clientes',
+            'top deudores',
+            'empleado legajo 1234',
+            'liquidación 45',
+            'liquidaciones este mes',
+            'liquidaciones pendientes de cierre',
+            'empleados ingresados este mes',
+            'recepciones en borrador',
+            'transferencias pendientes',
+            'ingresos y egresos este mes',
+            'resumen de tickets',
+            'tickets abiertos',
+            'tickets vencidos 7 días',
+            'precargas pendientes',
+            'OC vencidas sin recepción',
+            'pagos a proveedores este mes',
+            'cheques para depositar',
+            'facturas sin remito',
+            'pedidos pendientes',
+            'OC estado pendiente',
+            'OC aprobadas',
+            'requisiciones pendientes',
+            'solicitudes de pago emitidas',
+            'remitos pendientes',
+            'importaciones abiertas',
+            'capex activos',
+            'recuentos pendientes',
+            'requisiciones de sala pendientes',
+            'propuestas de pago en borrador',
+            'mis aprobaciones',
+            'proveedores con cuit duplicado',
+            'clientes con documento duplicado',
+            'proveedores de lanus',
+            'clientes de avellaneda',
+            'consulta inteligente remitos pendientes',
         ];
     }
 

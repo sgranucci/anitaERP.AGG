@@ -23,6 +23,7 @@ use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
+use App\Support\Stock\RecepcionProveedorImportacionSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
@@ -173,6 +174,7 @@ class RecepcionProveedorService
                     ?? (! empty($data['ai_decision_id']) ? 'OCR' : 'MANUAL'),
                 'creousuario_id' => Auth::id(),
                 'centrocosto_id' => RecepcionProveedorVisibilidadSupport::resolverCentrocostoCarga(),
+                'importacion_id' => RecepcionProveedorImportacionSupport::importacionIdDesdeOrdencompra($oc),
             ];
 
             // Recuperación / forzado de COM (p. ej. reclamar hueco tras confirmación fallida).
@@ -271,6 +273,7 @@ class RecepcionProveedorService
                     ? 'OCR'
                     : ($data['origen_carga'] ?? $recepcion->origen_carga),
                 'impuesto_interno' => $impuestoInterno,
+                'importacion_id' => RecepcionProveedorImportacionSupport::importacionIdDesdeOrdencompra($oc),
             ]);
 
             $this->reemplazarItems($recepcion, $items);
@@ -1371,6 +1374,30 @@ class RecepcionProveedorService
         if ($recepcion->tipo === Recepcion_Proveedor::TIPO_RECEPCION) {
             $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_ingresada', $recepcion->id);
             $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_encuesta', $recepcion->id);
+        }
+
+        // Event bus: suscripciones extra + motor de reglas (contexto rico para IF monto/tipo).
+        try {
+            $monto = 0.0;
+            if ($recepcion->relationLoaded('recepcion_proveedor_articulos')) {
+                $lineas = $recepcion->recepcion_proveedor_articulos;
+            } else {
+                $lineas = $recepcion->recepcion_proveedor_articulos()->get(['cantidad', 'precio']);
+            }
+            foreach ($lineas as $lin) {
+                $monto += (float) ($lin->cantidad ?? 0) * (float) ($lin->precio ?? 0);
+            }
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('stock.recepcion.confirmada', [
+                'entity_id' => (int) $recepcion->id,
+                'empresa_id' => (int) ($recepcion->empresa_id ?? 0),
+                'moneda_id' => (int) ($recepcion->moneda_id ?? 0) ?: null,
+                'monto' => round($monto, 2),
+                'tipo' => (string) ($recepcion->tipo ?? ''),
+                'proveedor_id' => (int) ($recepcion->proveedor_id ?? 0) ?: null,
+                'centrocosto_id' => (int) ($recepcion->centrocosto_id ?? 0) ?: null,
+                'url' => url('stock/recepcion-proveedor/'.$recepcion->id.'/editar'),
+            ]);
+        } catch (\Throwable) {
         }
     }
 

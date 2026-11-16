@@ -33,7 +33,7 @@ class GuiaPasoAPasoCatalogo
             'bandeja-legajos' => [
                 'archivo' => 'bandeja-legajos.html',
                 'titulo' => 'Bandeja de legajos',
-                'bajada' => 'Asignar COM a la factura y enviar el legajo a Cuentas a pagar o Gastronomía.',
+                'bajada' => 'Asignar COM a la factura, cupo de notas de crédito y envío a Cuentas a pagar o Gastronomía.',
                 'icono' => 'fa-folder-open',
                 'modulo' => 'Compras',
             ],

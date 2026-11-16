@@ -106,6 +106,7 @@ final class ConsultarContextoOperativoSkill implements AiSkillInterface
             'score' => $score,
             'latencia_ms' => $this->latenciaMs($inicio),
             'payload' => [
+                'origen' => 'fab',
                 'intent' => $resultado['intent'],
                 'pregunta' => $pregunta,
                 'fuente_router' => $fuenteRouter,

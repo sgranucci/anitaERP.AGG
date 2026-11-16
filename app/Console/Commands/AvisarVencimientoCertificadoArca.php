@@ -58,6 +58,18 @@ class AvisarVencimientoCertificadoArca extends Command
         $avisos->enviar('arca', 'certificado_vencimiento', 0, [
             'certificados' => $filas,
         ]);
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('arca.certificado.vencimiento', [
+                'entity_id' => 0,
+                'cantidad' => count($filas),
+                'tipo' => 'ARCA_CERT',
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => 'arca.certificado.vencimiento',
+                'error' => $e->getMessage(),
+            ]);
+        }
         $this->info('Aviso encolado para '.count($filas).' certificado(s).');
 
         return self::SUCCESS;

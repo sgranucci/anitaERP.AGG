@@ -478,6 +478,8 @@ class Concepto_IvacompraController extends Controller
             || can('editar-ingresos-egresos-caja', false)
             || can('editar-configuracion-general', false)
             || can('actualizar-configuracion-general', false)
+            || can('editar-configuracion-conciliacion-bancaria', false)
+            || can('actualizar-configuracion-conciliacion-bancaria', false)
             || can('listar-tipo-transaccion-compra', false)
             || can('crear-tipo-transaccion-compra', false)
             || can('editar-tipo-transaccion-compra', false)

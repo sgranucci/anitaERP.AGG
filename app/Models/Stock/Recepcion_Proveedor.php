@@ -3,6 +3,7 @@
 namespace App\Models\Stock;
 
 use App\Models\Compras\Contrato_Validacion_Abono;
+use App\Models\Compras\Importacion;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
@@ -48,6 +49,7 @@ class Recepcion_Proveedor extends Model implements Auditable
         'certificado_senasa', 'tropa', 'temperatura_ingreso', 'destino_senasa', 'camara', 'nro_establecimiento',
         'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'origen_carga', 'stkmae_precio_anita_sync_at', 'creousuario_id',
         'centrocosto_id',
+        'importacion_id',
     ];
 
     protected $casts = [
@@ -66,6 +68,11 @@ class Recepcion_Proveedor extends Model implements Auditable
     public function ordencompras()
     {
         return $this->belongsTo(Ordencompra::class, 'ordencompra_id');
+    }
+
+    public function importacion()
+    {
+        return $this->belongsTo(Importacion::class, 'importacion_id');
     }
 
     public function recepcion_referencia()

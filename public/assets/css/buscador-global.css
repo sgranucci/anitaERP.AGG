@@ -1,11 +1,11 @@
 /**
- * Buscador del encabezado: pantallas del rol y manuales.
+ * Buscador del encabezado: pantallas, comprobantes, registros y adjuntos.
  */
 
 .anita-buscador {
     position: relative;
-    width: 280px;
-    max-width: 34vw;
+    width: 320px;
+    max-width: 40vw;
     align-items: center;
 }
 
@@ -17,20 +17,62 @@
     position: absolute;
     top: calc(100% + 6px);
     left: 0;
-    width: 440px;
-    max-width: min(440px, 72vw);
-    max-height: min(70vh, 480px);
+    width: 560px;
+    max-width: min(560px, 92vw);
+    max-height: min(78vh, 620px);
     overflow: auto;
     background: #fff;
     border: 1px solid #d5dde8;
     border-radius: 8px;
     box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
     z-index: 2000;
-    padding: 4px 0 0;
+    padding: 0 0 0;
+}
+
+.anita-buscador-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e8eb;
+    background: #f4f8fb;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.anita-buscador-contador {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1b4f72;
+}
+
+.anita-buscador-filtros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.anita-buscador-filtro {
+    border: 1px solid #aed6f1;
+    background: #fff;
+    color: #1b4f72;
+    border-radius: 999px;
+    font-size: 11px;
+    padding: 1px 8px;
+    line-height: 1.6;
+    cursor: pointer;
+}
+
+.anita-buscador-filtro.is-on {
+    background: #2471a3;
+    border-color: #2471a3;
+    color: #fff;
 }
 
 .anita-buscador-grupo {
-    padding: 6px 12px 2px;
+    padding: 8px 12px 2px;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -42,9 +84,10 @@
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    padding: 7px 12px;
+    padding: 8px 12px;
     color: #17202a;
     text-decoration: none;
+    border-bottom: 1px solid #f0f3f6;
 }
 
 .anita-buscador-item:hover,
@@ -54,11 +97,12 @@
     text-decoration: none;
 }
 
-.anita-buscador-item i {
+.anita-buscador-item i.anita-buscador-icono {
     width: 16px;
     margin-top: 3px;
     color: #2471a3;
     text-align: center;
+    flex-shrink: 0;
 }
 
 .anita-buscador-sugerencia {
@@ -78,11 +122,36 @@
     flex: 1;
 }
 
+.anita-buscador-titulo-fila {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .anita-buscador-titulo {
     display: block;
     font-size: 14px;
     font-weight: 600;
     line-height: 1.25;
+}
+
+.anita-buscador-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    background: #d4e6f1;
+    color: #1b4f72;
+    border-radius: 3px;
+    padding: 1px 6px;
+    line-height: 1.5;
+}
+
+.anita-buscador-badge-adjunto {
+    background: #e8f8f5;
+    color: #0e6655;
 }
 
 .anita-buscador-detalle {
@@ -94,6 +163,55 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.anita-buscador-campos {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 12px;
+    margin-top: 6px;
+}
+
+.anita-buscador-campo {
+    font-size: 11px;
+    line-height: 1.35;
+    color: #5d6d7e;
+    min-width: 0;
+}
+
+.anita-buscador-campo strong {
+    color: #34495e;
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.anita-buscador-adjunto {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #0e6655;
+    background: #e8f8f5;
+    border-radius: 4px;
+    padding: 2px 7px;
+    max-width: 100%;
+}
+
+.anita-buscador-adjunto span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.anita-buscador-match {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #7d6608;
+    background: #fcf3cf;
+    border-radius: 3px;
+    padding: 1px 6px;
 }
 
 .anita-buscador-item:hover .anita-buscador-detalle,
@@ -114,6 +232,8 @@
     font-size: 11px;
     color: #85929e;
     background: #f8f9f9;
+    position: sticky;
+    bottom: 0;
 }
 
 .anita-buscador-marca {
@@ -145,5 +265,9 @@
         right: 8px;
         width: auto;
         max-width: none;
+    }
+
+    .anita-buscador-campos {
+        grid-template-columns: 1fr;
     }
 }

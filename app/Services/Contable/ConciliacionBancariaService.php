@@ -8,7 +8,12 @@ use App\Models\Caja\InterbankingMovimiento;
 use App\Support\Caja\InterbankingSaldoResolverSupport;
 use App\Models\Contable\ConciliacionBancariaChequePendiente;
 use App\Models\Contable\ConciliacionBancariaEjecucion;
+use App\Models\Contable\ConciliacionBancariaEjecucionArchivo;
+use App\Models\Contable\ConciliacionBancariaGrupo;
+use App\Models\Contable\ConciliacionBancariaGrupoLinea;
 use App\Models\Contable\ConciliacionBancariaPar;
+use Illuminate\Http\UploadedFile;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Services\Ai\AiPolicy;
 use App\Services\Ai\Skills\AiSkillContext;
 use App\Services\Ai\Skills\AiSkillRegistry;
@@ -16,17 +21,22 @@ use App\Services\Contable\Ai\SugerirParesConciliacionBancariaSkill;
 use App\Support\Ai\AiAgenteEventoDispatcherSupport;
 use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaAnomaliaSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaClearingDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaKpiSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendientesCpromaeSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPeriodoLockSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReclaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReferenciaSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReglasSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResidualReglaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
@@ -58,6 +68,14 @@ class ConciliacionBancariaService
         array $opciones = [],
     ): array {
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
+
+        ConciliacionBancariaPeriodoLockSupport::assertEditable(
+            $empresaId,
+            $cuentacajaId,
+            $mes,
+            $anio,
+            $usuarioId,
+        );
 
         $cuentacaja = Cuentacaja::query()
             ->with(['cuentacontables', 'empresas', 'bancos'])
@@ -108,8 +126,8 @@ class ConciliacionBancariaService
         // Histórico: desde cobertura IB (o 18 meses) — desde 2000 provoca OOM y no hay extracto para matchear.
         // Se mantienen cheques previos a IB como pendientes de carátula (estilo Excel Contaduría).
         $fechaMinIb = $this->resolverFechaMinimaInterbanking($empresaId, $cuentaInterbanking);
-        $diasCheque = max(30, (int) config('conciliacion_bancaria.dias_tolerancia_fecha_cheque', 30));
-        $lookbackMeses = max(6, (int) config('conciliacion_bancaria.historico_lookback_meses', 18));
+        $diasCheque = ConciliacionBancariaReglasSupport::diasToleranciaFechaCheque();
+        $lookbackMeses = ConciliacionBancariaReglasSupport::historicoLookbackMeses();
         $fechaDesdeHistorico = $fechaDesde->copy()->subMonths($lookbackMeses)->startOfDay();
         if ($fechaMinIb) {
             $desdeIb = $fechaMinIb->copy()->subDays($diasCheque)->startOfDay();
@@ -150,16 +168,37 @@ class ConciliacionBancariaService
             $cuentacajaId,
         );
 
-        $paresPrevios = ConciliacionBancariaPar::query()
-            ->where('cuentacaja_id', $cuentacajaId)
-            ->get();
+        $hashesPrevios = $this->hashesConciliadosCuenta($empresaId, $cuentacajaId);
+        $hashContConc = $hashesPrevios['contables'];
+        $hashBancoConc = $hashesPrevios['banco'];
 
-        $hashContConc = [];
-        $hashBancoConc = [];
-        foreach ($paresPrevios as $par) {
-            $hashContConc[$par->hash_contable] = true;
-            $hashBancoConc[$par->hash_banco] = true;
-        }
+        // Conteos previos al persistir esta corrida (evita doble conteo en total/KPI).
+        $paresPreviosCount = ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->count();
+        $paresPreviosMesCount = ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereMonth('fecha_contable', $mes)
+            ->whereYear('fecha_contable', $anio)
+            ->count();
+        $gruposAutoMesPrevios = ConciliacionBancariaGrupo::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereMonth('conciliado_at', $mes)
+            ->whereYear('conciliado_at', $anio)
+            ->where('modo', 'like', 'auto%')
+            ->count();
+        $gruposManualMesPrevios = ConciliacionBancariaGrupo::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereMonth('conciliado_at', $mes)
+            ->whereYear('conciliado_at', $anio)
+            ->where(function ($q) {
+                $q->where('modo', 'not like', 'auto%')->orWhereNull('modo');
+            })
+            ->count();
 
         $todosContables = array_merge($contablesHistoricos, $contablesPeriodo);
         $todosBanco = array_merge($movimientosBancoHistoricos, $movimientosBanco);
@@ -179,12 +218,24 @@ class ConciliacionBancariaService
         );
 
         $nuevosPares = array_merge($matchPeriodo['pares'], $matchHistorico['pares']);
+        $nuevosGrupos = array_merge($matchPeriodo['grupos'] ?? [], $matchHistorico['grupos'] ?? []);
 
         if ($persistirPares && $nuevosPares !== []) {
             $this->persistirPares($empresaId, $cuentacajaId, $nuevosPares, $usuarioId);
             foreach ($nuevosPares as $par) {
                 $hashContConc[(string) $par['contable']['hash']] = true;
                 $hashBancoConc[(string) $par['banco']['hash']] = true;
+            }
+        }
+        if ($persistirPares && $nuevosGrupos !== []) {
+            $this->persistirGruposAuto($empresaId, $cuentacajaId, $nuevosGrupos, $usuarioId);
+            foreach ($nuevosGrupos as $grupo) {
+                foreach ($grupo['contables'] ?? [] as $c) {
+                    $hashContConc[(string) ($c['hash'] ?? '')] = true;
+                }
+                foreach ($grupo['bancos'] ?? [] as $b) {
+                    $hashBancoConc[(string) ($b['hash'] ?? '')] = true;
+                }
             }
         }
 
@@ -302,7 +353,7 @@ class ConciliacionBancariaService
             'saldo_inicial_periodo' => $bancoProcesado['saldo_inicial'],
             'saldo_final_periodo' => $bancoProcesado['saldo_final'],
             'pares_nuevos' => $nuevosPares,
-            'pares_conciliados_total' => $paresPrevios->count() + count($nuevosPares),
+            'pares_conciliados_total' => $paresPreviosCount + count($nuevosPares),
             'pendientes_contables' => $pendientesContables,
             'pendientes_contables_cheques' => $partPend['cheques'],
             'pendientes_contables_anulas' => $partPend['anulas'] ?? [],
@@ -343,7 +394,22 @@ class ConciliacionBancariaService
                 $movimientosBanco,
             ),
             'caratula' => $caratula,
+            'residuales' => ConciliacionBancariaResidualReglaSupport::clasificarPendientes($pendientesBanco),
         ];
+
+        $kpi = ConciliacionBancariaKpiSupport::desdeCorrida(
+            $nuevosPares,
+            $pendientesContables,
+            $pendientesBanco,
+            $paresPreviosMesCount,
+            $gruposAutoMesPrevios,
+            $gruposManualMesPrevios,
+        );
+        $kpi['agenda_interbanking_cerrada'] = ConciliacionBancariaPeriodoLockSupport::estaMesCerradoEnAgenda(
+            $empresaId,
+            $mes,
+            $anio,
+        );
 
         $ejecucion = ConciliacionBancariaEjecucion::query()->create([
             'empresa_id' => $empresaId,
@@ -368,9 +434,11 @@ class ConciliacionBancariaService
                 'codigos_saldo_excel' => $codigosSaldoExcel,
                 'gastos_resumen' => $gastosResumen,
             ],
+            'kpi_json' => $kpi,
             'usuario_id' => $usuarioId,
         ]);
         $resultado['ejecucion_id'] = $ejecucion->id;
+        $resultado['kpi'] = $kpi;
 
         // Persistir cheques aunque no se graben pares (p. ej. export): si no, la
         // ejecución queda sin snapshot y envenena la próxima semilla de carátula.
@@ -411,7 +479,8 @@ class ConciliacionBancariaService
 
         $cuentaInterbanking = trim((string) ($cuentacaja->cuenta_interbanking ?? ''));
         if ($cuentaInterbanking === '') {
-            throw new RuntimeException('La cuenta de caja no tiene configurada la cuenta Interbanking.');
+            // Bancos sin Interbanking: extracto CSV/OFX/Excel usa cuenta sintética EXT-{codigo}.
+            $cuentaInterbanking = self::cuentaExtractoExterno((string) ($cuentacaja->codigo ?? ''));
         }
 
         $cuentaContable = $cuentacaja->cuentacontables;
@@ -498,6 +567,22 @@ class ConciliacionBancariaService
             ->limit(3000)
             ->get();
 
+        $grupos = ConciliacionBancariaGrupo::query()
+            ->with('lineas')
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where(function ($q) use ($fechaDesde, $fechaHasta): void {
+                $q->whereHas('lineas', function ($lq) use ($fechaDesde, $fechaHasta): void {
+                    $lq->whereBetween('fecha', [$fechaDesde->toDateString(), $fechaHasta->toDateString()]);
+                })->orWhereBetween('conciliado_at', [
+                    $fechaDesde->copy()->startOfDay(),
+                    $fechaHasta->copy()->endOfDay(),
+                ]);
+            })
+            ->orderByDesc('id')
+            ->limit(1000)
+            ->get();
+
         $hashesGlobal = $this->hashesConciliadosCuenta($empresaId, $cuentacajaId);
         $hashesContablesMes = [];
         foreach ($contables as $mov) {
@@ -534,12 +619,21 @@ class ConciliacionBancariaService
             }
         }
 
+        $paresTablero = $pares->map(fn (ConciliacionBancariaPar $par) => $this->filaTableroPar($par))->all();
+        foreach ($grupos as $grupo) {
+            $paresTablero[] = $this->filaTableroGrupo($grupo);
+        }
+        usort($paresTablero, static function (array $a, array $b): int {
+            return ((int) ($b['id'] ?? 0)) <=> ((int) ($a['id'] ?? 0));
+        });
+
         return [
             'contables' => array_map(fn (array $mov) => $this->filaTableroContable($mov), array_merge($contables, $anteriores)),
             'banco' => array_map(fn (array $mov) => $this->filaTableroBanco($mov), $banco),
-            'pares' => $pares->map(fn (ConciliacionBancariaPar $par) => $this->filaTableroPar($par))->all(),
+            'pares' => $paresTablero,
             'hashes_contables' => array_keys($hashesGlobal['contables']),
             'hashes_banco' => array_keys($hashesGlobal['banco']),
+            'periodo_cierre' => $this->estadoCierrePeriodo($empresaId, $cuentacajaId, $mes, $anio),
         ];
     }
 
@@ -563,7 +657,7 @@ class ConciliacionBancariaService
 
         $impC = ConciliacionBancariaHashSupport::importeFirmadoContable($contable);
         $impB = ConciliacionBancariaHashSupport::importeFirmadoBanco($banco);
-        $tolerancia = (float) config('conciliacion_bancaria.tolerancia_importe', 0.05);
+        $tolerancia = ConciliacionBancariaReglasSupport::toleranciaImporte();
         if (! $forzar && abs($impC - $impB) > $tolerancia) {
             throw new RuntimeException(
                 'Los importes no coinciden ('.$impC.' y '.$impB.'). Confirmá el cruce si es intencional.'
@@ -578,21 +672,29 @@ class ConciliacionBancariaService
         }
 
         $contable['conciliacion_modo'] = 'manual';
+        $fechaCont = self::fechaDesdeYmdOString($contable['fecha'] ?? $contable['fecha_fmt'] ?? null);
+        $fechaBan = self::fechaDesdeYmdOString($banco['process_date'] ?? $banco['fecha'] ?? null);
+        $this->assertEditableDesdeFechas($empresaId, $cuentacajaId, $fechaCont, $fechaBan, $usuarioId);
 
         try {
-            return ConciliacionBancariaPar::query()->create([
+            $par = ConciliacionBancariaPar::query()->create([
                 'empresa_id' => $empresaId,
                 'cuentacaja_id' => $cuentacajaId,
                 'hash_contable' => $hashC,
                 'hash_banco' => $hashB,
                 'contable_json' => $contable,
                 'banco_json' => $banco,
-                'fecha_contable' => self::fechaDesdeYmdOString($contable['fecha'] ?? $contable['fecha_fmt'] ?? null),
-                'fecha_banco' => self::fechaDesdeYmdOString($banco['process_date'] ?? $banco['fecha'] ?? null),
+                'fecha_contable' => $fechaCont,
+                'fecha_banco' => $fechaBan,
                 'importe' => $impC,
+                'origen' => 'manual',
+                'score' => null,
                 'conciliado_por_usuario_id' => $usuarioId,
                 'conciliado_at' => now(),
             ]);
+            ConciliacionBancariaClearingDocumentoSupport::despuesDePar($contable, $banco, $par);
+
+            return $par->fresh() ?? $par;
         } catch (QueryException $e) {
             throw new RuntimeException('No se pudo guardar el cruce. El movimiento puede haber quedado conciliado en otra solapa.', 0, $e);
         }
@@ -610,7 +712,209 @@ class ConciliacionBancariaService
             throw new RuntimeException('El cruce no existe o no pertenece a esta cuenta.');
         }
 
+        $fecha = $par->fecha_contable?->format('Y-m-d') ?? $par->fecha_banco?->format('Y-m-d');
+        if ($fecha !== null) {
+            $c = Carbon::parse($fecha);
+            ConciliacionBancariaPeriodoLockSupport::assertEditable(
+                $empresaId,
+                $cuentacajaId,
+                (int) $c->month,
+                (int) $c->year,
+            );
+        }
+
+        ConciliacionBancariaClearingDocumentoSupport::alDesconciliarPar($par);
         $par->delete();
+    }
+
+    public function desconciliarGrupo(int $empresaId, int $cuentacajaId, int $grupoId): void
+    {
+        $grupo = ConciliacionBancariaGrupo::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereKey($grupoId)
+            ->first();
+
+        if ($grupo === null) {
+            throw new RuntimeException('El grupo no existe o no pertenece a esta cuenta.');
+        }
+
+        EloquentAuditDeleteSupport::each(
+            ConciliacionBancariaGrupoLinea::query()->where('grupo_id', $grupo->id)
+        );
+        $grupo->delete();
+    }
+
+    /**
+     * Conciliación multi-match (1:N, N:1 o N:N) por suma de importes.
+     *
+     * @param  list<array<string, mixed>>  $contables
+     * @param  list<array<string, mixed>>  $bancos
+     */
+    public function conciliarGrupoManual(
+        int $empresaId,
+        int $cuentacajaId,
+        array $contables,
+        array $bancos,
+        ?int $usuarioId,
+        bool $forzar = false,
+        string $modo = 'manual_multi',
+    ): ConciliacionBancariaGrupo {
+        if ($contables === [] || $bancos === []) {
+            throw new RuntimeException('Hace falta al menos un movimiento contable y uno de banco.');
+        }
+
+        $fechaRef = self::fechaDesdeYmdOString(
+            $contables[0]['fecha'] ?? $contables[0]['fecha_fmt'] ?? $bancos[0]['process_date'] ?? $bancos[0]['fecha'] ?? null
+        );
+        $this->assertEditableDesdeFechas($empresaId, $cuentacajaId, $fechaRef, null, $usuarioId);
+
+        $hashes = $this->hashesConciliadosCuenta($empresaId, $cuentacajaId);
+        $lineasC = [];
+        $lineasB = [];
+        $sumaC = 0.0;
+        $sumaB = 0.0;
+        $vistosC = [];
+        $vistosB = [];
+
+        foreach ($contables as $mov) {
+            if (! is_array($mov)) {
+                continue;
+            }
+            $hash = (string) ($mov['hash'] ?? '');
+            if ($hash === '' || isset($vistosC[$hash])) {
+                continue;
+            }
+            if (isset($hashes['contables'][$hash])) {
+                throw new RuntimeException('Hay un movimiento contable que ya está conciliado.');
+            }
+            $imp = ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
+            $sumaC += $imp;
+            $vistosC[$hash] = true;
+            $lineasC[] = [
+                'hash' => $hash,
+                'mov' => $mov,
+                'importe' => $imp,
+                'fecha' => self::fechaDesdeYmdOString($mov['fecha'] ?? $mov['fecha_fmt'] ?? null),
+            ];
+        }
+
+        foreach ($bancos as $mov) {
+            if (! is_array($mov)) {
+                continue;
+            }
+            $hash = (string) ($mov['hash'] ?? '');
+            if ($hash === '' || isset($vistosB[$hash])) {
+                continue;
+            }
+            if (isset($hashes['banco'][$hash])) {
+                throw new RuntimeException('Hay un movimiento de banco que ya está conciliado.');
+            }
+            $imp = ConciliacionBancariaHashSupport::importeFirmadoBanco($mov);
+            $sumaB += $imp;
+            $vistosB[$hash] = true;
+            $lineasB[] = [
+                'hash' => $hash,
+                'mov' => $mov,
+                'importe' => $imp,
+                'fecha' => self::fechaDesdeYmdOString($mov['process_date'] ?? $mov['fecha'] ?? null),
+            ];
+        }
+
+        if ($lineasC === [] || $lineasB === []) {
+            throw new RuntimeException('Faltan movimientos válidos para armar el grupo.');
+        }
+
+        $sumaC = round($sumaC, 2);
+        $sumaB = round($sumaB, 2);
+        $tolerancia = ConciliacionBancariaReglasSupport::toleranciaImporte();
+        if (! $forzar && abs($sumaC - $sumaB) > $tolerancia) {
+            throw new RuntimeException(
+                'Las sumas no coinciden (contable '.$sumaC.' vs banco '.$sumaB.'). Confirmá el cruce si es intencional.'
+            );
+        }
+
+        // 1:1 sigue en la tabla histórica de pares (compatibilidad con corrida automática).
+        if (count($lineasC) === 1 && count($lineasB) === 1) {
+            $this->conciliarManual(
+                $empresaId,
+                $cuentacajaId,
+                $lineasC[0]['mov'],
+                $lineasB[0]['mov'],
+                $usuarioId,
+                $forzar,
+            );
+
+            return ConciliacionBancariaGrupo::query()->make([
+                'empresa_id' => $empresaId,
+                'cuentacaja_id' => $cuentacajaId,
+                'importe_contable' => $sumaC,
+                'importe_banco' => $sumaB,
+                'modo' => 'manual',
+            ]);
+        }
+
+        try {
+            return DB::transaction(function () use ($empresaId, $cuentacajaId, $lineasC, $lineasB, $sumaC, $sumaB, $usuarioId, $modo) {
+                $grupo = ConciliacionBancariaGrupo::query()->create([
+                    'empresa_id' => $empresaId,
+                    'cuentacaja_id' => $cuentacajaId,
+                    'importe_contable' => $sumaC,
+                    'importe_banco' => $sumaB,
+                    'modo' => $modo !== '' ? $modo : 'manual_multi',
+                    'conciliado_por_usuario_id' => $usuarioId,
+                    'conciliado_at' => now(),
+                ]);
+
+                foreach ($lineasC as $linea) {
+                    ConciliacionBancariaGrupoLinea::query()->create([
+                        'grupo_id' => $grupo->id,
+                        'cuentacaja_id' => $cuentacajaId,
+                        'lado' => ConciliacionBancariaGrupoLinea::LADO_CONTABLE,
+                        'hash' => $linea['hash'],
+                        'movimiento_json' => $linea['mov'],
+                        'fecha' => $linea['fecha'],
+                        'importe' => $linea['importe'],
+                    ]);
+                }
+                foreach ($lineasB as $linea) {
+                    ConciliacionBancariaGrupoLinea::query()->create([
+                        'grupo_id' => $grupo->id,
+                        'cuentacaja_id' => $cuentacajaId,
+                        'lado' => ConciliacionBancariaGrupoLinea::LADO_BANCO,
+                        'hash' => $linea['hash'],
+                        'movimiento_json' => $linea['mov'],
+                        'fecha' => $linea['fecha'],
+                        'importe' => $linea['importe'],
+                    ]);
+                }
+
+                // Clear documento solo si hay 1:1 efectivo documento↔IB (UK en IB).
+                if (count($lineasC) === 1 && count($lineasB) === 1) {
+                    ConciliacionBancariaClearingDocumentoSupport::despuesDePar(
+                        $lineasC[0]['mov'],
+                        $lineasB[0]['mov'],
+                        null,
+                    );
+                } elseif (count($lineasC) === 1 && count($lineasB) >= 1) {
+                    $bancosConId = array_values(array_filter(
+                        $lineasB,
+                        fn ($l) => (int) ($l['mov']['id'] ?? 0) > 0
+                    ));
+                    if (count($bancosConId) === 1) {
+                        ConciliacionBancariaClearingDocumentoSupport::despuesDePar(
+                            $lineasC[0]['mov'],
+                            $bancosConId[0]['mov'],
+                            null,
+                        );
+                    }
+                }
+
+                return $grupo->load('lineas');
+            });
+        } catch (QueryException $e) {
+            throw new RuntimeException('No se pudo guardar el grupo. Algún movimiento puede haber quedado conciliado en otra solapa.', 0, $e);
+        }
     }
 
     /**
@@ -665,8 +969,13 @@ class ConciliacionBancariaService
 
         return [
             'id' => (int) $par->id,
+            'tipo' => 'par',
+            'grupo_id' => null,
+            'par_id' => (int) $par->id,
             'hash_contable' => (string) $par->hash_contable,
             'hash_banco' => (string) $par->hash_banco,
+            'n_contable' => 1,
+            'n_banco' => 1,
             'importe' => (float) $par->importe,
             'fecha_contable' => $par->fecha_contable?->format('d/m/Y') ?? '',
             'fecha_banco' => $par->fecha_banco?->format('d/m/Y') ?? '',
@@ -674,6 +983,471 @@ class ConciliacionBancariaService
             'detalle_contable' => (string) ($cont['descripcion'] ?? $cont['tipo_comp'] ?? ''),
             'detalle_banco' => (string) ($banco['code_description_ib'] ?? ''),
         ];
+    }
+
+    private function filaTableroGrupo(ConciliacionBancariaGrupo $grupo): array
+    {
+        $lineas = $grupo->relationLoaded('lineas') ? $grupo->lineas : $grupo->lineas()->get();
+        $contables = $lineas->where('lado', ConciliacionBancariaGrupoLinea::LADO_CONTABLE)->values();
+        $bancos = $lineas->where('lado', ConciliacionBancariaGrupoLinea::LADO_BANCO)->values();
+        $detC = $contables->map(function ($l) {
+            $m = is_array($l->movimiento_json) ? $l->movimiento_json : [];
+
+            return trim((string) ($m['tipo_comp'] ?? '').' '.($m['descripcion'] ?? ''));
+        })->filter()->take(3)->implode(' · ');
+        $detB = $bancos->map(function ($l) {
+            $m = is_array($l->movimiento_json) ? $l->movimiento_json : [];
+
+            return trim((string) ($m['code_description_ib'] ?? $m['code_description_bank'] ?? ''));
+        })->filter()->take(3)->implode(' · ');
+
+        return [
+            'id' => (int) $grupo->id,
+            'tipo' => 'grupo',
+            'grupo_id' => (int) $grupo->id,
+            'par_id' => null,
+            'hash_contable' => (string) ($contables->first()->hash ?? ''),
+            'hash_banco' => (string) ($bancos->first()->hash ?? ''),
+            'n_contable' => $contables->count(),
+            'n_banco' => $bancos->count(),
+            'importe' => (float) $grupo->importe_contable,
+            'fecha_contable' => optional($contables->first()?->fecha)->format('d/m/Y') ?? '',
+            'fecha_banco' => optional($bancos->first()?->fecha)->format('d/m/Y') ?? '',
+            'modo' => (string) $grupo->modo,
+            'detalle_contable' => $detC !== '' ? $detC : ($contables->count().' mov. contables'),
+            'detalle_banco' => $detB !== '' ? $detB : ($bancos->count().' mov. banco'),
+        ];
+    }
+
+    /**
+     * @return array{estado: string, cerrado_at: ?string, cerrado_por_usuario_id: ?int, ejecucion_id: ?int}
+     */
+    public function estadoCierrePeriodo(int $empresaId, int $cuentacajaId, int $mes, int $anio): array
+    {
+        $ejec = ConciliacionBancariaEjecucion::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('mes', $mes)
+            ->where('anio', $anio)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($ejec === null) {
+            return [
+                'estado' => 'sin_ejecucion',
+                'cerrado_at' => null,
+                'cerrado_por_usuario_id' => null,
+                'ejecucion_id' => null,
+            ];
+        }
+
+        return [
+            'estado' => (string) ($ejec->estado ?? 'borrador'),
+            'cerrado_at' => $ejec->cerrado_at?->format('d/m/Y H:i'),
+            'cerrado_por_usuario_id' => $ejec->cerrado_por_usuario_id ? (int) $ejec->cerrado_por_usuario_id : null,
+            'aprobado_at' => $ejec->aprobado_at?->format('d/m/Y H:i'),
+            'aprobado_por_usuario_id' => $ejec->aprobado_por_usuario_id ? (int) $ejec->aprobado_por_usuario_id : null,
+            'ejecucion_id' => (int) $ejec->id,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    public function cerrarPeriodo(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        ?int $usuarioId,
+        array $snapshot = [],
+    ): ConciliacionBancariaEjecucion {
+        $ejec = ConciliacionBancariaEjecucion::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('mes', $mes)
+            ->where('anio', $anio)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($ejec === null) {
+            $desde = Carbon::createFromDate($anio, $mes, 1)->startOfDay();
+            $ejec = ConciliacionBancariaEjecucion::query()->create([
+                'empresa_id' => $empresaId,
+                'cuentacaja_id' => $cuentacajaId,
+                'mes' => $mes,
+                'anio' => $anio,
+                'fecha_desde' => $desde,
+                'fecha_hasta' => $desde->copy()->endOfMonth(),
+                'usuario_id' => $usuarioId,
+                'estado' => 'borrador',
+            ]);
+        }
+
+        if ((string) ($ejec->estado ?? '') === 'cerrado') {
+            throw new RuntimeException('El período ya está cerrado.');
+        }
+        if ((string) ($ejec->estado ?? '') === 'aprobado') {
+            throw new RuntimeException('El período ya está aprobado.');
+        }
+
+        ConciliacionBancariaPeriodoLockSupport::assertMesOperable($empresaId, $mes, $anio, $usuarioId);
+
+        $cerradoAt = now();
+        $ejec->estado = 'cerrado';
+        $ejec->cerrado_at = $cerradoAt;
+        $ejec->cerrado_por_usuario_id = $usuarioId;
+        $ejec->cierre_snapshot_json = $snapshot !== [] ? $snapshot : [
+            'pares' => ConciliacionBancariaPar::query()
+                ->where('empresa_id', $empresaId)
+                ->where('cuentacaja_id', $cuentacajaId)
+                ->count(),
+            'grupos' => ConciliacionBancariaGrupo::query()
+                ->where('empresa_id', $empresaId)
+                ->where('cuentacaja_id', $cuentacajaId)
+                ->count(),
+            'cerrado_desde' => 'manual',
+        ];
+        $ejec->kpi_json = ConciliacionBancariaKpiSupport::enriquecerAlCerrar($ejec, $cerradoAt);
+        $ejec->save();
+
+        return $ejec;
+    }
+
+    public function reabrirPeriodo(int $empresaId, int $cuentacajaId, int $mes, int $anio): ConciliacionBancariaEjecucion
+    {
+        ConciliacionBancariaPeriodoLockSupport::assertMesOperable($empresaId, $mes, $anio);
+
+        $ejec = ConciliacionBancariaEjecucion::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('mes', $mes)
+            ->where('anio', $anio)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($ejec === null) {
+            throw new RuntimeException('No hay ejecución de conciliación para reabrir.');
+        }
+
+        if ((string) ($ejec->estado ?? '') === 'aprobado') {
+            throw new RuntimeException('El período está aprobado. Solo un administrador con permiso puede reabrirlo tras desaprobar.');
+        }
+
+        $ejec->estado = 'borrador';
+        $ejec->cerrado_at = null;
+        $ejec->cerrado_por_usuario_id = null;
+        $ejec->save();
+
+        return $ejec;
+    }
+
+    public function aprobarPeriodo(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        ?int $usuarioId,
+    ): ConciliacionBancariaEjecucion {
+        $ejec = ConciliacionBancariaEjecucion::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('mes', $mes)
+            ->where('anio', $anio)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($ejec === null) {
+            throw new RuntimeException('No hay ejecución para aprobar. Cerrá el período primero.');
+        }
+        if ((string) ($ejec->estado ?? '') !== 'cerrado') {
+            throw new RuntimeException('Solo se aprueba un período cerrado (estado actual: '.($ejec->estado ?? 'borrador').').');
+        }
+
+        if (ConciliacionBancariaReglasSupport::aprobarDistintoDeCerrar()
+            && $usuarioId !== null
+            && (int) ($ejec->cerrado_por_usuario_id ?? 0) === (int) $usuarioId
+        ) {
+            throw new RuntimeException(
+                'SoD: quien cerró el período no puede aprobarlo. Pedí a otro usuario con permiso de aprobación.'
+            );
+        }
+
+        $ejec->estado = 'aprobado';
+        $ejec->aprobado_at = now();
+        $ejec->aprobado_por_usuario_id = $usuarioId;
+        $ejec->save();
+
+        return $ejec;
+    }
+
+    /**
+     * Evidencia SoD: adjunto al cierre o aprobación.
+     *
+     * @param  list<UploadedFile>  $archivos
+     * @return list<ConciliacionBancariaEjecucionArchivo>
+     */
+    public function adjuntarEvidencia(
+        int $ejecucionId,
+        array $archivos,
+        string $etapa,
+        ?int $usuarioId,
+    ): array {
+        $ejec = ConciliacionBancariaEjecucion::query()->findOrFail($ejecucionId);
+        $dir = storage_path('app/archivos/conciliacion_bancaria/'.$ejecucionId);
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $guardados = [];
+        foreach ($archivos as $file) {
+            if (! $file instanceof UploadedFile || ! $file->isValid()) {
+                continue;
+            }
+            $orig = $file->getClientOriginalName();
+            $safe = preg_replace('/[^a-zA-Z0-9._-]+/', '_', $orig) ?: ('evidencia_'.uniqid());
+            $safe = mb_substr($safe, 0, 180);
+            $file->move($dir, $safe);
+            $guardados[] = ConciliacionBancariaEjecucionArchivo::query()->create([
+                'ejecucion_id' => $ejecucionId,
+                'nombrearchivo' => $safe,
+                'nombre_original' => mb_substr($orig, 0, 255),
+                'etapa' => in_array($etapa, ['cierre', 'aprobacion'], true) ? $etapa : 'cierre',
+                'usuario_id' => $usuarioId,
+            ]);
+        }
+
+        return $guardados;
+    }
+
+    /**
+     * @return list<array{id:int,nombre:string,etapa:string,usuario:string|null,fecha:string|null}>
+     */
+    public function listarEvidencias(int $ejecucionId): array
+    {
+        if ($ejecucionId <= 0) {
+            return [];
+        }
+
+        return ConciliacionBancariaEjecucionArchivo::query()
+            ->with(['usuario:id,nombre'])
+            ->where('ejecucion_id', $ejecucionId)
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (ConciliacionBancariaEjecucionArchivo $a) => [
+                'id' => (int) $a->id,
+                'nombre' => (string) ($a->nombre_original ?: $a->nombrearchivo),
+                'etapa' => (string) ($a->etapa ?? 'cierre'),
+                'usuario' => $a->usuario?->nombre,
+                'fecha' => $a->created_at?->format('d/m/Y H:i'),
+            ])
+            ->all();
+    }
+
+    public function rutaEvidencia(ConciliacionBancariaEjecucionArchivo $archivo): string
+    {
+        return storage_path(
+            'app/archivos/conciliacion_bancaria/'.$archivo->ejecucion_id.'/'.$archivo->nombrearchivo
+        );
+    }
+
+    /**
+     * @param  list<array{contables: list<array<string,mixed>>, bancos: list<array<string,mixed>>, score?: int}>  $grupos
+     */
+    private function persistirGruposAuto(
+        int $empresaId,
+        int $cuentacajaId,
+        array $grupos,
+        ?int $usuarioId,
+    ): void {
+        foreach ($grupos as $grupo) {
+            $contables = $grupo['contables'] ?? [];
+            $bancos = $grupo['bancos'] ?? [];
+            if ($contables === [] || $bancos === []) {
+                continue;
+            }
+            try {
+                $this->conciliarGrupoManual(
+                    $empresaId,
+                    $cuentacajaId,
+                    $contables,
+                    $bancos,
+                    $usuarioId,
+                    false,
+                    'auto_multi',
+                );
+            } catch (RuntimeException) {
+                // Otro proceso pudo tomar el hash; se omite.
+            }
+        }
+    }
+
+    /**
+     * Tablero de avance por cuenta (mes/año).
+     *
+     * @param  list<int>  $empresaIds
+     * @return list<array<string, mixed>>
+     */
+    public function tableroAvance(array $empresaIds, int $mes, int $anio): array
+    {
+        $filas = [];
+        foreach ($empresaIds as $empresaId) {
+            $cuentas = Cuentacaja::query()
+                ->paraEmpresa($empresaId)
+                ->operativa()
+                ->with('cuentacontables')
+                ->orderBy('codigo')
+                ->get();
+
+            foreach ($cuentas as $cuenta) {
+                if (! $cuenta->cuentacontables) {
+                    continue;
+                }
+                $hashes = $this->hashesConciliadosCuenta($empresaId, (int) $cuenta->id);
+                $cierre = $this->estadoCierrePeriodo($empresaId, (int) $cuenta->id, $mes, $anio);
+                $nPares = ConciliacionBancariaPar::query()
+                    ->where('empresa_id', $empresaId)
+                    ->where('cuentacaja_id', $cuenta->id)
+                    ->whereMonth('fecha_contable', $mes)
+                    ->whereYear('fecha_contable', $anio)
+                    ->count();
+                $nGrupos = ConciliacionBancariaGrupo::query()
+                    ->where('empresa_id', $empresaId)
+                    ->where('cuentacaja_id', $cuenta->id)
+                    ->whereMonth('conciliado_at', $mes)
+                    ->whereYear('conciliado_at', $anio)
+                    ->count();
+                $origenes = ConciliacionBancariaKpiSupport::conteosOrigenMes(
+                    $empresaId,
+                    (int) $cuenta->id,
+                    $mes,
+                    $anio,
+                );
+                $ejec = ConciliacionBancariaEjecucion::query()
+                    ->where('empresa_id', $empresaId)
+                    ->where('cuentacaja_id', $cuenta->id)
+                    ->where('mes', $mes)
+                    ->where('anio', $anio)
+                    ->orderByDesc('id')
+                    ->first();
+                $kpi = is_array($ejec?->kpi_json) ? $ejec->kpi_json : [];
+                $pct = isset($kpi['pct_conciliado']) ? (float) $kpi['pct_conciliado'] : null;
+                $diasCierre = isset($kpi['dias_a_cierre']) ? (int) $kpi['dias_a_cierre'] : null;
+                $filas[] = [
+                    'empresa_id' => $empresaId,
+                    'cuentacaja_id' => (int) $cuenta->id,
+                    'codigo' => (string) $cuenta->codigo,
+                    'nombre' => (string) $cuenta->nombre,
+                    'tiene_interbanking' => trim((string) ($cuenta->cuenta_interbanking ?? '')) !== '',
+                    'pares_mes' => $nPares,
+                    'grupos_mes' => $nGrupos,
+                    'pares_auto' => $origenes['pares_auto'],
+                    'pares_manual' => $origenes['pares_manual'],
+                    'pct_conciliado' => $pct,
+                    'dias_a_cierre' => $diasCierre,
+                    'agenda_cerrada' => ConciliacionBancariaPeriodoLockSupport::estaMesCerradoEnAgenda($empresaId, $mes, $anio),
+                    'hashes_contables' => count($hashes['contables']),
+                    'hashes_banco' => count($hashes['banco']),
+                    'estado' => $cierre['estado'],
+                    'cerrado_at' => $cierre['cerrado_at'],
+                    'pendientes_hint' => (int) ($kpi['pendientes_contables'] ?? 0) + (int) ($kpi['pendientes_banco'] ?? 0),
+                ];
+            }
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Aging de pendientes del tablero manual (contable + banco) a una fecha de corte.
+     *
+     * @return array{filas: list<array<string,mixed>>, resumen: array<string, mixed>}
+     */
+    public function agingPendientes(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        ?string $fechaCorte = null,
+    ): array {
+        $tablero = $this->tableroManual($empresaId, $cuentacajaId, $mes, $anio, true, null);
+        $corte = $fechaCorte ? Carbon::parse($fechaCorte)->startOfDay() : Carbon::createFromDate($anio, $mes, 1)->endOfMonth();
+        $hashesC = array_fill_keys($tablero['hashes_contables'] ?? [], true);
+        $hashesB = array_fill_keys($tablero['hashes_banco'] ?? [], true);
+
+        $filas = [];
+        foreach ($tablero['contables'] ?? [] as $mov) {
+            $hash = (string) ($mov['hash'] ?? '');
+            if ($hash !== '' && isset($hashesC[$hash])) {
+                continue;
+            }
+            $fecha = Carbon::parse(substr((string) ($mov['fecha'] ?? $corte->toDateString()), 0, 10));
+            $dias = (int) $fecha->diffInDays($corte, false);
+            if ($dias < 0) {
+                $dias = 0;
+            }
+            $filas[] = [
+                'lado' => 'contable',
+                'fecha' => $fecha->format('d/m/Y'),
+                'dias' => $dias,
+                'bucket' => self::bucketAging($dias),
+                'detalle' => trim(($mov['tipo_comp'] ?? '').' '.($mov['descripcion'] ?? '')),
+                'importe' => (float) ($mov['importe'] ?? 0),
+                'hash' => $hash,
+            ];
+        }
+        foreach ($tablero['banco'] ?? [] as $mov) {
+            $hash = (string) ($mov['hash'] ?? '');
+            if ($hash !== '' && isset($hashesB[$hash])) {
+                continue;
+            }
+            $fecha = Carbon::parse(substr((string) ($mov['process_date'] ?? $corte->toDateString()), 0, 10));
+            $dias = (int) $fecha->diffInDays($corte, false);
+            if ($dias < 0) {
+                $dias = 0;
+            }
+            $filas[] = [
+                'lado' => 'banco',
+                'fecha' => $fecha->format('d/m/Y'),
+                'dias' => $dias,
+                'bucket' => self::bucketAging($dias),
+                'detalle' => trim(($mov['code_description_ib'] ?? '').' '.($mov['voucher_number'] ?? '')),
+                'importe' => (float) ($mov['importe'] ?? 0),
+                'hash' => $hash,
+            ];
+        }
+
+        usort($filas, static fn ($a, $b) => $b['dias'] <=> $a['dias']);
+
+        $resumen = [
+            '0-7' => 0,
+            '8-30' => 0,
+            '31-60' => 0,
+            '61+' => 0,
+            'total' => count($filas),
+            'importe_abs' => 0.0,
+        ];
+        foreach ($filas as $f) {
+            $resumen[$f['bucket']]++;
+            $resumen['importe_abs'] += abs((float) $f['importe']);
+        }
+
+        return ['filas' => $filas, 'resumen' => $resumen];
+    }
+
+    private static function bucketAging(int $dias): string
+    {
+        if ($dias <= 7) {
+            return '0-7';
+        }
+        if ($dias <= 30) {
+            return '8-30';
+        }
+        if ($dias <= 60) {
+            return '31-60';
+        }
+
+        return '61+';
     }
 
     /**
@@ -904,6 +1678,25 @@ class ConciliacionBancariaService
                 }
             });
 
+        if (\Illuminate\Support\Facades\Schema::hasTable('conciliacion_bancaria_grupo_linea')) {
+            ConciliacionBancariaGrupoLinea::query()
+                ->where('cuentacaja_id', $cuentacajaId)
+                ->orderBy('id')
+                ->chunkById(2000, function ($chunk) use (&$contables, &$banco): void {
+                    foreach ($chunk as $linea) {
+                        $hash = (string) $linea->hash;
+                        if ($hash === '') {
+                            continue;
+                        }
+                        if ($linea->lado === ConciliacionBancariaGrupoLinea::LADO_CONTABLE) {
+                            $contables[$hash] = true;
+                        } elseif ($linea->lado === ConciliacionBancariaGrupoLinea::LADO_BANCO) {
+                            $banco[$hash] = true;
+                        }
+                    }
+                });
+        }
+
         return ['contables' => $contables, 'banco' => $banco];
     }
 
@@ -930,7 +1723,7 @@ class ConciliacionBancariaService
                     continue;
                 }
 
-                ConciliacionBancariaPar::query()->create([
+                $creado = ConciliacionBancariaPar::query()->create([
                     'empresa_id' => $empresaId,
                     'cuentacaja_id' => $cuentacajaId,
                     'hash_contable' => $hashC,
@@ -940,11 +1733,43 @@ class ConciliacionBancariaService
                     'fecha_contable' => self::fechaDesdeYmdOString($cont['fecha'] ?? $cont['fecha_fmt'] ?? null),
                     'fecha_banco' => self::fechaDesdeYmdOString($banco['process_date'] ?? $banco['fecha'] ?? null),
                     'importe' => ConciliacionBancariaHashSupport::importeFirmadoContable($cont),
+                    'origen' => 'auto',
+                    'score' => isset($par['score']) ? (int) $par['score'] : null,
                     'conciliado_por_usuario_id' => $usuarioId,
                     'conciliado_at' => now(),
                 ]);
+                ConciliacionBancariaClearingDocumentoSupport::despuesDePar($cont, $banco, $creado);
             }
         });
+    }
+
+    private function assertEditableDesdeFechas(
+        int $empresaId,
+        int $cuentacajaId,
+        ?string $fechaCont,
+        ?string $fechaBan,
+        ?int $usuarioId = null,
+    ): void {
+        $fecha = $fechaCont ?? $fechaBan ?? now()->toDateString();
+        try {
+            $c = Carbon::parse($fecha);
+        } catch (\Throwable) {
+            $c = now();
+        }
+        ConciliacionBancariaPeriodoLockSupport::assertEditable(
+            $empresaId,
+            $cuentacajaId,
+            (int) $c->month,
+            (int) $c->year,
+            $usuarioId,
+        );
+    }
+
+    public static function cuentaExtractoExterno(string $codigoCuentacaja): string
+    {
+        $codigo = preg_replace('/\D+/', '', $codigoCuentacaja) ?: '0';
+
+        return 'EXT-'.$codigo;
     }
 
     private static function fechaDesdeYmdOString(mixed $valor): ?string
@@ -1184,7 +2009,15 @@ class ConciliacionBancariaService
         $support = new ConciliacionBancariaPendientesCpromaeSupport();
         $rutaExcel = trim((string) ($opciones['pendientes_excel'] ?? ''));
         $desdeExcel = null;
-        if ($rutaExcel !== '' && is_readable($rutaExcel)) {
+        $chequesOpcion = $opciones['pendientes_cheques'] ?? null;
+        if (is_array($chequesOpcion)) {
+            $desdeExcel = [
+                'cheques' => $chequesOpcion,
+                'banco_pendientes' => is_array($opciones['pendientes_banco_excel'] ?? null)
+                    ? $opciones['pendientes_banco_excel']
+                    : [],
+            ];
+        } elseif ($rutaExcel !== '' && is_readable($rutaExcel)) {
             $desdeExcel = ConciliacionBancariaExcelReferenciaSupport::leerPendientesDetalle($rutaExcel);
         }
 

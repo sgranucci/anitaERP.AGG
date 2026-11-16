@@ -29,6 +29,9 @@
                         <p class="anita-arbol-sub">{{ $data->nombre ?? '' }} · {{ $data->tipoarbol ?? '' }}@if(!empty($data->empresas->nombre)) · {{ $data->empresas->nombre }}@endif</p>
                     </div>
                     <div class="anita-arbol-hero-actions">
+                        <a href="{{ route('disenador_arbolaprobacion', $data->id) }}" class="btn btn-outline-light btn-sm" title="Vista gráfica del circuito">
+                            <i class="fa fa-project-diagram"></i> Diseñador gráfico
+                        </a>
                         <a href="{{ route('consulta_arbolaprobacion') }}" class="btn btn-outline-light btn-sm">
                             <i class="fa fa-reply"></i> Volver al listado
                         </a>

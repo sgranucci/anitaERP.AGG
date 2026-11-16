@@ -468,6 +468,20 @@ class PrestamoService
                 $this->moduloAvisoService->enviar('stock', 'prestamo_recordatorio', (int) $prestamo->id, [
                     'vencido' => $prestamo->estaVencido(),
                 ]);
+                try {
+                    app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('stock.prestamo.recordatorio', [
+                        'entity_id' => (int) $prestamo->id,
+                        'empresa_id' => (int) ($prestamo->empresa_id ?? 0),
+                        'estado' => (string) ($prestamo->estado ?? ''),
+                        'vencido' => $prestamo->estaVencido(),
+                        'url' => url('stock/prestamo/'.$prestamo->id.'/editar'),
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('ModuloAvisoEventBus emit falló', [
+                        'evento' => 'stock.prestamo.recordatorio',
+                        'error' => $e->getMessage(),
+                    ]);
+                }
                 $prestamo->ultimo_recordatorio_enviado_el = now()->toDateString();
                 $prestamo->save();
                 $enviados++;
@@ -740,6 +754,18 @@ class PrestamoService
     private function generarTokensYNotificarAprobacion(Prestamo $prestamo): void
     {
         $this->moduloAvisoService->enviar('stock', 'prestamo_solicitud', (int) $prestamo->id);
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('stock.prestamo.solicitud', [
+                'entity_id' => (int) $prestamo->id,
+                'empresa_id' => (int) ($prestamo->empresa_id ?? 0),
+                'tipo' => (string) ($prestamo->tipo ?? ''),
+                'estado' => (string) ($prestamo->estado ?? ''),
+                'usuario_id' => (int) ($prestamo->solicitante_id ?? 0) ?: null,
+                'prioridad' => (string) ($prestamo->prioridad ?? ''),
+                'url' => url('stock/prestamo/'.$prestamo->id.'/editar'),
+            ]);
+        } catch (\Throwable) {
+        }
     }
 
     private function notificarSolicitante(Prestamo $prestamo, string $tipo, ?string $mensaje): void

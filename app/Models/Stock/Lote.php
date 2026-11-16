@@ -13,10 +13,15 @@ class Lote extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $table = "lote";
-    protected $fillable = ['numerodespacho', 'fechaingreso', 'pais_id', 'usuario_id'];
+    protected $fillable = ['numerodespacho', 'fechaingreso', 'pais_id', 'usuario_id', 'importacion_id'];
 
 	public function paises()
 	{
 		return $this->belongsTo(Pais::class, 'pais_id');
 	}
+
+    public function importacion()
+    {
+        return $this->belongsTo(\App\Models\Compras\Importacion::class, 'importacion_id');
+    }
 }

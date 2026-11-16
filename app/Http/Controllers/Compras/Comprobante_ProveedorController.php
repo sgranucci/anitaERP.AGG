@@ -30,6 +30,7 @@ use App\Services\Compras\Tracking\TrackingPdfResolverService;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
+use App\Support\Compras\ComprobanteProveedorImportacionSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
@@ -442,6 +443,20 @@ class Comprobante_ProveedorController extends Controller
 
         $mensaje = 'Comprobante de proveedor guardado en borrador.';
         $avisos = $this->persistenciaService->ultimosAvisosControles();
+        try {
+            ComprobanteProveedorImportacionSupport::sincronizarDesdeRequest($comprobante, $request);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->route(
+                    'editar_comprobante_proveedor',
+                    ['id' => $comprobante->id]
+                        + $this->queryRetornoListado($request)
+                        + ComprobanteProveedorRetornoLegajoSupport::queryParams($request)
+                )
+                ->with('errores', [
+                    'El comprobante se guardó, pero no se asoció a la carpeta de importación: '.$e->getMessage(),
+                ]);
+        }
 
         $contabilizarAlGuardar = $request->input('accion') === 'contabilizar';
         if ($contabilizarAlGuardar) {
@@ -602,10 +617,19 @@ class Comprobante_ProveedorController extends Controller
 
         try {
             $this->persistenciaService->actualizarDesdeRequest($request, $id);
+            $comprobanteSync = $this->comprobanteRepository->find($id);
+            if ($comprobanteSync) {
+                ComprobanteProveedorImportacionSupport::sincronizarDesdeRequest($comprobanteSync, $request);
+            }
         } catch (ComprobanteProveedorDuplicadoException $e) {
             return $this->respuestaComprobanteDuplicado($e, quedarseEnFormulario: true);
         } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
             return $this->respuestaFacturaYaEnAnita($request, $e, 'No se pudo actualizar el comprobante');
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('errores', [$e->getMessage()]);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
@@ -2039,6 +2063,12 @@ class Comprobante_ProveedorController extends Controller
             'accionValidacionAbono' => 'contabilizar la factura',
             'validacionAbonoCompleta' => $validacionAbonoCompleta,
             'mostrarContabilizarAbono' => $mostrarContabilizarAbono,
+            'importacion_gastos_vinculados' => $comprobanteId
+                ? ComprobanteProveedorImportacionSupport::gastosVinculados((int) $comprobanteId)
+                : [],
+            'importacion_form' => ComprobanteProveedorImportacionSupport::prefijoFormulario(
+                $comprobanteId ? $data : null
+            ),
         ]);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Services\Configuracion;
 
+use App\Models\Configuracion\UserTask;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\IngresoProveedor;
 use App\Models\Stock\Prestamo;
@@ -588,6 +589,14 @@ class UserTaskBandejaService
             return collect();
         }
 
+        // Flag premium: leer índice user_task (pantalla SLA o env).
+        if (\App\Support\Configuracion\UserTaskConfigSupport::bandejaDesdeTabla()
+            && empty($filtros['forzar_vivo'])
+            && \Illuminate\Support\Facades\Schema::hasTable('user_task')
+        ) {
+            return $this->listarPendientesDesdeTabla($usuarioId, $filtros);
+        }
+
         $fuenteFiltro = strtolower(trim((string) ($filtros['fuente'] ?? '')));
         $tipoFiltro = strtoupper(trim((string) ($filtros['tipo'] ?? '')));
         $q = mb_strtolower(trim((string) ($filtros['q'] ?? '')));
@@ -1124,6 +1133,7 @@ class UserTaskBandejaService
                 'etiqueta_tipo' => 'Asiento',
                 'numero' => (string) ($a->numeroasiento ?: '#'.$a->id),
                 'comprobante_id' => (int) $a->id,
+                'empresa_id' => (int) ($a->empresa_id ?? 0) ?: null,
                 'nivel' => 1,
                 'monto' => 0,
                 'moneda_abrev' => '',
@@ -1179,6 +1189,7 @@ class UserTaskBandejaService
                 'etiqueta_tipo' => 'Transferencia',
                 'numero' => $codigo,
                 'comprobante_id' => (int) $t->id,
+                'empresa_id' => (int) ($t->empresa_id ?? 0) ?: null,
                 'nivel' => 1,
                 'monto' => 0,
                 'moneda_abrev' => '',
@@ -1245,6 +1256,7 @@ class UserTaskBandejaService
                     'etiqueta_tipo' => 'Ingreso proveedor',
                     'numero' => $titulo,
                     'comprobante_id' => (int) $t->id,
+                    'empresa_id' => (int) ($t->empresa_id ?? 0) ?: null,
                     'nivel' => 1,
                     'monto' => 0,
                     'moneda_abrev' => '',
@@ -1273,6 +1285,146 @@ class UserTaskBandejaService
                     'sort_ts' => $fecha->getTimestamp(),
                 ];
             });
+    }
+
+    /**
+     * Lectura desde user_task (flag user_task_bandeja_desde_tabla).
+     * Las acciones siguen en dominio; este listado es índice.
+     *
+     * @param  array{fuente?: string|null, tipo?: string|null, q?: string|null, urgencia?: string|null}  $filtros
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function listarPendientesDesdeTabla(int $usuarioId, array $filtros = []): Collection
+    {
+        $fuenteFiltro = strtolower(trim((string) ($filtros['fuente'] ?? '')));
+        $q = mb_strtolower(trim((string) ($filtros['q'] ?? '')));
+        $urgenciaFiltro = strtolower(trim((string) ($filtros['urgencia'] ?? '')));
+        $fuentes = $this->fuentesDesdePermisos($this->permisosOverride, $usuarioId);
+
+        $query = UserTask::query()
+            ->pendientes()
+            ->where('usuario_id', $usuarioId)
+            ->orderByDesc('prioridad')
+            ->orderBy('vence_en')
+            ->orderByDesc('abierta_en');
+
+        if ($fuenteFiltro !== '') {
+            $query->where('fuente', $fuenteFiltro);
+        } elseif ($fuentes !== []) {
+            $query->whereIn('fuente', $fuentes);
+        }
+
+        $items = $query->get()->map(function (UserTask $task) {
+            $abierta = $task->abierta_en ? Carbon::parse($task->abierta_en) : null;
+            $dias = $abierta ? (int) $abierta->startOfDay()->diffInDays(Carbon::now()->startOfDay()) : 0;
+            $sla = $task->vence_en
+                ? $this->slaDesdeVenceEn(Carbon::parse($task->vence_en), $dias)
+                : $this->slaGenerico($dias, $abierta);
+
+            return [
+                'fuente' => $task->fuente,
+                'fuente_label' => self::FUENTES[$task->fuente] ?? $task->fuente,
+                'comprobante_id' => (int) $task->entity_id,
+                'entity_id' => (int) $task->entity_id,
+                'movimiento_id' => $task->fuente === self::FUENTE_ARBOL ? (int) $task->entity_id : null,
+                'tipo' => (string) ($task->entity_type ?? ''),
+                'etiqueta_tipo' => (string) ($task->entity_type ?? $task->fuente),
+                'numero' => $task->titulo,
+                'titulo' => $task->titulo,
+                'subtitulo' => $task->subtitulo,
+                'url_ver' => $task->url,
+                'url' => $task->url,
+                'fecha_envio' => $task->abierta_en?->toDateTimeString(),
+                'dias_pendiente' => $dias,
+                'urgencia' => $sla['sla_estado'] === 'vencido' ? 'urgente' : ($sla['sla_estado'] ?? 'normal'),
+                'sla_label' => $sla['sla_label'],
+                'sla_estado' => $sla['sla_estado'],
+                'sla_fecha_limite' => $sla['sla_fecha_limite'],
+                'prioridad' => (int) ($task->prioridad ?? 0),
+                'user_task_id' => (int) $task->id,
+                'escalado' => $task->escalado_en !== null,
+                'puede_aprobar' => true,
+                'task_key' => $task->fuente.'|'.$task->entity_id,
+            ];
+        });
+
+        if ($q !== '') {
+            $items = $items->filter(function (array $row) use ($q) {
+                $haystack = mb_strtolower(trim(implode(' ', [
+                    $row['numero'] ?? '',
+                    $row['titulo'] ?? '',
+                    $row['subtitulo'] ?? '',
+                    $row['tipo'] ?? '',
+                ])));
+
+                return $haystack !== '' && str_contains($haystack, $q);
+            });
+        }
+
+        if ($urgenciaFiltro !== '') {
+            $items = $items->filter(function (array $row) use ($urgenciaFiltro) {
+                if ($urgenciaFiltro === 'vencido') {
+                    return ($row['sla_estado'] ?? '') === 'vencido';
+                }
+
+                return ($row['urgencia'] ?? '') === $urgenciaFiltro
+                    || ($row['sla_estado'] ?? '') === $urgenciaFiltro;
+            });
+        }
+
+        return $items->values();
+    }
+
+    /**
+     * @return array{sla_label: string, sla_estado: string, sla_fecha_limite: ?string, dias_para_vencer: ?int}
+     */
+    private function slaDesdeVenceEn(Carbon $venceEn, int $diasPendiente): array
+    {
+        $hoy = Carbon::now();
+        if ($venceEn->lt($hoy)) {
+            $atrasoHoras = max(1, (int) $venceEn->diffInHours($hoy));
+
+            return [
+                'sla_label' => $atrasoHoras < 24
+                    ? 'SLA vencido hace '.$atrasoHoras.' h'
+                    : 'SLA vencido hace '.(int) ceil($atrasoHoras / 24).' día(s)',
+                'sla_estado' => 'vencido',
+                'sla_fecha_limite' => $venceEn->format('Y-m-d H:i'),
+                'dias_para_vencer' => -1,
+            ];
+        }
+        $horas = (int) $hoy->diffInHours($venceEn, false);
+        if ($horas <= 0) {
+            return [
+                'sla_label' => 'SLA vence ahora',
+                'sla_estado' => 'urgente',
+                'sla_fecha_limite' => $venceEn->format('Y-m-d H:i'),
+                'dias_para_vencer' => 0,
+            ];
+        }
+        if ($horas <= 4) {
+            return [
+                'sla_label' => 'SLA vence en '.$horas.' h',
+                'sla_estado' => 'urgente',
+                'sla_fecha_limite' => $venceEn->format('Y-m-d H:i'),
+                'dias_para_vencer' => 0,
+            ];
+        }
+        if ($horas <= 24) {
+            return [
+                'sla_label' => 'SLA vence en '.$horas.' h',
+                'sla_estado' => 'atencion',
+                'sla_fecha_limite' => $venceEn->format('Y-m-d H:i'),
+                'dias_para_vencer' => 0,
+            ];
+        }
+
+        return [
+            'sla_label' => 'SLA '.$venceEn->format('d/m/Y H:i').($diasPendiente > 0 ? ' · '.$diasPendiente.' d' : ''),
+            'sla_estado' => 'ok',
+            'sla_fecha_limite' => $venceEn->format('Y-m-d H:i'),
+            'dias_para_vencer' => (int) ceil($horas / 24),
+        ];
     }
 
     private function urgenciaPorDias(int $dias): string

@@ -8,6 +8,7 @@
 <script>
     window.conciliacionBancariaEngancheUrl = @json(route('conciliacion_bancaria_api_enganche'));
     window.conciliacionBancariaCuentacajaPorCodigoUrl = @json(route('conciliacion_bancaria_api_cuentacaja_por_codigo', ['codigo' => '__CODIGO__']));
+    window.conciliacionBancariaAlinearExcelUrl = @json(route('conciliacion_bancaria_api_alinear_excel'));
 </script>
 <script src="{{ asset('assets/pages/scripts/contable/conciliacion_bancaria/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/conciliacion_bancaria/filtro.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
@@ -20,6 +21,25 @@
             <div class="card-header">
                 <h3 class="card-title">Conciliación bancaria</h3>
                 <div class="card-tools">
+                    @include('includes.contable.boton-manual-conciliacion-bancaria')
+                    <a href="{{ route('conciliacion_bancaria_tablero', ['mes' => $mes, 'anio' => $anio, 'consultar' => 1]) }}"
+                       class="btn btn-app bg-info" title="Avance multi-cuenta">
+                        <i class="fas fa-tachometer-alt"></i> Tablero
+                    </a>
+                    <a href="{{ route('conciliacion_bancaria_aging') }}"
+                       class="btn btn-app bg-secondary" title="Aging de pendientes">
+                        <i class="fas fa-hourglass-half"></i> Aging
+                    </a>
+                    <a href="{{ route('conciliacion_bancaria_excepciones') }}"
+                       class="btn btn-app bg-warning" title="Worklist de excepciones">
+                        <i class="fas fa-tasks"></i> Worklist
+                    </a>
+                    @if (can('editar-configuracion-conciliacion-bancaria', false))
+                        <a href="{{ route('configuracion_conciliacion_bancaria') }}"
+                           class="btn btn-app bg-warning" title="Reglas de matching">
+                            <i class="fas fa-sliders-h"></i> Reglas
+                        </a>
+                    @endif
                     @if ($cuentacaja_id && $empresa_id)
                         <a href="{{ route('conciliacion_bancaria_manual', ['empresa_id' => $empresa_id, 'cuentacaja_id' => $cuentacaja_id, 'mes' => $mes, 'anio' => $anio]) }}"
                            class="btn btn-app bg-primary" title="Cruzar movimientos a mano">
@@ -107,6 +127,13 @@
                     <a href="{{ route('conciliacion_bancaria') }}" class="btn btn-outline-secondary">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
+                    @if (can('alinear-conciliacion-bancaria-excel', false))
+                        <label class="btn btn-outline-warning mb-0 ml-2" for="input-alinear-excel" title="Excel Contaduría → dry-run / aplicar">
+                            <i class="fa fa-file-import"></i> Alinear Excel Contaduría
+                        </label>
+                        <input type="file" id="input-alinear-excel" class="d-none" accept=".xlsx,.xls">
+                        <span class="small text-muted ml-2" id="alinear-excel-estado"></span>
+                    @endif
                 </div>
             </form>
         </div>
@@ -154,6 +181,51 @@
                             </p>
                         </div>
                     </div>
+
+                    @php $kpi = $resultado['kpi'] ?? []; @endphp
+                    @if ($kpi !== [])
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="border rounded p-2">
+                                    <div class="small text-muted">% conciliado</div>
+                                    <strong>{{ number_format((float) ($kpi['pct_conciliado'] ?? 0), 1, ',', '.') }} %</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="border rounded p-2">
+                                    <div class="small text-muted">Pares auto (corrida)</div>
+                                    <strong>{{ (int) ($kpi['pares_auto_nuevos'] ?? 0) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="border rounded p-2">
+                                    <div class="small text-muted">Pendientes C / B</div>
+                                    <strong>{{ (int) ($kpi['pendientes_contables'] ?? 0) }} / {{ (int) ($kpi['pendientes_banco'] ?? 0) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="border rounded p-2">
+                                    <div class="small text-muted">Agenda IB / score IA</div>
+                                    <strong>{{ ! empty($kpi['agenda_interbanking_cerrada']) ? 'Cerrada' : 'Abierta' }}
+                                        @if (isset($resultado['ai_score']))
+                                            · IA {{ number_format((float) $resultado['ai_score'], 2, ',', '.') }}
+                                        @endif
+                                    </strong>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @php $residuales = $resultado['residuales'] ?? []; @endphp
+                    @if (count($residuales) > 0)
+                        <div class="alert alert-warning">
+                            <strong>Residuales clasificados ({{ count($residuales) }}):</strong>
+                            @foreach (array_slice($residuales, 0, 8) as $res)
+                                <span class="badge badge-light mr-1">{{ $res['regla']['clave'] ?? '?' }}{{ !empty($res['regla']['listo']) ? '' : ' (sin cuenta)' }}</span>
+                            @endforeach
+                            <span class="small text-muted">Completá cuenta/concepto en reglas residuales para postear.</span>
+                        </div>
+                    @endif
 
                     @include('contable.conciliacion_bancaria.partials.panel_ia_anomalias', ['resultado' => $resultado])
 

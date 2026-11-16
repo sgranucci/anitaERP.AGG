@@ -5,6 +5,9 @@ namespace App\Services\Contable;
 use App\Models\Caja\Cuentacaja;
 use App\Services\Caja\InterbankingMovimientoPersistenciaService;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExtractoSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPeriodoLockSupport;
+use Illuminate\Support\Facades\Auth;
 use RuntimeException;
 
 class ConciliacionBancariaExtractoExcelImportService
@@ -53,6 +56,45 @@ class ConciliacionBancariaExtractoExcelImportService
             $accountNumber = $extracto['account_number'];
         }
 
+        $movimientos = $extracto['movimientos'] ?? [];
+        if (! $omitirValidacionCierre && $movimientos !== []) {
+            $ctrl = ConciliacionBancariaExtractoSupport::controlesDesdeMovimientos($movimientos);
+            if ($ctrl['fecha_desde'] !== null) {
+                ConciliacionBancariaPeriodoLockSupport::assertFechaOperable(
+                    $empresaId,
+                    $ctrl['fecha_desde'],
+                    Auth::id() ? (int) Auth::id() : null,
+                );
+            }
+        }
+
+        $reg = ConciliacionBancariaExtractoSupport::registrarDesdeImportacion(
+            $empresaId,
+            (int) $cuenta->id,
+            $accountNumber,
+            'excel_contaduria',
+            (string) ($extracto['archivo'] ?? basename($ruta)),
+            $ruta,
+            $movimientos,
+            Auth::id() ? (int) Auth::id() : null,
+            isset($extracto['saldo_inicial']) ? (float) $extracto['saldo_inicial'] : null,
+            isset($extracto['saldo_final']) ? (float) $extracto['saldo_final'] : null,
+        );
+
+        if ($reg['omitido_duplicado']) {
+            return [
+                'ok' => true,
+                'account_number' => $accountNumber,
+                'filas' => 0,
+                'cuentacaja_id' => (int) $cuenta->id,
+                'cuenta_interbanking_asignada' => $asignada,
+                'archivo' => (string) ($extracto['archivo'] ?? basename($ruta)),
+                'extracto_id' => (int) $reg['extracto']->id,
+                'extracto_duplicado' => true,
+                'error' => null,
+            ];
+        }
+
         $filas = $this->persistencia->persistirLote(
             $empresaId,
             (string) $extracto['bank_number'],
@@ -60,7 +102,7 @@ class ConciliacionBancariaExtractoExcelImportService
             (string) $extracto['account_type'],
             'ARS',
             'excel_contaduria',
-            $extracto['movimientos'],
+            $movimientos,
             now(),
             $omitirValidacionCierre,
         );
@@ -71,7 +113,9 @@ class ConciliacionBancariaExtractoExcelImportService
             'filas' => $filas,
             'cuentacaja_id' => (int) $cuenta->id,
             'cuenta_interbanking_asignada' => $asignada,
-            'archivo' => (string) $extracto['archivo'],
+            'archivo' => (string) ($extracto['archivo'] ?? basename($ruta)),
+            'extracto_id' => (int) $reg['extracto']->id,
+            'extracto_duplicado' => false,
             'error' => null,
         ];
     }

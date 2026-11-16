@@ -15,7 +15,7 @@ return [
         [
             'titulo' => '1. Para qué sirve',
             'parrafos' => [
-                'El campo Buscar del encabezado, al lado del menú, encuentra pantallas del rol, manuales, clientes, artículos, proveedores y comprobantes. También permite crear un alta y, si la frase no coincide con nada de eso, abrir la consulta operativa.',
+                'El campo Buscar del encabezado, al lado del menú, encuentra pantallas del rol, manuales, maestros, comprobantes, tickets y adjuntos (por nombre o por el texto dentro del archivo, si está indexado). También permite crear un alta y, si la frase no coincide con nada de eso, abrir la consulta operativa.',
                 'Cada persona ve solo lo que su rol ya puede abrir. Un invitado no tiene el campo. En el celular el campo está en el mismo encabezado y el resultado se abre debajo.',
             ],
         ],
@@ -23,11 +23,12 @@ return [
             'titulo' => '2. Cómo se usa',
             'parrafos' => [
                 'Escriba al menos dos letras. La lista se arma sola. Las flechas mueven el renglón, Enter lo abre y Esc cierra la lista. El tramo que coincide queda marcado en amarillo.',
-                'La lista se parte en grupos: Sugerencias, Acciones, Pantallas, Ayuda, Comprobantes y Registros. Una pantalla anclada en la barra de abajo, si coincide con lo escrito, sube y muestra un pin.',
+                'Arriba del panel aparece «Resultados: N» y filtros por tipo (Todos, Comprobantes, Adjuntos, Registros, Pantallas). Cada fila es una tarjeta con fecha, tercero, importe u otros campos cuando aplica.',
+                'La lista se parte en grupos: Sugerencias, Acciones, Comprobantes, Adjuntos, Registros, Pantallas y Ayuda. Una pantalla anclada en la barra de abajo, si coincide con lo escrito, sube y muestra un pin.',
             ],
             'items' => [
                 'Una sugerencia (Completar búsqueda o Quisiste decir) reemplaza lo escrito y vuelve a buscar. No abre una pantalla.',
-                'Una pantalla se abre en la misma ventana. Un manual, un cliente, un artículo, un proveedor o un comprobante se abre en otra pestaña, en consulta.',
+                'Una pantalla se abre en la misma ventana. Un manual, un maestro, un comprobante o un adjunto se abre en otra pestaña, en consulta.',
                 'Enter sobre la fila marcada hace lo mismo que un clic.',
             ],
         ],
@@ -50,32 +51,42 @@ return [
             ],
         ],
         [
-            'titulo' => '5. Comprobantes por número',
+            'titulo' => '5. Comprobantes por número o texto',
             'parrafos' => [
-                'Un número de al menos tres dígitos busca orden de compra, pedido y factura. Cada fila dice el tipo. Si el mismo número es un cliente y una orden, salen las dos.',
-                'La orden de compra y la factura quedan en las empresas asignadas al usuario. Quien no tiene empresas asignadas ve todas. El pedido no tiene empresa: usa el mismo filtro de vendedor que el listado de pedidos.',
+                'Un número de al menos tres dígitos busca orden de compra, pedido, factura, cheque, comprobante de proveedor, orden de pago, remito, cobranza, requisición y ticket. Cada fila dice el tipo y muestra campos (fecha, tercero, importe).',
+                'Con texto (nombre de proveedor/cliente, beneficiario del cheque, título del ticket, observación) también se buscan esos comprobantes, no solo por número.',
+                'La orden de compra, la factura, el cheque, el CP, la OP, la cobranza y la requisición respetan las empresas asignadas. El pedido usa el filtro de vendedor del listado de pedidos.',
                 'En el pedido se busca el número final del código (el de «PED-…-00513365» se encuentra con 513365) y también el identificador interno si coincide exacto.',
             ],
             'tabla' => [
-                'caption' => 'Qué abre cada número',
+                'caption' => 'Qué abre cada búsqueda',
                 'headers' => ['Escribe', 'Trae'],
                 'rows' => [
-                    ['Número de orden de compra', 'La orden, con el proveedor, si el rol puede ver órdenes de compra.'],
-                    ['Número de factura', 'El comprobante de venta, con punto de venta y cliente, si el rol puede ver facturas.'],
-                    ['Número de pedido', 'El pedido y el cliente, si el rol puede ver pedidos.'],
+                    ['Número de orden de compra', 'La orden, con el proveedor.'],
+                    ['Número de factura / CP / OP / cheque', 'El comprobante correspondiente, con tercero e importe.'],
+                    ['Número de pedido / remito / cobranza / requisición', 'El documento, si el rol puede verlo.'],
+                    ['Beneficiario o tercero', 'Cheques, OP, CP, remitos, etc. por nombre.'],
                     ['Código de cliente', 'La ficha del cliente. Si además hay un comprobante con ese número, sale en Comprobantes.'],
                 ],
             ],
         ],
         [
-            'titulo' => '6. Lo que este rol abre seguido',
+            'titulo' => '6. Adjuntos',
+            'parrafos' => [
+                'El grupo Adjuntos encuentra archivos asociados a OC, comprobantes de proveedor, OP, requisiciones, tickets, cobranzas, clientes, proveedores, asientos, Capex y empleados.',
+                'Si el índice FTS está cargado (comando buscador:indexar-adjuntos), también busca dentro del contenido de PDF, Word, Excel y textos. Si aún no se indexó, igual busca por el nombre del archivo.',
+                'La fila abre el documento padre (la OC, la factura, el ticket, etc.) en consulta. El clip muestra el nombre del archivo que coincidió.',
+            ],
+        ],
+        [
+            'titulo' => '7. Lo que este rol abre seguido',
             'parrafos' => [
                 'Cuando se elige una fila, el rol recuerda ese texto y esa fila. A la tercera vez que la misma palabra abre la misma pantalla, esa pantalla queda primera, aunque el nombre no sea idéntico a lo escrito.',
                 'El recuerdo es del rol, no de una sola persona. Al empezar no hay nada guardado: se arma con el uso.',
             ],
         ],
         [
-            'titulo' => '7. Crear desde la barra',
+            'titulo' => '8. Crear desde la barra',
             'parrafos' => [
                 'Si lo escrito pide un alta, aparece el grupo Acciones. La fila entra a la pantalla de crear, con el mismo permiso que esa pantalla. Si el rol no puede crear, la fila no sale.',
                 '«factura» sola no crea: abre la pantalla de facturación. Hace falta un verbo: nueva, nuevo, crear o alta.',
@@ -97,11 +108,11 @@ return [
             ],
         ],
         [
-            'titulo' => '8. Una frase',
+            'titulo' => '9. Una frase',
             'parrafos' => [
                 'Si la frase es una pregunta que la consulta operativa ya sabe responder, aparece «Preguntar: …» aunque también haya pantallas o maestros. Al elegirla, el panel responde. La barra no llama al modelo en cada tecla y no confirma ninguna carga.',
                 'Ahí entran, entre otras, el saldo de un cliente, las OC pendientes de firma, las fórmulas de stock («artículos de compra del sku 111», «en qué fórmulas aparece el insumo 111»), los movimientos sin centro de costo y la conciliación ya corrida: «conciliación bancaria cuenta de caja 300 mes pasado» y «diferencias del turno de gastronomía». Esas dos últimas leen y explican; no concilian, no cobran y no cierran.',
-                'Si la frase no coincide con ninguna pregunta conocida, y tampoco trajo pantalla, comprobante, maestro ni alta, quien tiene la consulta ve «Consultar: …». Esa fila abre el panel con el texto escrito y se envía recién al confirmar adentro. Ejemplo: «quiero cobrar».',
+                'Si la frase no coincide con ninguna pregunta conocida, y tampoco trajo pantalla, comprobante, maestro, adjunto ni alta, quien tiene la consulta ve «Consultar: …». Esa fila abre el panel con el texto escrito y se envía recién al confirmar adentro. Ejemplo: «quiero cobrar».',
             ],
         ],
     ],

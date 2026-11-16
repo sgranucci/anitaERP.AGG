@@ -385,6 +385,17 @@ class BuscadorGlobalRegistrosSupport
                 $detalle .= ' · '.$fantasia;
             }
 
+            $campos = [];
+            if ($codigo !== '') {
+                $campos[] = ['label' => 'Código', 'valor' => $codigo];
+            }
+            if ($nombre !== '') {
+                $campos[] = ['label' => 'Nombre', 'valor' => $nombre];
+            }
+            if ($fantasia !== '' && strcasecmp($fantasia, $nombre) !== 0) {
+                $campos[] = ['label' => 'Fantasía', 'valor' => $fantasia];
+            }
+
             $filas[] = [
                 'titulo' => $titulo,
                 'detalle' => $detalle,
@@ -393,6 +404,8 @@ class BuscadorGlobalRegistrosSupport
                 'nueva_pestana' => true,
                 'tipo' => 'registro',
                 'clave' => $clavePrefijo.':'.(int) $fila->id,
+                'etiqueta' => $tipo,
+                'campos' => $campos,
             ];
         }
 

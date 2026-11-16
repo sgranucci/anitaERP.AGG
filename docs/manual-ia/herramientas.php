@@ -46,20 +46,32 @@ return [
         [
             'herramienta' => 'FAB / abrir panel',
             'ubicacion' => $fab,
-            'accion' => 'Abre el copiloto de consultas (chips + NL).',
+            'accion' => 'Abre el copiloto para decidir (KPIs, deudas, mayor, stock, listados).',
             'permiso' => 'ejecutar-consulta-ia',
         ],
         [
-            'herramienta' => 'Chips de intent',
+            'herramienta' => 'Herramientas (por módulo)',
             'ubicacion' => $fab,
-            'accion' => 'Lista solo intents permitidos para el rol (oculta mayor si falta consulta-ia-contable).',
+            'accion' => 'Atajos tipados por rol (Compras, Contable, Stock…). KPIs se ejecutan al instante.',
             'permiso' => 'ejecutar-consulta-ia + permiso de módulo',
         ],
         [
             'herramienta' => 'Pregunta en lenguaje natural',
             'ubicacion' => $fab,
-            'accion' => 'Router reglas → LLM clasificador → grounding ERP / RAG.',
+            'accion' => 'Reglas → Ollama → failover CI_LLM_* → grounding ERP / RAG / resumen.',
             'permiso' => 'ejecutar-consulta-ia',
+        ],
+        [
+            'herramienta' => 'Seguimiento (multi-turn)',
+            'ubicacion' => $fab.' · pill «Chat con contexto»',
+            'accion' => '«y el mes pasado», «de biyemas», «con CC 85». × reinicia el contexto.',
+            'permiso' => 'ejecutar-consulta-ia',
+        ],
+        [
+            'herramienta' => 'Consulta Inteligente (puente)',
+            'ubicacion' => $fab,
+            'accion' => '«cheques para depositar», «pagos este mes» → abre el explorador con filtros.',
+            'permiso' => 'listar-consulta-inteligente',
         ],
         [
             'herramienta' => 'Exportar Excel',

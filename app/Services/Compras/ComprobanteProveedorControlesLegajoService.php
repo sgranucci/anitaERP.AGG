@@ -598,13 +598,11 @@ class ComprobanteProveedorControlesLegajoService
                     $exceso
                 );
                 $aplicado = ComprobanteProveedorCupoNcLegajoSupport::aplicarCupo($exceso, $cupoEfectivo)['aplicado'];
-                $efectivo = ComprobanteProveedorCupoNcLegajoSupport::asignadoEfectivoTrasCupo(
-                    $importeFactura,
-                    $aplicado
-                );
+                // Misma base que NC vinculada a COM: provisión disponible = COM + cupo.
+                $provisionEfectiva = round($importeComDisponible + $aplicado, 2);
                 $sentido = ComprobanteProveedorToleranciaImporteSupport::sentidoFueraDePolitica(
-                    $efectivo,
-                    $importeComDisponible,
+                    $importeFactura,
+                    $provisionEfectiva,
                     $politica
                 );
             }

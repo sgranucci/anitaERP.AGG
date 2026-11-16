@@ -380,4 +380,43 @@
             cargarEngancheCuentacaja();
         }
     });
+
+    var inputAlinear = document.getElementById('input-alinear-excel');
+    if (inputAlinear && window.conciliacionBancariaAlinearExcelUrl) {
+        inputAlinear.addEventListener('change', function (ev) {
+            var file = ev.target.files && ev.target.files[0];
+            ev.target.value = '';
+            if (!file) return;
+            var mesEl = document.getElementById('mes');
+            var anioEl = document.getElementById('anio');
+            var estado = document.getElementById('alinear-excel-estado');
+            var aplicar = confirm(
+                'Alinear Excel Contaduría ' + (mesEl ? mesEl.value : '') + '/' + (anioEl ? anioEl.value : '') + '.\n\n'
+                + 'Aceptar = APLICAR cambios.\nCancelar = solo dry-run (sin grabar).'
+            );
+            var fd = new FormData();
+            fd.append('archivo', file);
+            fd.append('mes', mesEl ? mesEl.value : '');
+            fd.append('anio', anioEl ? anioEl.value : '');
+            fd.append('aplicar', aplicar ? '1' : '0');
+            if (estado) estado.textContent = aplicar ? 'Aplicando…' : 'Analizando (dry-run)…';
+            fetch(window.conciliacionBancariaAlinearExcelUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-CSRF-TOKEN': csrfToken(), 'X-Requested-With': 'XMLHttpRequest' },
+                body: fd
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (!data.ok) throw new Error(data.error || 'No se pudo alinear');
+                var res = data.resultado || {};
+                var msg = (data.aplicar ? 'Aplicado' : 'Dry-run') + ': '
+                    + (res.mensaje || res.codigo || '') + ' · '
+                    + JSON.stringify(res.resumen || res.pares || res).slice(0, 280);
+                if (estado) estado.textContent = msg;
+                alert(msg);
+            }).catch(function (err) {
+                if (estado) estado.textContent = '';
+                alert(err.message || 'Error al alinear');
+            });
+        });
+    }
 })();

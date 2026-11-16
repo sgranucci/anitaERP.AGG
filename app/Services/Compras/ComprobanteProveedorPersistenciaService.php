@@ -998,9 +998,10 @@ class ComprobanteProveedorPersistenciaService
                 substr((string) $request->input('fechacomprobante'), 0, 10),
             ),
             'numerocae' => $request->input('numerocae'),
-            'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
-                $request->input('tipo_autorizacion')
-            ) ?? (filled($request->input('numerocae')) ? ComprobanteProveedorTipoAutorizacion::CAE : null),
+            'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::resolverAlGrabar(
+                $request->input('tipo_autorizacion'),
+                $request->input('numerocae'),
+            ),
             'fechavencimientocae' => $request->input('fechavencimientocae'),
             'es_fce' => $request->boolean('es_fce'),
             'leyenda' => $request->input('leyenda'),

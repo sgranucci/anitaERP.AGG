@@ -178,6 +178,8 @@ Route::get('configuracion/leercotizacion/{fecha}/{moneda_id}', 'Configuracion\Co
 Route::get('configuracion/pais', 'Configuracion\PaisController@index')->name('pais');
 Route::get('configuracion/pais/crear', 'Configuracion\PaisController@crear')->name('crear_pais');
 Route::post('configuracion/pais', 'Configuracion\PaisController@guardar')->name('guardar_pais');
+Route::post('configuracion/pais/consulta', 'Configuracion\PaisController@consultaPais')->name('consulta_pais');
+Route::get('configuracion/pais/leer-por-codigo/{codigo}', 'Configuracion\PaisController@leerPorCodigo')->name('leer_pais_codigo');
 Route::get('configuracion/pais/{id}/editar', 'Configuracion\PaisController@editar')->name('editar_pais');
 Route::put('configuracion/pais/{id}', 'Configuracion\PaisController@actualizar')->name('actualizar_pais');
 Route::delete('configuracion/pais/{id}', 'Configuracion\PaisController@eliminar')->name('eliminar_pais');
@@ -289,7 +291,17 @@ Route::get('configuracion/manual-ia/descargar-word', 'Configuracion\ManualIaCont
 Route::get('configuracion/ai/intents-consulta', 'Configuracion\AiConsultaController@intents')->name('ai_consulta_intents');
 Route::post('configuracion/ai/consultar-contexto', 'Configuracion\AiConsultaController@consultar')->name('ai_consulta_contexto');
 Route::post('configuracion/ai/confirmar-pedido-consumo', 'Configuracion\AiConsultaController@confirmarPedidoConsumo')->name('ai_consulta_confirmar_pedido_consumo');
+Route::post('configuracion/ai/hitl-evento', 'Configuracion\AiConsultaController@hitlEvento')->name('ai_consulta_hitl_evento');
+Route::post('configuracion/ai/hitl-depositar-cheques', 'Configuracion\AiConsultaController@hitlDepositarCheques')->name('ai_consulta_hitl_depositar_cheques');
+Route::post('configuracion/ai/hitl-caucionar-cheques', 'Configuracion\AiConsultaController@hitlCaucionarCheques')->name('ai_consulta_hitl_caucionar_cheques');
+Route::post('configuracion/ai/hitl-confirmar-recepciones', 'Configuracion\AiConsultaController@hitlConfirmarRecepciones')->name('ai_consulta_hitl_confirmar_recepciones');
+Route::post('configuracion/ai/hitl-eliminar-recepciones-borrador', 'Configuracion\AiConsultaController@hitlEliminarRecepcionesBorrador')->name('ai_consulta_hitl_eliminar_recepciones_borrador');
+Route::post('configuracion/ai/hitl-confirmar-transferencias', 'Configuracion\AiConsultaController@hitlConfirmarTransferencias')->name('ai_consulta_hitl_confirmar_transferencias');
+Route::post('configuracion/ai/hitl-crear-borrador-propuesta', 'Configuracion\AiConsultaController@hitlCrearBorradorPropuesta')->name('ai_consulta_hitl_crear_borrador_propuesta');
+Route::post('configuracion/ai/hitl-enviar-aprobacion-propuesta', 'Configuracion\AiConsultaController@hitlEnviarAprobacionPropuesta')->name('ai_consulta_hitl_enviar_aprobacion_propuesta');
+Route::post('configuracion/ai/preferencias', 'Configuracion\AiConsultaController@guardarPreferencias')->name('ai_consulta_preferencias');
 Route::post('configuracion/ai/exportar-consulta/{formato?}', 'Configuracion\AiConsultaController@exportar')->name('ai_consulta_exportar');
+Route::get('configuracion/ai/brief-dia/pdf', 'Configuracion\AiConsultaController@exportarBriefPdf')->name('ai_consulta_brief_dia_pdf');
 
 /*
  * Auditoría de sesiones (bitácora navegación) + logs de archivo
@@ -1106,8 +1118,96 @@ Route::put('configuracion/general/agentes-iibb', 'Configuracion\ConfiguracionGen
  * Avisos configurables por módulo
  */
 Route::get('configuracion/modulo-aviso', 'Configuracion\ModuloAvisoController@index')->name('consultar_modulo_aviso');
+Route::get('configuracion/modulo-aviso/historial', 'Configuracion\ModuloAvisoController@historial')
+    ->name('historial_modulo_aviso_programado');
 Route::get('configuracion/modulo-aviso/{id}/editar', 'Configuracion\ModuloAvisoController@editar')->name('editar_modulo_aviso');
 Route::put('configuracion/modulo-aviso/{id}', 'Configuracion\ModuloAvisoController@actualizar')->name('actualizar_modulo_aviso');
+Route::post('configuracion/modulo-aviso/{id}/ejecutar-ahora', 'Configuracion\ModuloAvisoController@ejecutarAhora')
+    ->name('ejecutar_ahora_modulo_aviso');
+Route::get('configuracion/modulo-aviso/{id}/impacto', 'Configuracion\ModuloAvisoController@impacto')
+    ->name('impacto_modulo_aviso_programado');
+Route::get('configuracion/modulo-aviso/{id}/impacto-json', 'Configuracion\ModuloAvisoController@impactoJson')
+    ->name('impacto_json_modulo_aviso_programado');
+Route::get('configuracion/modulo-aviso/{id}/dry-run', 'Configuracion\ModuloAvisoController@dryRunSchedule')
+    ->name('dry_run_modulo_aviso_programado');
+Route::post('configuracion/modulo-aviso/hermano/{id}/toggle', 'Configuracion\ModuloAvisoController@toggleHermano')
+    ->name('toggle_hermano_modulo_aviso')
+    ->whereNumber('id');
+Route::post('configuracion/modulo-aviso/hermano/{id}/frecuencia', 'Configuracion\ModuloAvisoController@frecuenciaHermano')
+    ->name('frecuencia_hermano_modulo_aviso')
+    ->whereNumber('id');
+Route::post('configuracion/modulo-aviso/suscripcion/{familia}/{id}/toggle', 'Configuracion\ModuloAvisoController@toggleSuscripcionHermana')
+    ->name('toggle_suscripcion_hermana_modulo_aviso')
+    ->whereNumber('id');
+Route::get('configuracion/modulo-aviso/suscripcion/opciones-alta', 'Configuracion\ModuloAvisoController@opcionesAltaSuscripcionHermana')
+    ->name('opciones_alta_suscripcion_hermana_modulo_aviso');
+Route::post('configuracion/modulo-aviso/suscripcion', 'Configuracion\ModuloAvisoController@crearSuscripcionHermana')
+    ->name('crear_suscripcion_hermana_modulo_aviso');
+Route::get('configuracion/modulo-aviso/suscripcion/{familia}/{id}', 'Configuracion\ModuloAvisoController@detalleSuscripcionHermana')
+    ->name('detalle_suscripcion_hermana_modulo_aviso')
+    ->whereNumber('id');
+Route::post('configuracion/modulo-aviso/suscripcion/{familia}/{id}', 'Configuracion\ModuloAvisoController@actualizarSuscripcionHermana')
+    ->name('actualizar_suscripcion_hermana_modulo_aviso')
+    ->whereNumber('id');
+
+Route::get('configuracion/empresa-whatsapp', 'Configuracion\EmpresaWhatsappController@index')->name('consultar_empresa_whatsapp');
+Route::get('configuracion/empresa-whatsapp/{empresaId}/editar', 'Configuracion\EmpresaWhatsappController@editar')->name('editar_empresa_whatsapp');
+Route::put('configuracion/empresa-whatsapp/{empresaId}', 'Configuracion\EmpresaWhatsappController@actualizar')->name('actualizar_empresa_whatsapp');
+Route::post('configuracion/empresa-whatsapp/{empresaId}/prueba', 'Configuracion\EmpresaWhatsappController@enviarPrueba')->name('prueba_empresa_whatsapp');
+
+Route::get('configuracion/mis-preferencias-aviso', 'Configuracion\MisPreferenciasAvisoController@editar')
+    ->name('editar_mis_preferencias_aviso');
+Route::put('configuracion/mis-preferencias-aviso', 'Configuracion\MisPreferenciasAvisoController@actualizar')
+    ->name('actualizar_mis_preferencias_aviso');
+
+Route::get('configuracion/modulo-aviso-evento', 'Configuracion\ModuloAvisoEventoController@index')
+    ->name('consultar_modulo_aviso_evento');
+Route::post('configuracion/modulo-aviso-evento', 'Configuracion\ModuloAvisoEventoController@guardar')
+    ->name('guardar_modulo_aviso_evento');
+Route::delete('configuracion/modulo-aviso-evento/{id}', 'Configuracion\ModuloAvisoEventoController@eliminar')
+    ->name('eliminar_modulo_aviso_evento');
+
+Route::get('configuracion/aviso-regla', 'Configuracion\AvisoReglaController@index')->name('consultar_aviso_regla');
+Route::get('configuracion/aviso-regla/crear', 'Configuracion\AvisoReglaController@crear')->name('crear_aviso_regla');
+Route::post('configuracion/aviso-regla', 'Configuracion\AvisoReglaController@guardar')->name('guardar_aviso_regla');
+Route::get('configuracion/aviso-regla/{id}/editar', 'Configuracion\AvisoReglaController@editar')->name('editar_aviso_regla');
+Route::put('configuracion/aviso-regla/{id}', 'Configuracion\AvisoReglaController@actualizar')->name('actualizar_aviso_regla');
+Route::delete('configuracion/aviso-regla/{id}', 'Configuracion\AvisoReglaController@eliminar')->name('eliminar_aviso_regla');
+Route::put('configuracion/aviso-regla-motor', 'Configuracion\AvisoReglaController@actualizarMotor')->name('actualizar_aviso_regla_motor');
+Route::post('configuracion/aviso-regla/{id}/probar', 'Configuracion\AvisoReglaController@probar')->name('probar_aviso_regla');
+
+Route::get('configuracion/user-task-sla', 'Configuracion\UserTaskSlaController@editar')
+    ->name('editar_user_task_sla');
+Route::put('configuracion/user-task-sla', 'Configuracion\UserTaskSlaController@actualizar')
+    ->name('actualizar_user_task_sla');
+Route::delete('configuracion/user-task-sla/escalador/{id}', 'Configuracion\UserTaskSlaController@quitarEscalador')
+    ->name('quitar_user_task_escalador');
+
+Route::get('configuracion/whatsapp-envio-log', 'Configuracion\WhatsappEnvioLogController@index')
+    ->name('consultar_whatsapp_envio_log');
+
+Route::get('configuracion/usuarios-celular-masivo', 'Configuracion\UsuariosCelularMasivoController@editar')
+    ->name('editar_usuarios_celular_masivo');
+Route::put('configuracion/usuarios-celular-masivo', 'Configuracion\UsuariosCelularMasivoController@actualizar')
+    ->name('actualizar_usuarios_celular_masivo');
+
+Route::get('configuracion/user-task-sla-kpi', 'Configuracion\UserTaskSlaKpiController@index')
+    ->name('consultar_user_task_sla_kpi');
+Route::get('configuracion/user-task-sla-kpi/csv', 'Configuracion\UserTaskSlaKpiController@exportarCsv')
+    ->name('exportar_user_task_sla_kpi');
+
+Route::get('configuracion/user-task-reasignacion-masiva', 'Configuracion\UserTaskReasignacionMasivaController@editar')
+    ->name('editar_user_task_reasignacion_masiva');
+Route::post('configuracion/user-task-reasignacion-masiva', 'Configuracion\UserTaskReasignacionMasivaController@ejecutar')
+    ->name('ejecutar_user_task_reasignacion_masiva');
+
+Route::get('configuracion/web-push/public-key', 'Configuracion\WebPushController@publicKey')
+    ->name('web_push_public_key');
+Route::post('configuracion/web-push/suscribir', 'Configuracion\WebPushController@suscribir')
+    ->name('web_push_suscribir');
+Route::post('configuracion/web-push/desuscribir', 'Configuracion\WebPushController@desuscribir')
+    ->name('web_push_desuscribir');
+
 
 /*
  * Reemplazo de destinatario en avisos (vacaciones / suplencia con vencimiento)
@@ -1125,6 +1225,9 @@ Route::get('configuracion/lista-arbolaprobacion/{formato?}', 'Configuracion\Arbo
 Route::get('configuracion/arbolaprobacion/crear', 'Configuracion\ArbolaprobacionController@crear')->name('crea_arbolaprobacion');
 Route::post('configuracion/arbolaprobacion', 'Configuracion\ArbolaprobacionController@guardar')->name('guarda_arbolaprobacion');
 Route::get('configuracion/arbolaprobacion/{id}/editar', 'Configuracion\ArbolaprobacionController@editar')->name('edita_arbolaprobacion');
+Route::get('configuracion/arbolaprobacion/{id}/disenador', 'Configuracion\ArbolaprobacionDisenoController@show')->name('disenador_arbolaprobacion');
+Route::post('configuracion/arbolaprobacion/{id}/disenador/layout', 'Configuracion\ArbolaprobacionDisenoController@guardarLayout')->name('guardar_layout_arbolaprobacion');
+Route::put('configuracion/arbolaprobacion/{id}/disenador/nodo/{nivelId}', 'Configuracion\ArbolaprobacionDisenoController@actualizarNodo')->name('actualizar_nodo_arbolaprobacion');
 Route::put('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@actualizar')->name('actualiza_arbolaprobacion');
 Route::delete('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@eliminar')->name('elimina_arbolaprobacion');
 
@@ -1166,6 +1269,8 @@ Route::middleware('auth')->group(function () {
     Route::post('mis-aprobaciones/transferencia/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarTransferencia')->name('rechazar_transferencia_mis_aprobaciones');
     Route::post('mis-aprobaciones/ingreso-proveedor/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarIngresoProveedor')->name('aprobar_ingreso_proveedor_mis_aprobaciones');
     Route::post('mis-aprobaciones/ingreso-proveedor/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarIngresoProveedor')->name('rechazar_ingreso_proveedor_mis_aprobaciones');
+    Route::post('mis-aprobaciones/user-task/{id}/reasignar', 'Configuracion\MisAprobacionesArbolController@reasignarUserTask')
+        ->name('reasignar_user_task_mis_aprobaciones');
     Route::get('configuracion/mis-aprobaciones', 'Configuracion\MisAprobacionesArbolController@index');
     Route::post('configuracion/mis-aprobaciones/limpiar-huerfanos', 'Configuracion\MisAprobacionesArbolController@limpiarHuerfanos');
     Route::post('configuracion/mis-aprobaciones/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobar');
@@ -1488,12 +1593,31 @@ Route::put('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomatic
 Route::get('contable/conciliacion-bancaria', 'Contable\ConciliacionBancariaController@index')->name('conciliacion_bancaria');
 Route::get('contable/conciliacion-bancaria/manual', 'Contable\ConciliacionBancariaController@manual')->name('conciliacion_bancaria_manual');
 Route::get('contable/conciliacion-bancaria/manual/exportar', 'Contable\ConciliacionBancariaController@exportarManual')->name('conciliacion_bancaria_manual_exportar');
+Route::get('contable/conciliacion-bancaria-tablero', 'Contable\ConciliacionBancariaTableroController@index')->name('conciliacion_bancaria_tablero');
+Route::get('contable/listar-conciliacion-bancaria-tablero/{formato}', 'Contable\ConciliacionBancariaTableroController@exportar')->name('listar_conciliacion_bancaria_tablero');
+Route::get('contable/conciliacion-bancaria-aging', 'Contable\ConciliacionBancariaAgingController@index')->name('conciliacion_bancaria_aging');
+Route::get('contable/listar-conciliacion-bancaria-aging/{formato}', 'Contable\ConciliacionBancariaAgingController@exportar')->name('listar_conciliacion_bancaria_aging');
+Route::get('contable/conciliacion-bancaria-excepciones', 'Contable\ConciliacionBancariaExcepcionController@index')->name('conciliacion_bancaria_excepciones');
+Route::post('contable/conciliacion-bancaria-excepciones/asignar', 'Contable\ConciliacionBancariaExcepcionController@asignar')->name('conciliacion_bancaria_excepciones_asignar');
+Route::post('contable/conciliacion-bancaria-excepciones/resolver', 'Contable\ConciliacionBancariaExcepcionController@resolver')->name('conciliacion_bancaria_excepciones_resolver');
+Route::get('contable/configuracion-conciliacion-bancaria', 'Contable\ConfiguracionConciliacionBancariaController@editar')->name('configuracion_conciliacion_bancaria');
+Route::put('contable/configuracion-conciliacion-bancaria', 'Contable\ConfiguracionConciliacionBancariaController@actualizar')->name('actualizar_configuracion_conciliacion_bancaria');
 Route::get('contable/conciliacion-bancaria/api/enganche-cuentacaja', 'Contable\ConciliacionBancariaController@apiEngancheCuentacaja')->name('conciliacion_bancaria_api_enganche');
 Route::get('contable/conciliacion-bancaria/api/cuentacaja-por-codigo/{codigo}', 'Contable\ConciliacionBancariaController@apiCuentacajaPorCodigo')->name('conciliacion_bancaria_api_cuentacaja_por_codigo');
 Route::get('contable/conciliacion-bancaria/api/tablero', 'Contable\ConciliacionBancariaController@apiTablero')->name('conciliacion_bancaria_api_tablero');
 Route::post('contable/conciliacion-bancaria/api/sincronizar-dia', 'Contable\ConciliacionBancariaController@apiSincronizarDia')->name('conciliacion_bancaria_api_sincronizar_dia');
 Route::post('contable/conciliacion-bancaria/api/conciliar', 'Contable\ConciliacionBancariaController@apiConciliar')->name('conciliacion_bancaria_api_conciliar');
 Route::post('contable/conciliacion-bancaria/api/desconciliar', 'Contable\ConciliacionBancariaController@apiDesconciliar')->name('conciliacion_bancaria_api_desconciliar');
+Route::post('contable/conciliacion-bancaria/api/guardar-modo', 'Contable\ConciliacionBancariaController@apiGuardarModo')->name('conciliacion_bancaria_api_guardar_modo');
+Route::post('contable/conciliacion-bancaria/api/importar-extracto', 'Contable\ConciliacionBancariaController@apiImportarExtracto')->name('conciliacion_bancaria_api_importar_extracto');
+Route::post('contable/conciliacion-bancaria/api/alinear-excel', 'Contable\ConciliacionBancariaController@apiAlinearExcel')->name('conciliacion_bancaria_api_alinear_excel');
+Route::post('contable/conciliacion-bancaria/api/cerrar-periodo', 'Contable\ConciliacionBancariaController@apiCerrarPeriodo')->name('conciliacion_bancaria_api_cerrar_periodo');
+Route::post('contable/conciliacion-bancaria/api/reabrir-periodo', 'Contable\ConciliacionBancariaController@apiReabrirPeriodo')->name('conciliacion_bancaria_api_reabrir_periodo');
+Route::post('contable/conciliacion-bancaria/api/aprobar-periodo', 'Contable\ConciliacionBancariaController@apiAprobarPeriodo')->name('conciliacion_bancaria_api_aprobar_periodo');
+Route::post('contable/conciliacion-bancaria/api/adjuntar-evidencia', 'Contable\ConciliacionBancariaController@apiAdjuntarEvidencia')->name('conciliacion_bancaria_api_adjuntar_evidencia');
+Route::get('contable/conciliacion-bancaria/api/listar-evidencia', 'Contable\ConciliacionBancariaController@apiListarEvidencia')->name('conciliacion_bancaria_api_listar_evidencia');
+Route::get('contable/conciliacion-bancaria/api/descargar-evidencia/{archivoId}', 'Contable\ConciliacionBancariaController@apiDescargarEvidencia')->name('conciliacion_bancaria_api_descargar_evidencia');
+Route::get('contable/conciliacion-bancaria/api/forecast', 'Contable\ConciliacionBancariaController@apiForecast')->name('conciliacion_bancaria_api_forecast');
 Route::post('contable/conciliacion-bancaria/api/generar-gastos', 'Contable\ConciliacionBancariaController@apiGenerarGastos')->name('conciliacion_bancaria_api_generar_gastos');
 Route::get('contable/exportar-conciliacion-bancaria/{formato}', 'Contable\ConciliacionBancariaController@exportar')->name('exportar_conciliacion_bancaria');
 
@@ -1580,6 +1704,10 @@ Route::get('contable/manual-cuentas', 'Contable\ManualCuentasProcedimientoContro
 Route::get('contable/manual', 'Contable\ManualContableController@index')->name('manual_contable');
 Route::get('contable/manual/descargar-pdf', 'Contable\ManualContableController@descargarPdf')->name('manual_contable_pdf');
 Route::get('contable/manual/descargar-word', 'Contable\ManualContableController@descargarWord')->name('manual_contable_word');
+
+Route::get('contable/manual-conciliacion-bancaria', 'Contable\ManualConciliacionBancariaController@index')->name('manual_conciliacion_bancaria');
+Route::get('contable/manual-conciliacion-bancaria/descargar-pdf', 'Contable\ManualConciliacionBancariaController@descargarPdf')->name('manual_conciliacion_bancaria_pdf');
+Route::get('contable/manual-conciliacion-bancaria/descargar-word', 'Contable\ManualConciliacionBancariaController@descargarWord')->name('manual_conciliacion_bancaria_word');
 
 Route::get('contable/manual-cierres-rendiciones', 'Contable\ManualCierresRendicionesController@index')->name('manual_cierres_rendiciones');
 Route::get('contable/manual-cierres-rendiciones/descargar-pdf', 'Contable\ManualCierresRendicionesController@descargarPdf')->name('manual_cierres_rendiciones_pdf');
@@ -2033,6 +2161,38 @@ Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloC
 Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
 Route::get('direccion/tablero', 'Direccion\TableroController@index')->name('tablero_direccion');
 Route::get('direccion/tablero/detalle', 'Direccion\TableroController@detalle')->name('tablero_direccion_detalle');
+Route::get('direccion/consulta-inteligente', 'Direccion\ConsultaInteligenteController@index')->name('consulta_inteligente');
+Route::get('direccion/consulta-inteligente/tablero', 'Direccion\ConsultaInteligenteController@tablero')->name('tablero_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/cruzar', 'Direccion\ConsultaInteligenteController@cruzar')->name('cruzar_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/unir', 'Direccion\ConsultaInteligenteController@unir')->name('unir_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/unir/listar/{formato}', 'Direccion\ConsultaInteligenteController@exportarUnir')->name('listar_unir_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/diccionario', 'Direccion\ConsultaInteligenteController@diccionarioNl')->name('diccionario_consulta_inteligente');
+Route::post('direccion/consulta-inteligente/diccionario', 'Direccion\ConsultaInteligenteController@guardarDiccionarioNl')->name('guardar_diccionario_consulta_inteligente');
+Route::delete('direccion/consulta-inteligente/diccionario/{id}', 'Direccion\ConsultaInteligenteController@eliminarDiccionarioNl')->name('eliminar_diccionario_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/snapshots', 'Direccion\ConsultaInteligenteController@snapshots')->name('snapshots_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/snapshots/comparar', 'Direccion\ConsultaInteligenteController@compararSnapshots')->name('comparar_snapshots_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/snapshots/{id}', 'Direccion\ConsultaInteligenteController@verSnapshot')->name('ver_snapshot_consulta_inteligente');
+Route::delete('direccion/consulta-inteligente/snapshots/{id}', 'Direccion\ConsultaInteligenteController@eliminarSnapshot')->name('eliminar_snapshot_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/auditoria', 'Direccion\ConsultaInteligenteController@auditoria')->name('auditoria_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/configuracion', 'Direccion\ConsultaInteligenteController@configuracion')->name('configuracion_consulta_inteligente');
+Route::post('direccion/consulta-inteligente/configuracion', 'Direccion\ConsultaInteligenteController@guardarConfiguracion')->name('guardar_configuracion_consulta_inteligente');
+    Route::post('direccion/consulta-inteligente/preguntar', 'Direccion\ConsultaInteligenteController@preguntar')->name('preguntar_consulta_inteligente');
+    Route::get('direccion/consulta-inteligente/sugerencias', 'Direccion\ConsultaInteligenteController@sugerenciasNl')->name('sugerencias_consulta_inteligente');
+    Route::post('direccion/consulta-inteligente/enlace', 'Direccion\ConsultaInteligenteController@crearEnlaceNl')->name('crear_enlace_consulta_inteligente');
+    Route::get('direccion/consulta-inteligente/c/{token}', 'Direccion\ConsultaInteligenteController@abrirEnlaceNl')->name('enlace_consulta_inteligente');
+    Route::post('direccion/consulta-inteligente/pregunta/pdf', 'Direccion\ConsultaInteligenteController@exportarPreguntaPdf')->name('pdf_pregunta_consulta_inteligente');
+    Route::post('direccion/consulta-inteligente/favorito', 'Direccion\ConsultaInteligenteController@guardarFavoritoNl')->name('guardar_favorito_consulta_inteligente');
+    Route::delete('direccion/consulta-inteligente/favorito/{id}', 'Direccion\ConsultaInteligenteController@eliminarFavoritoNl')->name('eliminar_favorito_consulta_inteligente');
+    Route::get('direccion/consulta-inteligente/contexto/limpiar', 'Direccion\ConsultaInteligenteController@limpiarContextoNl')->name('limpiar_contexto_consulta_inteligente');
+    Route::get('direccion/consulta-inteligente/contexto/deshacer', 'Direccion\ConsultaInteligenteController@deshacerContextoNl')->name('deshacer_contexto_consulta_inteligente');
+    Route::post('direccion/consulta-inteligente/tablero/{widgetId}/quitar', 'Direccion\ConsultaInteligenteController@unpinTablero')->name('unpin_tablero_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/explorar/{entidad}', 'Direccion\ConsultaInteligenteController@explorar')->name('explorar_consulta_inteligente');
+Route::get('direccion/consulta-inteligente/listar/{formato}', 'Direccion\ConsultaInteligenteController@exportar')->name('listar_consulta_inteligente');
+Route::post('direccion/consulta-inteligente/explorar/{entidad}/vista', 'Direccion\ConsultaInteligenteController@guardarVista')->name('guardar_vista_consulta_inteligente');
+Route::delete('direccion/consulta-inteligente/explorar/{entidad}/vista/{id}', 'Direccion\ConsultaInteligenteController@eliminarVista')->name('eliminar_vista_consulta_inteligente');
+Route::post('direccion/consulta-inteligente/explorar/{entidad}/envio', 'Direccion\ConsultaInteligenteController@programarEnvio')->name('programar_envio_consulta_inteligente');
+Route::post('direccion/consulta-inteligente/explorar/{entidad}/pin', 'Direccion\ConsultaInteligenteController@pinTablero')->name('pin_tablero_consulta_inteligente');
+Route::post('direccion/consulta-inteligente/explorar/{entidad}/snapshot', 'Direccion\ConsultaInteligenteController@guardarSnapshot')->name('guardar_snapshot_consulta_inteligente');
 
 Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name('iva_ventas');
 Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
@@ -2204,6 +2364,8 @@ Route::delete('ventas/tiposuspensioncliente/{id}', 'Ventas\Tiposuspensioncliente
 Route::get('ventas/incoterm', 'Ventas\IncotermController@index')->name('incoterm');
 Route::get('ventas/incoterm/crear', 'Ventas\IncotermController@crear')->name('crear_incoterm');
 Route::post('ventas/incoterm', 'Ventas\IncotermController@guardar')->name('guardar_incoterm');
+Route::post('ventas/incoterm/consulta', 'Ventas\IncotermController@consultaIncoterm')->name('consulta_incoterm');
+Route::get('ventas/incoterm/leer-por-abreviatura/{abreviatura}', 'Ventas\IncotermController@leerPorAbreviatura')->name('leer_incoterm_abreviatura');
 Route::get('ventas/incoterm/{id}/editar', 'Ventas\IncotermController@editar')->name('editar_incoterm');
 Route::put('ventas/incoterm/{id}', 'Ventas\IncotermController@actualizar')->name('actualizar_incoterm');
 Route::delete('ventas/incoterm/{id}', 'Ventas\IncotermController@eliminar')->name('eliminar_incoterm');
@@ -4637,6 +4799,52 @@ Route::get('compras/comprobantes-pdf-lote/zip', 'Compras\ComprobantesPdfLoteRepo
 Route::get('compras/proveedor-control-ganancias-reporte', 'Compras\ProveedorControlGananciasReporteController@index')->name('proveedor_control_ganancias_reporte');
 Route::get('compras/listar-proveedor-control-ganancias-reporte/{formato}', 'Compras\ProveedorControlGananciasReporteController@exportar')->name('listar_proveedor_control_ganancias_reporte');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
+
+// Importaciones (comercio exterior compras)
+Route::get('compras/importacion', 'Compras\ImportacionController@index')->name('importacion');
+Route::get('compras/lista-importacion/{formato?}/{busqueda?}', 'Compras\ImportacionController@listar')->name('lista_importacion');
+Route::get('compras/importacion/crear', 'Compras\ImportacionController@crear')->name('crear_importacion');
+Route::post('compras/importacion', 'Compras\ImportacionController@guardar')->name('guardar_importacion');
+Route::get('compras/importacion/cashflow', 'Compras\ImportacionController@cashflow')->name('importacion_cashflow');
+Route::match(['get', 'post'], 'compras/importacion/simular', 'Compras\ImportacionController@simular')->name('importacion_simular');
+Route::post('compras/importacion/workbench/vista', 'Compras\ImportacionController@guardarVistaListado')->name('guardar_vista_listado_importacion');
+Route::delete('compras/importacion/workbench/vista/{id}', 'Compras\ImportacionController@eliminarVistaListado')->name('eliminar_vista_listado_importacion')->whereNumber('id');
+Route::post('compras/importacion/workbench/columnas', 'Compras\ImportacionController@guardarColumnasListado')->name('guardar_columnas_listado_importacion');
+Route::post('compras/importacion/workbench/etiquetas', 'Compras\ImportacionController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_importacion');
+Route::post('compras/importacion/workbench/preview', 'Compras\ImportacionController@previewWorkbench')->name('preview_workbench_importacion');
+Route::post('compras/importacion/consulta-ordencompra', 'Compras\ImportacionController@consultaOrdencompra')->name('importacion_consulta_ordencompra');
+Route::post('compras/importacion/resolver-ordencompra', 'Compras\ImportacionController@resolverOrdencompra')->name('importacion_resolver_ordencompra');
+Route::post('compras/importacion/consulta-lote', 'Compras\ImportacionController@consultaLote')->name('importacion_consulta_lote');
+Route::post('compras/importacion/resolver-lote', 'Compras\ImportacionController@resolverLote')->name('importacion_resolver_lote');
+Route::post('compras/importacion/consulta-carpeta', 'Compras\ImportacionController@consultaCarpeta')->name('importacion_consulta_carpeta');
+Route::post('compras/importacion/resolver-carpeta', 'Compras\ImportacionController@resolverCarpeta')->name('importacion_resolver_carpeta');
+Route::post('compras/importacion/consulta-comprobante-proveedor', 'Compras\ImportacionController@consultaComprobanteProveedor')->name('importacion_consulta_cp');
+Route::post('compras/importacion/resolver-comprobante-proveedor', 'Compras\ImportacionController@resolverComprobanteProveedor')->name('importacion_resolver_cp');
+Route::post('compras/importacion/consulta-recepcion', 'Compras\ImportacionController@consultaRecepcion')->name('importacion_consulta_com');
+Route::post('compras/importacion/resolver-recepcion', 'Compras\ImportacionController@resolverRecepcion')->name('importacion_resolver_com');
+Route::get('compras/importacion/manual', 'Compras\ManualImportacionController@index')->name('manual_importacion');
+Route::get('compras/importacion/manual/pdf', 'Compras\ManualImportacionController@descargarPdf')->name('manual_importacion_pdf');
+Route::get('compras/importacion/manual/word', 'Compras\ManualImportacionController@descargarWord')->name('manual_importacion_word');
+Route::get('compras/importacion/{id}/editar', 'Compras\ImportacionController@editar')->name('editar_importacion')->middleware('modo.consulta');
+Route::put('compras/importacion/{id}', 'Compras\ImportacionController@actualizar')->name('actualizar_importacion')->middleware('modo.consulta');
+Route::delete('compras/importacion/{id}', 'Compras\ImportacionController@eliminar')->name('eliminar_importacion');
+Route::post('compras/importacion/{id}/nacionalizar', 'Compras\ImportacionController@nacionalizar')->name('importacion_nacionalizar');
+Route::post('compras/importacion/{id}/calcular-costos', 'Compras\ImportacionController@calcularCostos')->name('importacion_calcular_costos');
+Route::get('compras/importacion/{id}/preview-costos', 'Compras\ImportacionController@previewCostos')->name('importacion_preview_costos');
+Route::post('compras/importacion/{id}/cerrar-costos', 'Compras\ImportacionController@cerrarCostos')->name('importacion_cerrar_costos');
+Route::post('compras/importacion/{id}/checklist/{itemId}', 'Compras\ImportacionController@checklistMarcar')->name('importacion_checklist_marcar');
+Route::post('compras/importacion/{id}/sync-libro-iva', 'Compras\ImportacionController@syncLibroIva')->name('importacion_sync_libro_iva');
+Route::get('compras/importacion/{id}/archivo/{archivoId}', 'Compras\ImportacionController@descargarArchivo')->name('importacion_archivo');
+
+Route::get('compras/importacion-gasto-tipo', 'Compras\ImportacionGastoTipoController@index')->name('importacion_gasto_tipo');
+Route::get('compras/importacion-gasto-tipo/crear', 'Compras\ImportacionGastoTipoController@crear')->name('crear_importacion_gasto_tipo');
+Route::post('compras/importacion-gasto-tipo', 'Compras\ImportacionGastoTipoController@guardar')->name('guardar_importacion_gasto_tipo');
+Route::post('compras/importacion-gasto-tipo/consulta', 'Compras\ImportacionGastoTipoController@consulta')->name('importacion_gasto_tipo_consulta');
+Route::post('compras/importacion-gasto-tipo/resolver', 'Compras\ImportacionGastoTipoController@leeUnoPorCodigo')->name('importacion_gasto_tipo_resolver');
+Route::get('compras/importacion-gasto-tipo/{id}/editar', 'Compras\ImportacionGastoTipoController@editar')->name('editar_importacion_gasto_tipo');
+Route::put('compras/importacion-gasto-tipo/{id}', 'Compras\ImportacionGastoTipoController@actualizar')->name('actualizar_importacion_gasto_tipo');
+Route::delete('compras/importacion-gasto-tipo/{id}', 'Compras\ImportacionGastoTipoController@eliminar')->name('eliminar_importacion_gasto_tipo');
+
 Route::get('compras/suscripciones', 'Compras\SuscripcionController@index')->name('consultar_suscripcion');
 Route::get('compras/suscripciones/crear', 'Compras\SuscripcionController@crear')->name('crear_suscripcion');
 Route::post('compras/suscripciones', 'Compras\SuscripcionController@guardar')->name('guardar_suscripcion');
@@ -4771,6 +4979,25 @@ Route::get('ayuda/manual-aprobaciones/descargar-pdf', 'Configuracion\ManualAprob
 Route::get('ayuda/manual-aprobaciones/descargar-word', 'Configuracion\ManualAprobacionesController@descargarWord')
     ->middleware('auth')
     ->name('manual_aprobaciones_word');
+Route::get('ayuda/manual-modulo-aviso', 'Configuracion\ManualModuloAvisoController@index')
+    ->middleware('auth')
+    ->name('manual_modulo_aviso');
+Route::get('ayuda/manual-modulo-aviso/descargar-pdf', 'Configuracion\ManualModuloAvisoController@descargarPdf')
+    ->middleware('auth')
+    ->name('manual_modulo_aviso_pdf');
+Route::get('ayuda/manual-modulo-aviso/descargar-word', 'Configuracion\ManualModuloAvisoController@descargarWord')
+    ->middleware('auth')
+    ->name('manual_modulo_aviso_word');
+Route::get('ayuda/manual-consulta-inteligente', 'Configuracion\ManualConsultaInteligenteController@index')
+    ->middleware('auth')
+    ->name('manual_consulta_inteligente');
+Route::get('ayuda/manual-consulta-inteligente/descargar-pdf', 'Configuracion\ManualConsultaInteligenteController@descargarPdf')
+    ->middleware('auth')
+    ->name('manual_consulta_inteligente_pdf');
+Route::get('ayuda/manual-consulta-inteligente/descargar-word', 'Configuracion\ManualConsultaInteligenteController@descargarWord')
+    ->middleware('auth')
+    ->name('manual_consulta_inteligente_word');
+
 Route::get('ventas/manual-facturacion', 'Ventas\ManualFacturacionBierzoController@index')
     ->middleware('auth')
     ->name('manual_facturacion_bierzo');

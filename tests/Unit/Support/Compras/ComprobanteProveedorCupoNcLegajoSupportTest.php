@@ -104,13 +104,14 @@ class ComprobanteProveedorCupoNcLegajoSupportTest extends TestCase
 
     public function test_asiento_permite_si_nc_cubre_solo_la_parte_sobre_5_pct(): void
     {
-        // Banda 5% de 98038.30 ≈ 4901.92; fuera de banda ≈ 6356.32.
+        // Con base COM+cupo: residual 4901.92 / 104394.62 ≈ 4,70% ≤ 5%.
         $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
             11258.24,
             98038.30,
             6356.32,
         ));
 
+        // Residual 5258.24 / 104038.30 ≈ 5,05% > 5%.
         $this->assertFalse(ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
             11258.24,
             98038.30,
@@ -134,6 +135,39 @@ class ComprobanteProveedorCupoNcLegajoSupportTest extends TestCase
             0.0,
             5.0,
             true,
+        ));
+    }
+
+    /**
+     * Blancaluna OC 225103 / 225207: NC contabilizada sin pivot a COM.
+     * Medir % sobre COM chica rechazaba; sobre COM+NC (como si estuviera vinculada) pasa.
+     */
+    public function test_blancaluna_nc_sin_pivot_usa_base_com_mas_nc(): void
+    {
+        // 225103: FC 355540.82, COM 82225.93, NC 262707.10 → residual 3,08% sobre COM+NC.
+        $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::dentroDeToleranciaTrasCupoNc(
+            355540.82,
+            82225.93,
+            262707.10,
+            5.0,
+        ));
+        $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
+            355540.82 - 82225.93,
+            82225.93,
+            262707.10,
+        ));
+
+        // 225207: residual 4,48% sobre COM+NC.
+        $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::dentroDeToleranciaTrasCupoNc(
+            906075.20,
+            19153.36,
+            848039.68,
+            5.0,
+        ));
+        $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
+            906075.20 - 19153.36,
+            19153.36,
+            848039.68,
         ));
     }
 }

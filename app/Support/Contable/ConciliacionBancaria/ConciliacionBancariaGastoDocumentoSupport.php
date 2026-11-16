@@ -40,7 +40,7 @@ final class ConciliacionBancariaGastoDocumentoSupport
             }
 
             $codigo = (int) $codigo;
-            if ($codigo === (int) config('conciliacion_bancaria.codigo_transferencia_default', 10) || $codigo === 9) {
+            if ($codigo === ConciliacionBancariaReglasSupport::codigoTransferenciaDefault() || $codigo === 9) {
                 continue;
             }
 
@@ -111,8 +111,8 @@ final class ConciliacionBancariaGastoDocumentoSupport
             'cuentacaja_codigo' => (string) ($cuentacaja->codigo ?? ''),
             'cuentacaja_nombre' => (string) ($cuentacaja->nombre ?? ''),
             'cuenta_banco_id' => $cuentaBancoId,
-            'tipo_caja' => (string) config('conciliacion_bancaria.documento_gastos.tipo_caja_abreviatura', 'EGR'),
-            'tipo_compra' => (string) config('conciliacion_bancaria.documento_gastos.tipo_compra_abreviatura', 'ICO'),
+            'tipo_caja' => ConciliacionBancariaDocumentoConfigSupport::tipoCajaAbreviatura(),
+            'tipo_compra' => ConciliacionBancariaDocumentoConfigSupport::tipoCompraAbreviatura(),
             'tipo_tesoreria' => ComprobanteProveedorTipoTesoreria::GASTO_BANCO,
             'lineas' => $lineas,
             'total' => $total,
@@ -156,7 +156,7 @@ final class ConciliacionBancariaGastoDocumentoSupport
             'error' => null,
         ];
 
-        $def = config('conciliacion_bancaria.documento_gastos.lineas.'.$codigo);
+        $def = ConciliacionBancariaDocumentoConfigSupport::lineaDocGasto($codigo);
         if (! is_array($def)) {
             $vacio['error'] = 'El código '.$codigo.' ('.$descripcion.') no tiene cuenta ni concepto en la configuración de gastos.';
 

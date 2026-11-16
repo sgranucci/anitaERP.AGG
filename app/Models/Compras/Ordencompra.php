@@ -8,8 +8,11 @@ use App\Models\Configuracion\Sala;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Seguridad\Usuario;
+use App\Models\Ventas\Incoterm;
 use App\Models\Ventas\Transporte;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Ordencompra extends Model implements Auditable
@@ -57,6 +60,7 @@ class Ordencompra extends Model implements Auditable
         'contrato_cuentacontable_id',
         'contrato_periodo_servicio', 'contrato_requiere_validacion_abono', 'contrato_validacion_plantilla_id',
         'contrato_exige_ingresos', 'contrato_minimo_ingresos',
+        'incoterm_id',
     ];
 
     protected $casts = [
@@ -96,6 +100,21 @@ class Ordencompra extends Model implements Auditable
     public function proveedores()
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function incoterm(): BelongsTo
+    {
+        return $this->belongsTo(Incoterm::class, 'incoterm_id');
+    }
+
+    public function importaciones(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Importacion::class,
+            'importacion_ordencompra',
+            'ordencompra_id',
+            'importacion_id'
+        )->withTimestamps();
     }
 
     public function requisiciones()

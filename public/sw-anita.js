@@ -50,3 +50,39 @@ self.addEventListener('fetch', (event) => {
     )
   );
 });
+
+self.addEventListener('push', (event) => {
+  let data = { title: 'Anita ERP', body: '', url: './mis-aprobaciones', icon: './assets/pwa/icon-192.png' };
+  try {
+    if (event.data) {
+      data = Object.assign(data, event.data.json());
+    }
+  } catch (e) {}
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Anita ERP', {
+      body: data.body || '',
+      icon: data.icon || './assets/pwa/icon-192.png',
+      badge: data.icon || './assets/pwa/icon-192.png',
+      data: { url: data.url || './mis-aprobaciones' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './mis-aprobaciones';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) {
+          client.navigate(target);
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(target);
+      }
+    })
+  );
+});
+

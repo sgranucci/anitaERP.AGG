@@ -97,6 +97,12 @@ final class ParametroSistemaSupport
     /** Aside: mostrar el número de opciones colgadas en cada carpeta de menú. */
     public const CLAVE_MENU_ASIDE_CONTEO_HIJOS = 'menu_aside_conteo_hijos';
 
+    /**
+     * Modo default del workspace de conciliación bancaria (Contaduría / Tesorería).
+     * Cada empresa puede sobreescribirlo en la pantalla manual.
+     */
+    public const CLAVE_CONCILIACION_BANCARIA_MODO_DEFAULT = 'conciliacion_bancaria_modo_default';
+
     /** Si gastronomía/hotel facturan en esta misma base ERP (Cierre X / p-cierrefact). */
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
@@ -105,13 +111,23 @@ final class ParametroSistemaSupport
      */
     public static function definiciones(): array
     {
-        $defs = [
+        $defs = array_merge(
+            \App\Support\ConsultaInteligente\ConsultaInteligenteAlertaSupport::definicionesParametro(),
+            [
             self::CLAVE_MENU_ASIDE_CONTEO_HIJOS => [
                 'grupo' => 'Interfaz',
                 'etiqueta' => 'Menú: cantidad de opciones en submenús',
                 'ayuda' => 'Si está activo, cada carpeta del menú lateral muestra un número con cuántas opciones cuelgan. Cada usuario puede prenderlo o apagarlo para sí con el botón # del panel de usuario. Por defecto: encendido en Crown, apagado en el resto.',
                 'tipo' => 'boolean',
                 'orden' => 5,
+            ],
+            self::CLAVE_CONCILIACION_BANCARIA_MODO_DEFAULT => [
+                'grupo' => 'Contable',
+                'etiqueta' => 'Conciliación bancaria: modo de trabajo',
+                'ayuda' => 'Default de la instalación. Contaduría = cierre mensual y carátula; Tesorería = día a día y traer del banco. Cada empresa puede cambiarlo en Conciliación manual. AGG arranca en Contaduría; el resto en Tesorería.',
+                'tipo' => 'select',
+                'orden' => 80,
+                'opciones' => \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaModoSupport::opciones(),
             ],
             self::CLAVE_LIMITE_FCE => [
                 'grupo' => 'Facturación ARCA',
@@ -220,7 +236,8 @@ final class ParametroSistemaSupport
                 'tipo' => 'cuentacontable',
                 'orden' => 90,
             ],
-        ];
+        ]
+        );
 
         if (EntornoEmpresaSupport::esInterforming()) {
             $defs[self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB] = [
@@ -750,6 +767,9 @@ final class ParametroSistemaSupport
             self::CLAVE_TESORERIA_CROWN_AVISOS_FALLO_MINIMO => '5000',
             self::CLAVE_TESORERIA_CROWN_AVISOS_JORNADA_ABIERTA_DIAS => '2',
             self::CLAVE_MENU_ASIDE_CONTEO_HIJOS => EntornoEmpresaSupport::esCrown() ? '1' : '0',
+            self::CLAVE_CONCILIACION_BANCARIA_MODO_DEFAULT => EntornoEmpresaSupport::esAgg()
+                ? \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaModoSupport::CONTADURIA
+                : \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaModoSupport::TESORERIA,
             default => '0',
         };
     }

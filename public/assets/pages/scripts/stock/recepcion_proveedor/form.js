@@ -385,6 +385,33 @@
         }
     }
 
+    function sincronizarImportacionDesdeOc(data) {
+        var $panel = $('#rp-panel-importacion');
+        if (!$panel.length) {
+            return;
+        }
+        var tiene = !!(data && data.tiene_importacion);
+        var id = data && data.importacion_id ? parseInt(data.importacion_id, 10) : 0;
+        $('#rp_importacion_id').val(id || '');
+        $('#rp_importacion_codigo').val((data && data.importacion_codigo) || '');
+        $('#rp_importacion_estado').val((data && data.importacion_estado) || '');
+        var incoterm = $.trim(((data && data.incoterm_abreviatura) || '') + ' ' + ((data && data.incoterm_nombre) || ''));
+        $('#rp_incoterm').val(incoterm);
+        $('#rp_numerodespacho').val((data && data.numerodespacho) || '');
+        var $link = $('#rp_importacion_link');
+        if (id > 0) {
+            $link.attr('href', carpetaBase + '/compras/importacion/' + id + '/editar?origen=modal_consulta&vista=consulta')
+                .removeClass('d-none');
+        } else {
+            $link.attr('href', '#').addClass('d-none');
+        }
+        if (tiene) {
+            $panel.removeClass('d-none');
+        } else {
+            $panel.addClass('d-none');
+        }
+    }
+
     function depositoCabeceraActivo() {
         return parseInt($('#recepcion_deposito_id').val(), 10) || depositoCabeceraId || 0;
     }
@@ -2503,6 +2530,7 @@
                     centrocostoOcActivo = parseInt(data.lineas[0].centrocosto_id, 10) || null;
                 }
                 sincronizarEmpresaDesdeOc(data);
+                sincronizarImportacionDesdeOc(data);
                 actualizarAvisoDescuentoOc(data.descuento_ordencompra);
                 aplicarPoliticaCantidadPrecarga(data.lineas || []);
                 renderItems(data.lineas);
@@ -2513,6 +2541,7 @@
                 ultimoNumeroOcCargado = null;
                 centrocostoOcActivo = null;
                 $('#ordencompra_id').val('');
+                sincronizarImportacionDesdeOc({});
                 actualizarAvisoDescuentoOc(0);
                 actualizarBotonConsultarOc();
                 alert(xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Error al cargar OC');
@@ -3327,6 +3356,7 @@
             }
             if (res.empresa_id || res.empresa_nombre) {
                 sincronizarEmpresaDesdeOc(res);
+                sincronizarImportacionDesdeOc(res);
             }
             if (res.lineas && res.lineas.length) {
                 renderItems(res.lineas);

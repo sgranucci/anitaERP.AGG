@@ -18,6 +18,15 @@
 <div class="anita-inbox">
     @include('includes.mensaje')
 
+    <div id="anita-web-push-banner" class="alert alert-info d-none mb-3" role="status">
+        <strong>Activá las notificaciones del navegador</strong>
+        para enterarte de aprobaciones aunque no tengas Anita abierta.
+        <a href="{{ route('editar_mis_preferencias_aviso') }}" class="alert-link ml-1">Ir a Mis preferencias</a>
+        <button type="button" class="btn btn-sm btn-outline-primary ml-2" id="anita-web-push-banner-btn">Activar ahora</button>
+        <button type="button" class="close" aria-label="Cerrar" id="anita-web-push-banner-dismiss"><span aria-hidden="true">&times;</span></button>
+        <div class="small text-muted mt-1">En iPhone: agregá Anita a la pantalla de inicio y activá desde ahí.</div>
+    </div>
+
     <header class="anita-inbox-hero">
         <div class="anita-inbox-hero-glow" aria-hidden="true"></div>
         <div class="anita-inbox-hero-grid">
@@ -824,6 +833,40 @@
             bulkForm.submit();
         });
     }
+})();
+</script>
+<script>
+window.AnitaWebPushUrls = {
+    publicKey: @json(route('web_push_public_key')),
+    suscribir: @json(route('web_push_suscribir')),
+};
+</script>
+<script src="{{ asset('assets/js/anita-web-push.js') }}?v={{ @filemtime(public_path('assets/js/anita-web-push.js')) ?: time() }}"></script>
+<script>
+(function () {
+    var banner = document.getElementById('anita-web-push-banner');
+    if (!banner) return;
+    var dismissed = false;
+    try { dismissed = localStorage.getItem('anita_web_push_banner_off') === '1'; } catch (e) {}
+    var already = false;
+    try { already = localStorage.getItem('anita_web_push_ok') === '1'; } catch (e) {}
+    if (dismissed || already || (typeof Notification !== 'undefined' && Notification.permission === 'granted')) {
+        return;
+    }
+    banner.classList.remove('d-none');
+    document.getElementById('anita-web-push-banner-dismiss')?.addEventListener('click', function () {
+        banner.classList.add('d-none');
+        try { localStorage.setItem('anita_web_push_banner_off', '1'); } catch (e) {}
+    });
+    document.getElementById('anita-web-push-banner-btn')?.addEventListener('click', function () {
+        if (!window.AnitaWebPush) return;
+        window.AnitaWebPush.activar().then(function () {
+            banner.classList.add('d-none');
+            try { localStorage.setItem('anita_web_push_ok', '1'); } catch (e) {}
+        }).catch(function (err) {
+            alert(err.message || 'No se pudo activar el push.');
+        });
+    });
 })();
 </script>
 @endsection

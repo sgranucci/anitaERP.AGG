@@ -132,7 +132,7 @@ return [
             'driver' => null,
         ],
 
-        // Fase C — diálogo operativo (chips + NL; LLM solo clasifica)
+        // Fase C — diálogo operativo (chips + NL; LLM clasifica + opcional resumen)
         'consultar_contexto_operativo' => [
             'habilitada' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO', true), FILTER_VALIDATE_BOOLEAN),
             'permiso' => 'ejecutar-consulta-ia',
@@ -141,6 +141,14 @@ return [
             // Si reglas no alcanzan: clasificar frase con Ollama/HTTP (JSON tipado)
             'llm_router' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_ROUTER', true), FILTER_VALIDATE_BOOLEAN),
             'llm_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_TIMEOUT', 45),
+            // Multi-turn: «y el mes pasado» reusa intent/params de sesión
+            'multiturn' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_MULTITURN', true), FILTER_VALIDATE_BOOLEAN),
+            // Tras grounding: narrar hechos (sin inventar números)
+            'llm_redactar' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_REDACTAR', true), FILTER_VALIDATE_BOOLEAN),
+            'llm_redactar_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_REDACTAR_TIMEOUT', 40),
+            // Si Ollama falla: misma cadena CI_LLM_* (Groq → Gemini → primary). No exige CI_LLM_ENABLED.
+            'llm_failover_externo' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_FAILOVER_EXTERNO', true), FILTER_VALIDATE_BOOLEAN),
+            'llm_failover_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_FAILOVER_TIMEOUT', env('CI_LLM_TIMEOUT', 8)),
         ],
 
         // Pedido por consumo (CC + depósito) → sugerencia RQ compra / sala (HITL)
@@ -190,6 +198,12 @@ return [
         'habilitado' => filter_var(env('AI_RAG_MANUALES_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         'index_path' => env('AI_RAG_MANUALES_INDEX', 'ai/manual_rag_index.json'),
         'top_k' => max(1, (int) env('AI_RAG_MANUALES_TOP_K', 5)),
+        // Embeddings opcionales vía Ollama /api/embeddings (requiere modelo p.ej. nomic-embed-text)
+        'embeddings_habilitado' => filter_var(env('AI_RAG_EMBEDDINGS_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
+        'embeddings_model' => env('AI_RAG_EMBEDDINGS_MODEL', 'nomic-embed-text'),
+        'embeddings_timeout' => max(5, (int) env('AI_RAG_EMBEDDINGS_TIMEOUT', 60)),
+        // Peso del score coseno vs léxico (0 = solo léxico, 1 = solo embedding)
+        'embeddings_peso' => max(0.0, min(1.0, (float) env('AI_RAG_EMBEDDINGS_PESO', 0.55))),
     ],
 
     /*
@@ -198,5 +212,21 @@ return [
     'mcp' => [
         'habilitado' => filter_var(env('AI_MCP_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'token' => (string) env('AI_MCP_TOKEN', ''),
+    ],
+
+    /*
+    | Digest diario del brief (cron ai:digest-brief). Solo opt-in mail persistido.
+    */
+    'digest' => [
+        'habilitado' => filter_var(env('AI_DIGEST_BRIEF_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => (string) env('AI_DIGEST_BRIEF_HORA', '08:15'),
+    ],
+
+    /*
+    | Alerta por umbral (cron ai:alerta-umbral). Opt-in + umbrales en prefs BD.
+    */
+    'alerta_umbral' => [
+        'habilitado' => filter_var(env('AI_ALERTA_UMBRAL_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => (string) env('AI_ALERTA_UMBRAL_HORA', '08:20'),
     ],
 ];

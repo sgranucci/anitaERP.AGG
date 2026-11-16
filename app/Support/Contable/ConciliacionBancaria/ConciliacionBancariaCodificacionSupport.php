@@ -89,16 +89,20 @@ final class ConciliacionBancariaCodificacionSupport
         $importe = ConciliacionBancariaHashSupport::importeFirmadoBanco($movimiento);
 
         if ($importe < 0) {
+            $codigo = ConciliacionBancariaReglasSupport::codigoGastoDefault();
+
             return [
-                'codigo' => (int) config('conciliacion_bancaria.codigo_gasto_default', 7),
-                'descripcion' => 'COMISIONES/INTERESES/SELLOS',
+                'codigo' => $codigo,
+                'descripcion' => self::descripcionCodigoNumerico($codigo) ?: 'COMISIONES/INTERESES/SELLOS',
                 'metodo' => 'default_gasto',
             ];
         }
 
+        $codigo = ConciliacionBancariaReglasSupport::codigoTransferenciaDefault();
+
         return [
-            'codigo' => (int) config('conciliacion_bancaria.codigo_transferencia_default', 10),
-            'descripcion' => 'TRANSFERENCIAS/PAGOS/DEPOSITOS',
+            'codigo' => $codigo,
+            'descripcion' => self::descripcionCodigoNumerico($codigo) ?: 'TRANSFERENCIAS/PAGOS/DEPOSITOS',
             'metodo' => 'default_transferencia',
         ];
     }
@@ -147,15 +151,19 @@ final class ConciliacionBancariaCodificacionSupport
      */
     private static function clasificarPorPcc(string $pcc, string $concepto, string $textoDesc): ?array
     {
-        $acumulados = config('conciliacion_bancaria.conceptos_acumulado', []);
+        $estructuras = ConciliacionBancariaPccMapaSupport::estructuras();
+        $mapa = $estructuras['mapa'];
+        $pccAc = $estructuras['acumulado'];
+        $ambiguos = $estructuras['ambiguos'];
+
+        $acumulados = ConciliacionBancariaCodificacionMapasSupport::conceptosAcumulado();
         if (in_array($concepto, $acumulados, true)) {
-            $pccAc = config('conciliacion_bancaria.pcc_acumulado', []);
-            if (in_array($pcc, $pccAc, true) || isset(config('conciliacion_bancaria.pcc_map', [])[$pcc]) && config('conciliacion_bancaria.pcc_map')[$pcc] === 'AC') {
+            if (in_array($pcc, $pccAc, true) || (isset($mapa[$pcc]) && $mapa[$pcc] === 'AC')) {
                 return self::codigoAcumulado($concepto);
             }
         }
 
-        $ambiguo = config('conciliacion_bancaria.pcc_ambiguos.'.$pcc);
+        $ambiguo = $ambiguos[$pcc] ?? null;
         if (is_array($ambiguo)) {
             foreach ($ambiguo as $regla) {
                 $patrones = $regla['patrones_concepto'] ?? [];
@@ -172,7 +180,6 @@ final class ConciliacionBancariaCodificacionSupport
             }
         }
 
-        $mapa = config('conciliacion_bancaria.pcc_map', []);
         if (array_key_exists($pcc, $mapa)) {
             $codigo = $mapa[$pcc];
             if ($codigo === 'AC') {
@@ -194,9 +201,9 @@ final class ConciliacionBancariaCodificacionSupport
             return null;
         }
 
-        $mapa = config('conciliacion_bancaria.concepto_map', []);
+        $mapa = ConciliacionBancariaCodificacionMapasSupport::conceptoMap();
         foreach ($mapa as $patron => $def) {
-            if (str_contains($concepto, strtoupper($patron))) {
+            if (str_contains($concepto, strtoupper((string) $patron))) {
                 $codigo = $def['codigo'] ?? 10;
 
                 return self::respuestaCodigo(
@@ -207,7 +214,7 @@ final class ConciliacionBancariaCodificacionSupport
             }
         }
 
-        if (in_array($concepto, config('conciliacion_bancaria.conceptos_acumulado', []), true)) {
+        if (in_array($concepto, ConciliacionBancariaCodificacionMapasSupport::conceptosAcumulado(), true)) {
             return self::codigoAcumulado($concepto);
         }
 
@@ -219,7 +226,7 @@ final class ConciliacionBancariaCodificacionSupport
      */
     private static function clasificarPorCodigoOperacion(string $codOp): ?array
     {
-        $mapa = config('conciliacion_bancaria.cod_op_map', []);
+        $mapa = ConciliacionBancariaCodificacionMapasSupport::codOpMap();
         if (! array_key_exists($codOp, $mapa)) {
             return null;
         }
@@ -239,9 +246,9 @@ final class ConciliacionBancariaCodificacionSupport
             return null;
         }
 
-        foreach (config('conciliacion_bancaria.codificacion_gastos', []) as $codigo => $def) {
+        foreach (ConciliacionBancariaCodificacionMapasSupport::codificacionGastos() as $codigo => $def) {
             foreach ($def['patrones'] ?? [] as $patron) {
-                if ($patron !== '' && str_contains($texto, strtoupper($patron))) {
+                if ($patron !== '' && str_contains($texto, strtoupper((string) $patron))) {
                     return self::respuestaCodigo($codigo, (string) ($def['descripcion'] ?? ''), 'patron');
                 }
             }
@@ -287,13 +294,7 @@ final class ConciliacionBancariaCodificacionSupport
 
     private static function descripcionCodigoNumerico(int|string $codigo): string
     {
-        if ($codigo === 'AC') {
-            return 'ACUMULADO DIARIO';
-        }
-
-        $def = config('conciliacion_bancaria.codificacion_gastos.'.(int) $codigo, []);
-
-        return (string) ($def['descripcion'] ?? '');
+        return ConciliacionBancariaCodificacionMapasSupport::descripcionCodigo($codigo);
     }
 
     /**
@@ -310,7 +311,7 @@ final class ConciliacionBancariaCodificacionSupport
         foreach ($movimientos as $mov) {
             $clasif = self::clasificarMovimientoBanco($mov, $overridesSaldo);
             $codigo = $clasif['codigo'];
-            if ($codigo === 'AC' || (int) $codigo === (int) config('conciliacion_bancaria.codigo_transferencia_default', 10)) {
+            if ($codigo === 'AC' || (int) $codigo === ConciliacionBancariaReglasSupport::codigoTransferenciaDefault()) {
                 continue;
             }
 

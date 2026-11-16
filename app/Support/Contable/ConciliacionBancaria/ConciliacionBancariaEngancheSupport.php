@@ -58,10 +58,10 @@ final class ConciliacionBancariaEngancheSupport
             $faltantes[] = 'Falta cuenta contable en cuentas de caja.';
         }
         if ($cuentaIb === '') {
-            $faltantes[] = 'Falta cuenta Interbanking en cuentas de caja.';
+            $faltantes[] = 'Sin Interbanking: usá Importar extracto (Excel/CSV/OFX) en Manual; se asigna cuenta EXT-{código}.';
         }
         if ($cuentaIb !== '' && $movimientosCount === 0 && ! $saldoIb) {
-            $faltantes[] = 'Sin movimientos ni saldos Interbanking persistidos para esa cuenta.';
+            $faltantes[] = 'Sin movimientos ni saldos de extracto persistidos para esa cuenta (Traer del banco o Importar extracto).';
         }
 
         return [

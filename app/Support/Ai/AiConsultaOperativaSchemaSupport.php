@@ -94,13 +94,45 @@ final class AiConsultaOperativaSchemaSupport
     {
         $out = [];
 
-        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'cuenta_codigo', 'cuenta_nombre', 'deposito_codigo', 'empresa_codigo', 'empresa_nombre', 'numero_oc', 'evento', 'descripcion', 'cuentacaja_codigo', 'identificador_pc'] as $k) {
+        foreach (['sku', 'codigo', 'documento', 'numero', 'valor', 'pregunta', 'cuenta_codigo', 'cuenta_nombre', 'deposito_codigo', 'empresa_codigo', 'empresa_nombre', 'numero_oc', 'evento', 'descripcion', 'cuentacaja_codigo', 'identificador_pc', 'bucket', 'accion', 'legajo', 'periodo', 'entidad', 'plantilla', 'patron', 'campo', 'localidad'] as $k) {
             if (isset($params[$k]) && is_scalar($params[$k])) {
                 $v = trim((string) $params[$k]);
                 if ($v !== '') {
                     $out[$k] = $v;
                 }
             }
+        }
+
+        if (isset($out['legajo']) && is_numeric($out['legajo'])) {
+            $out['legajo'] = (int) $out['legajo'];
+        }
+        if (isset($params['umbral']) && is_numeric($params['umbral'])) {
+            $out['umbral'] = (float) $params['umbral'];
+        }
+        if (isset($params['dias_min']) && is_numeric($params['dias_min'])) {
+            $out['dias_min'] = max(0, min(3650, (int) $params['dias_min']));
+        }
+        if (isset($params['limite']) && is_numeric($params['limite'])) {
+            $out['limite'] = max(
+                AiConsultaHistorialPreciosCompraSupport::LIMITE_MIN,
+                min(AiConsultaHistorialPreciosCompraSupport::LIMITE_MAX, (int) $params['limite'])
+            );
+        }
+        if (isset($params['dias_horizonte']) && is_numeric($params['dias_horizonte'])) {
+            $out['dias_horizonte'] = max(0, min(1095, (int) $params['dias_horizonte']));
+        }
+        if (! empty($params['vencidos'])
+            && $intent === AiConsultaOperativaSupport::INTENT_PROYECCION_PAGOS) {
+            $out['vencidos'] = true;
+        }
+        if (isset($params['tipo_alerta']) && is_scalar($params['tipo_alerta'])) {
+            $ta = strtoupper(trim((string) $params['tipo_alerta']));
+            if ($ta !== '') {
+                $out['tipo_alerta'] = $ta;
+            }
+        }
+        if (isset($params['semanas']) && is_numeric($params['semanas'])) {
+            $out['semanas'] = max(1, min(26, (int) $params['semanas']));
         }
 
         if (isset($params['empresa_id']) && is_numeric($params['empresa_id']) && (int) $params['empresa_id'] > 0) {
@@ -149,6 +181,9 @@ final class AiConsultaOperativaSchemaSupport
                 AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX,
                 AiConsultaOperativaSupport::INTENT_FORMULA_COMPRA,
                 AiConsultaOperativaSupport::INTENT_FORMULA_USO,
+                AiConsultaOperativaSupport::INTENT_HISTORIAL_PRECIOS_COMPRA,
+                AiConsultaOperativaSupport::INTENT_PRECIO_POR_PROVEEDOR,
+                AiConsultaOperativaSupport::INTENT_EXISTENCIAS_DEPOSITO,
                 AiConsultaOperativaSupport::INTENT_PEDIDO_CONSUMO_SECTOR,
             ], true)) {
             $out['solo_insumo'] = true;

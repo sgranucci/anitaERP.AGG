@@ -1479,6 +1479,37 @@ class TransferenciaMercaderiaService
     {
         DB::afterCommit(function () use ($codigo, $transferenciaId, $opciones) {
             $this->moduloAvisoService->enviar('stock', $codigo, $transferenciaId, $opciones);
+
+            $evento = match ($codigo) {
+                'transferencia_confirmada' => 'stock.transferencia.confirmada',
+                'transferencia_rechazada' => 'stock.transferencia.rechazada',
+                'transferencia_pendiente_aprobacion' => 'stock.transferencia.pendiente',
+                default => null,
+            };
+            if ($evento === null) {
+                return;
+            }
+
+            try {
+                $empresaId = (int) (Transferencia_Mercaderia::query()
+                    ->whereKey($transferenciaId)
+                    ->value('empresa_id') ?? 0);
+                $contexto = [
+                    'entity_id' => $transferenciaId,
+                    'empresa_id' => $empresaId,
+                    'tipo' => $codigo,
+                    'url' => url('stock/transferencia-mercaderia'),
+                ];
+                if (isset($opciones['motivo'])) {
+                    $contexto['motivo'] = (string) $opciones['motivo'];
+                }
+                app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit($evento, $contexto);
+            } catch (\Throwable $e) {
+                Log::warning('ModuloAvisoEventBus emit falló', [
+                    'evento' => $evento,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         });
     }
 

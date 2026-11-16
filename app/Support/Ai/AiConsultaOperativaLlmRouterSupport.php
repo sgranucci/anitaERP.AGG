@@ -4,10 +4,11 @@ namespace App\Support\Ai;
 
 use App\Services\Ai\AiGateway;
 use App\Services\Ai\AiPrompt;
+use App\Services\Ai\AiResult;
 use Throwable;
 
 /**
- * Clasificador NL → JSON tipado vía AiGateway (solo interpretación; sin números de negocio).
+ * Clasificador NL → JSON tipado vía AiGateway (Ollama) con failover a cadena CI_LLM_*.
  */
 final class AiConsultaOperativaLlmRouterSupport
 {
@@ -17,6 +18,7 @@ final class AiConsultaOperativaLlmRouterSupport
     }
 
     /**
+     * @param  array<string,mixed>|null  $contextoPrevio
      * @return array{
      *   ok: bool,
      *   intent?: string,
@@ -29,7 +31,7 @@ final class AiConsultaOperativaLlmRouterSupport
      *   sugerencias?: list<string>
      * }
      */
-    public static function interpretar(string $pregunta): array
+    public static function interpretar(string $pregunta, ?array $contextoPrevio = null): array
     {
         if (! self::habilitado()) {
             return [
@@ -56,6 +58,7 @@ Formato JSON obligatorio (una sola de estas formas):
 
 Reglas:
 - intent debe ser uno del catálogo.
+- Si hay "Turno anterior" y el usuario solo cambia período/empresa/CC («y el mes pasado», «de biyemas»), reutilizá ese intent y fusioná params.
 - "saldo/deuda/CT del proveedor" → proveedor_ctacte (codigo); ficha sin saldo → proveedor.
 - "saldo/deuda/CT del cliente" → cliente_ctacte (codigo); ficha → cliente.
 - "asiento N" → asiento (numero).
@@ -67,6 +70,11 @@ Reglas:
 - "saldo del artículo/insumo" → articulo_saldo; "kardex/movimientos" → articulo_kardex (valor/sku).
 - "artículos de compra del sku / de tal insumo" → formula_compra (params.sku). Solo lectura.
 - "en qué fórmulas aparece el insumo / sku" → formula_uso (params.sku). Solo lectura. No modifica la fórmula.
+- "precios de costo / cómo saltaron los precios / historial de precios / últimas N compras del insumo o sku" → historial_precios_compra (params.sku, opcional params.limite=3, solo_insumo). Solo lectura COM.
+- "proyección de pagos / qué vence para pagar / pagos a vencer" → proyeccion_pagos (opcional vencidos=true, empresa).
+- "contratos por vencer / OC a vencer / suscripciones que vencen" → contratos_por_vencer (opcional dias_horizonte, tipo_alerta).
+- "precio por proveedor / comparar precios del sku" → precio_por_proveedor (params.sku).
+- "existencias / saldos por depósito del sku" → existencias_deposito (params.sku).
 - "movimientos / mayor sin centro de costo" → mayor_cuenta con params.sin_centrocosto=true. No imputa el centro.
 - "conciliación bancaria cuenta de caja X" → conciliacion_bancaria (params.cuentacaja_codigo). Solo lee la última corrida; no concilia.
 - "diferencias del turno / gastronomía" → conciliacion_turno_gastronomia. Solo explica; no cierra ni cobra.
@@ -79,29 +87,34 @@ Reglas:
 - "OC pendientes de firma" → oc_pendientes_firma; "OC vencidas sin recepción" → oc_vencidas_sin_recepcion.
 - "lead time OC recepción" → lead_time_oc_recepcion; "top proveedores por monto" → top_proveedores_monto; "RQ/requisiciones sin OC" → rq_sin_oc.
 - "cómo hago / manual / ayuda / documentación" → consultar_manual (params.valor = frase completa).
+- "cheques para depositar / en cartera / pagos a proveedores / remitos / listados explorador" → consulta_inteligente (params.pregunta = frase completa).
 - OC estado/firma puntual (una OC N) → ordencompra / arbol_oc (no confundir con mayor de OC ni con KPIs agregados).
 - Período: fecha_desde/fecha_hasta ISO; "este mes", "mes pasado", "julio"/"julio 2026".
 - Opcional: deposito_codigo, max_lineas 1..80, campos_excluir, cruzar_con=proveedor, solo_deuda, empresa_id/empresa_nombre, centrocosto_codigo, numero_oc.
 - Si falta dato crítico o hay varias cuentas/empresas ambiguas, pedí aclaración; no inventes saldos ni KPIs.
 SYS;
 
+        $ctxTxt = AiConsultaOperativaContextoSupport::resumenParaPrompt($contextoPrevio);
         $user = "Catálogo de intents:\n".implode("\n", $lineas)
-            ."\n\nEjemplos:\n- ".implode("\n- ", AiConsultaOperativaRouterSupport::ejemplos())
-            ."\n\nConsulta del usuario:\n".$pregunta
+            ."\n\nEjemplos:\n- ".implode("\n- ", AiConsultaOperativaRouterSupport::ejemplos());
+        if ($ctxTxt !== '') {
+            $user .= "\n\n".$ctxTxt;
+        }
+        $user .= "\n\nConsulta del usuario:\n".$pregunta
             ."\n\nRespondé SOLO JSON.";
 
+        $prompt = new AiPrompt(
+            prompt: $user,
+            system: $system,
+            esperaJson: true,
+            temperature: 0.05,
+            maxTokens: 512,
+            timeout: (int) config('ai.skills.consultar_contexto_operativo.llm_timeout', 45),
+            meta: ['skill' => 'consultar_contexto_operativo', 'fase' => 'router_nl'],
+        );
+
         try {
-            /** @var AiGateway $gateway */
-            $gateway = app(AiGateway::class);
-            $result = $gateway->generar(new AiPrompt(
-                prompt: $user,
-                system: $system,
-                esperaJson: true,
-                temperature: 0.05,
-                maxTokens: 512,
-                timeout: (int) config('ai.skills.consultar_contexto_operativo.llm_timeout', 45),
-                meta: ['skill' => 'consultar_contexto_operativo', 'fase' => 'router_nl'],
-            ));
+            $pack = self::generarConFailover($prompt);
         } catch (Throwable $e) {
             return [
                 'ok' => false,
@@ -111,18 +124,75 @@ SYS;
             ];
         }
 
+        $result = $pack['result'];
+        $fuente = $pack['fuente'];
+
         if (! $result->ok || ! is_array($result->json)) {
             return [
                 'ok' => false,
                 'error' => $result->error ?? 'El modelo no devolvió JSON válido.',
-                'fuente' => 'llm',
+                'fuente' => $fuente,
                 'sugerencias' => AiConsultaOperativaRouterSupport::ejemplos(),
             ];
         }
 
         $validado = AiConsultaOperativaSchemaSupport::validarPlan($result->json);
-        $validado['fuente'] = 'llm';
+        $validado['fuente'] = $fuente;
+        if ($fuente === 'llm_externo' && ($validado['ok'] ?? false) && ! empty($validado['interpretacion'])) {
+            $prov = (string) ($result->meta['proveedor'] ?? '');
+            if ($prov !== '' && ! str_contains((string) $validado['interpretacion'], $prov)) {
+                $validado['interpretacion'] = trim((string) $validado['interpretacion']).' · '.$prov;
+            }
+        }
 
         return $validado;
+    }
+
+    /**
+     * Ollama (AiGateway) → si falla, cadena CI_LLM_* (Groq/Gemini/…).
+     *
+     * @return array{result: AiResult, fuente: string}
+     */
+    private static function generarConFailover(AiPrompt $prompt): array
+    {
+        /** @var AiGateway $gateway */
+        $gateway = app(AiGateway::class);
+        $local = $gateway->generar($prompt);
+        if ($local->ok && is_array($local->json)) {
+            return ['result' => $local, 'fuente' => 'llm'];
+        }
+
+        if (! AiLlmCadenaExternaSupport::habilitadoParaCopiloto()) {
+            return ['result' => $local, 'fuente' => 'llm'];
+        }
+
+        $timeoutExterno = (int) config(
+            'ai.skills.consultar_contexto_operativo.llm_failover_timeout',
+            config('consulta_inteligente.llm_timeout', 8)
+        );
+        $externo = AiLlmCadenaExternaSupport::generar(new AiPrompt(
+            prompt: $prompt->prompt,
+            system: $prompt->system,
+            esperaJson: true,
+            temperature: $prompt->temperature,
+            maxTokens: $prompt->maxTokens,
+            timeout: $timeoutExterno,
+            meta: array_merge($prompt->meta, [
+                'failover_desde' => $local->driver !== '' ? $local->driver : 'ollama',
+                'failover_error' => $local->error,
+            ]),
+        ));
+
+        if ($externo->ok && is_array($externo->json)) {
+            return ['result' => $externo, 'fuente' => 'llm_externo'];
+        }
+
+        // Devolver el error más útil (preferir externo si ambos fallaron)
+        $msg = trim(($local->error ?? 'Ollama sin respuesta').' | externo: '.($externo->error ?? 'sin respuesta'));
+
+        return [
+            'result' => AiResult::fallo($msg, $externo->driver ?: $local->driver, $externo->model ?: $local->model),
+            'fuente' => 'llm',
+        ];
     }
 }

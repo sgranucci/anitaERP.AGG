@@ -59,6 +59,7 @@ class BuscadorGlobalSupport
         private BarraTareasSupport $barraTareas,
         private BuscadorGlobalRegistrosSupport $registrosSupport,
         private BuscadorGlobalComprobantesSupport $comprobantesSupport,
+        private BuscadorGlobalAdjuntosSupport $adjuntosSupport,
         private BuscadorGlobalAccionesSupport $accionesSupport,
         private BuscadorEleccionSupport $elecciones
     ) {}
@@ -69,9 +70,11 @@ class BuscadorGlobalSupport
      *     ayuda: list<array<string, mixed>>,
      *     registros: list<array<string, mixed>>,
      *     comprobantes: list<array<string, mixed>>,
+     *     adjuntos: list<array<string, mixed>>,
      *     acciones: list<array<string, mixed>>,
      *     frase: array<string, mixed>|null,
-     *     sugerencias: list<array{texto: string, tipo: string}>
+     *     sugerencias: list<array{texto: string, tipo: string}>,
+     *     totales: array<string, int>
      * }
      */
     public function buscar(string $consulta): array
@@ -83,9 +86,19 @@ class BuscadorGlobalSupport
                 'ayuda' => [],
                 'registros' => [],
                 'comprobantes' => [],
+                'adjuntos' => [],
                 'acciones' => [],
                 'frase' => null,
                 'sugerencias' => [],
+                'totales' => [
+                    'pantallas' => 0,
+                    'ayuda' => 0,
+                    'registros' => 0,
+                    'comprobantes' => 0,
+                    'adjuntos' => 0,
+                    'acciones' => 0,
+                    'total' => 0,
+                ],
             ];
         }
 
@@ -185,18 +198,31 @@ class BuscadorGlobalSupport
 
         $refuerzos = $this->elecciones->refuerzos($q);
         $pantallas = $this->mejores($this->reforzar($pantallas, $refuerzos), self::LIMITE_PANTALLAS);
+        $ayuda = $this->mejores($this->reforzar($ayuda, $refuerzos), self::LIMITE_AYUDA);
         $comprobantes = $this->subirElegidos($this->comprobantesSupport->buscar($consulta), $refuerzos);
+        $adjuntos = $this->subirElegidos($this->adjuntosSupport->buscar($consulta), $refuerzos);
         $registros = $this->subirElegidos($this->registrosSupport->buscar($consulta), $refuerzos);
         $acciones = $this->subirElegidos($this->accionesSupport->buscar($q), $refuerzos);
+        $totales = [
+            'pantallas' => count($pantallas),
+            'ayuda' => count($ayuda),
+            'comprobantes' => count($comprobantes),
+            'adjuntos' => count($adjuntos),
+            'registros' => count($registros),
+            'acciones' => count($acciones),
+        ];
+        $totales['total'] = array_sum($totales);
 
         return [
             'pantallas' => $pantallas,
-            'ayuda' => $this->mejores($this->reforzar($ayuda, $refuerzos), self::LIMITE_AYUDA),
+            'ayuda' => $ayuda,
             'comprobantes' => $comprobantes,
+            'adjuntos' => $adjuntos,
             'registros' => $registros,
             'acciones' => $acciones,
-            'frase' => $this->fraseConsulta($consulta, $q, $pantallas, $comprobantes, $registros, $acciones),
+            'frase' => $this->fraseConsulta($consulta, $q, $pantallas, $comprobantes, $registros, $acciones, $adjuntos),
             'sugerencias' => $sugerencias,
+            'totales' => $totales,
         ];
     }
 
@@ -216,7 +242,8 @@ class BuscadorGlobalSupport
         array $pantallas,
         array $comprobantes,
         array $registros,
-        array $acciones
+        array $acciones,
+        array $adjuntos = []
     ): ?array {
         if (! $this->consultaIaDisponible()) {
             return null;
@@ -227,7 +254,7 @@ class BuscadorGlobalSupport
             return $reconocida;
         }
 
-        if ($pantallas !== [] || $comprobantes !== [] || $registros !== [] || $acciones !== []) {
+        if ($pantallas !== [] || $comprobantes !== [] || $registros !== [] || $acciones !== [] || $adjuntos !== []) {
             return null;
         }
         if (mb_strlen($q) < 8 || ! str_contains($q, ' ')) {

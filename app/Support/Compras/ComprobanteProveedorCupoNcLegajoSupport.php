@@ -13,6 +13,12 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
  * FC − provisión COM, se permite asignar/cargar/asentar: el excedente se imputa a
  * cuentas de la OC (como el camino ≤5%) y la NC se contabiliza después.
  *
+ * Equivalencia con NC vinculada a COM: al imputar la NC al pivot, el comparable negativo
+ * amplía la provisión disponible (COM + NC) y el % de tolerancia se mide sobre esa base.
+ * El cupo (NC sin pivot) debe usar la misma base —COM + cupo aplicado—, no reducir la
+ * factura y medir el % sobre la COM chica: eso rechazaba legajos Blancaluna (OC 225103 /
+ * 225207) donde COM+NC dejaba el residual ≤5% pero (FC−NC) vs COM quedaba fuera.
+ *
  * Las NC ya subidas al legajo sin montos (PDF/scan, subtotal/total 0) también desbloquean:
  * el operador cargará el neto al contabilizar la NC.
  *
@@ -65,7 +71,8 @@ final class ComprobanteProveedorCupoNcLegajoSupport
     }
 
     /**
-     * True si, tras aplicar cupo NC al exceso, el comparable efectivo queda dentro de tolerancia %.
+     * True si, tras aplicar cupo NC al exceso, FC vs (COM + cupo) queda dentro de tolerancia %.
+     * Misma semántica que vincular la NC a la COM (provisión disponible ampliada).
      */
     public static function dentroDeToleranciaTrasCupoNc(
         float $asignado,
@@ -81,18 +88,18 @@ final class ComprobanteProveedorCupoNcLegajoSupport
 
         $cupo = self::cupoEfectivoParaExceso($cupoNcDisponible, $ncPendienteSinImporte, $exceso);
         $aplicado = self::aplicarCupo($exceso, $cupo)['aplicado'];
-        $efectivo = self::asignadoEfectivoTrasCupo($asignado, $aplicado);
+        $provisionEfectiva = round($provision + $aplicado, 2);
 
         return ! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
-            $efectivo,
-            $provision,
+            $asignado,
+            $provisionEfectiva,
             $toleranciaPct
         );
     }
 
     /**
-     * Asiento: permite prorratear far_diferencia aunque el % supere TOLERANCIA_PCT
-     * si el cupo NC cubre al menos la parte fuera de la banda % (o hay NC sin importe).
+     * Asiento: permite prorratear far_diferencia aunque el % sobre la COM cruda supere
+     * TOLERANCIA_PCT si, con el cupo NC, FC vs (COM + cupo) queda dentro del % (o hay NC sin importe).
      */
     public static function diferenciaAsientoPermitidaConCupoNc(
         float $diferenciaNeto,
@@ -123,13 +130,20 @@ final class ComprobanteProveedorCupoNcLegajoSupport
         }
 
         $exceso = round($diferenciaNeto, 2);
-        $bandaPermitida = round(abs($provision) * max(0.0, $porcentajeMax) / 100.0, 2);
-        $fueraDeBanda = max(0.0, round($exceso - $bandaPermitida, 2));
-        if ($fueraDeBanda <= ComprobanteProveedorImporteComparacionComSupport::tolerancia()) {
+        $cupo = max(0.0, round($cupoNcDisponible, 2));
+        $aplicado = self::aplicarCupo($exceso, $cupo)['aplicado'];
+        $provisionEfectiva = round($provision + $aplicado, 2);
+        $residual = round($exceso - $aplicado, 2);
+
+        if ($residual <= ComprobanteProveedorImporteComparacionComSupport::tolerancia()) {
             return true;
         }
 
-        return round($cupoNcDisponible, 2) + 0.0001 >= $fueraDeBanda;
+        return ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(
+            $residual,
+            $provisionEfectiva,
+            $porcentajeMax
+        );
     }
 
     /**

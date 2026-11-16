@@ -272,6 +272,16 @@
                         urlConsultar: @json(route('ai_consulta_contexto')),
                         urlExportar: @json(route('ai_consulta_exportar', ['formato' => 'EXCEL'])),
                         urlConfirmarPedido: @json(route('ai_consulta_confirmar_pedido_consumo')),
+                        urlHitlEvento: @json(route('ai_consulta_hitl_evento')),
+                        urlHitlDepositar: @json(route('ai_consulta_hitl_depositar_cheques')),
+                        urlHitlCaucionar: @json(route('ai_consulta_hitl_caucionar_cheques')),
+                        urlHitlConfirmarRecepciones: @json(route('ai_consulta_hitl_confirmar_recepciones')),
+                        urlHitlEliminarRecepciones: @json(route('ai_consulta_hitl_eliminar_recepciones_borrador')),
+                        urlHitlConfirmarTransferencias: @json(route('ai_consulta_hitl_confirmar_transferencias')),
+                        urlHitlCrearBorradorPropuesta: @json(route('ai_consulta_hitl_crear_borrador_propuesta')),
+                        urlHitlEnviarAprobacionPropuesta: @json(route('ai_consulta_hitl_enviar_aprobacion_propuesta')),
+                        urlBriefPdf: @json(route('ai_consulta_brief_dia_pdf')),
+                        urlPreferencias: @json(route('ai_consulta_preferencias')),
                     };
                 </script>
                 <script src="{{ asset('assets/pages/scripts/configuracion/ai/consulta_operativa.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/ai/consulta_operativa.js')) ?: time() }}" type="text/javascript"></script>

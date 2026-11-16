@@ -137,7 +137,7 @@ final class ConciliacionBancariaReferenciaSupport
         $descBanco = strtoupper(trim((string) ($banco['code_description_bank'] ?? '')));
         $textoBanco = $concepto.' '.$descBanco;
 
-        $mapa = config('conciliacion_bancaria.tipo_comp_conceptos_banco', []);
+        $mapa = ConciliacionBancariaDocumentoConfigSupport::tipoCompConceptosBanco();
         $patrones = $mapa[$tipo] ?? null;
         if (! is_array($patrones) || $patrones === []) {
             return false;

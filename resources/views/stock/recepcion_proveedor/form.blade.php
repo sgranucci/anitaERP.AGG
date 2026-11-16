@@ -291,6 +291,62 @@
 @include('stock.recepcion_proveedor.partials.aviso_descuento_oc', ['descuentoOc' => $descuentoOcCabecera])
 
 @php
+    $impCtx = [
+        'tiene_importacion' => (bool) ($cabeceraOld['tiene_importacion'] ?? false),
+        'importacion_id' => $cabeceraOld['importacion_id'] ?? null,
+        'importacion_codigo' => $cabeceraOld['importacion_codigo'] ?? '',
+        'importacion_estado' => $cabeceraOld['importacion_estado'] ?? '',
+        'incoterm_abreviatura' => $cabeceraOld['incoterm_abreviatura'] ?? '',
+        'incoterm_nombre' => $cabeceraOld['incoterm_nombre'] ?? '',
+        'numerodespacho' => $cabeceraOld['numerodespacho'] ?? '',
+    ];
+    $urlImportacionConsulta = ((int) ($impCtx['importacion_id'] ?? 0) > 0 && (can('listar-importacion', false) || can('editar-importacion', false)))
+        ? route('editar_importacion', ['id' => (int) $impCtx['importacion_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta'])
+        : null;
+@endphp
+<div id="rp-panel-importacion" class="card card-outline card-info mb-3 {{ ! empty($impCtx['tiene_importacion']) ? '' : 'd-none' }}">
+    <div class="card-header py-2">
+        <h3 class="card-title mb-0"><i class="fa fa-ship"></i> Importaci&oacute;n (desde la OC)</h3>
+        <span class="text-muted small ml-2">Solo lectura — definido en la carpeta / OC</span>
+    </div>
+    <div class="card-body py-2">
+        <input type="hidden" id="rp_importacion_id" name="importacion_id_vista" value="{{ $impCtx['importacion_id'] ?? '' }}" disabled>
+        <div class="form-group row mb-2">
+            <label class="col-lg-2 col-form-label text-right">Carpeta</label>
+            <div class="col-lg-4">
+                <div class="d-flex align-items-center" style="gap:4px;">
+                    <input type="text" id="rp_importacion_codigo" class="form-control" readonly
+                           value="{{ $impCtx['importacion_codigo'] }}">
+                    <a id="rp_importacion_link" href="{{ $urlImportacionConsulta ?: '#' }}"
+                       class="btn btn-sm btn-info flex-shrink-0 {{ $urlImportacionConsulta ? '' : 'd-none' }}"
+                       target="_blank" rel="noopener" title="Abrir carpeta">
+                        <i class="fa fa-external-link"></i>
+                    </a>
+                </div>
+            </div>
+            <label class="col-lg-2 col-form-label text-right">Estado carpeta</label>
+            <div class="col-lg-3">
+                <input type="text" id="rp_importacion_estado" class="form-control" readonly
+                       value="{{ $impCtx['importacion_estado'] }}">
+            </div>
+        </div>
+        <div class="form-group row mb-0">
+            <label class="col-lg-2 col-form-label text-right">Incoterm</label>
+            <div class="col-lg-4">
+                <input type="text" id="rp_incoterm" class="form-control" readonly
+                       value="{{ trim(($impCtx['incoterm_abreviatura'] ?? '').' '.($impCtx['incoterm_nombre'] ?? '')) }}">
+            </div>
+            <label class="col-lg-2 col-form-label text-right">Despacho</label>
+            <div class="col-lg-3">
+                <input type="text" id="rp_numerodespacho" class="form-control" readonly
+                       value="{{ $impCtx['numerodespacho'] }}"
+                       placeholder="Cuando la carpeta est&eacute; nacionalizada">
+            </div>
+        </div>
+    </div>
+</div>
+
+@php
     // Devolución: siempre fecha del día (no heredar la de la recepción origen / período cerrado).
     $fechaFormDefault = ($modoDevolucion ?? false)
         ? date('Y-m-d')

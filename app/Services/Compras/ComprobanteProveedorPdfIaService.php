@@ -350,11 +350,10 @@ final class ComprobanteProveedorPdfIaService
 
         [$letra, $sucursal, $numeroFactura] = $this->resolverLetraSucursalNumero($resuelto);
 
-        $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::normalizar(
-            $resuelto['tipo_autorizacion'] ?? null
-        ) ?? (filled($resuelto['numerocae'] ?? null)
-            ? ComprobanteProveedorTipoAutorizacion::CAE
-            : null);
+        $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::resolverAlGrabar(
+            $resuelto['tipo_autorizacion'] ?? null,
+            $resuelto['numerocae'] ?? null,
+        );
 
         ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
             $empresaId,

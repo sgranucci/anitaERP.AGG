@@ -214,6 +214,20 @@ class TicketService
 		}
 
 		$this->moduloAvisoService->enviar('ticket', 'alta_tecnologia', (int) $ticket->id);
+		try {
+			app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('ticket.alta', [
+				'entity_id' => (int) $ticket->id,
+				'empresa_id' => (int) ($ticket->empresa_id ?? 0),
+				'usuario_id' => (int) ($ticket->usuario_id ?? 0) ?: null,
+				'estado' => (string) ($ticket->estado_ticket ?? ''),
+				'url' => url('ticket/administracion_ticket/'.$ticket->id.'/editar'),
+			]);
+		} catch (\Throwable $e) {
+			Log::warning('ModuloAvisoEventBus emit falló', [
+				'evento' => 'ticket.alta',
+				'error' => $e->getMessage(),
+			]);
+		}
 	}
 
 	/**
@@ -255,6 +269,26 @@ class TicketService
 			}
 
 			$this->moduloAvisoService->enviar('ticket', 'asignacion_tecnico', $id);
+			try {
+				$tarea = \App\Models\Ticket\Ticket_Tarea::query()
+					->with('tickets:id,empresa_id,usuario_id,estado_ticket')
+					->find($id);
+				$ticket = $tarea?->tickets;
+				app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('ticket.asignacion', [
+					'entity_id' => $id,
+					'empresa_id' => (int) ($ticket->empresa_id ?? 0),
+					'usuario_id' => (int) ($tarea->tecnico_id ?? $ticket->usuario_id ?? 0) ?: null,
+					'estado' => (string) ($ticket->estado_ticket ?? ''),
+					'url' => $ticket
+						? url('ticket/administracion_ticket/'.$ticket->id.'/editar')
+						: null,
+				]);
+			} catch (\Throwable $e) {
+				Log::warning('ModuloAvisoEventBus emit falló', [
+					'evento' => 'ticket.asignacion',
+					'error' => $e->getMessage(),
+				]);
+			}
 		}
 	}
 

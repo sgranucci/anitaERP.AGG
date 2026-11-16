@@ -29,6 +29,20 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Avisos por módulo (premium)',
+                'bajada' => 'Catálogo, programación, mail/campanita/WhatsApp, preferencias, eventos, user task, SLA, auditoría y celulares.',
+                'url' => route('manual_modulo_aviso'),
+                'icono' => 'fa-bell',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Consulta Inteligente',
+                'bajada' => 'Pregunta NL, QBE, tablero con KPIs/gráficos compartidos, favoritos, refinamiento multi-turno y Excel programado.',
+                'url' => route('manual_consulta_inteligente'),
+                'icono' => 'fa-magic',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Circuito de suscripciones',
                 'bajada' => 'SaaS y tarjeta corporativa: alta como OC abierta, autorización del gerente, tope y tolerancia, conciliación del resumen (CSV/XLS) e imputación. Disponible en Centro de ayuda.',
                 'url' => route('manual_suscripciones'),
@@ -37,9 +51,16 @@ class AyudaManuales
             ],
             [
                 'modulo' => 'Compras',
-                'bajada' => 'Proveedores, tablas, requisiciones, listas de precio, presupuestos, órdenes de compra y contratos / OC abiertas.',
+                'bajada' => 'Proveedores, requisiciones, OC, contratos, legajo COM/FC/NC (cupo de notas de crédito) y Cuentas a pagar.',
                 'url' => route('manual_compras'),
                 'icono' => 'fa-shopping-cart',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Importaciones / comercio exterior',
+                'bajada' => 'Carpeta de importación, OC y embarques, landed cost híbrido, nacionalización (lote/COM), checklist, Libro IVA 066, cashflow y simulador.',
+                'url' => route('manual_importacion'),
+                'icono' => 'fa-ship',
                 'disponible' => true,
             ],
             [
@@ -120,6 +141,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Contable — Conciliación bancaria',
+                'bajada' => 'Mayor vs extracto (IB o archivo), carátula, workspace multi-match, cierre/aprobación, aging, tablero y reglas editables.',
+                'url' => route('manual_conciliacion_bancaria'),
+                'icono' => 'fa-university',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Contaduría — Cierres de rendiciones',
                 'bajada' => 'Asientos de máquinas, bingo, estacionamiento y vending: preview, cuentas, pozo acumulado y conciliación Flash.',
                 'url' => route('manual_cierres_rendiciones'),
@@ -165,7 +193,7 @@ class AyudaManuales
             ],
             [
                 'modulo' => 'Compras — Bandeja de legajos',
-                'bajada' => 'Guía paso a paso: asignar COM a la factura y enviar a Cuentas a pagar o Gastronomía.',
+                'bajada' => 'Guía paso a paso: asignar COM a la factura, cupo NC y envío a Cuentas a pagar o Gastronomía.',
                 'url' => route('guia_paso_a_paso', ['slug' => 'bandeja-legajos']),
                 'icono' => 'fa-folder-open',
                 'disponible' => true,

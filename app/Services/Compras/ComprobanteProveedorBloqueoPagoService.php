@@ -84,12 +84,55 @@ class ComprobanteProveedorBloqueoPagoService
     }
 
     /**
+     * El control de pago marcó estas facturas porque el tipo decía CAE y el número venía vacío.
+     * Sin dígitos no hay constatación (servicios: Edesur, telecom, etc.). Se levanta ese bloqueo
+     * automático para que el próximo intento de pago no quede trabado con el cartel viejo.
+     *
+     * @param  list<int>  $cuentacorrienteIds
+     */
+    public function levantarBloqueosCaeAusente(array $cuentacorrienteIds): void
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $cuentacorrienteIds),
+            static fn (int $id) => $id > 0
+        )));
+        if ($ids === []) {
+            return;
+        }
+
+        $comprobanteIds = DB::table('proveedor_cuentacorriente as cc')
+            ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cc.comprobante_proveedor_id')
+            ->whereIn('cc.id', $ids)
+            ->where('cp.bloqueado_pago', true)
+            ->where('cp.bloqueado_pago_motivo', 'like', 'El CAE debe tener 14 dígitos%')
+            ->where(function ($q) {
+                $q->whereNull('cp.numerocae')->orWhere('cp.numerocae', '');
+            })
+            ->pluck('cp.id');
+
+        foreach ($comprobanteIds->unique() as $cpId) {
+            $comprobante = Comprobante_Proveedor::query()->find((int) $cpId);
+            if (! $comprobante || ! $this->estaBloqueado($comprobante)) {
+                continue;
+            }
+
+            $this->liberar(
+                $comprobante,
+                'Factura sin CAE: la constatación en ARCA no aplica. Se levanta el bloqueo automático.'
+            );
+        }
+    }
+
+    /**
      * Frena el armado de una OP que incluya facturas retenidas.
      *
      * @param  list<int>  $cuentacorrienteIds
      */
     public function assertNingunaBloqueada(array $cuentacorrienteIds): void
     {
+        // Primero: bloqueos automáticos por CAE vacío (servicios) no deben frenar ningún camino de pago.
+        $this->levantarBloqueosCaeAusente($cuentacorrienteIds);
+
         $ids = array_values(array_unique(array_filter(
             array_map('intval', $cuentacorrienteIds),
             static fn (int $id) => $id > 0

@@ -66,6 +66,18 @@
             Aceptación = (confirmadas + editadas + auto) / resueltas.
             Pendientes = sugerencias sin confirmación ni descarte.
         </p>
+        @php $hitl = $kpis['hitl_fab'] ?? null; @endphp
+        @if (is_array($hitl))
+            <p class="mb-0 mt-2">
+                <strong>HITL desde FAB:</strong> {{ (int) ($hitl['total'] ?? 0) }}
+                <span class="text-muted small">
+                    (dep/cauc {{ (int) ($hitl['depositos'] ?? 0) }}
+                    · COM {{ (int) ($hitl['recepciones'] ?? 0) }}
+                    · TM {{ (int) ($hitl['transferencias'] ?? 0) }}
+                    · PP {{ (int) ($hitl['propuestas'] ?? 0) }})
+                </span>
+            </p>
+        @endif
     </div>
     <div class="col-md-6">
         @if (($kpis['por_skill'] ?? []) !== [])

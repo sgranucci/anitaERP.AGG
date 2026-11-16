@@ -476,6 +476,7 @@ class OrdencompraGestionService
             ], $oc->id);
 
             $this->ordencompraArticuloRepository->syncFromRequest(array_merge($payload, ['fecha' => $cab['fecha']]), $oc->id);
+            $this->sincronizarImportacionCarpeta((int) $oc->id, $payload);
 
             $this->marcarPresupuestoElegidoSiAplica($payload, (int) ($cab['requisicion_id'] ?? 0));
 
@@ -658,6 +659,7 @@ class OrdencompraGestionService
         try {
             $this->ordencompraRepository->update($cab, $id);
             $this->ordencompraArticuloRepository->syncFromRequest(array_merge($payload, ['fecha' => $cab['fecha']]), $id);
+            $this->sincronizarImportacionCarpeta($id, $payload);
             $this->marcarPresupuestoElegidoSiAplica($payload, (int) ($cab['requisicion_id'] ?? 0));
             $this->sincronizarComprobantesCuotas($id, $payload, Auth::user()->id);
             $this->regenerarCondicionesContratacion($id);
@@ -755,6 +757,21 @@ class OrdencompraGestionService
             DB::rollBack();
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('compras.oc.estado_cambiado', [
+                'entity_id' => $id,
+                'empresa_id' => (int) ($oc->empresa_id ?? 0),
+                'estado' => $nuevoEstado,
+                'tipo' => 'OC',
+                'url' => url('compras/ordencompra/'.$id.'/editar'),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => 'compras.oc.estado_cambiado',
+                'error' => $e->getMessage(),
+            ]);
         }
 
         return ['mensaje' => 'ok'];
@@ -1426,6 +1443,7 @@ class OrdencompraGestionService
             'detalle' => $payload['detalle'] ?? '',
             'lugarentrega' => $payload['lugarentrega'] ?? null,
             'transporte_id' => ! empty($payload['transporte_id']) ? (int) $payload['transporte_id'] : null,
+            'incoterm_id' => ! empty($payload['incoterm_id']) ? (int) $payload['incoterm_id'] : null,
             'tratamiento' => $payload['tratamiento'],
             'pct_anticipo' => $this->resolverPctAnticipoDesdePayload($payload),
             'proveedor_id' => ! empty($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
@@ -1704,6 +1722,8 @@ class OrdencompraGestionService
             'requisicion_id' => 'nullable|integer|exists:requisicion,id',
             'proveedor_id' => 'required|integer|exists:proveedor,id',
             'transporte_id' => 'nullable|integer|exists:transporte,id',
+            'incoterm_id' => 'nullable|integer|exists:incoterm,id',
+            'importacion_id' => 'nullable|integer|exists:importacion,id',
             'condicioncompra_id' => 'nullable|integer|exists:condicioncompra,id',
             'condicionentrega_id' => 'nullable|integer|exists:condicionentrega,id',
             'condicionpago_id' => 'nullable|integer|exists:condicionpago,id',
@@ -2238,6 +2258,19 @@ class OrdencompraGestionService
         DB::table('comprobante_proveedor')
             ->whereIn('ordencompra_comprobante_id', $comprobanteIds)
             ->update(['ordencompra_comprobante_id' => null]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function sincronizarImportacionCarpeta(int $ordencompraId, array $payload): void
+    {
+        $importacionId = ! empty($payload['importacion_id']) ? (int) $payload['importacion_id'] : null;
+        $oc = Ordencompra::query()->find($ordencompraId);
+        if (! $oc) {
+            return;
+        }
+        $oc->importaciones()->sync($importacionId ? [$importacionId] : []);
     }
 
     private function regenerarCondicionesContratacion(int $ordencompraId): void

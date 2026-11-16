@@ -405,7 +405,10 @@ class ComprobanteProveedorContabilizarService
                 app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
                     ->marcarContabilizado($comprobante);
 
-                return $comprobante->fresh();
+                $fresh = $comprobante->fresh();
+                $this->emitEventoContabilizado($fresh);
+
+                return $fresh;
             }
 
             $this->assertContabilizacionPersistida($comprobanteId, (int) $resultadoErp['asiento_id']);
@@ -429,7 +432,10 @@ class ComprobanteProveedorContabilizarService
                 app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
                     ->marcarContabilizado($comprobante);
 
-                return $comprobante->fresh();
+                $fresh = $comprobante->fresh();
+                $this->emitEventoContabilizado($fresh);
+
+                return $fresh;
             }
 
             // 2) Anita compra/concmov/promov (fuera del TX MySQL: si falla, compensamos abajo).
@@ -461,7 +467,10 @@ class ComprobanteProveedorContabilizarService
             app(\App\Services\Compras\ComprobanteProveedorAnticipoDesvioAvisoService::class)
                 ->marcarContabilizado($comprobante);
 
-            return $comprobante->fresh();
+            $fresh = $comprobante->fresh(['tipotransaccion_compras']);
+            $this->emitEventoContabilizado($fresh);
+
+            return $fresh;
         } catch (Throwable $e) {
             // numeroAsientoAnita solo se setea tras commit ERP exitoso; si está null el
             // corte fue validación/asiento ERP (no Anita).
@@ -883,5 +892,31 @@ class ComprobanteProveedorContabilizarService
     private function anitaEscrituraHabilitada(): bool
     {
         return ComprobanteProveedorAnitaBridgeGate::escrituraHabilitada();
+    }
+
+    private function emitEventoContabilizado(?Comprobante_Proveedor $comprobante): void
+    {
+        if (! $comprobante) {
+            return;
+        }
+
+        try {
+            $comprobante->loadMissing('tipotransaccion_compras:id,abreviatura');
+            $tipo = strtoupper(trim((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? '')));
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('compras.comprobante.contabilizado', [
+                'entity_id' => (int) $comprobante->id,
+                'empresa_id' => (int) ($comprobante->empresa_id ?? 0),
+                'monto' => round((float) ($comprobante->total ?? 0), 2),
+                'moneda_id' => (int) ($comprobante->moneda_id ?? 0) ?: null,
+                'proveedor_id' => (int) ($comprobante->proveedor_id ?? 0) ?: null,
+                'tipo' => $tipo !== '' ? $tipo : 'CP',
+                'url' => url('compras/comprobante-proveedor/'.$comprobante->id.'/editar'),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => 'compras.comprobante.contabilizado',
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

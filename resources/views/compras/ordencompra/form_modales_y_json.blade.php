@@ -25,6 +25,8 @@
 @include('includes.compras.modalconsultarequisicion')
 @include('includes.compras.modalconsultalistasprecio')
 @include('includes.compras.modal_elegir_articulo_proveedor')
+@include('includes.ventas.modalconsultaincoterm')
+@include('includes.compras.modalconsulta_importacion_carpeta')
 @include('includes.contable.modalconsultacuentacontable')
 @include('includes.contable.modalconsultacentrocosto')
 @if (\App\Support\Compras\OrdencompraUiConfigSupport::solicitanteEditable() && empty($visualizar))

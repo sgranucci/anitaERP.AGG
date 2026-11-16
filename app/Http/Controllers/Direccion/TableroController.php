@@ -73,6 +73,7 @@ class TableroController extends Controller
             ['titulo' => 'Deuda proveedores', 'url' => route('proveedor_cuentacorriente_reporte'), 'icono' => 'fa-truck'],
             ['titulo' => 'IVA ventas', 'url' => route('iva_ventas'), 'icono' => 'fa-file-invoice-dollar'],
             ['titulo' => 'IVA compras', 'url' => route('iva_compras'), 'icono' => 'fa-file-invoice'],
+            ['titulo' => 'Consulta Inteligente', 'url' => route('consulta_inteligente'), 'icono' => 'fa-lightbulb'],
         ];
     }
 }

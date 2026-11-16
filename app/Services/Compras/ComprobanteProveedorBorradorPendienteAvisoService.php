@@ -91,6 +91,20 @@ class ComprobanteProveedorBorradorPendienteAvisoService
             ];
         }
 
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('compras.comprobante.borrador_pendiente', [
+                'entity_id' => 0,
+                'enviados' => $enviados,
+                'cantidad' => $cantidadMax,
+                'tipo' => 'CP_BORRADOR',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => 'compras.comprobante.borrador_pendiente',
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return ['enviados' => $enviados, 'omitido' => null, 'cantidad' => $cantidadMax];
     }
 }

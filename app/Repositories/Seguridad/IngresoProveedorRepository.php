@@ -107,6 +107,17 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
             'ingreso_proveedor_creado',
             (int) $ticket->id
         );
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('seguridad.ingreso_proveedor.creado', [
+                'entity_id' => (int) $ticket->id,
+                'empresa_id' => (int) ($ticket->empresa_id ?? 0),
+                'proveedor_id' => (int) ($ticket->proveedor_id ?? 0) ?: null,
+                'estado' => (string) ($ticket->estado ?? ''),
+                'tipo' => 'IP',
+                'url' => url('seguridad/ingreso-proveedor/'.$ticket->id),
+            ]);
+        } catch (\Throwable) {
+        }
 
         return $ticket;
     }

@@ -9,12 +9,13 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
 {
     protected $signature = 'contable:conciliacion-bancaria-alinear-excel
                             {--dir= : Directorio con Excels Contaduría}
-                            {--archivo= : Un Excel puntual}
+                            {--archivo= : Un Excel puntual (Contaduría o Anita sin conciliar)}
                             {--mes=10 : Mes}
                             {--anio=2026 : Año}
+                            {--hasta= : Fecha corte Y-m-d (Anita sin conciliar; default fin de mes)}
                             {--aplicar : Persistir import EXTRACTO, pares y cierre Contaduría (sin esto es dry-run)}';
 
-    protected $description = 'Alinea el ERP a los pendientes del Excel Contaduría (opción A: Contaduría manda)';
+    protected $description = 'Alinea el ERP a los pendientes del Excel Contaduría o Anita Tesorería (opción A: el Excel manda)';
 
     public function handle(ConciliacionBancariaAlinearExcelService $service): int
     {
@@ -27,6 +28,7 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
         $aplicar = (bool) $this->option('aplicar');
         $dir = trim((string) ($this->option('dir') ?: ''));
         $archivo = trim((string) ($this->option('archivo') ?: ''));
+        $hasta = trim((string) ($this->option('hasta') ?: ''));
 
         if ($dir === '' && $archivo === '') {
             $this->error('Indicá --dir= o --archivo=');
@@ -34,11 +36,23 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info(($aplicar ? 'APLICAR' : 'DRY-RUN').sprintf(' · %02d/%d', $mes, $anio));
+        $this->info(($aplicar ? 'APLICAR' : 'DRY-RUN').sprintf(' · %02d/%d', $mes, $anio)
+            .($hasta !== '' ? ' · hasta '.$hasta : ''));
 
         try {
             if ($archivo !== '') {
-                $resultados = [$service->alinearArchivo($archivo, $mes, $anio, $aplicar)];
+                if (\App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport::esExportAnitaSinConciliar($archivo)) {
+                    $this->line('Formato: Anita movimientos sin conciliar');
+                    $resultados = $service->alinearAnitaSinConciliar(
+                        $archivo,
+                        $mes,
+                        $anio,
+                        $aplicar,
+                        $hasta !== '' ? $hasta : null,
+                    );
+                } else {
+                    $resultados = [$service->alinearArchivo($archivo, $mes, $anio, $aplicar)];
+                }
             } else {
                 // Una cuenta por vez: liberar mayor/Excel entre archivos.
                 $resultados = [];

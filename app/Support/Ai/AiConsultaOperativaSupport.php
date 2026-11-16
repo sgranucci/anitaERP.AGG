@@ -40,12 +40,14 @@ use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\RecuentoMovimientosArticuloSupport;
+use App\Support\ConsultaInteligente\ConsultaInteligenteNlSupport;
+use App\Support\ConsultaInteligente\ConsultaInteligentePermisosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Grounding de consultas operativas acotadas (Fase C): maestros + snapshots tipados.
- * Sin LLM ni embeddings: resuelve por código/ID y arma párrafos + links.
+ * El LLM solo clasifica (router) y opcionalmente narra hechos ya grounded; no inventa números.
  */
 final class AiConsultaOperativaSupport
 {
@@ -105,6 +107,93 @@ final class AiConsultaOperativaSupport
 
     public const INTENT_CONCILIACION_TURNO = 'conciliacion_turno_gastronomia';
 
+    /** Puente al explorador Consulta Inteligente (cheques, pagos, remitos, etc.). */
+    public const INTENT_CONSULTA_INTELIGENTE = 'consulta_inteligente';
+
+    /** Aging cartera CHT (vencidos / por vencer). */
+    public const INTENT_CHEQUE_AGING = 'cheque_aging';
+
+    /** Cashflow semanal CHT/CHP. */
+    public const INTENT_CHEQUE_CASHFLOW = 'cheque_cashflow';
+
+    /** Insumos con saldo bajo / crítico. */
+    public const INTENT_STOCK_CRITICO = 'stock_critico';
+
+    /** Brief del día (KPIs reunión en sesión). */
+    public const INTENT_BRIEF_DIA = 'brief_dia';
+
+    /** Cola HITL de ai_agente_evento. */
+    public const INTENT_COLA_HITL = 'cola_hitl';
+
+    /** Resumen propuestas de pago (AP). */
+    public const INTENT_PROPUESTA_PAGO_RESUMEN = 'propuesta_pago_resumen';
+
+    /** Cash position (IB vs deuda vs propuestas). */
+    public const INTENT_CASH_POSITION = 'cash_position';
+
+    /** Aging / top deuda vencida proveedores. */
+    public const INTENT_AP_AGING = 'ap_aging';
+
+    /** Aging / top deudores clientes (AR). */
+    public const INTENT_AR_AGING = 'ar_aging';
+
+    /** Ficha empleado sueldos por legajo. */
+    public const INTENT_EMPLEADO_LEGAJO = 'empleado_legajo';
+
+    /** Resumen de liquidación de sueldos. */
+    public const INTENT_LIQUIDACION_RESUMEN = 'liquidacion_resumen';
+
+    /** Corridas de liquidación de un período (AAAAMM). */
+    public const INTENT_LIQUIDACIONES_PERIODO = 'liquidaciones_periodo';
+
+    /** Corridas aún editables (borrador/calculada/revisada) del período. */
+    public const INTENT_LIQUIDACIONES_PENDIENTES_CIERRE = 'liquidaciones_pendientes_cierre';
+
+    /** Recepciones proveedor en borrador. */
+    public const INTENT_RECEPCION_BORRADORES = 'recepcion_borradores';
+
+    /** Transferencias de mercadería pendientes de recepción. */
+    public const INTENT_TM_PENDIENTES = 'tm_pendientes';
+
+    /** Totales ingresos/egresos de caja del período. */
+    public const INTENT_INGRESO_EGRESO_PERIODO = 'ingreso_egreso_periodo';
+
+    /** KPI tickets por estado. */
+    public const INTENT_TICKETS_KPI = 'tickets_kpi';
+
+    /** Tickets abiertos (Pendiente / En ejecución) por antigüedad. */
+    public const INTENT_TICKETS_ABIERTOS = 'tickets_abiertos';
+
+    /** Precargas de factura proveedor en PENDIENTE. */
+    public const INTENT_PRECARGA_PENDIENTES = 'precarga_pendientes';
+
+    /** Empleados con ingreso en el período. */
+    public const INTENT_EMPLEADOS_INGRESADOS = 'empleados_ingresados';
+
+    /** Listado de dolor por entidad CI (plantilla + preview). */
+    public const INTENT_ENTIDAD_DOLOR = 'entidad_dolor';
+
+    /** Bandeja Mis aprobaciones (pendientes del usuario). */
+    public const INTENT_MIS_APROBACIONES = 'mis_aprobaciones';
+
+    /** Patrones analíticos (duplicados, por localidad, …). */
+    public const INTENT_PATRON_ANALITICO = 'patron_analitico';
+
+    /** Últimas N compras / salto de precio de costo de un artículo. */
+    public const INTENT_HISTORIAL_PRECIOS_COMPRA = 'historial_precios_compra';
+
+    /** Proyección de pagos a proveedores (tramos). */
+    public const INTENT_PROYECCION_PAGOS = 'proyeccion_pagos';
+
+    /** Contratos / OC abiertas por vencer. */
+    public const INTENT_CONTRATOS_POR_VENCER = 'contratos_por_vencer';
+
+    /** Último precio de costo por proveedor (mismo SKU). */
+    public const INTENT_PRECIO_POR_PROVEEDOR = 'precio_por_proveedor';
+
+    /** Existencias / saldos del artículo por depósito. */
+    public const INTENT_EXISTENCIAS_DEPOSITO = 'existencias_deposito';
+
     /** @return array<string, string> */
     public static function intentsEtiquetas(): array
     {
@@ -137,6 +226,35 @@ final class AiConsultaOperativaSupport
             self::INTENT_FORMULA_USO => 'Fórmulas donde aparece un insumo',
             self::INTENT_CONCILIACION_BANCARIA => 'Sugerencias de conciliación bancaria',
             self::INTENT_CONCILIACION_TURNO => 'Diferencias del turno de gastronomía',
+            self::INTENT_CONSULTA_INTELIGENTE => 'Consulta Inteligente (cheques, pagos, remitos…)',
+            self::INTENT_CHEQUE_AGING => 'Aging cartera de cheques (vencidos / por vencer)',
+            self::INTENT_CHEQUE_CASHFLOW => 'Cashflow semanal de cheques (CHT/CHP)',
+            self::INTENT_STOCK_CRITICO => 'Stock crítico de insumos',
+            self::INTENT_BRIEF_DIA => 'Brief del día (KPIs de reunión)',
+            self::INTENT_COLA_HITL => 'Cola HITL de agentes (pendientes)',
+            self::INTENT_PROPUESTA_PAGO_RESUMEN => 'Resumen de propuestas de pago (AP)',
+            self::INTENT_CASH_POSITION => 'Cash position (IB / deuda / propuestas)',
+            self::INTENT_AP_AGING => 'Aging proveedores (deuda vencida)',
+            self::INTENT_AR_AGING => 'Aging clientes / top deudores (AR)',
+            self::INTENT_EMPLEADO_LEGAJO => 'Ficha de empleado (legajo)',
+            self::INTENT_LIQUIDACION_RESUMEN => 'Resumen de liquidación de sueldos',
+            self::INTENT_LIQUIDACIONES_PERIODO => 'Liquidaciones del período (AAAAMM)',
+            self::INTENT_LIQUIDACIONES_PENDIENTES_CIERRE => 'Liquidaciones pendientes de cierre',
+            self::INTENT_RECEPCION_BORRADORES => 'Recepciones COM en borrador',
+            self::INTENT_TM_PENDIENTES => 'Transferencias pendientes de recepción',
+            self::INTENT_INGRESO_EGRESO_PERIODO => 'Ingresos / egresos de caja (período)',
+            self::INTENT_TICKETS_KPI => 'Resumen de tickets por estado',
+            self::INTENT_TICKETS_ABIERTOS => 'Tickets abiertos (Pendiente / En ejecución)',
+            self::INTENT_PRECARGA_PENDIENTES => 'Precargas de factura pendientes',
+            self::INTENT_EMPLEADOS_INGRESADOS => 'Empleados ingresados en el período',
+            self::INTENT_ENTIDAD_DOLOR => 'Listado operativo por entidad (plantillas CI)',
+            self::INTENT_MIS_APROBACIONES => 'Mis aprobaciones pendientes',
+            self::INTENT_PATRON_ANALITICO => 'Patrón analítico (duplicados / localidad)',
+            self::INTENT_HISTORIAL_PRECIOS_COMPRA => 'Historial de precios de costo (últimas compras)',
+            self::INTENT_PROYECCION_PAGOS => 'Proyección de pagos a proveedores',
+            self::INTENT_CONTRATOS_POR_VENCER => 'Contratos / OC por vencer',
+            self::INTENT_PRECIO_POR_PROVEEDOR => 'Precio de costo por proveedor',
+            self::INTENT_EXISTENCIAS_DEPOSITO => 'Existencias por depósito',
         ];
     }
 
@@ -227,6 +345,61 @@ final class AiConsultaOperativaSupport
                 && filter_var(config('ai.skills.sugerir_pares_conciliacion_bancaria.habilitada', false), FILTER_VALIDATE_BOOLEAN),
             self::INTENT_CONCILIACION_TURNO => can('gestionar-habilitacion-turno-gastronomia', false)
                 && filter_var(config('ai.skills.explicar_diferencias_conciliacion_turno_gastronomia.habilitada', false), FILTER_VALIDATE_BOOLEAN),
+            self::INTENT_CONSULTA_INTELIGENTE => ConsultaInteligentePermisosSupport::puedeListar(),
+            self::INTENT_CHEQUE_AGING,
+            self::INTENT_CHEQUE_CASHFLOW => can('listar-cheque', false),
+            self::INTENT_STOCK_CRITICO => can('listar-articulos', false) || can('editar-articulos', false),
+            self::INTENT_BRIEF_DIA => can('listar-ordencompra', false)
+                || can('listar-kpi-compras', false)
+                || can('listar-cheque', false)
+                || can('listar-articulos', false)
+                || can('listar-propuesta-pago', false)
+                || can('listar-pagoproveedor', false)
+                || can('listar-cuentacorriente-proveedor', false)
+                || can('listar-ai-decisiones', false),
+            self::INTENT_COLA_HITL => can('listar-ai-decisiones', false),
+            self::INTENT_PROPUESTA_PAGO_RESUMEN => can('listar-propuesta-pago', false),
+            self::INTENT_CASH_POSITION,
+            self::INTENT_AP_AGING => can('listar-propuesta-pago', false)
+                || can('listar-pagoproveedor', false)
+                || can('listar-cuentacorriente-proveedor', false),
+            self::INTENT_AR_AGING => can('listar-cuentacorriente-cliente', false)
+                || can('listar-clientes', false),
+            self::INTENT_EMPLEADO_LEGAJO => can('listar-empleado-sueldos', false),
+            self::INTENT_LIQUIDACION_RESUMEN,
+            self::INTENT_LIQUIDACIONES_PERIODO,
+            self::INTENT_LIQUIDACIONES_PENDIENTES_CIERRE => can('listar-liquidacion-sueldos', false),
+            self::INTENT_RECEPCION_BORRADORES => can('listar-recepcion-proveedor', false),
+            self::INTENT_TM_PENDIENTES => can('listar-transferencias-pendientes', false)
+                || can('crear-transferencia-mercaderia', false)
+                || can('listar-movimientos-de-stock', false),
+            self::INTENT_INGRESO_EGRESO_PERIODO => can('listar-ingresos-egresos-caja', false),
+            self::INTENT_TICKETS_KPI,
+            self::INTENT_TICKETS_ABIERTOS => can('listar-ticket', false)
+                || can('listar-administracion-ticket', false),
+            self::INTENT_PRECARGA_PENDIENTES => can('listar-precarga-proveedores', false),
+            self::INTENT_EMPLEADOS_INGRESADOS => can('listar-empleado-sueldos', false),
+            self::INTENT_ENTIDAD_DOLOR => ConsultaInteligentePermisosSupport::puedeListar(),
+            self::INTENT_MIS_APROBACIONES => can('aprobar-mis-aprobaciones-arbol', false)
+                || can('listar-aprobacion-asiento', false)
+                || can('aprobar-solicitud-indumentaria', false)
+                || can('aprobar-transferencia-mercaderia', false)
+                || can('autorizar-ingreso-proveedor', false),
+            self::INTENT_PATRON_ANALITICO => can('listar-proveedores', false)
+                || can('listar-clientes', false)
+                || can('listar-empleado-sueldos', false),
+            self::INTENT_HISTORIAL_PRECIOS_COMPRA => can('listar-reporte-historial-precios-compra', false)
+                || can('listar-recepcion-proveedor', false)
+                || can('listar-articulos', false),
+            self::INTENT_PROYECCION_PAGOS => can('listar-reporte-proyeccion-pagos', false)
+                || can('listar-cuentacorriente-proveedor', false),
+            self::INTENT_CONTRATOS_POR_VENCER => can('listar-reporte-contrato-vencimiento', false)
+                || can('listar-ordencompra', false),
+            self::INTENT_PRECIO_POR_PROVEEDOR => can('listar-reporte-historial-precios-compra', false)
+                || can('listar-recepcion-proveedor', false)
+                || can('listar-articulos', false),
+            self::INTENT_EXISTENCIAS_DEPOSITO => can('listar-articulos', false)
+                || can('editar-articulos', false),
             default => false,
         };
     }
@@ -251,7 +424,11 @@ final class AiConsultaOperativaSupport
             return self::fallo($intent, 'Intent no soportado. Elija una consulta de la lista.');
         }
         $omitirPermisoRol = ! empty($params['_mcp_bridge']);
-        unset($params['_mcp_bridge']);
+        // Conservar _mcp_bridge para que Decision/Cobertura puedan saltear can() de sesión
+        // (token MCP = canal autorizado) y evitar side-effects de brief en sesión.
+        if (! $omitirPermisoRol) {
+            unset($params['_mcp_bridge']);
+        }
         if (! $omitirPermisoRol && ! self::usuarioPuedeIntent($intent)) {
             return self::fallo($intent, 'Sin permiso para esta consulta IA con su rol actual.');
         }
@@ -312,8 +489,108 @@ final class AiConsultaOperativaSupport
             self::INTENT_FORMULA_USO => self::consultarFormulaUso($params),
             self::INTENT_CONCILIACION_BANCARIA => self::consultarConciliacionBancaria($params),
             self::INTENT_CONCILIACION_TURNO => self::consultarConciliacionTurno($params),
+            self::INTENT_CONSULTA_INTELIGENTE => self::consultarConsultaInteligente($params),
+            self::INTENT_CHEQUE_AGING => AiConsultaDecisionSupport::chequeAging($params),
+            self::INTENT_CHEQUE_CASHFLOW => AiConsultaDecisionSupport::chequeCashflow($params),
+            self::INTENT_STOCK_CRITICO => AiConsultaDecisionSupport::stockCritico($params),
+            self::INTENT_BRIEF_DIA => AiConsultaDecisionSupport::briefDia($params),
+            self::INTENT_COLA_HITL => AiConsultaDecisionSupport::colaHitl($params),
+            self::INTENT_PROPUESTA_PAGO_RESUMEN => AiConsultaDecisionSupport::propuestaPagoResumen($params),
+            self::INTENT_CASH_POSITION => AiConsultaDecisionSupport::cashPosition($params),
+            self::INTENT_AP_AGING => AiConsultaDecisionSupport::apAging($params),
+            self::INTENT_AR_AGING => AiConsultaCoberturaModulosSupport::arAging($params),
+            self::INTENT_EMPLEADO_LEGAJO => AiConsultaCoberturaModulosSupport::empleadoLegajo($params),
+            self::INTENT_LIQUIDACION_RESUMEN => AiConsultaCoberturaModulosSupport::liquidacionResumen($params),
+            self::INTENT_LIQUIDACIONES_PERIODO => AiConsultaCoberturaModulosSupport::liquidacionesPeriodo($params),
+            self::INTENT_LIQUIDACIONES_PENDIENTES_CIERRE => AiConsultaCoberturaModulosSupport::liquidacionesPendientesCierre($params),
+            self::INTENT_RECEPCION_BORRADORES => AiConsultaCoberturaModulosSupport::recepcionBorradores($params),
+            self::INTENT_TM_PENDIENTES => AiConsultaCoberturaModulosSupport::tmPendientes($params),
+            self::INTENT_INGRESO_EGRESO_PERIODO => AiConsultaCoberturaModulosSupport::ingresoEgresoPeriodo($params),
+            self::INTENT_TICKETS_KPI => AiConsultaCoberturaModulosSupport::ticketsKpi($params),
+            self::INTENT_TICKETS_ABIERTOS => AiConsultaCoberturaModulosSupport::ticketsAbiertos($params),
+            self::INTENT_PRECARGA_PENDIENTES => AiConsultaCoberturaModulosSupport::precargaPendientes($params),
+            self::INTENT_EMPLEADOS_INGRESADOS => AiConsultaCoberturaModulosSupport::empleadosIngresados($params),
+            self::INTENT_ENTIDAD_DOLOR => AiConsultaDolorEntidadesSupport::ejecutar($params),
+            self::INTENT_MIS_APROBACIONES => AiConsultaCoberturaModulosSupport::misAprobaciones($params),
+            self::INTENT_PATRON_ANALITICO => AiConsultaPatronAnaliticoSupport::ejecutar($params),
+            self::INTENT_HISTORIAL_PRECIOS_COMPRA => self::consultarHistorialPreciosCompra($params),
+            self::INTENT_PROYECCION_PAGOS => AiConsultaPackASupport::proyeccionPagos($params),
+            self::INTENT_CONTRATOS_POR_VENCER => AiConsultaPackASupport::contratosPorVencer($params),
+            self::INTENT_PRECIO_POR_PROVEEDOR => self::consultarPrecioPorProveedor($params),
+            self::INTENT_EXISTENCIAS_DEPOSITO => self::consultarExistenciasDeposito($params),
             default => self::fallo($intent, 'Intent no implementado.'),
         };
+    }
+
+    /**
+     * Puente NL → Consulta Inteligente (URL + explicación; no inventa filas).
+     *
+     * @param  array<string,mixed>  $params
+     * @return array<string,mixed>
+     */
+    private static function consultarConsultaInteligente(array $params): array
+    {
+        if (! ConsultaInteligentePermisosSupport::puedeListar()) {
+            return self::fallo(self::INTENT_CONSULTA_INTELIGENTE, 'Sin permiso para Consulta Inteligente.');
+        }
+
+        $pregunta = trim((string) ($params['pregunta'] ?? $params['valor'] ?? $params['descripcion'] ?? ''));
+        if ($pregunta === '') {
+            return self::fallo(
+                self::INTENT_CONSULTA_INTELIGENTE,
+                'Indique qué listar (ej.: «cheques para depositar» o «pagos a proveedores este mes»).'
+            );
+        }
+
+        $nl = ConsultaInteligenteNlSupport::interpretar($pregunta);
+        if (! ($nl['ok'] ?? false)) {
+            return self::fallo(
+                self::INTENT_CONSULTA_INTELIGENTE,
+                (string) ($nl['mensaje'] ?? 'No se pudo interpretar en Consulta Inteligente.')
+            );
+        }
+
+        $parrafos = [
+            (string) ($nl['explicacion'] ?? 'Consulta preparada en el explorador.'),
+        ];
+        if (! empty($nl['via'])) {
+            $parrafos[] = 'Interpretación: '.((string) $nl['via'] === 'llm' ? 'LLM + catálogo' : 'patrones / diccionario');
+        }
+        foreach (($nl['qbe_legible'] ?? []) as $linea) {
+            $linea = trim((string) $linea);
+            if ($linea !== '' && ! in_array($linea, $parrafos, true)) {
+                $parrafos[] = $linea;
+            }
+        }
+        $parrafos[] = 'Abrí el enlace para ver el listado completo con filtros aplicados.';
+
+        $links = [];
+        $url = (string) ($nl['url'] ?? '');
+        if ($url !== '') {
+            $links[] = [
+                'etiqueta' => 'Abrir en Consulta Inteligente',
+                'url' => $url,
+            ];
+        } else {
+            $links[] = [
+                'etiqueta' => 'Ir a Consulta Inteligente',
+                'url' => route('consulta_inteligente'),
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'intent' => self::INTENT_CONSULTA_INTELIGENTE,
+            'score' => 0.88,
+            'parrafos' => $parrafos,
+            'links' => $links,
+            'datos' => [
+                'entidad' => $nl['entidad'] ?? null,
+                'via' => $nl['via'] ?? null,
+                'query' => $nl['query'] ?? [],
+            ],
+            'tabla' => null,
+        ];
     }
 
     /**
@@ -2051,12 +2328,47 @@ final class AiConsultaOperativaSupport
     }
 
     /**
-     * @return array<string,mixed>
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
      */
+    private static function consultarHistorialPreciosCompra(array $params): array
+    {
+        $articulo = self::articuloDeFormula($params, self::INTENT_HISTORIAL_PRECIOS_COMPRA);
+        if (! ($articulo instanceof Articulo)) {
+            return $articulo;
+        }
+
+        return AiConsultaHistorialPreciosCompraSupport::ejecutar($articulo, $params);
+    }
+
     /**
      * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      */
+    private static function consultarPrecioPorProveedor(array $params): array
+    {
+        $articulo = self::articuloDeFormula($params, self::INTENT_PRECIO_POR_PROVEEDOR);
+        if (! ($articulo instanceof Articulo)) {
+            return $articulo;
+        }
+
+        return AiConsultaPackASupport::precioPorProveedor($articulo, $params);
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private static function consultarExistenciasDeposito(array $params): array
+    {
+        $articulo = self::articuloDeFormula($params, self::INTENT_EXISTENCIAS_DEPOSITO);
+        if (! ($articulo instanceof Articulo)) {
+            return $articulo;
+        }
+
+        return AiConsultaPackASupport::existenciasPorDeposito($articulo, $params);
+    }
+
     private static function consultarFormulaCompra(array $params): array
     {
         if (! self::puedeFormula()) {

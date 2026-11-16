@@ -117,15 +117,10 @@ final class AiAgenteOperativoSupport
             'Plan operativo (HITL): '.self::eventosEtiquetas()[$evento],
             'La IA solo propone; usted confirma cada consulta o acción en el ERP.',
             'Pasos sugeridos: '.count($pasos),
+            'Los enlaces abren la pantalla filtrada; «consultar en chat» reusa el copiloto.',
         ];
 
-        $links = [];
-        if ($evento === self::EVENTO_DESVIO_CONCILIACION && can('ejecutar-conciliacion-bancaria', false)) {
-            $links[] = [
-                'etiqueta' => 'Abrir conciliación bancaria',
-                'url' => route('conciliacion_bancaria'),
-            ];
-        }
+        $links = self::linksDesdePasos($pasos, $evento);
 
         return [
             'ok' => true,
@@ -142,6 +137,34 @@ final class AiAgenteOperativoSupport
                 'pasos' => $pasos,
             ],
         ];
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $pasos
+     * @return list<array{etiqueta: string, url: string}>
+     */
+    private static function linksDesdePasos(array $pasos, string $evento): array
+    {
+        $links = [];
+        if ($evento === self::EVENTO_DESVIO_CONCILIACION && can('ejecutar-conciliacion-bancaria', false)) {
+            $links[] = [
+                'etiqueta' => 'Abrir conciliación bancaria',
+                'url' => route('conciliacion_bancaria'),
+            ];
+        }
+        foreach ($pasos as $paso) {
+            $url = trim((string) ($paso['url'] ?? ''));
+            if ($url === '') {
+                continue;
+            }
+            $etiqueta = trim((string) ($paso['etiqueta'] ?? 'Abrir pantalla'));
+            $links[] = [
+                'etiqueta' => $etiqueta,
+                'url' => $url,
+            ];
+        }
+
+        return $links;
     }
 
     /**
@@ -224,6 +247,9 @@ final class AiAgenteOperativoSupport
                 'frase' => 'Abrir conciliación bancaria y revisar ai_anomalias',
                 'motivo' => 'Priorizar pendientes de severidad alta y pares con score bajo.',
                 'params' => [],
+                'url' => can('ejecutar-conciliacion-bancaria', false)
+                    ? route('conciliacion_bancaria')
+                    : null,
             ],
         ];
         if ($cuenta !== '') {
@@ -237,6 +263,14 @@ final class AiAgenteOperativoSupport
                     'fecha_desde' => $desde,
                     'fecha_hasta' => $hasta,
                 ],
+                'url' => can('listar-mayor-plano-cuenta', false)
+                    ? route('mayor_plano_cuenta', array_filter([
+                        'consultar' => 1,
+                        'cuenta_codigo' => $cuenta,
+                        'fecha_desde' => $desde,
+                        'fecha_hasta' => $hasta,
+                    ]))
+                    : null,
             ];
         } else {
             $pasos[] = [
@@ -245,6 +279,9 @@ final class AiAgenteOperativoSupport
                 'frase' => 'mayor de la cuenta [código] este mes',
                 'motivo' => 'Indique el código de la cuenta de caja vinculada.',
                 'params' => ['fecha_desde' => $desde, 'fecha_hasta' => $hasta],
+                'url' => can('listar-mayor-plano-cuenta', false)
+                    ? route('mayor_plano_cuenta', ['consultar' => 1, 'fecha_desde' => $desde, 'fecha_hasta' => $hasta])
+                    : null,
             ];
         }
         $pasos[] = [
@@ -276,6 +313,9 @@ final class AiAgenteOperativoSupport
                 'frase' => 'proveedor '.$codigo,
                 'motivo' => 'Confirmar datos maestros y condición.',
                 'params' => ['codigo' => $codigo],
+                'url' => can('listar-proveedor', false) || can('editar-proveedor', false)
+                    ? route('proveedor', ['filtro_valor' => $codigo, 'filtro_campo' => 'codigo', 'filtro_operador' => 'igual'])
+                    : null,
             ],
             [
                 'intent' => AiConsultaOperativaSupport::INTENT_PROVEEDOR_CTACTE,
@@ -283,6 +323,14 @@ final class AiAgenteOperativoSupport
                 'frase' => 'saldo del proveedor '.$codigo.' este mes',
                 'motivo' => 'Ver deuda, vencimientos y comprobantes (join OC).',
                 'params' => ['codigo' => $codigo, 'fecha_desde' => date('Y-m-01'), 'fecha_hasta' => date('Y-m-d')],
+                'url' => can('listar-cuentacorriente-proveedor', false)
+                    ? route('proveedor_cuentacorriente_reporte', [
+                        'consultar' => 1,
+                        'proveedor_codigo' => $codigo,
+                        'fecha_desde' => date('Y-m-01'),
+                        'fecha_hasta' => date('Y-m-d'),
+                    ])
+                    : null,
             ],
             [
                 'intent' => AiConsultaOperativaSupport::INTENT_ORDENCOMPRA,
@@ -290,6 +338,9 @@ final class AiAgenteOperativoSupport
                 'frase' => 'estado de la OC [nro]',
                 'motivo' => 'Cruzar facturas CT con órdenes pendientes.',
                 'params' => [],
+                'url' => can('listar-ordencompra', false)
+                    ? route('consultar_ordencompra', ['filtro_valor' => $codigo])
+                    : null,
             ],
         ];
     }
@@ -312,6 +363,9 @@ final class AiAgenteOperativoSupport
                 'frase' => 'cliente '.$codigo,
                 'motivo' => 'Confirmar datos y estado comercial.',
                 'params' => ['codigo' => $codigo],
+                'url' => can('listar-clientes', false) || can('editar-cliente', false)
+                    ? route('cliente', ['filtro_valor' => $codigo, 'filtro_campo' => 'codigo', 'filtro_operador' => 'igual'])
+                    : null,
             ],
             [
                 'intent' => AiConsultaOperativaSupport::INTENT_CLIENTE_CTACTE,
@@ -319,6 +373,14 @@ final class AiAgenteOperativoSupport
                 'frase' => 'saldo del cliente '.$codigo.' este mes',
                 'motivo' => 'Ver facturas, cobranzas y vencimientos.',
                 'params' => ['codigo' => $codigo, 'fecha_desde' => date('Y-m-01'), 'fecha_hasta' => date('Y-m-d')],
+                'url' => can('listar-cuentacorriente-cliente', false)
+                    ? route('cliente_cuentacorriente_reporte', [
+                        'consultar' => 1,
+                        'cliente_codigo' => $codigo,
+                        'fecha_desde' => date('Y-m-01'),
+                        'fecha_hasta' => date('Y-m-d'),
+                    ])
+                    : null,
             ],
         ];
     }
@@ -341,6 +403,13 @@ final class AiAgenteOperativoSupport
                 'frase' => 'estado de la OC '.$numero,
                 'motivo' => 'Ver totales, estado y proveedor.',
                 'params' => ['numero' => $numero],
+                'url' => can('listar-ordencompra', false)
+                    ? route('consultar_ordencompra', [
+                        'filtro_valor' => $numero,
+                        'filtro_campo' => 'numeroordencompra',
+                        'filtro_operador' => 'igual',
+                    ])
+                    : null,
             ],
             [
                 'intent' => AiConsultaOperativaSupport::INTENT_ARBOL_OC,
@@ -348,6 +417,13 @@ final class AiAgenteOperativoSupport
                 'frase' => 'quién debe firmar la OC '.$numero,
                 'motivo' => 'Árbol de aprobación y nivel pendiente.',
                 'params' => ['numero' => $numero],
+                'url' => can('listar-ordencompra', false)
+                    ? route('consultar_ordencompra', [
+                        'filtro_valor' => $numero,
+                        'filtro_campo' => 'numeroordencompra',
+                        'filtro_operador' => 'igual',
+                    ])
+                    : null,
             ],
         ];
     }
@@ -370,6 +446,9 @@ final class AiAgenteOperativoSupport
                 'frase' => 'saldo del insumo '.$valor,
                 'motivo' => 'Existencia por depósito (solo insumos gastronomía).',
                 'params' => ['valor' => $valor, 'solo_insumo' => true],
+                'url' => can('listar-articulos', false)
+                    ? route('articulo', ['filtro_valor' => $valor])
+                    : null,
             ],
             [
                 'intent' => AiConsultaOperativaSupport::INTENT_ARTICULO_KARDEX,
@@ -382,6 +461,17 @@ final class AiAgenteOperativoSupport
                     'fecha_desde' => date('Y-m-01'),
                     'fecha_hasta' => date('Y-m-d'),
                 ],
+                'url' => can('listar-articulos', false)
+                    ? route('articulo', ['filtro_valor' => $valor])
+                    : null,
+            ],
+            [
+                'intent' => AiConsultaOperativaSupport::INTENT_STOCK_CRITICO,
+                'etiqueta' => 'Listar stock crítico de insumos',
+                'frase' => 'stock crítico de insumos',
+                'motivo' => 'Ver el universo de insumos bajo umbral, no solo este SKU.',
+                'params' => [],
+                'url' => can('listar-articulos', false) ? route('articulo') : null,
             ],
         ];
     }

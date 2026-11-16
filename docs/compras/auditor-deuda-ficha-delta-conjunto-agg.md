@@ -13,42 +13,72 @@ Factura anticipada vs recepción: `compras:auditar-factura-anticipada-recepcion`
 
 ## Base vigente (aceptada)
 
-Corte **08/11/2026** · anticipos **solo OPA** (sin factura anticipada / recepción).  
+Corte **15/11/2026** · anticipos **solo OPA** (sin factura anticipada / recepción).  
 Ficha deuda vs ficha cuadrada en las tres (0 diferencias).  
-A partir del 09/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde.
+A partir del 16/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde.
 
 | Empresa | Delta proveedores | Delta anticipos (OPA) | **Delta conjunto** |
 |---|---:|---:|---:|
-| Biyemas | 407.510.558,72 | 437.268.014,54 | **844.778.573,26** |
+| Biyemas | 407.510.558,72 | 432.294.428,94 | **839.804.987,66** |
 | Kandiko | −161.877.377,17 | 6.680.138,63 | **−155.197.238,54** |
 | Rebisco | −297.971.512,89 | 38.874.018,07 | **−259.097.494,82** |
 
-### Biyemas — cuentas al 08/11/2026
+### Biyemas — cuentas al 15/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | −40.081.767,16 | 240.255.129,04 | 280.336.896,20 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 3.321.172.908,64 | 2.983.235.585,50 | −337.937.323,14 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | −177.117.517,39 | 103.219.378,81 | 280.336.896,20 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 3.267.959.994,74 | 2.930.022.671,60 | −337.937.323,14 |
 | 216010003 DS. FINANC. REBISCO SA. | 583.254,23 | 513.877,69 | −69.376,54 |
 | 216030002 DS. COMER. INTERCO KAN CTE | 205.396,08 | 465.385.758,28 | 465.180.362,20 |
-| 114040001 ANTICIPOS A PROVEEDORES (OPA) | −86.530.179,99 | 350.737.834,55 | 437.268.014,54 |
+| 114040001 ANTICIPOS A PROVEEDORES (OPA) | −86.530.179,99 | 345.764.248,95 | 432.294.428,94 |
 
-### Kandiko — cuentas al 08/11/2026
+### Kandiko — cuentas al 15/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | 43.458.091,79 | 42.963.807,36 | −494.284,43 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.023.672.927,28 | 862.289.834,24 | −161.383.093,04 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | 37.441.796,89 | 36.947.512,46 | −494.284,43 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.035.720.598,45 | 874.337.505,41 | −161.383.093,04 |
 | 221010004 PROVEEDORES MON EXTR. NO CTES | 0,00 | 0,30 | 0,30 |
 | 114040001 ANTICIPOS A PROVEEDORES (OPA) | −1.860.550,00 | 4.819.588,63 | 6.680.138,63 |
 
-### Rebisco — cuentas al 08/11/2026
+### Rebisco — cuentas al 15/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | 88.765.679,69 | 79.845.798,60 | −8.919.881,09 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.679.681.914,90 | 1.390.630.283,10 | −289.051.631,80 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | 60.420.782,22 | 51.500.901,13 | −8.919.881,09 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.688.444.588,08 | 1.399.392.956,28 | −289.051.631,80 |
 | 114040001 ANTICIPOS A PROVEEDORES (OPA) | −81.754.650,23 | −42.880.632,16 | 38.874.018,07 |
+
+---
+
+## Salto documentado: 14/11 → 15/11/2026
+
+La alerta del mail fue solo por el delta de Biyemas. La ficha siguió en cero. Kandiko y Rebisco no se movieron.
+
+| Empresa | Conjunto 14/11 | Conjunto 15/11 | Variación |
+|---|---:|---:|---:|
+| Biyemas | 844.778.573,26 | 839.804.987,66 | **−4.973.585,60** |
+| Kandiko | −155.197.238,54 | −155.197.238,54 | 0,00 |
+| Rebisco | −259.097.494,82 | −259.097.494,82 | 0,00 |
+
+En Biyemas solo se movió **114040001 ANTICIPOS A PROVEEDORES (OPA)** (−4.973.585,60). Proveedores delta igual. Deuda OPA igual (−86.530.179,99); el mayor OPA-only bajó de 350.737.834,55 a 345.764.248,95.
+
+### Origen
+
+El 14/11 a las 08:14 (después del corte 07:50) se vinculó `recepcionproveedor_id` en tres asientos COM Anita con Haber en 114040001. Sin ese FK entraban en el mayor OPA-only; al vincularlos salen (recepción → auditor `compras:auditar-factura-anticipada-recepcion`). La deuda OPA no cambió; el Haber dejó de contarse en anticipos OPA y el delta bajó exactamente 4.973.585,60.
+
+| Asiento | COM | Haber 114040001 | Recepción | OC | Proveedor |
+|---|---|---:|---|---|---|
+| 5271745 | X 1-166962 | 236.792,80 | 65650 | 221461 | MHFLIA SRL (3710) |
+| 5271746 | X 1-166963 | 236.792,80 | 65651 | 221461 | MHFLIA SRL (3710) |
+| 5271931 | X 1-167001 | 4.500.000,00 | 65653 | 218092 | BORDES DIEGO HERNAN (3296) |
+
+### Lectura
+
+- **No es descuadre de ficha.** Deuda y ficha en cero en las tres empresas.
+- El salto es el vínculo de las COM a la recepción ERP, coherente con el criterio “anticipos solo OPA”.
+- Se **acepta como nueva base** al 15/11/2026.
 
 ---
 
@@ -74,7 +104,7 @@ Ese asiento tiene Debe 918.300 en 114040001. Sin `comprobante_proveedor_id` entr
 
 - **No es descuadre de ficha.** Deuda y ficha en cero en las tres empresas.
 - El salto es el vínculo de la FIB al comprobante ERP, coherente con el criterio “anticipos solo OPA”.
-- Se **acepta como nueva base** al 08/11/2026.
+- Se **aceptó como base** al 08/11/2026 (reemplazada el 15/11).
 
 ---
 

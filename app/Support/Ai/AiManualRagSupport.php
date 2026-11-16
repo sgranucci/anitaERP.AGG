@@ -2,11 +2,12 @@
 
 namespace App\Support\Ai;
 
+use App\Services\Ai\OllamaEmbeddingClient;
 use Illuminate\Support\Facades\File;
 use Throwable;
 
 /**
- * RAG léxico sobre docs/manual-* (sin embeddings).
+ * RAG sobre docs/manual-*: léxico + embeddings opcionales (Ollama).
  * Index: storage/app/ai/manual_rag_index.json
  */
 final class AiManualRagSupport
@@ -23,7 +24,7 @@ final class AiManualRagSupport
     }
 
     /**
-     * @return array{chunks: int, modulos: list<string>, path: string}
+     * @return array{chunks: int, modulos: list<string>, path: string, embeddings?: int}
      */
     public static function indexar(): array
     {
@@ -73,19 +74,38 @@ final class AiManualRagSupport
                 if ($texto === '') {
                     continue;
                 }
+                $baseUrl = self::urlManual($nombreDir);
                 $chunks[] = [
                     'id' => $nombreDir.'#'.$i,
                     'modulo' => $modulo,
                     'manual' => $nombreDir,
                     'titulo' => $titulo,
                     'texto' => mb_substr($texto, 0, 4000),
-                    'url' => self::urlManual($nombreDir),
+                    // Deep-link a la sección (#cap-N) del manual HTML
+                    'url' => $baseUrl ? $baseUrl.'#cap-'.$i : null,
+                    'seccion_idx' => (int) $i,
                 ];
             }
         }
 
+        $embedOk = 0;
+        $client = app(OllamaEmbeddingClient::class);
+        if ($client->habilitado()) {
+            foreach ($chunks as &$chunk) {
+                $vec = $client->embed(($chunk['titulo'] ?? '')."\n".($chunk['texto'] ?? ''));
+                if (is_array($vec) && $vec !== []) {
+                    $chunk['embedding'] = $vec;
+                    $embedOk++;
+                }
+            }
+            unset($chunk);
+        }
+
         $payload = [
             'generado_at' => now()->toIso8601String(),
+            'embeddings_model' => $embedOk > 0
+                ? (string) config('ai.rag_manuales.embeddings_model', 'nomic-embed-text')
+                : null,
             'chunks' => $chunks,
         ];
         $path = self::rutaIndice();
@@ -99,6 +119,7 @@ final class AiManualRagSupport
             'chunks' => count($chunks),
             'modulos' => array_values(array_unique($modulos)),
             'path' => $path,
+            'embeddings' => $embedOk,
         ];
     }
 
@@ -123,29 +144,49 @@ final class AiManualRagSupport
         }
 
         $tokens = self::tokenizar($consulta);
-        if ($tokens === []) {
+        $queryEmbed = null;
+        $pesoEmbed = (float) config('ai.rag_manuales.embeddings_peso', 0.55);
+        $client = app(OllamaEmbeddingClient::class);
+        if ($client->habilitado() && $pesoEmbed > 0) {
+            $queryEmbed = $client->embed($consulta);
+        }
+
+        if ($tokens === [] && $queryEmbed === null) {
             return [];
         }
 
         $scored = [];
         foreach ($chunks as $chunk) {
             $haystack = self::normalizar(($chunk['titulo'] ?? '').' '.($chunk['texto'] ?? '').' '.($chunk['modulo'] ?? ''));
-            $score = 0.0;
+            $lex = 0.0;
             foreach ($tokens as $tok) {
                 if ($tok === '') {
                     continue;
                 }
                 if (str_contains($haystack, $tok)) {
-                    $score += mb_strlen($tok) >= 5 ? 2.0 : 1.0;
+                    $lex += mb_strlen($tok) >= 5 ? 2.0 : 1.0;
                     if (str_contains(self::normalizar((string) ($chunk['titulo'] ?? '')), $tok)) {
-                        $score += 1.5;
+                        $lex += 1.5;
                     }
                 }
             }
-            if ($score <= 0) {
+            $sem = 0.0;
+            if ($queryEmbed !== null && ! empty($chunk['embedding']) && is_array($chunk['embedding'])) {
+                $cos = OllamaEmbeddingClient::cosine($queryEmbed, $chunk['embedding']);
+                // escala coseno [0..1] a un score comparable al léxico
+                $sem = max(0.0, $cos) * 10.0;
+            }
+            if ($lex <= 0 && $sem <= 0) {
                 continue;
             }
+            if ($queryEmbed !== null && $sem > 0) {
+                $score = ((1.0 - $pesoEmbed) * $lex) + ($pesoEmbed * $sem);
+            } else {
+                $score = $lex;
+            }
             $chunk['score'] = $score;
+            $chunk['score_lex'] = $lex;
+            $chunk['score_sem'] = $sem;
             $scored[] = $chunk;
         }
 
@@ -208,17 +249,21 @@ final class AiManualRagSupport
             ];
         }
 
-        $parrafos = ['Resultados del manual (RAG léxico) para: “'.$q.'”.'];
+        $modo = filter_var(config('ai.rag_manuales.embeddings_habilitado', false), FILTER_VALIDATE_BOOLEAN)
+            ? 'RAG léxico+embeddings'
+            : 'RAG léxico';
+        $parrafos = ['Resultados del manual ('.$modo.') para: “'.$q.'”.'];
         $links = [];
         $filas = [];
         foreach ($hits as $hit) {
             $extracto = mb_substr((string) $hit['texto'], 0, 320);
             $parrafos[] = '• '.$hit['titulo'].' — '.$hit['modulo'].': '.$extracto
                 .(mb_strlen((string) $hit['texto']) > 320 ? '…' : '');
-            if (! empty($hit['url'])) {
+            $url = self::urlConAnclaSeccion($hit);
+            if ($url !== null && $url !== '') {
                 $links[] = [
                     'etiqueta' => $hit['manual'].' / '.$hit['titulo'],
-                    'url' => (string) $hit['url'],
+                    'url' => $url,
                 ];
             }
             $filas[] = [
@@ -300,10 +345,43 @@ final class AiManualRagSupport
         ]);
     }
 
+    /**
+     * Asegura #cap-N aunque el índice viejo no tenga ancla.
+     *
+     * @param  array<string,mixed>  $hit
+     */
+    private static function urlConAnclaSeccion(array $hit): ?string
+    {
+        $url = trim((string) ($hit['url'] ?? ''));
+        if ($url === '') {
+            $manual = (string) ($hit['manual'] ?? '');
+            $url = (string) (self::urlManual($manual) ?? '');
+        }
+        if ($url === '') {
+            return null;
+        }
+        if (str_contains($url, '#cap-')) {
+            return $url;
+        }
+        $idx = null;
+        if (isset($hit['seccion_idx']) && is_numeric($hit['seccion_idx'])) {
+            $idx = (int) $hit['seccion_idx'];
+        } elseif (isset($hit['id']) && preg_match('/#(\d+)$/', (string) $hit['id'], $m) === 1) {
+            $idx = (int) $m[1];
+        }
+        if ($idx === null) {
+            return $url;
+        }
+        $base = explode('#', $url, 2)[0];
+
+        return $base.'#cap-'.$idx;
+    }
+
     private static function urlManual(string $manualDir): ?string
     {
         $map = [
             'manual-compras' => 'manual_compras',
+            'manual-importacion' => 'manual_importacion',
             'manual-stock' => 'manual_stock',
             'manual-recepcion-movstock' => 'manual_recepcion_movstock',
             'manual-stock-gastronomia' => 'manual_stock_gastronomia',
@@ -319,6 +397,7 @@ final class AiManualRagSupport
             'manual-cierres-rendiciones' => 'manual_cierres_rendiciones',
             'manual-reporte-definible' => 'manual_reporte_definible',
             'manual-propuesta-pago' => 'manual_propuesta_pago',
+            'manual-conciliacion-bancaria' => 'manual_conciliacion_bancaria',
             'manual-uif' => 'manual_uif',
             'manual-sueldos' => 'manual_sueldos',
             'manual-lsd-sueldos' => 'manual_lsd_sueldos',

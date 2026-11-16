@@ -605,6 +605,132 @@ final class ConciliacionBancariaExcelReferenciaSupport
         return null;
     }
 
+    /**
+     * Export Anita Tesorería “Movimientos de Cuentas sin conciliar” (una hoja por cuenta).
+     */
+    public static function esExportAnitaSinConciliar(string $ruta): bool
+    {
+        if (! is_readable($ruta)) {
+            return false;
+        }
+        try {
+            $libro = IOFactory::load($ruta);
+        } catch (Throwable) {
+            return false;
+        }
+        foreach ($libro->getWorksheetIterator() as $hoja) {
+            for ($r = 1; $r <= min(6, (int) $hoja->getHighestRow()); $r++) {
+                $t = self::normTexto((string) self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
+                if (str_contains($t, 'movimientos de cuentas sin conciliar')) {
+                    unset($libro);
+
+                    return true;
+                }
+            }
+        }
+        unset($libro);
+
+        return false;
+    }
+
+    /**
+     * @return list<array{
+     *   codigo: string,
+     *   hoja: string,
+     *   titulo_cuenta: string,
+     *   cheques: list<array{tip: string, numero: string, importe: float, detalle: string, fecha_emision: ?string, fecha_cheque: ?string}>,
+     *   suma_cheques: float,
+     *   banco_pendientes: list<array{fecha: string|null, referencia: string, concepto: string, importe: float}>,
+     *   suma_banco_pendientes: float
+     * }>
+     */
+    public static function leerPendientesAnitaSinConciliar(string $ruta): array
+    {
+        if (! is_readable($ruta)) {
+            throw new RuntimeException('No se puede leer el Excel Anita: '.$ruta);
+        }
+
+        try {
+            $libro = IOFactory::load($ruta);
+        } catch (Throwable $e) {
+            throw new RuntimeException('Error abriendo Excel Anita: '.$e->getMessage(), 0, $e);
+        }
+
+        $out = [];
+        foreach ($libro->getWorksheetIterator() as $hoja) {
+            $tituloCuenta = '';
+            $codigo = null;
+            $max = (int) $hoja->getHighestRow();
+            for ($r = 1; $r <= min(8, $max); $r++) {
+                $raw = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
+                if (preg_match('/Cuenta:\s*\((\d+)\)\s*(.*)$/iu', $raw, $m)) {
+                    $digitos = ltrim($m[1], '0');
+                    $codigo = $digitos !== '' ? $digitos : $m[1];
+                    $tituloCuenta = trim($m[2]);
+                    break;
+                }
+            }
+            if ($codigo === null) {
+                continue;
+            }
+
+            $cheques = [];
+            $sumaCh = 0.0;
+            $headerRow = 0;
+            for ($r = 1; $r <= min(12, $max); $r++) {
+                $tip = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
+                if (strcasecmp($tip, 'Tip') === 0) {
+                    $headerRow = $r;
+                    break;
+                }
+            }
+            if ($headerRow <= 0) {
+                continue;
+            }
+
+            for ($r = $headerRow + 1; $r <= $max; $r++) {
+                $tip = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
+                if ($tip === '' || strcasecmp($tip, 'Tip') === 0 || str_starts_with(mb_strtolower($tip), 'total')) {
+                    continue;
+                }
+                $numero = self::soloDigitos((string) self::valorCelda($hoja->getCellByColumnAndRow(2, $r)));
+                $fechaEmision = self::celdaFechaAYmd(self::valorCelda($hoja->getCellByColumnAndRow(4, $r)));
+                $fechaCheque = self::celdaFechaAYmd(self::valorCelda($hoja->getCellByColumnAndRow(5, $r)));
+                $detalle = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(8, $r)));
+                $deb = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(9, $r))) ?? 0.0;
+                $cred = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(10, $r))) ?? 0.0;
+                $importe = $cred > 0 ? $cred : -$deb;
+                if ($numero === '' && abs($importe) < 0.005) {
+                    continue;
+                }
+                $cheques[] = [
+                    'tip' => $tip,
+                    'numero' => $numero,
+                    'importe' => round($importe, 2),
+                    'detalle' => $detalle,
+                    'fecha_emision' => $fechaEmision,
+                    'fecha_cheque' => $fechaCheque,
+                ];
+                $sumaCh += $importe;
+            }
+
+            $out[] = [
+                'codigo' => $codigo,
+                'hoja' => (string) $hoja->getTitle(),
+                'titulo_cuenta' => $tituloCuenta,
+                'cheques' => $cheques,
+                'suma_cheques' => round($sumaCh, 2),
+                'banco_pendientes' => [],
+                'suma_banco_pendientes' => 0.0,
+            ];
+        }
+
+        unset($libro);
+        gc_collect_cycles();
+
+        return $out;
+    }
+
     private static function hojaMes($libro)
     {
         return self::hojaPorNombres($libro, self::HOJAS_MES);

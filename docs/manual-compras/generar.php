@@ -76,6 +76,11 @@ foreach ($contenido['secciones'] as $sec) {
     foreach ($sec['parrafos'] ?? [] as $p) {
         $section->addText($p, ['size' => 11], ['spaceAfter' => 120, 'alignment' => Jc::BOTH]);
     }
+    foreach (['tabla', 'tabla2', 'tabla3'] as $tablaKey) {
+        if (! empty($sec[$tablaKey])) {
+            addWordTable($section, $sec[$tablaKey]);
+        }
+    }
     if (! empty($sec['items'])) {
         foreach ($sec['items'] as $item) {
             $section->addListItem($item, 0, null, 'multilevel');
@@ -83,9 +88,6 @@ foreach ($contenido['secciones'] as $sec) {
         $section->addTextBreak(1);
     }
     addWordHerramientas($section, $sec);
-    if (! empty($sec['tabla'])) {
-        addWordTable($section, $sec['tabla']);
-    }
 }
 
 IOFactory::createWriter($phpWord, 'Word2007')->save($docxPath);
@@ -190,24 +192,20 @@ function buildHtml(array $contenido, array $capturasCfg): string
         foreach ($sec['parrafos'] ?? [] as $p) {
             $h .= '<p>' . e($p) . '</p>';
         }
-        if (! empty($sec['items'])) {
-            $h .= '<ul>';
-            foreach ($sec['items'] as $item) {
-                $h .= '<li>' . e($item) . '</li>';
+        foreach (['tabla', 'tabla2', 'tabla3'] as $tablaKey) {
+            if (empty($sec[$tablaKey])) {
+                continue;
             }
-            $h .= '</ul>';
-        }
-        $h .= renderHerramientasHtml($sec);
-        if (! empty($sec['tabla'])) {
-            if (! empty($sec['tabla']['caption'])) {
-                $h .= '<p class="table-caption">' . e($sec['tabla']['caption']) . '</p>';
+            $tabla = $sec[$tablaKey];
+            if (! empty($tabla['caption'])) {
+                $h .= '<p class="table-caption">' . e($tabla['caption']) . '</p>';
             }
             $h .= '<table><thead><tr>';
-            foreach ($sec['tabla']['headers'] as $hd) {
+            foreach ($tabla['headers'] as $hd) {
                 $h .= '<th>' . e($hd) . '</th>';
             }
             $h .= '</tr></thead><tbody>';
-            foreach ($sec['tabla']['rows'] as $row) {
+            foreach ($tabla['rows'] as $row) {
                 $h .= '<tr>';
                 foreach ($row as $cell) {
                     $h .= '<td>' . e($cell) . '</td>';
@@ -216,6 +214,14 @@ function buildHtml(array $contenido, array $capturasCfg): string
             }
             $h .= '</tbody></table>';
         }
+        if (! empty($sec['items'])) {
+            $h .= '<ul>';
+            foreach ($sec['items'] as $item) {
+                $h .= '<li>' . e($item) . '</li>';
+            }
+            $h .= '</ul>';
+        }
+        $h .= renderHerramientasHtml($sec);
         $h .= '</section>';
     }
 

@@ -28,6 +28,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Proveedores',
         ],
+        'compras.importacion' => [
+            'url_base' => 'compras/importacion',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Importaciones',
+        ],
         'sueldos.empleado' => [
             'url_base' => 'sueldos/empleado',
             'icono' => 'fa-bookmark',

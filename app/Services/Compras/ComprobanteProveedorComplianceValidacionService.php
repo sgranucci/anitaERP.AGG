@@ -115,7 +115,7 @@ class ComprobanteProveedorComplianceValidacionService
         $tipoAut = strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? '')));
         $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
 
-        if ($cae === '' && $tipoAut === '') {
+        if ($cae === '') {
             $base['mensaje'] = 'Sin CAE: no aplica constatación.';
 
             return $base;
@@ -226,7 +226,8 @@ class ComprobanteProveedorComplianceValidacionService
     }
 
     /**
-     * Revalidación WSCDC al armar/confirmar OP. Si no aplica (sin CAE / CAEA / deshabilitado), ok.
+     * Revalidación WSCDC al armar/confirmar OP. Si no aplica (sin número de CAE / CAEA / deshabilitado), ok.
+     * Un tipo CAE grabado sin número (factura de servicio) no se constata ni bloquea el pago.
      * Al pagar, WS caído también se considera no OK (no emitir a ciegas).
      *
      * @return array{
@@ -259,7 +260,7 @@ class ComprobanteProveedorComplianceValidacionService
         $tipoAut = strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? '')));
         $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
 
-        if ($cae === '' && $tipoAut === '') {
+        if ($cae === '') {
             return $base;
         }
 
@@ -395,7 +396,7 @@ class ComprobanteProveedorComplianceValidacionService
         $tipoAut = strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? '')));
         $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
 
-        if ($cae === '' && $tipoAut === '') {
+        if ($cae === '') {
             return;
         }
 

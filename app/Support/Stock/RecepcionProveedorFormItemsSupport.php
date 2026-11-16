@@ -280,8 +280,12 @@ class RecepcionProveedorFormItemsSupport
         $empresaNombre = null;
         $descuentoOrdencompra = 0.0;
 
+        $importacionCtx = RecepcionProveedorImportacionSupport::contextoDesdeOrdencompra(null);
+
         if ($ordencompraId !== null && $ordencompraId > 0) {
-            $oc = Ordencompra::query()->with(['proveedores', 'empresas'])->find($ordencompraId);
+            $oc = Ordencompra::query()
+                ->with(['proveedores', 'empresas', 'incoterm', 'importaciones.lotes'])
+                ->find($ordencompraId);
             if ($oc !== null) {
                 $numeroOc = $numeroOc ?? (int) $oc->numeroordencompra;
                 $proveedorNombre = $proveedorNombre ?? optional($oc->proveedores)->nombre;
@@ -289,6 +293,7 @@ class RecepcionProveedorFormItemsSupport
                 $empresaId = (int) $oc->empresa_id;
                 $empresaNombre = optional($oc->empresas)->nombre;
                 $descuentoOrdencompra = OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc);
+                $importacionCtx = RecepcionProveedorImportacionSupport::contextoDesdeOrdencompra($oc);
             }
         }
 
@@ -299,7 +304,7 @@ class RecepcionProveedorFormItemsSupport
             'empresa_id' => $empresaId,
             'empresa_nombre' => $empresaNombre,
             'descuento_ordencompra' => $descuentoOrdencompra,
-        ];
+        ] + $importacionCtx;
     }
 
     /** @return array{codigo: string, nombre: string}|null */

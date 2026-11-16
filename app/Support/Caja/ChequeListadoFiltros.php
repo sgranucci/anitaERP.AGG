@@ -43,6 +43,11 @@ class ChequeListadoFiltros
         'tipo' => ['column' => 'cheque.negociable', 'type' => 'texto', 'label' => 'Tipo'],
         'fechaemision' => ['column' => 'cheque.fechaemision', 'type' => 'fecha', 'label' => 'Emisión'],
         'fechapago' => ['column' => 'cheque.fechapago', 'type' => 'fecha', 'label' => 'Pago'],
+        // FKs para cruces de Consulta Inteligente (ocultos en grilla; filtrables por QBE).
+        'cliente_id' => ['column' => 'cheque.cliente_id', 'type' => 'entero', 'label' => 'ID cliente'],
+        'proveedor_id' => ['column' => 'cheque.proveedor_id', 'type' => 'entero', 'label' => 'ID proveedor'],
+        'pagoproveedor_id' => ['column' => 'cheque.pagoproveedor_id', 'type' => 'entero', 'label' => 'ID OP'],
+        'comprobante_proveedor_id' => ['column' => 'cheque.comprobante_proveedor_id', 'type' => 'entero', 'label' => 'ID factura'],
     ];
 
     /** @var array<string, array{column: string, label: string}> */

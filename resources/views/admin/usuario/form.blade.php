@@ -24,6 +24,13 @@
             </div>
         </div>
         <div class="form-group row">
+            <label for="celular" class="col-lg-3 col-form-label">Celular (WhatsApp)</label>
+            <div class="col-lg-8">
+                <input type="text" name="celular" id="celular" class="form-control" value="{{ old('celular', $data->celular ?? '') }}" maxlength="30" autocomplete="tel" placeholder="54911…" />
+                <small class="form-text text-muted">Solo se usa si el aviso tiene canal WhatsApp y la empresa tiene cuenta activa.</small>
+            </div>
+        </div>
+        <div class="form-group row">
             <label for="password" class="col-lg-3 col-form-label {{ !isset($data) ? 'requerido' : '' }}">Contraseña</label>
             <div class="col-lg-8">
                 <input type="password" name="password" id="password" class="form-control" value="" {{ !isset($data) ? 'required' : '' }} minlength="5" autocomplete="new-password" />

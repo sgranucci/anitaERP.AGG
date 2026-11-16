@@ -7,6 +7,7 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Sueldos\EmpleadoEstados;
 use App\Support\Sueldos\LibretaSanitariaAvisoSupport;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class LibretaSanitariaAvisoService
 {
@@ -53,10 +54,24 @@ class LibretaSanitariaAvisoService
             return;
         }
 
+        $cantidad = count($filas);
         $this->moduloAvisoService->enviar('sueldos', 'libreta_sanitaria_pendiente', 0, [
-            'cantidad' => (string) count($filas),
+            'cantidad' => (string) $cantidad,
             'empleados' => LibretaSanitariaAvisoSupport::formatearLista($filas),
             'fecha' => now()->timezone('America/Argentina/Buenos_Aires')->format('d/m/Y'),
         ]);
+
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('sueldos.libreta_sanitaria.pendiente', [
+                'entity_id' => 0,
+                'cantidad' => $cantidad,
+                'tipo' => 'LIBRETA_SANITARIA',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => 'sueldos.libreta_sanitaria.pendiente',
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

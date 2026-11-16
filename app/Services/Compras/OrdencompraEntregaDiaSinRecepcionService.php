@@ -83,6 +83,20 @@ class OrdencompraEntregaDiaSinRecepcionService
             return ['enviados' => 0, 'omitido' => 'sin_pendientes', 'total' => $total];
         }
 
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('compras.entrega.dia_sin_recepcion', [
+                'entity_id' => 0,
+                'enviados' => $enviados,
+                'cantidad' => $total,
+                'tipo' => 'ENTREGA_DIA_SIN_RECEPCION',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('ModuloAvisoEventBus emit falló', [
+                'evento' => 'compras.entrega.dia_sin_recepcion',
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return ['enviados' => $enviados, 'omitido' => null, 'total' => $total];
     }
 }

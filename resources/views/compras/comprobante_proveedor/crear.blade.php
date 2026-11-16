@@ -15,6 +15,8 @@
 <script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/comprobante_proveedor/formulario.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/importacion/consulta_carpeta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/importacion/consulta_carpeta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/importacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/comprobante_proveedor/importacion.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

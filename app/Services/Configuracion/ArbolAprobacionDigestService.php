@@ -4,6 +4,7 @@ namespace App\Services\Configuracion;
 
 use App\Mail\Configuracion\MailDigestMisAprobaciones;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
+use App\Support\Configuracion\UsuarioAvisoPreferenciaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -32,6 +33,15 @@ class ArbolAprobacionDigestService
 
         foreach ($usuarioIds as $usuarioId) {
             try {
+                if (! UsuarioAvisoPreferenciaSupport::permite(
+                    $usuarioId,
+                    UsuarioAvisoPreferenciaSupport::CANAL_DIGEST
+                )) {
+                    $stats['omitidos']++;
+
+                    continue;
+                }
+
                 $items = $this->userTaskBandejaService->listarPendientesParaUsuario($usuarioId)
                     ->filter(fn (array $row) => ! empty($row['documento_existe']))
                     ->values();
@@ -41,6 +51,19 @@ class ArbolAprobacionDigestService
 
                     continue;
                 }
+
+                $items = $items->map(function (array $row) {
+                    $rel = (string) ($row['url_detalle'] ?? $row['url_ver'] ?? $row['url'] ?? '');
+                    if ($rel !== '') {
+                        $row['url_abs'] = preg_match('#^https?://#i', $rel)
+                            ? $rel
+                            : urlAppAbsoluta(ltrim($rel, '/'));
+                    } else {
+                        $row['url_abs'] = urlAppAbsoluta('mis-aprobaciones');
+                    }
+
+                    return $row;
+                });
 
                 $cacheKey = 'mis_aprobaciones_digest_'.$usuarioId.'_'.$hoy->toDateString();
                 if (! Cache::add($cacheKey, 1, $hoy->copy()->endOfDay())) {

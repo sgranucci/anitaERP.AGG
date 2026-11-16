@@ -27,7 +27,15 @@ class ConciliacionBancariaEjecucion extends Model implements Auditable
         'saldo_contable',
         'diferencia',
         'resumen_json',
+        'kpi_json',
+        'extracto_id',
         'usuario_id',
+        'estado',
+        'cerrado_at',
+        'cerrado_por_usuario_id',
+        'cierre_snapshot_json',
+        'aprobado_at',
+        'aprobado_por_usuario_id',
     ];
 
     protected function casts(): array
@@ -39,6 +47,10 @@ class ConciliacionBancariaEjecucion extends Model implements Auditable
             'saldo_contable' => 'decimal:2',
             'diferencia' => 'decimal:2',
             'resumen_json' => 'array',
+            'kpi_json' => 'array',
+            'cierre_snapshot_json' => 'array',
+            'cerrado_at' => 'datetime',
+            'aprobado_at' => 'datetime',
         ];
     }
 
@@ -60,5 +72,10 @@ class ConciliacionBancariaEjecucion extends Model implements Auditable
     public function chequesPendientes(): HasMany
     {
         return $this->hasMany(ConciliacionBancariaChequePendiente::class, 'ejecucion_id');
+    }
+
+    public function archivos(): HasMany
+    {
+        return $this->hasMany(ConciliacionBancariaEjecucionArchivo::class, 'ejecucion_id');
     }
 }

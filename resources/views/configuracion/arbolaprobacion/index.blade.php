@@ -89,6 +89,9 @@
                                 </td>
                                 <td>
                                     @if (can('edita-arbol-de-aprobacion', false))
+                                        <a href="{{ route('disenador_arbolaprobacion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Diseñador gráfico">
+                                            <i class="fa fa-project-diagram"></i>
+                                        </a>
                                         <a href="{{ route('edita_arbolaprobacion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>
                                         </a>

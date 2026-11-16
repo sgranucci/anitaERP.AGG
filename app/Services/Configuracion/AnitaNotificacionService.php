@@ -54,6 +54,13 @@ class AnitaNotificacionService
             return null;
         }
 
+        if ($url !== null) {
+            $url = trim($url);
+            if ($url !== '' && ! preg_match('#^https?://#i', $url) && function_exists('urlAppAbsoluta')) {
+                $url = urlAppAbsoluta(ltrim($url, '/'));
+            }
+        }
+
         try {
             $n = AnitaNotificacion::query()->create([
                 'usuario_id' => $usuarioId,
@@ -73,8 +80,26 @@ class AnitaNotificacionService
         }
 
         $this->enviarWebhooksExternos($n);
+        $this->enviarWebPush($n);
 
         return $n;
+    }
+
+    private function enviarWebPush(AnitaNotificacion $n): void
+    {
+        try {
+            app(WebPushEnvioService::class)->enviarAUsuarios(
+                [(int) $n->usuario_id],
+                (string) $n->titulo,
+                $n->cuerpo,
+                $n->url
+            );
+        } catch (Throwable $e) {
+            Log::warning('anita_notificacion_webpush_error', [
+                'usuario_id' => $n->usuario_id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

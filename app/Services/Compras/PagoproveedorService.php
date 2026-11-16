@@ -1057,6 +1057,7 @@ class PagoproveedorService
 
         // La propuesta ya filtra las retenidas, pero acá también llega el armado manual de la OP
         // con ids de cuenta corriente elegidos a mano: el bloqueo tiene que valer igual.
+        // assertNingunaBloqueada también levanta bloqueos automáticos por CAE vacío.
         app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($ccIds);
         $this->assertWscdcAntesDePagar($ccIds);
 
@@ -1072,7 +1073,9 @@ class PagoproveedorService
     private function motivoNoPagable(array $cuentacorrienteIds): ?string
     {
         try {
-            app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($cuentacorrienteIds);
+            $bloqueoPago = app(ComprobanteProveedorBloqueoPagoService::class);
+            $bloqueoPago->levantarBloqueosCaeAusente($cuentacorrienteIds);
+            $bloqueoPago->assertNingunaBloqueada($cuentacorrienteIds);
             $this->assertWscdcAntesDePagar($cuentacorrienteIds);
         } catch (ValidationException $e) {
             return implode(' ', \Illuminate\Support\Arr::flatten($e->errors()));
@@ -2003,6 +2006,7 @@ class PagoproveedorService
                     ->pluck('proveedor_cuentacorriente_id')
                     ->map(static fn ($id) => (int) $id)
                     ->all();
+                // assertNingunaBloqueada también levanta bloqueos automáticos por CAE vacío.
                 app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada($ccIdsConfirmacion);
                 $this->assertWscdcAntesDePagar($ccIdsConfirmacion);
 

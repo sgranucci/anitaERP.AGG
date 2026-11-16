@@ -21,6 +21,7 @@
 }
 
 .anita-ai-consulta__fab {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -46,6 +47,56 @@
     font-weight: 700;
     font-size: 0.86rem;
     letter-spacing: 0.04em;
+}
+
+.anita-ai-consulta__fab-badge {
+    position: absolute;
+    top: -0.35rem;
+    right: -0.25rem;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 999px;
+    background: #c0392b;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.25rem;
+    text-align: center;
+    box-shadow: 0 2px 6px rgba(192, 57, 43, 0.45);
+}
+
+.anita-ai-consulta__hitl-row,
+.anita-ai-consulta__depositar {
+    border-left: 3px solid #148f77;
+    padding-left: 0.5rem;
+}
+
+.anita-ai-consulta__aviso-inicio {
+    margin-top: 0.45rem;
+}
+
+.anita-ai-consulta__prefs {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    background: var(--ai-surface);
+    padding: 0.75rem 0.9rem 1rem;
+    overflow: auto;
+}
+
+.anita-ai-consulta__prefs[hidden] {
+    display: none !important;
+}
+
+.anita-ai-consulta__prefs-form .form-control-sm {
+    font-size: 0.85rem;
+}
+
+.anita-ai-consulta__btn-icon.is-open {
+    background: rgba(26, 82, 118, 0.12);
 }
 
 .anita-ai-consulta__drawer {
@@ -487,6 +538,21 @@
 
 .anita-ai-consulta__fuente {
     font-style: italic;
+}
+
+.anita-ai-consulta__resumen {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--ai-ink);
+    background: #eaf6f3;
+    border-left: 3px solid var(--ai-accent-2);
+    padding: 0.55rem 0.7rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.anita-ai-consulta__contexto-pill {
+    background: #eaf2f8;
+    color: #1a5276;
 }
 
 .anita-ai-consulta__result-actions {

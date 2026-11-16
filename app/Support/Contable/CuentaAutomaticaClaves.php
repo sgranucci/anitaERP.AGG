@@ -180,6 +180,15 @@ final class CuentaAutomaticaClaves
     public const BIEN_USO_GASTO_AMORTIZACION = 'bien_uso.gasto_amortizacion';
 
     /**
+     * Contrapartida / clearing de gastos inventariables de importación (landed cost).
+     * El tipo de gasto puede tener su propia cuenta; esta clave es el fallback del proceso.
+     */
+    public const IMPORTACION_GASTOS_INVENTARIABLES = 'importacion.gastos_inventariables';
+
+    /** Cuenta de resultado para gastos de importación no inventariables (fallback). */
+    public const IMPORTACION_GASTOS_RESULTADO = 'importacion.gastos_resultado';
+
+    /**
      * @return array<string, array{
      *   grupo: string,
      *   descripcion: string,
@@ -671,6 +680,20 @@ final class CuentaAutomaticaClaves
             self::BIEN_USO_GASTO_AMORTIZACION => [
                 'grupo' => 'Bienes de uso',
                 'descripcion' => 'Gasto de amortizaciones (Debe asiento amort.; Anita impcont 301)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::IMPORTACION_GASTOS_INVENTARIABLES => [
+                'grupo' => 'Importaciones',
+                'descripcion' => 'Clearing / contrapartida de gastos inventariables (landed cost)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::IMPORTACION_GASTOS_RESULTADO => [
+                'grupo' => 'Importaciones',
+                'descripcion' => 'Gastos de importación no inventariables (resultado)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

@@ -1,5 +1,8 @@
 # Centro de avisos in-app (campanita)
 
+Manual de usuario del módulo completo (catálogo, WhatsApp, SLA, eventos):  
+`docs/manual-modulo-aviso/` · Centro de ayuda → **Avisos por módulo (premium)** · arquitectura: `docs/arquitectura/modulo-aviso-premium.md`.
+
 ## Qué es
 
 No es un chat. Es un **centro de notificaciones** por usuario:

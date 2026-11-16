@@ -5,6 +5,12 @@
  * Fuente: Codificacion bcos.xlsx + mapeo P.C.C. validado contra extracto Macro (cuenta 127).
  */
 return [
+    /**
+     * Modo default del workspace manual: contaduria | tesoreria.
+     * Prioridad real: config por empresa → parametro_sistema → este env → default por entorno.
+     */
+    'modo_default' => env('CONCILIACION_BANCARIA_MODO_DEFAULT', ''),
+
     'tolerancia_importe' => (float) env('CONCILIACION_BANCARIA_TOLERANCIA', 0.05),
 
     /** Importe mínimo (abs) de un pendiente para marcar anomalía IA. */
@@ -37,6 +43,7 @@ return [
 
     /**
      * Compatibilidad tipo comprobante mayor → concepto Interbanking (code_description_ib / bank).
+     * Fallback: tabla conciliacion_bancaria_tipo_comp si tiene filas.
      */
     'tipo_comp_conceptos_banco' => [
         'OPP' => ['TRF.DATA', 'CH DEP', 'CH/PAG', 'CHEQUE', 'CHP', 'CHD', 'SUELDO', 'PAGO.REMUN'],
@@ -50,6 +57,7 @@ return [
     /**
      * P.C.C. (grouping_code_ib Interbanking) → código conciliación.
      * 'AC' = acumulado diario (sellos, IVA 10,5 %, intereses acuerdo).
+     * Fallback: la pantalla Configuración conciliación bancaria (tabla conciliacion_bancaria_pcc) manda si tiene filas.
      */
     'pcc_map' => [
         '2 1 1' => 9,
@@ -79,7 +87,10 @@ return [
     /** P.C.C. que siempre producen AC si el concepto es de acumulado diario. */
     'pcc_acumulado' => ['6 9 1', '6 2 2', '5 2 1'],
 
-    /** Conceptos IB que se reportan como AC (referencia 0 en solapa Saldo). */
+    /**
+     * Conceptos IB que se reportan como AC (referencia 0 en solapa Saldo).
+     * Fallback: tabla conciliacion_bancaria_concepto (es_acumulado=1) si tiene filas.
+     */
     'conceptos_acumulado' => [
         'SELL.PROV',
         'IVA.10.5%',
@@ -137,6 +148,7 @@ return [
 
     /**
      * Concepto IB (code_description_ib) → código cuando P.C.C. no alcanza.
+     * Fallback: tabla conciliacion_bancaria_concepto si tiene filas.
      *
      * @var array<string, array{codigo: int|string, descripcion: string}>
      */
@@ -164,6 +176,7 @@ return [
 
     /**
      * Código operación IB → código conciliación (respaldo).
+     * Fallback: tabla conciliacion_bancaria_cod_op si tiene filas.
      *
      * @var array<string, int>
      */
@@ -184,6 +197,7 @@ return [
 
     /**
      * Código => patrones texto (Codificacion bcos.xlsx — capa final).
+     * Fallback: tabla conciliacion_bancaria_patron_gasto si tiene filas.
      *
      * @var array<int, array{descripcion: string, patrones: list<string>}>
      */
@@ -244,6 +258,7 @@ return [
      * Cierre de gastos bancarios → un egreso (EGR) y un ICO.
      * Las cuentas y los conceptos se resuelven por código de maestro (no por id).
      * Código 9 (cheques) y 10 (transferencias) no entran al documento.
+     * Fallback: tabla conciliacion_bancaria_doc_gasto + reglas documento_tipo_* si hay datos.
      *
      * @var array{
      *   tipo_caja_abreviatura: string,

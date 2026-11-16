@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo de Compras',
-    'version' => '1.6',
+    'version' => '1.8',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -16,7 +16,7 @@ return [
             'titulo' => '1. Introducción',
             'parrafos' => [
                 'Anita ERP es el sistema integrado de gestión empresarial utilizado para administrar procesos comerciales, contables y operativos de la organización.',
-                'El presente manual describe el acceso al sistema y el uso del módulo de Compras, que abarca el circuito documental desde la solicitud interna (requisición) hasta la emisión de la orden de compra al proveedor.',
+                'El presente manual describe el acceso al sistema y el uso del módulo de Compras, que abarca el circuito documental desde la solicitud interna (requisición) hasta la emisión de la orden de compra al proveedor, el legajo (COM + factura + nota de crédito) y la carga en Cuentas a pagar.',
                 'El módulo se integra con el sistema legacy Anita para sincronización inicial de requisiciones, listas de precio de proveedor y órdenes de compra, según configuración del entorno.',
             ],
         ],
@@ -317,7 +317,98 @@ return [
             ],
         ],
         [
-            'titulo' => '13. Avisos y seguimiento de contratos',
+            'titulo' => '13. Legajo: COM, factura y nota de crédito (cupo NC)',
+            'parrafos' => [
+                'El legajo de una orden de compra reúne la recepción (COM), las facturas (FC) y las notas de crédito (NC) del mismo proveedor/OC. En la bandeja (Compras → Bandeja de legajos) se asigna la COM a la factura y se envía a Cuentas a pagar (o a Gastronomía). La guía paso a paso del Centro de ayuda detalla esos clics; este capítulo explica la regla de importes y el asiento.',
+                'Cuando la empresa exige flujo OC → COM → factura, la FC se compara con la provisión de la COM asignada. Si el neto de la factura supera la COM en más del porcentaje configurado (por defecto 5%, por centro de costo de la OC), el sistema no deja contabilizar… salvo que en el mismo legajo haya NC cuyo neto cubra ese exceso. Eso se llama cupo NC.',
+                'La NC no exige COM. En la bandeja aparece como «NC sin COM». No hay que vincular la NC a la recepción para ajustes de precio o de facturación. Si la mercadería se devolvió, el movimiento de stock/devolución es independiente; la NC contable puede seguir sin COM.',
+            ],
+            'items' => [
+                'Cupo NC = suma del neto comparable de todas las NC del legajo (precarga o comprobante ya cargado) que no estén vinculadas a una COM.',
+                'Si una NC ya está vinculada a una COM, no suma al cupo: resta del «ya facturado» de esa COM (amplía la provisión disponible).',
+                'NC subida solo como PDF/scan con importes en cero también desbloquea: CxP cargará el neto al contabilizarla.',
+                'El cupo es un pozo del legajo, no un emparejamiento «esta NC es de aquella FC». En la bandeja, al validar varias FC a la vez, el pozo se reparte una sola vez entre los excesos.',
+                'Al contabilizar una FC suelta, el control mira el pozo completo contra el exceso de esa FC.',
+                'Ejemplos con importes: ver el apartado 13.1.',
+            ],
+        ],
+        [
+            'titulo' => '13.1 Ejemplos con importes (cupo NC y asiento)',
+            'parrafos' => [
+                'Todos los importes de los ejemplos son netos gravados (letra A), sin IVA. El porcentaje de tolerancia por defecto es 5% sobre la base COM + cupo NC (equivalente a haber vinculado la NC a la COM).',
+            ],
+            'tabla' => [
+                'caption' => 'Ejemplo A — números redondos: qué asienta cada documento',
+                'headers' => ['Documento', 'Importe neto', 'Qué hace el asiento'],
+                'rows' => [
+                    [
+                        'COM (recepción confirmada)',
+                        '100.000,00',
+                        'Debe mercadería/gasto 100.000 · Haber FAR (facturas a recibir) 100.000',
+                    ],
+                    [
+                        'NC (ajuste comercial, sin COM)',
+                        '50.000,00',
+                        'Haber mercadería/gasto 50.000 · Debe proveedores (más IVA/perc. del comprobante)',
+                    ],
+                    [
+                        'FC contra esa COM',
+                        '150.000,00',
+                        'Debe FAR 100.000 (cancela la COM) · Debe mercadería/gasto 50.000 (diferencia FC−COM) · Haber proveedores + IVA + perc.',
+                    ],
+                ],
+            ],
+            'tabla2' => [
+                'caption' => 'Ejemplo A — control de tolerancia y neto al cierre',
+                'headers' => ['Cálculo', 'Resultado'],
+                'rows' => [
+                    ['Provisión COM', '100.000,00'],
+                    ['Cupo NC del legajo', '50.000,00'],
+                    ['Base equivalente (COM + cupo)', '150.000,00'],
+                    ['Neto FC vs esa base', '150.000 − 150.000 = 0 (0%) → dentro del 5%: se permite asentar'],
+                    ['Neto en mercadería/gasto al cierre', 'COM 100.000 + diff FC 50.000 − NC 50.000 = 100.000 (= lo recibido)'],
+                    ['FAR al cierre', '0'],
+                    ['Deuda neta con el proveedor (neto)', 'FC 150.000 − NC 50.000 = 100.000'],
+                ],
+            ],
+            'tabla3' => [
+                'caption' => 'Ejemplo B — caso operativo (OC/FC 355.540,82 · COM parcial · NC)',
+                'headers' => ['Documento / paso', 'Importe o cálculo'],
+                'rows' => [
+                    ['OC (pedido completo)', '355.540,82'],
+                    ['COM (solo lo recibido; p. ej. 4 de 12 bultos)', '82.225,93'],
+                    ['NC ya contabilizada (sin COM)', '262.707,10'],
+                    ['FC a contabilizar (asignada a la COM)', '355.540,82'],
+                    ['Exceso bruto FC − COM', '355.540,82 − 82.225,93 = 273.314,89 (332% sobre la COM sola)'],
+                    ['Sin mirar la NC', '332% > 5% → bloquearía y devolvería el legajo a Compras'],
+                    ['Base COM + cupo NC', '82.225,93 + 262.707,10 = 344.933,03'],
+                    ['Residual FC vs base', '355.540,82 − 344.933,03 = 10.607,79 → 3,08% ≤ 5% → permite asentar'],
+                    ['Asiento FC (neto)', 'Debe FAR 82.225,93 + Debe mercadería/gasto 273.314,89'],
+                    ['Neto final mercadería/gasto', '82.225,93 + 273.314,89 − 262.707,10 = 92.833,72 (= FC − NC)'],
+                    ['Residual vs lo recibido', '92.833,72 − 82.225,93 = 10.607,79 (lo que los documentos no cubrieron; no lo inventa el ERP)'],
+                ],
+            ],
+            'items' => [
+                'Orden COM → NC → FC o COM → FC → NC: el neto es el mismo si la NC y la diferencia de la FC van a la misma cuenta de mercadería/gasto.',
+                'Operación: Compras asigna la COM solo a la FC y envía el legajo; CxP carga/contabiliza la FC. No hace falta «enganchar» la NC a la COM.',
+                'Ajuste de precio o facturación (FC alta + NC): NC sin COM; cupo del legajo; COM solo a la FC.',
+                'Devolución física: registrar la salida/devolución de stock. La NC puede seguir sin COM; el vínculo NC↔COM no reemplaza el movimiento de stock.',
+                'Varias FC y varias NC: el cupo es la suma de las NC. No hay matching automático. Conviene que la suma de NC cubra la suma de excesos FC−COM.',
+            ],
+        ],
+        [
+            'titulo' => '14. Factura de proveedor e importación',
+            'parrafos' => [
+                'En todas las opciones de carga de factura de proveedor (Con OC, Sin OC y el resto) hay un panel Importación, colapsado por defecto. Sirve para asociar la factura a una carpeta de comercio exterior (flete, seguro, despachante, etc.) sin obligar a quien no opera importaciones a ver el bloque abierto.',
+                'Al expandirlo: carpeta (código/lupa) y tipo de gasto. Al guardar se crea o actualiza un gasto real en la carpeta con el total de la factura. El detalle del circuito está en el Manual de Importaciones (capítulo Factura de proveedor ↔ gasto de importación).',
+            ],
+            'items' => [
+                'Si la factura ya está vinculada, el panel muestra un badge con la cantidad y lista las carpetas asociadas.',
+                'No hace falta OC en la factura para asociar un gasto de importación.',
+            ],
+        ],
+        [
+            'titulo' => '15. Avisos y seguimiento de contratos',
             'captura_id' => 'contrato_reporte',
             'herramientas_grupos' => [
                 ['titulo' => 'Reporte de contratos y OC abiertas por vencer', 'clave' => 'contrato_reporte'],
@@ -364,15 +455,17 @@ return [
             ],
         ],
         [
-            'titulo' => '14. Circuito documental integrado',
+            'titulo' => '16. Circuito documental integrado',
             'parrafos' => [
-                'El flujo estándar de compras es: Tablas maestras → Proveedor → Requisición (PENDIENTE) → EN COMPRAS (carga presupuestos) → Árbol de aprobación → APROBADA → Orden(es) de compra → Aprobación OC → CUMPLIDA/CERRADA.',
+                'El flujo estándar de compras es: Tablas maestras → Proveedor → Requisición (PENDIENTE) → EN COMPRAS (carga presupuestos) → Árbol de aprobación → APROBADA → Orden(es) de compra → Aprobación OC → recepción COM → legajo (factura / NC) → Cuentas a pagar → CUMPLIDA/CERRADA.',
                 'Las listas de precio de proveedor alimentan precios de referencia en requisiciones y OC. Los presupuestos documentan la cotización seleccionada.',
-                'Las OC marcadas como contrato no siguen ese cierre: quedan vigentes durante todo el período contratado y se van consumiendo con recepciones y facturas sucesivas, hasta que se renuevan o se cierran (ver capítulos 11, 12 y 13). La ruta de cada factura (con o sin COM, y de dónde sale la cuenta del neto) la fija el contrato, no el flujo general de la empresa.',
+                'Las OC marcadas como contrato no siguen ese cierre: quedan vigentes durante todo el período contratado y se van consumiendo con recepciones y facturas sucesivas, hasta que se renuevan o se cierran (ver capítulos 11, 12 y 15). La ruta de cada factura (con o sin COM, y de dónde sale la cuenta del neto) la fija el contrato, no el flujo general de la empresa.',
+                'El legajo con COM, FC y NC (cupo de notas de crédito, asiento FAR + diferencia) se describe en el capítulo 13.',
+                'Las facturas de gasto de comercio exterior (flete, seguro, despachante) pueden asociarse a una carpeta de Importaciones desde el panel colapsable del ABM (capítulo 14) o desde la carpeta misma.',
             ],
         ],
         [
-            'titulo' => '15. Integración con sistema Anita',
+            'titulo' => '17. Integración con sistema Anita',
             'parrafos' => [
                 'En entornos migrados, el ERP sincroniza datos históricos desde Anita (Informix) en el primer acceso a ciertos listados vacíos:',
             ],
@@ -384,7 +477,7 @@ return [
             ],
         ],
         [
-            'titulo' => '16. Resolución de problemas frecuentes',
+            'titulo' => '18. Resolución de problemas frecuentes',
             'items' => [
                 'No veo el menú de Compras: verifique rol activo y asignación Menú-Rol con el administrador.',
                 'No puedo editar una requisición: confirme estado (solo PENDIENTE o EN COMPRAS) y permiso/oficina de compra.',
@@ -400,10 +493,13 @@ return [
                 'Al grabar pide la cuenta del contrato: el contrato está en sin recepción con cuenta indicada en el contrato, pero esa cuenta no está cargada. Edite la OC, elija "Cuenta indicada en este contrato" y complete Cuenta a imputar.',
                 'Al grabar pide la cuenta DEBE del neto: cárguela en el contrato (cuenta a imputar) o, si el comprobante no tiene OC ni COM, indíquela en la solapa Asiento contable.',
                 'Al contabilizar falta la cuenta de un artículo de la OC: el contrato imputa el neto con las cuentas de los ítems. Abra el artículo y cargue la cuenta de compras o gastos de la empresa, o cambie la imputación del contrato a cuenta indicada en el contrato.',
+                'No veo el panel Importación en la factura: hace falta permiso de listar/crear/editar importación o de crear/editar comprobante de proveedor. El panel está colapsado: ábralo con el título Importación.',
+                'El legajo vuelve a Compras por diferencia factura vs provisión COM: revise el capítulo 13 (cupo NC). Suele faltar la NC en el legajo, o el residual FC − (COM + NC) supera el 5% configurado para el centro de costo.',
+                'Hay NC cargada pero igual bloquea la FC: confirme que la NC está en el mismo número de OC/empresa y que el neto comparable (subtotal letra A) alcanza para dejar FC vs COM+NC dentro del 5%. No hace falta asignar la NC a la COM.',
             ],
         ],
         [
-            'titulo' => '17. Soporte',
+            'titulo' => '19. Soporte',
             'parrafos' => [
                 'Para incidencias técnicas, solicitud de permisos o capacitación adicional, contacte al administrador del sistema o al área de Sistemas de su organización.',
                 'Conserve este manual en formato digital (Word/PDF) para consulta de usuarios finales y personal de Compras.',

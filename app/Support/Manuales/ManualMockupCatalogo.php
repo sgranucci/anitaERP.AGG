@@ -70,6 +70,11 @@ final class ManualMockupCatalogo
                 'img_dir' => 'docs/manual-propuesta-pago/img',
                 'label' => 'Propuesta de Pago',
             ],
+            'importacion' => [
+                'config' => 'manual_importacion',
+                'img_dir' => 'docs/manual-importacion/img',
+                'label' => 'Importaciones',
+            ],
             'reporte-definible' => [
                 'config' => 'manual_reporte_definible',
                 'img_dir' => 'docs/manual-reporte-definible/img',
@@ -99,6 +104,11 @@ final class ManualMockupCatalogo
                 'config' => 'manual_tesoreria_crown',
                 'img_dir' => 'docs/manual-tesoreria-crown/img',
                 'label' => 'Tesorería Crown',
+            ],
+            'conciliacion-bancaria' => [
+                'config' => 'manual_conciliacion_bancaria',
+                'img_dir' => 'docs/manual-conciliacion-bancaria/img',
+                'label' => 'Conciliación bancaria',
             ],
         ];
     }

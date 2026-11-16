@@ -99,6 +99,15 @@ class OrdencompraAlertasAbiertasService
             return ['enviados' => 0, 'omitido' => 'sin_alertas'];
         }
 
+        try {
+            app(\App\Services\Configuracion\ModuloAvisoEventBus::class)->emit('compras.oc.alerta_abierta', [
+                'entity_id' => 0,
+                'enviados' => $enviados,
+                'tipo' => 'OC_ALERTA',
+            ]);
+        } catch (\Throwable) {
+        }
+
         return ['enviados' => $enviados, 'omitido' => null];
     }
 }

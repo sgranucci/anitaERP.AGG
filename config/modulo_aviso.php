@@ -18,9 +18,111 @@ return [
      */
     'programados' => [
         'sueldos.libreta_sanitaria_pendiente' => 'sueldos:avisar-libreta-sanitaria',
+        'caja.cheques_aging' => 'caja:avisar-cheques-aging',
+        'compras.ordencompra_alertas_abiertas' => 'compras:alertas-ordencompra-abiertas',
+        'compras.entrega_dia_sin_recepcion' => 'compras:avisar-entrega-dia-sin-recepcion',
+        'compras.ordencompra_contrato_vencimiento' => 'compras:alertas-contratos-vencimiento',
+        'compras.suscripcion_comprobante_faltante' => 'compras:alertas-suscripcion-comprobantes',
+        'compras.comprobante_proveedor_borrador_pendiente' => 'compras:avisar-comprobantes-borrador',
+        'arca.certificado_vencimiento' => 'arca:avisar-vencimiento-certificados',
+        'seguridad.ingreso_proveedor_recordatorio' => 'seguridad:recordatorio-tickets-ingreso',
+        'stock.prestamo_recordatorio' => 'prestamo:recordatorios',
+        'listado.envios_workbench' => 'compras:enviar-listados-programados',
+        'consulta_inteligente.envios_programados' => 'direccion:enviar-consultas-inteligentes',
+        'contable.reportes_definibles' => 'contable:distribuir-reportes-definibles',
+        'sueldos.reportes_definibles' => 'sueldos:distribuir-reportes-definibles',
+        'flash.distribuir_reportes' => 'flash:distribuir-reportes',
+        'flash_crown.distribuir_reportes' => 'flash-crown:distribuir-reportes',
+        'arbolaprobacion.digest_pendientes' => 'arbolaprobacion:digest-pendientes',
+        'arbolaprobacion.recordatorios' => 'arbolaprobacion:recordatorios',
+        'tesoreria_crown.avisos' => 'tesoreria-crown:avisos',
+        'ai.digest_brief' => 'ai:digest-brief',
+        'ai.alerta_umbral' => 'ai:alerta-umbral',
+    ],
+
+    /*
+    | diaria = una vez por día (ultima_en). cada_pasada = cada poll 15′ (suscripción decide).
+    */
+    'programados_frecuencia' => [
+        'contable.reportes_definibles' => 'cada_pasada',
+        'sueldos.reportes_definibles' => 'cada_pasada',
+        'flash.distribuir_reportes' => 'cada_pasada',
+        'flash_crown.distribuir_reportes' => 'cada_pasada',
+    ],
+
+    /*
+    | Gate por instalación (EMPRESA). Sin entrada = todos los entornos.
+    */
+    'programados_entorno' => [
+        'flash.distribuir_reportes' => 'agg',
+        'flash_crown.distribuir_reportes' => 'crown',
+        'tesoreria_crown.avisos' => 'crown',
+    ],
+
+    /*
+    | Flags Artisan por clave.
+    */
+    'programados_opciones' => [
+        'sueldos.reportes_definibles' => ['--ejecutar' => true],
+        'tesoreria_crown.avisos' => ['--ejecutar' => true, '--anita' => true, '--mail' => true],
+        'ai.digest_brief' => ['--ejecutar' => true],
+        'ai.alerta_umbral' => ['--ejecutar' => true],
     ],
 
     'programados_habilitado' => env('MODULO_AVISO_PROGRAMADOS', true),
+
+    // Campanita + mail al fallar una corrida (máx. 1 alerta por clave y día).
+    'alerta_fallo_habilitada' => env('MODULO_AVISO_ALERTA_FALLO', true),
+
+    /*
+    | Acción tipada por clave (catálogo, sin script libre).
+    | Valores: comando_artisan | listado_excel | consulta_inteligente | webhook_allowlist
+    */
+    'acciones_tipadas' => [
+        'sueldos.libreta_sanitaria_pendiente' => 'comando_artisan',
+        'caja.cheques_aging' => 'comando_artisan',
+        'compras.ordencompra_alertas_abiertas' => 'comando_artisan',
+        'compras.entrega_dia_sin_recepcion' => 'comando_artisan',
+        'compras.ordencompra_contrato_vencimiento' => 'comando_artisan',
+        'compras.suscripcion_comprobante_faltante' => 'comando_artisan',
+        'compras.comprobante_proveedor_borrador_pendiente' => 'comando_artisan',
+        'arca.certificado_vencimiento' => 'comando_artisan',
+        'seguridad.ingreso_proveedor_recordatorio' => 'comando_artisan',
+        'stock.prestamo_recordatorio' => 'comando_artisan',
+        'listado.envios_workbench' => 'listado_excel',
+        'consulta_inteligente.envios_programados' => 'consulta_inteligente',
+        'contable.reportes_definibles' => 'comando_artisan',
+        'sueldos.reportes_definibles' => 'comando_artisan',
+        'flash.distribuir_reportes' => 'comando_artisan',
+        'flash_crown.distribuir_reportes' => 'comando_artisan',
+        'arbolaprobacion.digest_pendientes' => 'comando_artisan',
+        'arbolaprobacion.recordatorios' => 'comando_artisan',
+        'tesoreria_crown.avisos' => 'comando_artisan',
+        'ai.digest_brief' => 'comando_artisan',
+        'ai.alerta_umbral' => 'comando_artisan',
+    ],
+
+    /*
+    | Webhooks allowlist. Solo estas claves se pueden disparar desde reglas.
+    | URL vacía = entrada ignorada. No hay URL libre desde la UI.
+    */
+    'webhooks_allowlist' => array_filter([
+        'ops_aprobaciones' => array_filter([
+            'url' => env('MODULO_AVISO_WEBHOOK_OPS_APROBACIONES_URL'),
+            'metodo' => env('MODULO_AVISO_WEBHOOK_OPS_APROBACIONES_METODO', 'POST'),
+            'timeout' => (int) env('MODULO_AVISO_WEBHOOK_OPS_APROBACIONES_TIMEOUT', 10),
+        ]),
+        'ops_stock' => array_filter([
+            'url' => env('MODULO_AVISO_WEBHOOK_OPS_STOCK_URL'),
+            'metodo' => env('MODULO_AVISO_WEBHOOK_OPS_STOCK_METODO', 'POST'),
+            'timeout' => (int) env('MODULO_AVISO_WEBHOOK_OPS_STOCK_TIMEOUT', 10),
+        ]),
+        'ops_general' => array_filter([
+            'url' => env('MODULO_AVISO_WEBHOOK_OPS_GENERAL_URL'),
+            'metodo' => env('MODULO_AVISO_WEBHOOK_OPS_GENERAL_METODO', 'POST'),
+            'timeout' => (int) env('MODULO_AVISO_WEBHOOK_OPS_GENERAL_TIMEOUT', 10),
+        ]),
+    ], static fn ($cfg) => is_array($cfg) && ! empty($cfg['url'])),
 
     /*
     | Handler por clave modulo.codigo → clase que implementa ModuloAvisoHandlerInterface
@@ -70,12 +172,24 @@ return [
         'uif.cliente_alta' => App\Services\Configuracion\Handlers\UifClienteAltaAvisoHandler::class,
         'sueldos.empleado_alta_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoAltaProvisoriaAvisoHandler::class,
         'sueldos.libreta_sanitaria_pendiente' => App\Services\Configuracion\Handlers\SueldosLibretaSanitariaAvisoHandler::class,
+        'caja.cheques_aging' => App\Services\Configuracion\Handlers\CajaChequesAgingAvisoHandler::class,
         'ticket.alta_tecnologia' => App\Services\Configuracion\Handlers\TicketAltaTecnologiaAvisoHandler::class,
         'ticket.asignacion_tecnico' => App\Services\Configuracion\Handlers\TicketAsignacionTecnicoAvisoHandler::class,
         'seguridad.ingreso_proveedor_creado' => App\Services\Configuracion\Handlers\SeguridadIngresoProveedorAvisoHandler::class,
         'seguridad.ingreso_proveedor_rechazado' => App\Services\Configuracion\Handlers\SeguridadIngresoProveedorAvisoHandler::class,
         'seguridad.ingreso_proveedor_recordatorio' => App\Services\Configuracion\Handlers\SeguridadIngresoProveedorAvisoHandler::class,
         'seguridad.ingreso_proveedor_abono_sin_cierre' => App\Services\Configuracion\Handlers\SeguridadIngresoProveedorContratoAvisoHandler::class,
+        'listado.envios_workbench' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'consulta_inteligente.envios_programados' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'contable.reportes_definibles' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'sueldos.reportes_definibles' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'flash.distribuir_reportes' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'flash_crown.distribuir_reportes' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'arbolaprobacion.digest_pendientes' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'arbolaprobacion.recordatorios' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'tesoreria_crown.avisos' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'ai.digest_brief' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
+        'ai.alerta_umbral' => App\Services\Configuracion\Handlers\ListadoEnviosProgramadosAvisoHandler::class,
     ],
 
 ];

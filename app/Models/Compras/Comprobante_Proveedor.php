@@ -148,6 +148,12 @@ class Comprobante_Proveedor extends Model implements Auditable
             ->orderBy('orden');
     }
 
+    /** Gastos de carpetas de importación que referencian esta factura. */
+    public function importacion_gastos()
+    {
+        return $this->hasMany(Importacion_Gasto::class, 'comprobante_proveedor_id');
+    }
+
     public function recepcion_proveedores()
     {
         return $this->belongsToMany(

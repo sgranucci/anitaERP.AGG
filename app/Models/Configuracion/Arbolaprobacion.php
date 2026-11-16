@@ -10,7 +10,12 @@ class Arbolaprobacion extends Model implements Auditable
 {
     protected $fillable = [
         'nombre', 'tipoarbol', 'empresa_id', 'recordatorio', 'diasinrespuesta', 'diavencimientorecordatorio', 'estado',
+        'diseno_layout',
         'oc_disparar_arbol_al_alta', 'oc_sector_cambio_centrocosto_id', 'oc_sector_disparo_aprobacion_id', 'oc_sector_destino_aprobacion_id',
+    ];
+
+    protected $casts = [
+        'diseno_layout' => 'array',
     ];
 
     protected $table = 'arbolaprobacion';

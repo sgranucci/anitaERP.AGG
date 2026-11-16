@@ -7,6 +7,7 @@ use App\Contracts\Configuracion\ModuloAvisoHandlerInterface;
 use App\Mail\Configuracion\ModuloAvisoMail;
 use App\Models\Configuracion\ModuloAvisoDestinatario;
 use App\Models\Configuracion\ModuloAvisoTipo;
+use App\Support\Configuracion\UsuarioAvisoPreferenciaSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -53,6 +54,8 @@ class ModuloAvisoService
 
             if ($handler instanceof ModuloAvisoDespachoHandlerInterface) {
                 $handler->despachar($tipo, $entityId, $opciones);
+                $this->bridgeInAppSiCorresponde($tipo, $handler, $entityId);
+                $this->bridgeWhatsappSiCorresponde($tipo, $handler, $entityId, $opciones);
 
                 return;
             }
@@ -99,6 +102,9 @@ class ModuloAvisoService
                     ]);
                 }
             }
+
+            $this->bridgeInAppSiCorresponde($tipo, $handler, $entityId);
+            $this->bridgeWhatsappSiCorresponde($tipo, $handler, $entityId, $opciones);
         } catch (\Throwable $e) {
             Log::error('ModuloAvisoService::enviar', [
                 'modulo' => $modulo,
@@ -129,11 +135,23 @@ class ModuloAvisoService
             }
             $email = $dest->emailResuelto();
             if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                if ($dest->usuario_id
+                    && ! UsuarioAvisoPreferenciaSupport::permite(
+                        (int) $dest->usuario_id,
+                        UsuarioAvisoPreferenciaSupport::CANAL_MAIL,
+                        (int) $tipo->id
+                    )
+                ) {
+                    continue;
+                }
                 $emails[] = strtolower($email);
             }
         }
 
-        return array_values(array_unique($emails));
+        return UsuarioAvisoPreferenciaSupport::filtrarEmails(
+            array_values(array_unique($emails)),
+            (int) $tipo->id
+        );
     }
 
     private function handler(string $modulo, string $codigo): ?ModuloAvisoHandlerInterface
@@ -178,5 +196,108 @@ class ModuloAvisoService
         }, $texto);
 
         return is_string($resultado) ? $resultado : $texto;
+    }
+
+    /**
+     * Campanita in-app para destinatarios con usuario_id (opt-in por tipo).
+     */
+    private function bridgeInAppSiCorresponde(
+        ModuloAvisoTipo $tipo,
+        ModuloAvisoHandlerInterface $handler,
+        int $entityId
+    ): void {
+        if (! $tipo->notificar_in_app) {
+            return;
+        }
+
+        $usuarioIds = [];
+        foreach ($tipo->destinatarios()->where('activo', true)->whereNotNull('usuario_id')->get() as $dest) {
+            $usuarioIds[] = (int) $dest->usuario_id;
+        }
+        $usuarioIds = UsuarioAvisoPreferenciaSupport::filtrarIds(
+            $usuarioIds,
+            UsuarioAvisoPreferenciaSupport::CANAL_IN_APP,
+            (int) $tipo->id
+        );
+        if ($usuarioIds === []) {
+            return;
+        }
+
+        $link = $tipo->incluir_link_consulta ? $handler->linkConsulta($entityId) : null;
+        $cuerpo = trim((string) ($tipo->mail_texto ?? ''));
+        if (mb_strlen($cuerpo) > 400) {
+            $cuerpo = mb_substr($cuerpo, 0, 397).'…';
+        }
+
+        app(AnitaNotificacionService::class)->avisarSistemaAUsuarios(
+            $usuarioIds,
+            (string) $tipo->nombre,
+            $cuerpo !== '' ? $cuerpo : null,
+            $link,
+            [
+                'modulo_aviso' => $tipo->claveCompleta(),
+                'entity_id' => $entityId,
+            ]
+        );
+    }
+
+    /**
+     * WhatsApp solo si el tipo lo pide y la empresa del contexto tiene cuenta activa.
+     *
+     * @param  array<string, mixed>  $opciones
+     */
+    private function bridgeWhatsappSiCorresponde(
+        ModuloAvisoTipo $tipo,
+        ModuloAvisoHandlerInterface $handler,
+        int $entityId,
+        array $opciones = []
+    ): void {
+        if (! $tipo->notificar_whatsapp) {
+            return;
+        }
+
+        $filtro = $handler->contextoFiltro($entityId);
+        $empresaId = isset($opciones['empresa_id'])
+            ? (int) $opciones['empresa_id']
+            : (isset($filtro['empresa_id']) ? (int) $filtro['empresa_id'] : 0);
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $usuarioIds = [];
+        foreach ($tipo->destinatarios()->where('activo', true)->whereNotNull('usuario_id')->get() as $dest) {
+            if ($dest->empresa_id && (int) $dest->empresa_id !== $empresaId) {
+                continue;
+            }
+            $usuarioIds[] = (int) $dest->usuario_id;
+        }
+        $usuarioIds = UsuarioAvisoPreferenciaSupport::filtrarIds(
+            $usuarioIds,
+            UsuarioAvisoPreferenciaSupport::CANAL_WHATSAPP,
+            (int) $tipo->id
+        );
+        if ($usuarioIds === []) {
+            return;
+        }
+
+        $placeholders = $handler->placeholders($entityId);
+        $link = $tipo->incluir_link_consulta ? $handler->linkConsulta($entityId) : null;
+        $texto = $this->aplicarPlaceholders(
+            (string) ($tipo->mail_texto ?? $tipo->nombre),
+            $placeholders,
+            $link
+        );
+        $texto = trim($tipo->nombre."\n\n".$texto);
+        if ($link) {
+            $texto .= "\n".$link;
+        }
+
+        app(WhatsappEnvioService::class)->enviarAUsuarios(
+            $usuarioIds,
+            $empresaId,
+            $texto,
+            $tipo->claveCompleta(),
+            $entityId
+        );
     }
 }

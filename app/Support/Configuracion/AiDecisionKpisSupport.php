@@ -92,7 +92,64 @@ final class AiDecisionKpisSupport
                 ? round((float) $agregados->latencia_avg, 0)
                 : null,
             'por_skill' => $porSkill,
+            'hitl_fab' => self::contarHitlFab($filtros),
         ];
+    }
+
+    /**
+     * Acciones HITL confirmadas desde el FAB (payload.confirmacion / origen fab).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{total: int, depositos: int, recepciones: int, transferencias: int, propuestas: int}
+     */
+    private static function contarHitlFab(array $filtros): array
+    {
+        $base = AiDecision::query()
+            ->where('skill', 'consultar_contexto_operativo')
+            ->where('accion', AiDecision::ACCION_CONFIRMADA);
+        AiDecisionListadoFiltros::aplicar($base, $filtros);
+
+        $rows = (clone $base)
+            ->whereNotNull('payload')
+            ->orderByDesc('id')
+            ->limit(2000)
+            ->get(['id', 'payload']);
+
+        $out = [
+            'total' => 0,
+            'depositos' => 0,
+            'recepciones' => 0,
+            'transferencias' => 0,
+            'propuestas' => 0,
+        ];
+        foreach ($rows as $row) {
+            $payload = is_array($row->payload) ? $row->payload : [];
+            if (($payload['origen'] ?? null) === 'mcp') {
+                continue;
+            }
+            $conf = is_array($payload['confirmacion'] ?? null) ? $payload['confirmacion'] : null;
+            if ($conf === null && ($payload['canal'] ?? null) !== 'fab_hitl') {
+                continue;
+            }
+            if ($conf === null) {
+                continue;
+            }
+            $out['total']++;
+            if (array_key_exists('depositados', $conf) || array_key_exists('caucionados', $conf)) {
+                $out['depositos']++;
+            }
+            if (array_key_exists('confirmadas', $conf) && array_key_exists('recepcion_ids', $conf)) {
+                $out['recepciones']++;
+            }
+            if (($conf['accion_hitl'] ?? '') === 'confirmar_tm' || array_key_exists('transferencia_ids', $conf)) {
+                $out['transferencias']++;
+            }
+            if (array_key_exists('propuesta_pago_id', $conf)) {
+                $out['propuestas']++;
+            }
+        }
+
+        return $out;
     }
 
     /**

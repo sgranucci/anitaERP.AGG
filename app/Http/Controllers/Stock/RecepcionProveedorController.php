@@ -428,6 +428,7 @@ class RecepcionProveedorController extends Controller
         }
 
         $oc = $data['cabecera'];
+        $importacionCtx = \App\Support\Stock\RecepcionProveedorImportacionSupport::contextoDesdeOrdencompra($oc);
 
         return response()->json([
             'ordencompra_id' => $oc->id,
@@ -440,7 +441,7 @@ class RecepcionProveedorController extends Controller
             'tratamiento' => $oc->tratamiento,
             'descuento_ordencompra' => OrdencompraDescuentoSupport::porcentajeEfectivoDesdeOrdencompra($oc),
             'lineas' => $data['lineas'],
-        ]);
+        ] + $importacionCtx);
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Sueldos\Solicitud_Prenda_Sueldos;
 use App\Services\Configuracion\MisAprobacionesArbolService;
 use App\Services\Configuracion\UserTaskBandejaService;
+use App\Services\Configuracion\UserTaskSlaService;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Services\Stock\PrestamoService;
 use App\Services\Stock\TransferenciaMercaderiaService;
@@ -23,6 +24,7 @@ class MisAprobacionesArbolController extends Controller
         private PrestamoService $prestamoService,
         private AsientoAprobacionService $asientoAprobacionService,
         private TransferenciaMercaderiaService $transferenciaService,
+        private UserTaskSlaService $userTaskSlaService,
     ) {}
 
     public function index(Request $request)
@@ -392,6 +394,27 @@ class MisAprobacionesArbolController extends Controller
         }
 
         return $this->redirectTrasAccion($request, 'Pendiente huérfano descartado.');
+    }
+
+    public function reasignarUserTask(Request $request, $id)
+    {
+        $this->asegurarAccesoBandeja();
+        $nuevoUsuarioId = (int) $request->input('usuario_id', 0);
+        if ($nuevoUsuarioId <= 0) {
+            return back()->with('error', 'Indicá el usuario destino.');
+        }
+
+        try {
+            $nueva = $this->userTaskSlaService->reasignar(
+                (int) $id,
+                $nuevoUsuarioId,
+                (int) (auth()->id() ?? 0)
+            );
+
+            return back()->with('mensaje', 'Tarea reasignada (#'.$nueva->id.').');
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     public function reenviar(Request $request, $id)
