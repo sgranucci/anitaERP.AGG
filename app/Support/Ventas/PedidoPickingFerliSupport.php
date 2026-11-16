@@ -930,7 +930,15 @@ final class PedidoPickingFerliSupport
             $deposito = 1;
         }
 
-        if (self::lineaYaEgresoLoQuePide($pedidoCombinacionId, trim($loteCodigo), $deposito, $curva, $pide)) {
+        if (self::lineaYaEgresoLoQuePide(
+            $pedidoCombinacionId,
+            (int) $linea->articulo_id,
+            (int) $linea->combinacion_id,
+            trim($loteCodigo),
+            $deposito,
+            $curva,
+            $pide
+        )) {
             return null;
         }
 
@@ -948,20 +956,24 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * La línea ya tiene egresado de ese lote y depósito, talle por talle, al menos lo que pide.
+     * La línea ya egresó ese artículo, combinación, lote y depósito, talle por talle, al menos lo que pide.
      * Regrabarla no saca pares nuevos: no se controla contra el saldo de hoy, que pudo quedar
      * negativo por movimientos posteriores de otros comprobantes.
+     * Otro artículo o combinación no cuenta: ese consumo es de otro stock y se vuelve a controlar.
      *
      * @param  array<string, float>  $curva
      */
     private static function lineaYaEgresoLoQuePide(
         int $pedidoCombinacionId,
+        int $articuloId,
+        int $combinacionId,
         string $loteCodigo,
         int $depositoId,
         array $curva,
         float $pide
     ): bool {
-        if ($pedidoCombinacionId <= 0 || $loteCodigo === '' || $loteCodigo === '0' || $depositoId <= 0) {
+        if ($pedidoCombinacionId <= 0 || $articuloId <= 0 || $combinacionId <= 0
+            || $loteCodigo === '' || $loteCodigo === '0' || $depositoId <= 0) {
             return false;
         }
 
@@ -970,6 +982,8 @@ final class PedidoPickingFerliSupport
             ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
             ->join('talle as t', 't.id', '=', 'amt.talle_id')
             ->where('am.pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('am.articulo_id', $articuloId)
+            ->where('am.combinacion_id', $combinacionId)
             ->where('am.lote', $loteCodigo)
             ->where('am.deposito_id', $depositoId)
             ->groupBy('t.nombre')
