@@ -813,6 +813,16 @@ final class PedidoPickingFerliSupport
         if ($paresPedidos <= 0.0001 && $curvaPedido === []) {
             return null;
         }
+        // Un talle en negativo que la línea no pide no le resta pares: el control por talle
+        // de abajo ya mira los que sí pide.
+        $curvaNormalizada = self::normalizarCurvaNumeracion($curvaPedido);
+        if ($curvaNormalizada !== []) {
+            foreach (self::normalizarCurvaNumeracion($tallesStock) as $talle => $cantidad) {
+                if ($cantidad < 0 && ! isset($curvaNormalizada[$talle])) {
+                    $saldo -= $cantidad;
+                }
+            }
+        }
         if ($saldo + 0.0001 < $paresPedidos) {
             if ($saldo <= 0.0001) {
                 return 'El lote/OT '.$ref.' no tiene saldo en el depósito '.$depositoTxt.'.';
@@ -920,6 +930,10 @@ final class PedidoPickingFerliSupport
             $deposito = 1;
         }
 
+        if (self::lineaYaEgresoLoQuePide($pedidoCombinacionId, trim($loteCodigo), $deposito, $curva, $pide)) {
+            return null;
+        }
+
         return self::errorSiEgresoBucketSuperaSaldo(
             (int) $linea->articulo_id,
             (int) $linea->combinacion_id,
@@ -931,6 +945,54 @@ final class PedidoPickingFerliSupport
             0,
             $pedidoCombinacionId
         );
+    }
+
+    /**
+     * La línea ya tiene egresado de ese lote y depósito, talle por talle, al menos lo que pide.
+     * Regrabarla no saca pares nuevos: no se controla contra el saldo de hoy, que pudo quedar
+     * negativo por movimientos posteriores de otros comprobantes.
+     *
+     * @param  array<string, float>  $curva
+     */
+    private static function lineaYaEgresoLoQuePide(
+        int $pedidoCombinacionId,
+        string $loteCodigo,
+        int $depositoId,
+        array $curva,
+        float $pide
+    ): bool {
+        if ($pedidoCombinacionId <= 0 || $loteCodigo === '' || $loteCodigo === '0' || $depositoId <= 0) {
+            return false;
+        }
+
+        $egresado = [];
+        $rows = DB::table('articulo_movimiento as am')
+            ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
+            ->join('talle as t', 't.id', '=', 'amt.talle_id')
+            ->where('am.pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('am.lote', $loteCodigo)
+            ->where('am.deposito_id', $depositoId)
+            ->groupBy('t.nombre')
+            ->select(['t.nombre as talle', DB::raw('SUM(amt.cantidad) as cantidad')])
+            ->get();
+        foreach ($rows as $row) {
+            $egresado[trim((string) $row->talle)] = -1 * (float) $row->cantidad;
+        }
+        $egresado = self::normalizarCurvaNumeracion($egresado);
+        if ($egresado === []) {
+            return false;
+        }
+
+        if (array_sum($egresado) + 0.0001 < $pide) {
+            return false;
+        }
+        foreach (self::normalizarCurvaNumeracion($curva) as $talle => $cantidad) {
+            if (($egresado[$talle] ?? 0) + 0.0001 < $cantidad) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
