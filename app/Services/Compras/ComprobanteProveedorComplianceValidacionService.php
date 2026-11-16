@@ -203,6 +203,73 @@ class ComprobanteProveedorComplianceValidacionService
         ]);
     }
 
+    /**
+     * Candado al ingreso por API/agente: con CAE de 14 dígitos exige constatación ARCA OK
+     * (receptor, total, etc.). Sin CAE no aplica. WS caído: no bloquea; devuelve avisos.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<string> avisos (p.ej. WS caído)
+     *
+     * @throws \RuntimeException si ARCA rechaza o faltan datos para constatar con CAE presente
+     */
+    public function assertWscdcAlIngresoApi(array $payload): array
+    {
+        if (! $this->wscdcHabilitadoParaComprobante()) {
+            return [];
+        }
+
+        $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
+        if ($cae === '') {
+            return [];
+        }
+
+        $tipoAut = strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? '')));
+        if ($tipoAut === ComprobanteProveedorTipoAutorizacion::CAEA) {
+            return ['CAEA: la constatación WSCDC al ingreso API no aplica del mismo modo que CAE.'];
+        }
+
+        if (strlen($cae) !== 14) {
+            throw new \RuntimeException(
+                'El CAE debe tener 14 dígitos para constatar el comprobante en ARCA (WSCDC) al ingresar por API.'
+            );
+        }
+
+        $resultado = $this->constatarEnVivo($payload);
+        $avisos = array_map('strval', $resultado['avisos'] ?? []);
+        $errores = array_map('strval', $resultado['errores'] ?? []);
+        $wsCaido = ! empty($resultado['wscdc']['ws_caido']);
+
+        if ($wsCaido) {
+            Log::warning('WSCDC ingreso API: WS caído, se permite precarga con aviso', [
+                'avisos' => $avisos,
+                'empresa_id' => $payload['empresa_id'] ?? null,
+                'proveedor_id' => $payload['proveedor_id'] ?? null,
+            ]);
+
+            return $avisos !== []
+                ? $avisos
+                : ['No se pudo constatar en ARCA (WSCDC) al ingresar: servicio no disponible.'];
+        }
+
+        if (($resultado['aplica'] ?? false) && ! ($resultado['listo'] ?? false)) {
+            throw new \RuntimeException(
+                (string) ($resultado['mensaje']
+                    ?? 'No se pudo constatar en ARCA (WSCDC): faltan datos fiscales (CUIT, tipo, fecha, sucursal o número).')
+            );
+        }
+
+        if (($resultado['ok'] ?? false) !== true) {
+            $detalle = implode(' ', $errores !== [] ? $errores : [
+                (string) ($resultado['mensaje'] ?? 'Constatación ARCA (WSCDC) rechazada.'),
+            ]);
+            throw new \RuntimeException(
+                'ARCA rechazó el comprobante al ingresar por API (WSCDC). '.$detalle
+            );
+        }
+
+        return $avisos;
+    }
+
     /** @param  array<string, mixed>  $payload */
     public function fingerprintWscdc(array $payload): string
     {

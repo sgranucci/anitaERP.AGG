@@ -607,29 +607,32 @@ final class ComprobanteProveedorPdfIaService
             }
         } else {
             if ($cuitDestinatario === '') {
-                $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
-            } else {
-                try {
-                    $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
-                    if (! empty($empresa['cuit_corregido'])) {
-                        $advertencias[] = 'CUIT destinatario corregido por OCR: «'
-                            .($empresa['cuit_leido'] ?? $cuitDestinatario)
-                            .'» → «'.$empresa['cuit_corregido'].'» ('.$empresa['nombre'].').';
-                        $extraido['cuit_destinatario'] = $empresa['cuit_corregido'];
-                        $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
-                        $cuitDestinatario = $empresa['cuit_corregido'];
-                    }
-                } catch (RuntimeException $e) {
-                    // CUIT ilegible/errado: si hay OC, la empresa sale de ahí (misma política que sin CUIT).
-                    try {
-                        $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
-                        $advertencias[] = 'CUIT destinatario «'.$cuitDestinatario.'» no matcheó empresa; '
-                            .'se usó la empresa de la OC '.$numeroOc.' ('.$empresa['nombre'].').';
-                        $extraido['cuit_destinatario_origen'] = 'oc_fallback';
-                    } catch (RuntimeException) {
-                        throw $e;
-                    }
+                // Sin CUIT receptor no adivinamos la sociedad desde la OC (riesgo Biyemas/Kandiko).
+                throw new RuntimeException(
+                    'No se leyó el CUIT receptor de la factura. Indíquelo manualmente; '
+                    .'no se asigna la empresa de la OC '.$numeroOc.' automáticamente.'
+                );
+            }
+
+            try {
+                $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
+                if (! empty($empresa['cuit_corregido'])) {
+                    $advertencias[] = 'CUIT destinatario corregido por OCR: «'
+                        .($empresa['cuit_leido'] ?? $cuitDestinatario)
+                        .'» → «'.$empresa['cuit_corregido'].'» ('.$empresa['nombre'].').';
+                    $extraido['cuit_destinatario'] = $empresa['cuit_corregido'];
+                    $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
+                    $cuitDestinatario = $empresa['cuit_corregido'];
                 }
+            } catch (RuntimeException $e) {
+                // No reasignar en silencio a la empresa de la OC: ese fallback puso
+                // facturas en la sociedad equivocada (ITALMEN). Exigir CUIT receptor válido.
+                throw new RuntimeException(
+                    'CUIT destinatario «'.$cuitDestinatario.'» no corresponde a una empresa del grupo. '
+                    .'Corrija el CUIT receptor o cargue la factura en la empresa correcta; '
+                    .'no se usa la empresa de la OC '.$numeroOc.' como reemplazo. '
+                    .$e->getMessage()
+                );
             }
 
             try {

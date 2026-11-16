@@ -171,6 +171,10 @@ class PagoproveedorAnularRevertirService
             throw new RuntimeException('Solo se pueden revertir OP confirmadas, pagadas o conciliadas.');
         }
 
+        // Si Anita ya grabó el AOP (importado al mayor), un revertir ERP genera un
+        // segundo compensatorio contable (incidente OPP 117522 / 03-nov-2026).
+        $this->assertNoAopAnitaPreexistente($pago);
+
         $fechaOp = $fecha && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)
             ? $fecha
             : date('Y-m-d');
@@ -200,6 +204,7 @@ class PagoproveedorAnularRevertirService
             if (! in_array((string) $actual->estado, ['CONFIRMADA', 'PAGADA', 'CONCILIADA'], true)) {
                 throw new RuntimeException('Solo se pueden revertir OP confirmadas, pagadas o conciliadas.');
             }
+            $this->assertNoAopAnitaPreexistente($actual);
 
             // El sobrante deja de existir con la OPP: el AOP solo compensa los renglones de la OPP.
             $opaSobrante = PagoproveedorOpaSobranteSupport::hija($actual);
@@ -491,6 +496,41 @@ class PagoproveedorAnularRevertirService
         if ((int) ($pago->pagoproveedor_origen_id ?? 0) > 0) {
             throw new RuntimeException('No se puede operar sobre una OP compensatoria.');
         }
+    }
+
+    /**
+     * Bloquea revertir si el mayor ya tiene el AOP nativo de Anita del mismo número.
+     * Evita duplicar Debe/Haber (banco, retenciones, proveedores) con un compensatorio ERP.
+     */
+    private function assertNoAopAnitaPreexistente(Pagoproveedor $pago): void
+    {
+        $nro = (int) ($pago->numerotransaccion ?? 0);
+        if ($nro <= 0) {
+            return;
+        }
+
+        $aop = Asiento::query()
+            ->where('empresa_id', (int) $pago->empresa_id)
+            ->where('anita_tipo', 'AOP')
+            ->where('anita_nro', $nro)
+            ->orderBy('fecha')
+            ->orderBy('id')
+            ->first(['id', 'numeroasiento', 'fecha', 'anita_origen']);
+
+        if ($aop === null) {
+            return;
+        }
+
+        $fecha = $aop->fecha instanceof \DateTimeInterface
+            ? $aop->fecha->format('d/m/Y')
+            : (string) $aop->fecha;
+        $origen = trim((string) ($aop->anita_origen ?? '')) ?: 'Anita';
+
+        throw new RuntimeException(
+            'La OP '.$nro.' ya tiene AOP en el mayor (asiento '.$aop->numeroasiento
+            .' del '.$fecha.', origen '.$origen
+            .'). No se puede revertir desde el ERP: generaría un segundo compensatorio contable.'
+        );
     }
 
     private function fechaYmd($fecha): string

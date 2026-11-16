@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\OrdencompraService;
 use App\Services\Compras\ComprobanteService;
+use App\Services\Compras\ComprobanteProveedorComplianceValidacionService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Support\Compras\ApiPrecargaProveedorLogger;
 use App\Support\Compras\ComprobanteProveedorConceptosIibbPadronCotejoSupport;
@@ -274,35 +275,19 @@ class ApiController extends Controller
 
         $resolucionEmpresa = app(PrecargaProveedorResolucionSupport::class);
         try {
+            // Empresa = CUIT receptor del PDF/agente. Nunca fallback a la OC:
+            // si el CUIT no matchea, rechazar (antes se reescribía a la empresa de la OC y
+            // terminaba la factura en la sociedad incorrecta, p.ej. ITALMEN Biyemas/Kandiko).
             $resueltoEmpresa = $resolucionEmpresa->resolverEmpresaPorCuit((string) $request->cuit_empresa);
         } catch (\RuntimeException $e) {
-            if ($numeroOc === '') {
-                $log->warning('recibe_comprobante.empresa_error', [
-                    'cuit_empresa' => $request->cuit_empresa,
-                    'message' => $e->getMessage(),
-                    'status' => 422,
-                ]);
+            $log->warning('recibe_comprobante.empresa_error', [
+                'cuit_empresa' => $request->cuit_empresa,
+                'numero_oc' => $numeroOc,
+                'message' => $e->getMessage(),
+                'status' => 422,
+            ]);
 
-                return response()->json(['message' => $e->getMessage()], 422);
-            }
-            try {
-                $resueltoEmpresa = $resolucionEmpresa->resolverEmpresaPorOc($numeroOc);
-                $log->warning('recibe_comprobante.empresa_fallback_oc', [
-                    'cuit_empresa' => $request->cuit_empresa,
-                    'numero_oc' => $numeroOc,
-                    'empresa_id' => $resueltoEmpresa['empresa_id'],
-                    'message' => $e->getMessage(),
-                ]);
-            } catch (\RuntimeException $eOc) {
-                $log->warning('recibe_comprobante.empresa_error', [
-                    'cuit_empresa' => $request->cuit_empresa,
-                    'numero_oc' => $numeroOc,
-                    'message' => $e->getMessage(),
-                    'status' => 422,
-                ]);
-
-                return response()->json(['message' => $e->getMessage()], 422);
-            }
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
         if ($numeroOc !== '') {
@@ -678,6 +663,42 @@ class ApiController extends Controller
             );
         } catch (\RuntimeException $e) {
             $log->warning('recibe_comprobante.factura_duplicada', [
+                'message' => $e->getMessage(),
+                'status' => 422,
+            ]);
+
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        // Con CAE: constatar WSCDC antes de crear la precarga (receptor + total vs ARCA).
+        try {
+            $avisosWscdc = app(ComprobanteProveedorComplianceValidacionService::class)
+                ->assertWscdcAlIngresoApi([
+                    'empresa_id' => $empresa_id,
+                    'proveedor_id' => $proveedor_id,
+                    'tipotransaccion_compra_id' => $tipotransaccion_compra_id,
+                    'letra' => (string) $request->letra,
+                    'sucursal' => (int) $request->sucursal,
+                    'numerocomprobante' => (int) $request->numero_factura,
+                    'fechacomprobante' => (string) $request->fecha_factura,
+                    'total' => $totalRequest,
+                    'numerocae' => $numeroCae,
+                    'tipo_autorizacion' => isset($data['tipo_autorizacion'])
+                        ? (string) $data['tipo_autorizacion']
+                        : 'CAE',
+                ]);
+            if ($avisosWscdc !== []) {
+                $avisosConceptos = array_merge($avisosConceptos, $avisosWscdc);
+                $pararevisar = true;
+                $data['pararevisar'] = true;
+                $log->warning('recibe_comprobante.wscdc_aviso', [
+                    'avisos' => $avisosWscdc,
+                ]);
+            }
+        } catch (\RuntimeException $e) {
+            $log->warning('recibe_comprobante.wscdc_rechazo', [
                 'message' => $e->getMessage(),
                 'status' => 422,
             ]);
