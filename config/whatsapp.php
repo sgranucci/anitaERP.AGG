@@ -27,4 +27,22 @@ return [
     'plantilla_nombre' => env('WHATSAPP_PLANTILLA_NOMBRE', 'anita_aviso'),
     'plantilla_idioma' => env('WHATSAPP_PLANTILLA_IDIOMA', 'es_AR'),
 
+    /*
+    | Proxy hacia graph.facebook.com (solo EMPRESA=CROWN).
+    | Vacío / omitido = ARCA_PADRON_PROXY_*. AGG/resto ignoran este bloque.
+    */
+    'proxy_habilitado' => filter_var(env('WHATSAPP_PROXY_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    'proxy_host' => (($__waProxyHost = trim((string) env('WHATSAPP_PROXY_HOST', ''))) !== ''
+        ? $__waProxyHost
+        : trim((string) env('ARCA_PADRON_PROXY_HOST', ''))),
+    'proxy_port' => (int) ((trim((string) env('WHATSAPP_PROXY_PORT', '')) !== '')
+        ? env('WHATSAPP_PROXY_PORT')
+        : env('ARCA_PADRON_PROXY_PORT', 3128)),
+    'proxy_user' => (($__waProxyUser = trim((string) env('WHATSAPP_PROXY_USER', ''))) !== ''
+        ? $__waProxyUser
+        : trim((string) env('ARCA_PADRON_PROXY_USER', ''))),
+    'proxy_password' => (($__waProxyPass = (string) env('WHATSAPP_PROXY_PASSWORD', '')) !== ''
+        ? $__waProxyPass
+        : (string) env('ARCA_PADRON_PROXY_PASSWORD', '')),
+
 ];

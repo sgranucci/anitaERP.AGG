@@ -4,7 +4,7 @@ namespace App\Services\Configuracion\Whatsapp;
 
 use App\Contracts\Configuracion\WhatsappDriverInterface;
 use App\Models\Configuracion\EmpresaWhatsappCuenta;
-use Illuminate\Support\Facades\Http;
+use App\Support\Configuracion\WhatsappHttpProxySupport;
 use Illuminate\Support\Facades\Log;
 
 class MetaCloudWhatsappDriver implements WhatsappDriverInterface
@@ -32,16 +32,17 @@ class MetaCloudWhatsappDriver implements WhatsappDriverInterface
         ];
 
         try {
-            $resp = Http::timeout((int) config('whatsapp.meta.timeout', 20))
-                ->withToken($token)
-                ->acceptJson()
-                ->post($url, $payload);
+            $resp = WhatsappHttpProxySupport::cliente(
+                $token,
+                (int) config('whatsapp.meta.timeout', 20)
+            )->post($url, $payload);
 
             if (! $resp->successful()) {
                 Log::warning('WhatsApp Meta: HTTP error', [
                     'empresa_id' => $cuenta->empresa_id,
                     'status' => $resp->status(),
                     'body' => mb_substr($resp->body(), 0, 500),
+                    'proxy' => WhatsappHttpProxySupport::hostPuertoResumen(),
                 ]);
 
                 return ['ok' => false, 'error' => 'http_'.$resp->status()];
@@ -54,6 +55,7 @@ class MetaCloudWhatsappDriver implements WhatsappDriverInterface
             Log::error('WhatsApp Meta: excepción', [
                 'empresa_id' => $cuenta->empresa_id,
                 'error' => $e->getMessage(),
+                'proxy' => WhatsappHttpProxySupport::hostPuertoResumen(),
             ]);
 
             return ['ok' => false, 'error' => $e->getMessage()];
@@ -106,16 +108,17 @@ class MetaCloudWhatsappDriver implements WhatsappDriverInterface
         }
 
         try {
-            $resp = Http::timeout((int) config('whatsapp.meta.timeout', 20))
-                ->withToken($token)
-                ->acceptJson()
-                ->post($url, $payload);
+            $resp = WhatsappHttpProxySupport::cliente(
+                $token,
+                (int) config('whatsapp.meta.timeout', 20)
+            )->post($url, $payload);
 
             if (! $resp->successful()) {
                 Log::warning('WhatsApp Meta plantilla: HTTP error', [
                     'empresa_id' => $cuenta->empresa_id,
                     'status' => $resp->status(),
                     'body' => mb_substr($resp->body(), 0, 500),
+                    'proxy' => WhatsappHttpProxySupport::hostPuertoResumen(),
                 ]);
 
                 return ['ok' => false, 'error' => 'http_'.$resp->status()];
@@ -128,6 +131,7 @@ class MetaCloudWhatsappDriver implements WhatsappDriverInterface
             Log::error('WhatsApp Meta plantilla: excepción', [
                 'empresa_id' => $cuenta->empresa_id,
                 'error' => $e->getMessage(),
+                'proxy' => WhatsappHttpProxySupport::hostPuertoResumen(),
             ]);
 
             return ['ok' => false, 'error' => $e->getMessage()];
