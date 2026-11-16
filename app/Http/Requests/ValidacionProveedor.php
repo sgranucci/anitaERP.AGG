@@ -55,12 +55,17 @@ class ValidacionProveedor extends FormRequest
     public function rules()
     {
         $nroInscripcionRules = ['required', new RuleProveedor('nroinscripcion')];
-        if ($this->tipoServicioProveedorControlaUnicidadCuit() && ! $this->proveedorEsDelExterior()) {
-            // Un CUIT repetido solo en un proveedor suspendido no bloquea el guardado.
+        // Suspendido puede compartir CUIT con un activo (ej. duplicado Anita a dar de baja).
+        // La unicidad solo aplica entre proveedores no suspendidos.
+        if (
+            $this->tipoServicioProveedorControlaUnicidadCuit()
+            && ! $this->proveedorEsDelExterior()
+            && ! $this->proveedorQuedaSuspendido()
+        ) {
             $nroInscripcionRules[] = Rule::unique('proveedor', 'nroinscripcion')
                 ->ignore($this->route('id'))
                 ->whereNull('deleted_at')
-                ->whereNot('estado', Proveedor::$enumEstado['1']);
+                ->whereNot('estado', Proveedor::ESTADO_SUSPENDIDO);
         }
 
         $rules = [
@@ -332,6 +337,16 @@ class ValidacionProveedor extends FormRequest
     }
 
     /**
+     * Al suspender (o dejar suspendido) no exige CUIT único: el duplicado puede coexistir con el activo.
+     */
+    private function proveedorQuedaSuspendido(): bool
+    {
+        $estado = trim((string) $this->input('estado'));
+
+        return $estado === Proveedor::ESTADO_SUSPENDIDO || $estado === '1';
+    }
+
+    /**
      * País distinto de Argentina: el CUIT puede repetirse (CUIT país compartido o CUIT ARCA).
      */
     private function proveedorEsDelExterior(): bool
@@ -375,7 +390,7 @@ class ValidacionProveedor extends FormRequest
         $idActual = $this->route('id');
         $otros = Proveedor::query()
             ->where('nroinscripcion', $cuit)
-            ->where('estado', '!=', Proveedor::$enumEstado['1'])
+            ->where('estado', '!=', Proveedor::ESTADO_SUSPENDIDO)
             ->when($idActual !== null && $idActual !== '', function ($query) use ($idActual) {
                 $query->where('id', '!=', $idActual);
             })

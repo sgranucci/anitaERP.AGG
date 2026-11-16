@@ -2897,6 +2897,14 @@ class FacturacionService
 			&& (int) ($data['venta_id'] ?? 0) > 0
 			&& $tipotransaccionCalculo
 			&& $tipotransaccionCalculo->esNotaCredito();
+		// ND que revierte NC: mismos renglones/OT de la NC; no rearmar como factura nueva.
+		$omitirResolucionOtMostrador = $esNcMostrador
+			|| (
+				! $esPosMostrador
+				&& NotaDebitoReversionNotaCreditoSupport::payloadEsReversion($data)
+				&& $tipotransaccionCalculo
+				&& $tipotransaccionCalculo->esNotaDebito()
+			);
 
 		// Lee los items a facturar
 		$dataFactura = [];
@@ -3335,7 +3343,7 @@ class FacturacionService
 				(int) $cliente->id,
 				(string) $fechaFactura,
 				$esPosMostrador,
-				$esNcMostrador
+				$omitirResolucionOtMostrador
 			);
 			if (is_array($otLineaMostrador) && isset($otLineaMostrador['error'])) {
 				return $otLineaMostrador;
@@ -3347,7 +3355,7 @@ class FacturacionService
 					(int) $cliente->id,
 					(string) $fechaFactura,
 					$esPosMostrador,
-					$esNcMostrador
+					$omitirResolucionOtMostrador
 				);
 				if (is_array($otLineaMostrador) && isset($otLineaMostrador['error'])) {
 					return $otLineaMostrador;
@@ -3386,6 +3394,15 @@ class FacturacionService
 				$despachoLinea = trim((string) ($otLineaMostrador['despacho'] ?? ''));
 				$loteImpMostrador = (int) ($otLineaMostrador['loteimportacion_id'] ?? 0);
 				$loteImportacionIdLinea = $loteImpMostrador > 0 ? $loteImpMostrador : null;
+			} elseif ($omitirResolucionOtMostrador) {
+				// NC / ND de reversión: conservar OT/pedido del origen sin revalidar como FAC.
+				$otFromForm = (int) ($data['ordentrabajo_ids'][$offItem] ?? 0);
+				$pcFromForm = (int) ($data['pedido_combinacion_ids'][$offItem] ?? 0);
+				$ordentrabajoIdLinea = $otFromForm > 0 ? $otFromForm : null;
+				$pedidoCombinacionIdLinea = $pcFromForm > 0 ? $pcFromForm : null;
+				if ($moduloIdLinea === null && $moduloIdDesdeRequest > 0) {
+					$moduloIdLinea = $moduloIdDesdeRequest;
+				}
 			} elseif ($moduloIdLinea === null && $moduloIdDesdeRequest > 0) {
 				$moduloIdLinea = $moduloIdDesdeRequest;
 			} elseif ($moduloIdLinea === null
@@ -5950,6 +5967,18 @@ class FacturacionService
 						(int) $venta_id
 					);
 				}
+			}
+
+			// Ferli: ND que cancela NC → saca del stock lo que la NC había reingresado.
+			$esReversionNdStock = is_array($opcionesEmision)
+				&& ! empty($opcionesEmision[NotaDebitoReversionNotaCreditoSupport::FLAG])
+				&& $tipotransaccion->esNotaDebito();
+			if (EntornoEmpresaSupport::esFerli() && $esReversionNdStock && (int) $venta_id > 0) {
+				\App\Support\Ventas\Ferli\NotaCreditoReabrePedidoOtFerliSupport::alGrabarNdReversion(
+					(int) $venta_id,
+					(int) $vta->id,
+					(string) $fechaFactura
+				);
 			}
 
 			// Tiendanube: NC total sobre FAC del staging → libera cantidades para refacturar

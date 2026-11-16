@@ -39,6 +39,33 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertNull($payload['movimientostock_id']);
     }
 
+    public function test_nd_reverso_entrada_nc_saca_pares_con_mismo_lote(): void
+    {
+        $payload = S::payloadReversoEntradaDevolucionNc([
+            'id' => 501,
+            'lote' => '26748',
+            'ordentrabajo_id' => 26748,
+            'pedido_combinacion_id' => 34153,
+            'articulo_id' => 12518,
+            'combinacion_id' => 17172,
+            'modulo_id' => 30,
+            'deposito_id' => 1,
+            'tipotransaccion_stock_id' => 46,
+            'cantidad' => 12.0,
+            'precio' => 58100,
+            'concepto' => 'Devolución NC',
+        ], 9001, '2026-11-16');
+
+        self::assertNotNull($payload);
+        self::assertSame('26748', $payload['lote']);
+        self::assertSame(26748, $payload['ordentrabajo_id']);
+        self::assertSame(34153, $payload['pedido_combinacion_id']);
+        self::assertSame(-12.0, $payload['cantidad']);
+        self::assertSame(9001, $payload['venta_id']);
+        self::assertSame('Reverso Devolución NC #501', $payload['concepto']);
+        self::assertSame('2026-11-16', $payload['fecha']);
+    }
+
     public function test_devuelve_el_consumo_aunque_el_lote_este_en_cero(): void
     {
         self::assertFalse(S::esConsumoPickingRevertible([

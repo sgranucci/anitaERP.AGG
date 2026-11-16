@@ -104,6 +104,49 @@ final class NotaCreditoReabrePedidoOtFerliSupport
     }
 
     /**
+     * ND de mostrador que cancela una NC: saca del stock lo que esa NC había reingresado.
+     *
+     * @return array{aplicado: bool, movimientos_revertidos: int, motivo?: string}
+     */
+    public static function alGrabarNdReversion(
+        int $ventaNcId,
+        int $ventaNdId,
+        ?string $fechaNd = null
+    ): array {
+        $vacio = ['aplicado' => false, 'movimientos_revertidos' => 0];
+
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return $vacio + ['motivo' => 'no_ferli'];
+        }
+        if ($ventaNcId <= 0 || $ventaNdId <= 0) {
+            return $vacio + ['motivo' => 'ids'];
+        }
+
+        $revertidos = PedidoPickingFerliSupport::revertirEntradasDevolucionNcAlGrabarNd(
+            $ventaNcId,
+            $ventaNdId,
+            $fechaNd
+        );
+
+        if ($revertidos > 0) {
+            try {
+                Log::info('ferli.nd.reverso_devolucion_nc', [
+                    'venta_nc_id' => $ventaNcId,
+                    'venta_nd_id' => $ventaNdId,
+                    'movimientos_revertidos' => $revertidos,
+                ]);
+            } catch (\Throwable) {
+                // No tumbar la ND por fallo de log.
+            }
+        }
+
+        return [
+            'aplicado' => $revertidos > 0,
+            'movimientos_revertidos' => $revertidos,
+        ];
+    }
+
+    /**
      * NC parcial: devuelve los pares acreditados, aunque sea una parte de la curva.
      * Si la línea quedó cubierta por completo y estaba en un picking, vuelve a pendiente.
      * No se desarma el picking ni se tocan las líneas que siguen facturadas.

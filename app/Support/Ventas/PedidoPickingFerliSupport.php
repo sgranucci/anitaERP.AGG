@@ -61,6 +61,12 @@ final class PedidoPickingFerliSupport
 
     public const CONCEPTO_DEVOLUCION_NC_PICKING_LEGADO_PREFIJO = 'Devolución NC picking #';
 
+    /** Entrada de OT fabricada para el cliente (sin consumo previo). */
+    public const CONCEPTO_DEVOLUCION_NC = 'Devolución NC';
+
+    /** ND que cancela una NC: saca del stock la entrada de esa NC. */
+    public const CONCEPTO_REVERSO_DEVOLUCION_NC_PREFIJO = 'Reverso Devolución NC #';
+
     /** @return list<string> */
     public static function prefijosConceptoReversoConsumo(): array
     {
@@ -1914,6 +1920,228 @@ final class PedidoPickingFerliSupport
         return $ingresos;
     }
 
+    /**
+     * Preview del alta que haría {@see ingresarMercaderiaDevuelta} (sin grabar).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function previewIngresoMercaderiaDevuelta(int $ventaNcId): array
+    {
+        if ($ventaNcId <= 0 || ! self::habilitado()) {
+            return [];
+        }
+
+        $filas = [];
+        $grupos = [];
+        foreach (Venta_Emision::query()
+            ->where('venta_id', $ventaNcId)
+            ->where('pedido_combinacion_id', '>', 0)
+            ->get(['pedido_combinacion_id', 'talle_id', 'cantidad', 'precio', 'deposito_id']) as $emision) {
+            $id = (int) $emision->pedido_combinacion_id;
+            $cant = abs((float) $emision->cantidad);
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            if (! isset($grupos[$id])) {
+                $grupos[$id] = [
+                    'cantidad' => 0.0,
+                    'deposito_id' => (int) ($emision->deposito_id ?? 0),
+                    'talles' => [],
+                ];
+            }
+            $grupos[$id]['cantidad'] += $cant;
+            if ($grupos[$id]['deposito_id'] <= 0) {
+                $grupos[$id]['deposito_id'] = (int) ($emision->deposito_id ?? 0);
+            }
+            $talleId = (int) ($emision->talle_id ?? 0);
+            if ($talleId > 0) {
+                $grupos[$id]['talles'][] = [
+                    'talle_id' => $talleId,
+                    'cantidad' => $cant,
+                    'precio' => $emision->precio,
+                ];
+            }
+        }
+
+        foreach ($grupos as $pcId => $grupo) {
+            $ya = self::paresYaIngresadosPorNota($ventaNcId, (int) $pcId);
+            $falta = (float) $grupo['cantidad'] - $ya;
+            $pendiente = self::paresPendientesDeDevolver((int) $pcId);
+            $linea = Pedido_Combinacion::query()->find((int) $pcId);
+            $otId = (int) ($linea->ot_id ?? 0);
+            $companero = $linea && OtClienteCompartidoStockSupport::esFacturaDeCompanero($linea, $otId);
+            $tieneMovPc = Articulo_Movimiento::query()->where('pedido_combinacion_id', (int) $pcId)->exists();
+            $accion = 'nada';
+            if ($falta > 0.0001 && $pendiente > 0.0001) {
+                $accion = 'reverso_consumo';
+            } elseif ($falta > 0.0001 && ! $tieneMovPc && $companero) {
+                $accion = 'alta_devolucion_nc';
+            } elseif ($falta > 0.0001) {
+                $accion = 'bloqueado';
+            }
+
+            $filas[] = [
+                'pedido_combinacion_id' => (int) $pcId,
+                'ordentrabajo_id' => $otId,
+                'ot_codigo' => $otId > 0
+                    ? (string) (Ordentrabajo::query()->whereKey($otId)->value('codigo') ?? '')
+                    : '',
+                'articulo_id' => (int) ($linea->articulo_id ?? 0),
+                'combinacion_id' => (int) ($linea->combinacion_id ?? 0),
+                'deposito_id' => (int) ($grupo['deposito_id'] ?: 1),
+                'cantidad_nc' => (float) $grupo['cantidad'],
+                'ya_ingresado' => $ya,
+                'falta' => max(0.0, $falta),
+                'pendiente_consumo' => $pendiente,
+                'companero' => $companero,
+                'accion' => $accion,
+                'talles' => $grupo['talles'],
+            ];
+        }
+
+        return $filas;
+    }
+
+    /**
+     * ND que revierte NC: saca del stock las entradas que esa NC había generado.
+     */
+    public static function revertirEntradasDevolucionNcAlGrabarNd(
+        int $ventaNcId,
+        int $ventaNdId,
+        ?string $fecha = null
+    ): int {
+        if ($ventaNcId <= 0 || $ventaNdId <= 0 || ! self::habilitado()) {
+            return 0;
+        }
+
+        $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+        $revertidos = 0;
+
+        $entradas = Articulo_Movimiento::query()
+            ->with('articulo_movimiento_talles')
+            ->where('venta_id', $ventaNcId)
+            ->where('cantidad', '>', 0)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($entradas as $entrada) {
+            if (self::yaTieneReversoEntradaDevolucionNc((int) $entrada->id)) {
+                continue;
+            }
+            $payload = self::payloadReversoEntradaDevolucionNc($entrada, $ventaNdId, $fechaYmd);
+            if ($payload === null) {
+                continue;
+            }
+
+            $reverso = Articulo_Movimiento::query()->create($payload);
+            foreach ($entrada->articulo_movimiento_talles as $talle) {
+                $cant = abs((float) $talle->cantidad);
+                if ($cant <= 0.0001) {
+                    continue;
+                }
+                Articulo_Movimiento_Talle::query()->create([
+                    'articulo_movimiento_id' => $reverso->id,
+                    'pedido_combinacion_talle_id' => $talle->pedido_combinacion_talle_id,
+                    'talle_id' => $talle->talle_id,
+                    'cantidad' => -1 * $cant,
+                    'precio' => $talle->precio,
+                ]);
+            }
+            $revertidos++;
+        }
+
+        return $revertidos;
+    }
+
+    public static function conceptoReversoEntradaDevolucionNc(int $movimientoEntradaId): string
+    {
+        return self::CONCEPTO_REVERSO_DEVOLUCION_NC_PREFIJO.$movimientoEntradaId;
+    }
+
+    public static function yaTieneReversoEntradaDevolucionNc(int $movimientoEntradaId): bool
+    {
+        if ($movimientoEntradaId <= 0) {
+            return false;
+        }
+
+        return Articulo_Movimiento::query()
+            ->where('cantidad', '<', 0)
+            ->where('concepto', self::conceptoReversoEntradaDevolucionNc($movimientoEntradaId))
+            ->exists();
+    }
+
+    /**
+     * @param  object|array<string, mixed>  $mov
+     * @return array<string, mixed>|null
+     */
+    public static function payloadReversoEntradaDevolucionNc($mov, int $ventaNdId, string $fecha): ?array
+    {
+        $cantidad = (float) self::valorMovimiento($mov, 'cantidad', 0);
+        if ($cantidad <= 0.0001) {
+            return null;
+        }
+
+        $fechaYmd = Carbon::parse($fecha)->format('Y-m-d');
+        $otId = (int) self::valorMovimiento($mov, 'ordentrabajo_id', 0);
+        $pcId = (int) self::valorMovimiento($mov, 'pedido_combinacion_id', 0);
+        $loteImpId = (int) self::valorMovimiento($mov, 'loteimportacion_id', 0);
+        $tipoVentaId = (int) self::valorMovimiento($mov, 'tipotransaccion_id', 0);
+        $tipoStockId = (int) self::valorMovimiento($mov, 'tipotransaccion_stock_id', 0);
+        $depositoId = (int) self::valorMovimiento($mov, 'deposito_id', 0);
+        $moduloId = (int) self::valorMovimiento($mov, 'modulo_id', 0);
+        $combinacionId = (int) self::valorMovimiento($mov, 'combinacion_id', 0);
+        $listaprecioId = (int) self::valorMovimiento($mov, 'listaprecio_id', 0);
+        $monedaId = (int) self::valorMovimiento($mov, 'moneda_id', 0);
+        $colorId = (int) self::valorMovimiento($mov, 'color_id', 0);
+        $talleId = (int) self::valorMovimiento($mov, 'talle_id', 0);
+        $entradaId = (int) self::valorMovimiento($mov, 'id', 0);
+
+        // Preferir CONOT (salida) si la entrada no trae tipo; si trae tipo stock/venta, se conserva.
+        if ($tipoStockId <= 0 && $tipoVentaId <= 0) {
+            $tipoVentaId = (int) config('consprod.TIPOTRANSACCION_CONSUME_OT');
+        }
+
+        $payload = [
+            'fecha' => $fechaYmd,
+            'fechajornada' => $fechaYmd,
+            'tipotransaccion_id' => $tipoVentaId > 0 ? $tipoVentaId : null,
+            'tipotransaccion_stock_id' => $tipoStockId > 0 ? $tipoStockId : null,
+            'venta_id' => $ventaNdId > 0 ? $ventaNdId : null,
+            'venta_emision_id' => null,
+            'movimientostock_id' => null,
+            'pedido_combinacion_id' => $pcId > 0 ? $pcId : null,
+            'ordentrabajo_id' => $otId > 0 ? $otId : null,
+            'lote' => self::loteVisibleEnReporteStock(
+                trim((string) self::valorMovimiento($mov, 'lote', '')),
+                $otId
+            ),
+            'articulo_id' => (int) self::valorMovimiento($mov, 'articulo_id', 0),
+            'color_id' => $colorId > 0 ? $colorId : null,
+            'talle_id' => $talleId > 0 ? $talleId : null,
+            'numeroparte' => self::valorMovimiento($mov, 'numeroparte', null),
+            'combinacion_id' => $combinacionId > 0 ? $combinacionId : null,
+            'concepto' => self::conceptoReversoEntradaDevolucionNc($entradaId),
+            'modulo_id' => $moduloId > 0 ? $moduloId : null,
+            'cantidad' => -1 * $cantidad,
+            'precio' => self::valorMovimiento($mov, 'precio', 0),
+            'costo' => self::valorMovimiento($mov, 'costo', 0),
+            'listaprecio_id' => $listaprecioId > 0 ? $listaprecioId : null,
+            'incluyeimpuesto' => self::valorMovimiento($mov, 'incluyeimpuesto', null),
+            'moneda_id' => $monedaId > 0 ? $monedaId : null,
+            'descuento' => self::valorMovimiento($mov, 'descuento', null),
+            'descuentointegrado' => self::valorMovimiento($mov, 'descuentointegrado', null),
+            'deposito_id' => $depositoId > 0 ? $depositoId : 1,
+            'loteimportacion_id' => $loteImpId > 0 ? $loteImpId : null,
+        ];
+
+        if (UnidadesCajaPiezaSupport::articuloMovimientoTieneColumnas()) {
+            $payload['caja'] = self::valorMovimiento($mov, 'caja', null);
+            $payload['pieza'] = self::valorMovimiento($mov, 'pieza', null);
+        }
+
+        return $payload;
+    }
+
     private static function paresYaIngresadosPorNota(int $ventaNcId, int $pedidoCombinacionId): float
     {
         if ($ventaNcId <= 0 || $pedidoCombinacionId <= 0) {
@@ -2010,7 +2238,7 @@ final class PedidoPickingFerliSupport
             'articulo_id' => $linea->articulo_id,
             'combinacion_id' => $linea->combinacion_id,
             'modulo_id' => $linea->modulo_id,
-            'concepto' => 'Devolución NC',
+            'concepto' => self::CONCEPTO_DEVOLUCION_NC,
             'cantidad' => $cantidad,
             'precio' => $linea->precio,
             'costo' => 0,
