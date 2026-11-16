@@ -19,6 +19,7 @@ class RemitoInterno extends Model implements Auditable
 
     protected $fillable = [
         'numero',
+        'tipo',
         'fecha',
         'local_venta_id',
         'empresa_id',
@@ -34,6 +35,10 @@ class RemitoInterno extends Model implements Auditable
     protected $casts = [
         'fecha' => 'date',
         'numero' => 'integer',
+    ];
+
+    protected $attributes = [
+        'tipo' => 'RIN',
     ];
 
     public function lineas(): HasMany

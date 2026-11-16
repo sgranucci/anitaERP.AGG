@@ -32,15 +32,16 @@
                 @csrf
                 <div class="card-body">
                     <p class="text-muted small mb-3">
-                        Sirve una curva (SKU, combinación, color y una columna por talle)
+                        Sirve una curva (SKU / Referencia Ferli, combinación o Cor, y una columna por talle; Cx multiplica cajas)
                         o un pedido de fábrica de Brasil: artículo con código, combinación, curva por talle y módulos.
                         En ese pedido cada talle se multiplica por los módulos. Las hojas y las filas de total se leen solas.
                         Empresa, tipo, depósito, fecha, lote, lote de importación y leyenda no vienen en el archivo.
                     </p>
                     @if ($esFerli)
                         <div class="alert alert-info py-2">
-                            La curva común va a un depósito de <strong>local</strong>.
-                            El pedido de fábrica (Brasil) va a un depósito de <strong>fábrica</strong>: los colores se resuelven en ese catálogo.
+                            El catálogo sigue al <strong>depósito</strong>: local → locales; fábrica → fábrica
+                            (la Cor se resuelve por <strong>combinación</strong>).
+                            El pedido de Brasil con módulos también va a fábrica.
                         </div>
                     @else
                         <div class="alert alert-info py-2">
@@ -111,7 +112,7 @@
                                 'canal' => $depositoCanal,
                                 'col_label' => 'col-lg-4 col-form-label text-right pr-2',
                                 'col_input' => 'col-lg-8',
-                                'ayuda' => $esFerli ? 'Tiene que ser un local.' : '',
+                                'ayuda' => $esFerli ? 'Local = catálogo locales. Fábrica = catálogo fábrica (por combinación).' : '',
                             ])
                             <div class="form-group row mb-2">
                                 <label for="leyenda" class="col-lg-4 control-label text-right pr-2">Leyenda</label>

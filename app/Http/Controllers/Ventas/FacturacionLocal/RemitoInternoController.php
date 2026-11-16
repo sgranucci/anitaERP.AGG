@@ -15,6 +15,7 @@ use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoListadoFiltros;
+use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
 use InvalidArgumentException;
@@ -45,6 +46,7 @@ class RemitoInternoController extends Controller
             'camposFiltro' => RemitoInternoListadoFiltros::CAMPOS,
             'locales' => $locales,
             'estados' => RemitoInternoEstadosSupport::opcionesSelect(),
+            'tiposRemito' => RemitoInternoTiposSupport::opcionesSelect(),
         ]);
     }
 
@@ -87,6 +89,7 @@ class RemitoInternoController extends Controller
         $data = new RemitoInterno([
             'fecha' => now()->toDateString(),
             'estado' => RemitoInternoEstadosSupport::BORRADOR,
+            'tipo' => RemitoInternoTiposSupport::RIN,
         ]);
 
         return view('ventas.facturacion_local.remito_interno.crear', $this->formData($data, true));
@@ -103,9 +106,11 @@ class RemitoInternoController extends Controller
             return back()->withInput()->with('error', $e->getMessage());
         }
 
+        $tipo = RemitoInternoTiposSupport::normalizar((string) $remito->tipo);
+
         return redirect()
             ->route('editar_remito_interno', $remito->id)
-            ->with('mensaje', 'Remito interno Nº '.$remito->numero.' guardado como borrador.');
+            ->with('mensaje', $tipo.' Nº '.$remito->numero.' guardado como borrador.');
     }
 
     public function editar($id)
@@ -219,7 +224,9 @@ class RemitoInternoController extends Controller
 
         $archivo = $this->service->generarPdfArchivo($remito);
 
-        return response()->download($archivo, 'remito_interno_'.$remito->numero.'.pdf');
+        $tipo = RemitoInternoTiposSupport::normalizar((string) $remito->tipo);
+
+        return response()->download($archivo, 'remito_'.strtolower($tipo).'_'.$remito->numero.'.pdf');
     }
 
     public function apiBuscarArticulo(Request $request)
@@ -299,6 +306,7 @@ class RemitoInternoController extends Controller
             'locales' => $locales,
             'editable' => $editable,
             'estados' => RemitoInternoEstadosSupport::opcionesSelect(),
+            'tiposRemito' => RemitoInternoTiposSupport::opcionesSelect(),
         ];
     }
 

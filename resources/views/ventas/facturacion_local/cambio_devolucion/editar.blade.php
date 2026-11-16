@@ -74,6 +74,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 </div>
             </form>
 
+            <div class="px-3">
+                @include('ventas.facturacion_local.cambio_devolucion.partials.preview_fac')
+                @include('ventas.facturacion_local.cambio_devolucion.partials.preview_nc')
+            </div>
+
             <div class="card-footer d-flex flex-wrap align-items-center">
                 @if ($puedeActualizar)
                     <button type="submit" form="form-cambio-devolucion" class="btn btn-success botonsubmit mr-2 mb-1">
@@ -131,8 +136,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 @endif
 
                 @if (($puedeNcReemplazo ?? false) && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
-                    <form method="POST" action="{{ route('emitir_nc_reemplazo_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                          onsubmit="return confirm('¿Emitir nota de crédito de la factura de reemplazo por un error de carga? El par vuelve al stock y después se puede facturar de nuevo. El legajo no se cierra.');">
+                    <form method="POST" action="{{ route('emitir_nc_reemplazo_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1 cdm-form-emitir-nc-reemplazo"
+                          onsubmit="return window.cdmConfirmarNcReemplazo(this);">
                         @csrf
                         <button type="submit" class="btn btn-outline-danger">NC del reemplazo (error)</button>
                     </form>
@@ -157,7 +162,7 @@ document.addEventListener('DOMContentLoaded', function () {
                         $lineasDevolverNc = $data->lineas->where('tipo', 'devolver')->values();
                     @endphp
                     <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex flex-wrap align-items-center mr-2 mb-1 cdm-form-emitir-nc"
-                          onsubmit="var s=this.querySelector('[name=modo_precio]'); return confirm('¿Emitir la nota de crédito de lo devuelto con este precio: '+(s?s.options[s.selectedIndex].text:'')+'? El motivo define si ese par ingresa al stock.');">
+                          onsubmit="return window.cdmConfirmarNcDevolver(this);">
                         @csrf
                         @include('ventas.facturacion_local.cambio_devolucion.partials.select_modo_precio', [
                             'etiquetaPrecio' => 'Precio de la devolución',

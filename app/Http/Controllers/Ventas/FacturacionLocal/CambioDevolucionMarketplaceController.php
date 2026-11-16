@@ -10,6 +10,7 @@ use App\Models\Ventas\CambioDevolucionMarketplace;
 use App\Models\Ventas\LocalVenta;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEmisionService;
+use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceNcService;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceOppDevolucionService;
 use App\Services\Ventas\FacturacionLocal\CambioDevolucionMarketplaceService;
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
@@ -40,6 +41,7 @@ class CambioDevolucionMarketplaceController extends Controller
     public function __construct(
         private readonly CambioDevolucionMarketplaceService $service,
         private readonly CambioDevolucionMarketplaceEmisionService $emisionService,
+        private readonly CambioDevolucionMarketplaceNcService $ncService,
         private readonly CambioDevolucionMarketplaceOppDevolucionService $oppDevolucionService,
         private readonly Caja_MovimientoRepositoryInterface $cajaMovimientoRepository,
     ) {
@@ -197,9 +199,14 @@ class CambioDevolucionMarketplaceController extends Controller
         can('emitir-fac-cambio-devolucion-marketplace-facturacion-local');
 
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar((string) $request->input('modo_precio'));
+        $lineaIds = $this->lineaIdsDesdeRequest($request);
 
         try {
-            $resultado = $this->service->emitirFacReemplazo(CambioDevolucionMarketplace::query()->findOrFail($id), $modo);
+            $resultado = $this->service->emitirFacReemplazo(
+                CambioDevolucionMarketplace::query()->findOrFail($id),
+                $modo,
+                $lineaIds
+            );
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -213,13 +220,18 @@ class CambioDevolucionMarketplaceController extends Controller
             ->with('mensaje', $resultado['mensaje'] ?? 'FAC emitida.');
     }
 
-    public function emitirNcReemplazo($id)
+    public function emitirNcReemplazo(Request $request, $id)
     {
         $this->assertFerli();
         can('emitir-nc-cambio-devolucion-marketplace-facturacion-local');
 
+        $lineaIds = $this->lineaIdsDesdeRequest($request);
+
         try {
-            $resultado = $this->service->emitirNcReemplazo(CambioDevolucionMarketplace::query()->findOrFail($id));
+            $resultado = $this->service->emitirNcReemplazo(
+                CambioDevolucionMarketplace::query()->findOrFail($id),
+                $lineaIds
+            );
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -326,9 +338,15 @@ class CambioDevolucionMarketplaceController extends Controller
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar((string) $request->input('modo_precio'));
         $precios = $request->input('precio_devolver', []);
         $precios = is_array($precios) ? $precios : [];
+        $lineaIds = $this->lineaIdsDesdeRequest($request);
 
         try {
-            $resultado = $this->service->emitirNcOriginal(CambioDevolucionMarketplace::query()->findOrFail($id), $modo, $precios);
+            $resultado = $this->service->emitirNcOriginal(
+                CambioDevolucionMarketplace::query()->findOrFail($id),
+                $modo,
+                $precios,
+                $lineaIds
+            );
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -591,9 +609,22 @@ class CambioDevolucionMarketplaceController extends Controller
         $previewFac = $puedeOperarFacturacion && $reemplazosPendientes > 0 && ! $editable
             ? $this->previewFacturaReemplazo($data)
             : null;
+        $facVigenteId = (int) ($data->venta_reemplazo_id ?? 0);
+        $previewNcReemplazo = $puedeOperarFacturacion && $facVigenteId > 0 && ! $editable
+            ? $this->previewNcReemplazo($data)
+            : null;
+        $previewNcDevolver = $data->exists
+            && ! $editable
+            && (int) ($data->venta_nc_id ?? 0) <= 0
+            && $data->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)->isNotEmpty()
+            && ! CambioDevolucionMarketplaceEstadosSupport::esTerminal($estado)
+            ? $this->previewNcDevolver($data)
+            : null;
 
         return [
             'previewFac' => $previewFac,
+            'previewNcReemplazo' => $previewNcReemplazo,
+            'previewNcDevolver' => $previewNcDevolver,
             'data' => $data,
             'locales' => $locales,
             'canales' => CambioDevolucionMarketplaceCatalogoSupport::CANALES,
@@ -626,15 +657,24 @@ class CambioDevolucionMarketplaceController extends Controller
     }
 
     /**
-     * Total de la factura por modo de precio y diferencia estimada contra lo devuelto,
-     * para el diálogo de confirmación. Si la NC de lo devuelto no salió, se estima con la grilla.
+     * Detalle de la factura por modo de precio (líneas, pares, total) y diferencia estimada
+     * contra lo devuelto, para el panel de preview y el diálogo de confirmación.
+     * Si la NC de lo devuelto no salió, se estima con la grilla.
      *
-     * @return array{modos:array<string,array{ok:bool,total?:float,error?:string}>,vigente:float,devolver:float,devolver_estimado:bool}
+     * @return array{
+     *   modos:array<string,array{ok:bool,total?:float,cantidad_pares?:float,lineas?:list<array<string,mixed>>,avisos?:list<string>,error?:string}>,
+     *   pendientes:list<array<string,mixed>>,
+     *   cantidad_pares_pendientes:float,
+     *   vigente:float,
+     *   devolver:float,
+     *   devolver_estimado:bool
+     * }
      */
     private function previewFacturaReemplazo(CambioDevolucionMarketplace $data): array
     {
-        $data->loadMissing(['ventaNc', 'comprobantes']);
+        $data->loadMissing(['ventaNc', 'comprobantes', 'lineas.articulo']);
         $modos = $this->emisionService->previsualizarPorModo($data);
+        $pendientes = $this->emisionService->pendientesReemplazoParaPreview($data);
         $ncId = (int) ($data->venta_nc_id ?? 0);
         $devolver = $ncId > 0
             ? abs((float) ($data->ventaNc->total ?? 0))
@@ -644,10 +684,75 @@ class CambioDevolucionMarketplaceController extends Controller
 
         return [
             'modos' => $modos,
+            'pendientes' => $pendientes,
+            'cantidad_pares_pendientes' => round(array_sum(array_column($pendientes, 'cantidad')), 4),
             'vigente' => CambioDevolucionMarketplaceLiquidacionSupport::totalReemplazosVigentes($data),
             'devolver' => round($devolver, 2),
             'devolver_estimado' => $ncId <= 0,
         ];
+    }
+
+    /**
+     * @return array{ok:bool,total?:float,cantidad_pares?:float,lineas?:list<array<string,mixed>>,pendientes:list<array<string,mixed>>,error?:string}
+     */
+    private function previewNcReemplazo(CambioDevolucionMarketplace $data): array
+    {
+        $data->loadMissing(['lineas.articulo', 'ventaReemplazo.venta_emisiones']);
+        $pendientes = [];
+        $facId = (int) ($data->venta_reemplazo_id ?? 0);
+        foreach ($data->lineas as $linea) {
+            if ((string) $linea->tipo !== CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO) {
+                continue;
+            }
+            if ((int) ($linea->venta_fac_id ?? 0) !== $facId || $facId <= 0) {
+                continue;
+            }
+            $cant = round((float) $linea->cantidad, 4);
+            $precio = round((float) $linea->precio_unitario, 4);
+            $pendientes[] = [
+                'linea_id' => (int) $linea->id,
+                'sku' => trim((string) ($linea->articulo?->sku ?? '')),
+                'descripcion' => trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: '')),
+                'cantidad' => $cant,
+                'precio_unitario' => $precio,
+                'subtotal' => round($cant * $precio, 2),
+            ];
+        }
+        $preview = $this->ncService->previsualizarNcReemplazo($data);
+
+        return array_merge($preview, ['pendientes' => $pendientes]);
+    }
+
+    /**
+     * @return array{
+     *   modos:array<string,array{ok:bool,total?:float,cantidad_pares?:float,lineas?:list<array<string,mixed>>,avisos?:list<string>,error?:string}>,
+     *   pendientes:list<array<string,mixed>>,
+     *   cantidad_pares_pendientes:float
+     * }
+     */
+    private function previewNcDevolver(CambioDevolucionMarketplace $data): array
+    {
+        $pendientes = $this->ncService->devolverParaPreview($data);
+        $modos = $this->ncService->previsualizarNcOriginalPorModo($data);
+
+        return [
+            'modos' => $modos,
+            'pendientes' => $pendientes,
+            'cantidad_pares_pendientes' => round(array_sum(array_column($pendientes, 'cantidad')), 4),
+        ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function lineaIdsDesdeRequest(Request $request): array
+    {
+        $raw = $request->input('linea_ids', []);
+        if (! is_array($raw)) {
+            $raw = [];
+        }
+
+        return CambioDevolucionMarketplaceEmisionService::normalizarIds($raw);
     }
 
     /**

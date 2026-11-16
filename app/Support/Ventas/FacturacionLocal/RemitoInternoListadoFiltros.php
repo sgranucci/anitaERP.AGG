@@ -80,6 +80,11 @@ class RemitoInternoListadoFiltros
             $estado = '';
         }
 
+        $tipo = strtoupper(trim((string) $request->input('filtro_tipo', '')));
+        if ($tipo !== '' && ! RemitoInternoTiposSupport::esValido($tipo)) {
+            $tipo = '';
+        }
+
         $localId = (int) $request->input('filtro_local_venta_id', 0);
 
         return [
@@ -91,6 +96,7 @@ class RemitoInternoListadoFiltros
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'estado' => $estado,
+            'tipo' => $tipo,
             'local_venta_id' => $localId > 0 ? $localId : 0,
         ];
     }
@@ -106,6 +112,7 @@ class RemitoInternoListadoFiltros
             'busqueda' => '',
             'busqueda_rapida' => false,
             'estado' => '',
+            'tipo' => '',
             'local_venta_id' => 0,
         ];
     }
@@ -116,6 +123,9 @@ class RemitoInternoListadoFiltros
             return true;
         }
         if (trim((string) ($filtros['estado'] ?? '')) !== '') {
+            return true;
+        }
+        if (trim((string) ($filtros['tipo'] ?? '')) !== '') {
             return true;
         }
         if ((int) ($filtros['local_venta_id'] ?? 0) > 0) {
@@ -145,6 +155,10 @@ class RemitoInternoListadoFiltros
         if ($estado !== '') {
             $out['filtro_estado'] = $estado;
         }
+        $tipo = trim((string) ($filtros['tipo'] ?? ''));
+        if ($tipo !== '') {
+            $out['filtro_tipo'] = $tipo;
+        }
         $localId = (int) ($filtros['local_venta_id'] ?? 0);
         if ($localId > 0) {
             $out['filtro_local_venta_id'] = $localId;
@@ -162,6 +176,11 @@ class RemitoInternoListadoFiltros
         $estado = trim((string) ($filtros['estado'] ?? ''));
         if ($estado !== '') {
             $query->where('remito_interno.estado', $estado);
+        }
+
+        $tipo = trim((string) ($filtros['tipo'] ?? ''));
+        if ($tipo !== '' && RemitoInternoTiposSupport::esValido($tipo)) {
+            $query->where('remito_interno.tipo', $tipo);
         }
 
         $localId = (int) ($filtros['local_venta_id'] ?? 0);

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Remito interno {{ $remito->numero ?? '' }}</title>
+    <title>Remito {{ $remito->tipo ?? 'RIN' }} {{ $remito->numero ?? '' }}</title>
     <style type="text/css">
         @include('includes.reportes.estilos_pdf_pagina', [
             'pdf_size' => 'a4 portrait',
@@ -86,6 +86,8 @@
     <td class="marco-centro">
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Ventas\FacturacionLocal\RemitoInternoNumeracionSupport;
+    use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
 
     $nombreEmpresa = $remito->empresa->nombre
         ?? ($remito->localVenta->empresa->nombre ?? null)
@@ -96,6 +98,11 @@
     $depTxt = trim(($remito->deposito->codigo ?? '').' — '.($remito->deposito->nombre ?? ''));
     $items = $items ?? [];
     $totalPares = (float) ($totalPares ?? 0);
+    $tipoPdf = RemitoInternoTiposSupport::normalizar((string) ($remito->tipo ?? RemitoInternoTiposSupport::RIN));
+    $tituloPdf = RemitoInternoTiposSupport::tituloDocumento($tipoPdf);
+    $subtituloPdf = $tipoPdf === RemitoInternoTiposSupport::REX
+        ? 'Remito externo de mercadería'
+        : 'Remito interno de mercadería';
 @endphp
 
 <table class="ri-header">
@@ -106,17 +113,17 @@
             @endif
             <div class="ri-bloque">
                 <strong>{{ $nombreEmpresa }}</strong><br>
-                Remito interno de mercadería
+                {{ $subtituloPdf }}
             </div>
         </td>
         <td class="ri-meta">
-            <div class="ri-titulo">REMITO INTERNO N° {{ $remito->numero }}</div>
-            <strong>Tipo:</strong> {{ \App\Support\Ventas\FacturacionLocal\RemitoInternoNumeracionSupport::TIPO_ANITA }}
-            {{ \App\Support\Ventas\FacturacionLocal\RemitoInternoNumeracionSupport::LETRA_ANITA }}
+            <div class="ri-titulo">{{ $tituloPdf }} N° {{ $remito->numero }}</div>
+            <strong>Tipo:</strong> {{ $tipoPdf }}
+            {{ RemitoInternoNumeracionSupport::LETRA_ANITA }}
             @php
                 $sucPdf = '';
                 if ($remito->localVenta) {
-                    $sucPdf = \App\Support\Ventas\FacturacionLocal\RemitoInternoNumeracionSupport::sucursalDesdeLocal($remito->localVenta);
+                    $sucPdf = RemitoInternoNumeracionSupport::sucursalDesdeLocal($remito->localVenta);
                 }
             @endphp
             @if ($sucPdf !== '')

@@ -1,5 +1,7 @@
 @php
     use App\Support\Ventas\FacturacionLocal\RemitoInternoEstadosSupport;
+    use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
+    $tiposRemito = $tiposRemito ?? RemitoInternoTiposSupport::opcionesSelect();
     $lineasExistentes = old('lineas');
     if (! is_array($lineasExistentes)) {
         $lineasExistentes = ($data->lineas ?? collect())->map(function ($l) {
@@ -68,12 +70,30 @@
                 <label class="col-lg-4 control-label text-right pr-2">Nº / Estado</label>
                 <div class="col-lg-6">
                     <p class="form-control-plaintext mb-0">
+                        {{ RemitoInternoTiposSupport::normalizar((string) $data->tipo) }}
                         {{ $data->numero }} —
                         {{ RemitoInternoEstadosSupport::etiqueta($data->estado) }}
                     </p>
                 </div>
             </div>
         @endif
+
+        <div class="form-group row">
+            <label class="col-lg-4 control-label text-right pr-2 requerido" for="tipo">Tipo de remito</label>
+            <div class="col-lg-3">
+                <select name="tipo" id="tipo" class="form-control" {{ $ro ? 'disabled' : 'required' }}>
+                    @foreach ($tiposRemito as $tipoKey => $tipoLabel)
+                        <option value="{{ $tipoKey }}"
+                            {{ old('tipo', $data->tipo ?? RemitoInternoTiposSupport::RIN) === $tipoKey ? 'selected' : '' }}>
+                            {{ $tipoLabel }}
+                        </option>
+                    @endforeach
+                </select>
+                @if ($ro)
+                    <input type="hidden" name="tipo" value="{{ $data->tipo ?? RemitoInternoTiposSupport::RIN }}">
+                @endif
+            </div>
+        </div>
 
         <div class="form-group row">
             <label class="col-lg-4 control-label text-right pr-2 requerido" for="fecha">Fecha</label>

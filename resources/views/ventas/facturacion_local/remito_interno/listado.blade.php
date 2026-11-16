@@ -17,6 +17,7 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Ventas\FacturacionLocal\RemitoInternoEstadosSupport;
+    use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
     $logos = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
 @endphp
 @if (! empty($logos))
@@ -33,6 +34,7 @@
 <table class="data">
     <thead>
         <tr>
+            <th>Tipo</th>
             <th>Nº</th>
             <th>Fecha</th>
             <th>Estado</th>
@@ -44,6 +46,7 @@
     <tbody>
         @foreach ($datas as $data)
             <tr>
+                <td>{{ RemitoInternoTiposSupport::normalizar((string) $data->tipo) }}</td>
                 <td>{{ $data->numero }}</td>
                 <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
                 <td>{{ RemitoInternoEstadosSupport::etiqueta($data->estado) }}</td>

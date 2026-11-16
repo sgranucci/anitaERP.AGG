@@ -22,10 +22,14 @@ final class CambioDevolucionMarketplaceEmisionService
     }
 
     /**
+     * @param  list<int|string>|null  $lineaIds  Obligatorio al emitir: líneas de reemplazo a incluir.
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
-    public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
-    {
+    public function emitirFacReemplazo(
+        CambioDevolucionMarketplace $cambio,
+        ?string $modoPrecio = null,
+        ?array $lineaIds = null,
+    ): array {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing(['lineas.articulo', 'localVenta', 'ventaOriginal.venta_emisiones']);
         /** @var LocalVenta|null $local */
@@ -34,7 +38,7 @@ final class CambioDevolucionMarketplaceEmisionService
             return ['ok' => false, 'error' => 'Local de venta inexistente.'];
         }
 
-        $preparado = $this->prepararLineas($cambio, $modo);
+        $preparado = $this->prepararLineas($cambio, $modo, $lineaIds, true);
         if (! $preparado['ok']) {
             return ['ok' => false, 'error' => $preparado['error']];
         }
@@ -54,19 +58,80 @@ final class CambioDevolucionMarketplaceEmisionService
     }
 
     /**
-     * Total que saldría en la factura con cada modo de precio, sin emitir.
+     * Detalle del comprobante que saldría con cada modo de precio, sin emitir.
      *
-     * @return array<string, array{ok:bool,total?:float,error?:string}>
+     * @param  list<int|string>|null  $lineaIds  Si viene, solo esas líneas pendientes.
+     * @return array<string, array{ok:bool,total?:float,cantidad_pares?:float,lineas?:list<array<string,mixed>>,avisos?:list<string>,error?:string}>
      */
-    public function previsualizarPorModo(CambioDevolucionMarketplace $cambio): array
+    public function previsualizarPorModo(CambioDevolucionMarketplace $cambio, ?array $lineaIds = null): array
     {
         $cambio->loadMissing(['lineas.articulo', 'ventaOriginal.venta_emisiones']);
         $out = [];
         foreach (array_keys(CambioDevolucionMarketplacePrecioSupport::MODOS) as $modo) {
-            $preparado = $this->prepararLineas($cambio, $modo);
-            $out[$modo] = $preparado['ok']
-                ? ['ok' => true, 'total' => round((float) $preparado['total'], 2)]
-                : ['ok' => false, 'error' => (string) $preparado['error']];
+            $preparado = $this->prepararLineas($cambio, $modo, $lineaIds, false);
+            if (! $preparado['ok']) {
+                $out[$modo] = ['ok' => false, 'error' => (string) $preparado['error']];
+
+                continue;
+            }
+            $lineas = [];
+            $cantidadPares = 0.0;
+            foreach ($preparado['lineas'] as $linea) {
+                $cant = round((float) ($linea['cantidad'] ?? 0), 4);
+                $precio = round((float) ($linea['precio'] ?? 0), 4);
+                $cantidadPares += $cant;
+                $lineas[] = [
+                    'linea_id' => (int) ($linea['linea_id'] ?? 0),
+                    'articulo_id' => (int) ($linea['articulo_id'] ?? 0),
+                    'sku' => (string) ($linea['sku'] ?? ''),
+                    'descripcion' => (string) ($linea['descripcion'] ?? ''),
+                    'cantidad' => $cant,
+                    'precio' => $precio,
+                    'subtotal' => round($cant * $precio, 2),
+                ];
+            }
+            $out[$modo] = [
+                'ok' => true,
+                'total' => round((float) $preparado['total'], 2),
+                'cantidad_pares' => round($cantidadPares, 4),
+                'lineas' => $lineas,
+                'avisos' => array_values($preparado['avisos'] ?? []),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Líneas de reemplazo todavía sin factura (lo que el operador ve en grilla como pendiente).
+     * Sirve para el preview aunque el modo de precio todavía no cierre.
+     *
+     * @return list<array{linea_id:int,articulo_id:int,sku:string,descripcion:string,cantidad:float,precio_unitario:float,subtotal:float}>
+     */
+    public function pendientesReemplazoParaPreview(CambioDevolucionMarketplace $cambio): array
+    {
+        $cambio->loadMissing(['lineas.articulo']);
+        $out = [];
+        foreach ($cambio->lineas as $linea) {
+            if ((string) $linea->tipo !== CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO) {
+                continue;
+            }
+            if ((int) ($linea->venta_fac_id ?? 0) > 0) {
+                continue;
+            }
+            $cant = round((float) $linea->cantidad, 4);
+            $precio = round((float) $linea->precio_unitario, 4);
+            $sku = trim((string) ($linea->articulo?->sku ?? ''));
+            $desc = trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: ''));
+            $out[] = [
+                'linea_id' => (int) $linea->id,
+                'articulo_id' => (int) $linea->articulo_id,
+                'sku' => $sku,
+                'descripcion' => $desc,
+                'cantidad' => $cant,
+                'precio_unitario' => $precio,
+                'subtotal' => round($cant * $precio, 2),
+            ];
         }
 
         return $out;
@@ -75,10 +140,15 @@ final class CambioDevolucionMarketplaceEmisionService
     /**
      * Valida y resuelve el precio de las líneas pendientes. No graba.
      *
+     * @param  list<int|string>|null  $lineaIds
      * @return array{ok:bool,error?:string,lineas:list<array<string,mixed>>,total:float,ajustes:list<array<string,mixed>>,avisos:list<string>,lineas_reemplazo:\Illuminate\Support\Collection}
      */
-    private function prepararLineas(CambioDevolucionMarketplace $cambio, string $modo): array
-    {
+    private function prepararLineas(
+        CambioDevolucionMarketplace $cambio,
+        string $modo,
+        ?array $lineaIds = null,
+        bool $exigirSeleccion = false,
+    ): array {
         $vacio = ['lineas' => [], 'total' => 0.0, 'ajustes' => [], 'avisos' => [], 'lineas_reemplazo' => collect()];
         $falla = static fn (string $error): array => ['ok' => false, 'error' => $error] + $vacio;
 
@@ -98,14 +168,33 @@ final class CambioDevolucionMarketplaceEmisionService
         if ($pendientes->isEmpty()) {
             return $falla('No hay un reemplazo nuevo para facturar. Agregalo en la grilla y guardalo.');
         }
-        // Solo pendientes: tras NC todas lo son; si ya hay FAC vigente, solo el par nuevo.
-        // Si dejaron la línea vieja (precio mal) y sumaron otra del mismo artículo, cortar.
-        $lineasReemplazo = $pendientes;
+
+        $idsElegidos = self::normalizarIds($lineaIds);
+        if ($exigirSeleccion && $idsElegidos === []) {
+            return $falla('Indicá qué línea(s) de reemplazo facturar. No se emite sola con todo lo pendiente.');
+        }
+        if ($idsElegidos !== []) {
+            $pendientesPorId = $pendientes->keyBy(static fn ($l) => (int) $l->id);
+            $lineasReemplazo = collect();
+            foreach ($idsElegidos as $id) {
+                $linea = $pendientesPorId->get($id);
+                if (! $linea instanceof CambioDevolucionMarketplaceLinea) {
+                    return $falla('La línea '.$id.' no es un reemplazo pendiente de facturar.');
+                }
+                $lineasReemplazo->push($linea);
+            }
+        } else {
+            // Preview sin filtro: todas las pendientes (el operador elige al emitir).
+            $lineasReemplazo = $pendientes;
+        }
+
         $dup = $this->duplicadoPendienteMismoArticulo($lineasReemplazo);
         if ($dup !== null) {
             return $falla($dup);
         }
-        $exceso = CambioDevolucionMarketplaceCatalogoSupport::errorExcesoReemplazo($cambio->lineas);
+        $exceso = CambioDevolucionMarketplaceCatalogoSupport::errorExcesoReemplazo(
+            $this->lineasParaControlExceso($cambio, $lineasReemplazo, $idsElegidos !== [])
+        );
         if ($exceso !== null) {
             return $falla($exceso);
         }
@@ -143,12 +232,15 @@ final class CambioDevolucionMarketplaceEmisionService
                 $avisos[] = $resuelto['aviso'];
             }
             $total += $cant * $precio;
+            $descripcion = trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: ''));
             $lineas[] = [
+                'linea_id' => (int) $linea->id,
                 'articulo_id' => (int) $linea->articulo_id,
+                'sku' => trim((string) ($linea->articulo?->sku ?? '')),
                 'cantidad' => $cant,
                 'precio' => $precio,
                 'descuento' => 0,
-                'descripcion' => (string) ($linea->descripcion ?? ''),
+                'descripcion' => $descripcion,
                 'combinacion_id' => (int) ($linea->combinacion_id ?? 0),
                 'talle_id' => (int) ($linea->talle_id ?? 0),
                 'color_id' => (int) ($linea->color_id ?? 0),
@@ -457,5 +549,58 @@ final class CambioDevolucionMarketplaceEmisionService
         }
 
         return implode('; ', $partes).'.';
+    }
+
+    /**
+     * Para el control par-por-par: con selección, las pendientes no elegidas no cuentan
+     * (el operador las deja afuera a propósito).
+     *
+     * @param  \Illuminate\Support\Collection<int, CambioDevolucionMarketplaceLinea>  $seleccionadas
+     * @return \Illuminate\Support\Collection<int, CambioDevolucionMarketplaceLinea>
+     */
+    private function lineasParaControlExceso(
+        CambioDevolucionMarketplace $cambio,
+        $seleccionadas,
+        bool $haySeleccion,
+    ) {
+        if (! $haySeleccion) {
+            return $cambio->lineas;
+        }
+        $idsSel = $seleccionadas->map(static fn ($l) => (int) $l->id)->all();
+
+        return $cambio->lineas->filter(static function ($linea) use ($idsSel) {
+            $tipo = (string) ($linea->tipo ?? '');
+            if ($tipo === CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER) {
+                return true;
+            }
+            if ($tipo !== CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO) {
+                return false;
+            }
+            if ((int) ($linea->venta_fac_id ?? 0) > 0) {
+                return true;
+            }
+
+            return in_array((int) $linea->id, $idsSel, true);
+        })->values();
+    }
+
+    /**
+     * @param  list<int|string>|null  $ids
+     * @return list<int>
+     */
+    public static function normalizarIds(?array $ids): array
+    {
+        if ($ids === null || $ids === []) {
+            return [];
+        }
+        $out = [];
+        foreach ($ids as $id) {
+            $n = (int) $id;
+            if ($n > 0 && ! in_array($n, $out, true)) {
+                $out[] = $n;
+            }
+        }
+
+        return $out;
     }
 }

@@ -163,19 +163,29 @@ final class CambioDevolucionMarketplaceService
     /**
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    public function emitirFacReemplazo(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null): array
-    {
+    /**
+     * @param  list<int|string>|null  $lineaIds
+     */
+    public function emitirFacReemplazo(
+        CambioDevolucionMarketplace $cambio,
+        ?string $modoPrecio = null,
+        ?array $lineaIds = null,
+    ): array {
         return $this->conBloqueoEmision(
             $cambio,
-            fn (CambioDevolucionMarketplace $fresco): array => $this->emitirFacReemplazoBloqueado($fresco, $modoPrecio)
+            fn (CambioDevolucionMarketplace $fresco): array => $this->emitirFacReemplazoBloqueado($fresco, $modoPrecio, $lineaIds)
         );
     }
 
     /**
+     * @param  list<int|string>|null  $lineaIds
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    private function emitirFacReemplazoBloqueado(CambioDevolucionMarketplace $cambio, ?string $modoPrecio): array
-    {
+    private function emitirFacReemplazoBloqueado(
+        CambioDevolucionMarketplace $cambio,
+        ?string $modoPrecio,
+        ?array $lineaIds = null,
+    ): array {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing('lineas');
         $this->assertPuedeFacturarReemplazo($cambio);
@@ -184,7 +194,7 @@ final class CambioDevolucionMarketplaceService
                 'No hay líneas de reemplazo. Si es solo devolución, usá «Continuar sin reemplazo».'
             );
         }
-        $resultado = $this->emisionService->emitirFacReemplazo($cambio, $modo);
+        $resultado = $this->emisionService->emitirFacReemplazo($cambio, $modo, $lineaIds);
         if (empty($resultado['ok'])) {
             return $resultado;
         }
@@ -237,11 +247,14 @@ final class CambioDevolucionMarketplaceService
     /**
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    public function emitirNcReemplazo(CambioDevolucionMarketplace $cambio): array
+    /**
+     * @param  list<int|string>|null  $lineaIds
+     */
+    public function emitirNcReemplazo(CambioDevolucionMarketplace $cambio, ?array $lineaIds = null): array
     {
         return $this->conBloqueoEmision(
             $cambio,
-            fn (CambioDevolucionMarketplace $fresco): array => $this->emitirNcReemplazoBloqueado($fresco)
+            fn (CambioDevolucionMarketplace $fresco): array => $this->emitirNcReemplazoBloqueado($fresco, $lineaIds)
         );
     }
 
@@ -266,15 +279,17 @@ final class CambioDevolucionMarketplaceService
     }
 
     /**
+     * @param  list<int|string>|null  $lineaIds
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    private function emitirNcReemplazoBloqueado(CambioDevolucionMarketplace $cambio): array
+    private function emitirNcReemplazoBloqueado(CambioDevolucionMarketplace $cambio, ?array $lineaIds = null): array
     {
         $this->assertPuedeAnularReemplazo($cambio);
         $ventaFacId = (int) $cambio->venta_reemplazo_id;
         $this->registrarComprobante($cambio, CambioDevolucionMarketplaceComprobante::TIPO_FAC_REEMPLAZO, $ventaFacId);
 
-        $resultado = $this->ncService->emitirNcReemplazo($cambio);
+        $idsLimpiar = CambioDevolucionMarketplaceEmisionService::normalizarIds($lineaIds);
+        $resultado = $this->ncService->emitirNcReemplazo($cambio, $lineaIds);
         if (empty($resultado['ok'])) {
             return $resultado;
         }
@@ -286,18 +301,21 @@ final class CambioDevolucionMarketplaceService
             $ventaNcId,
             $ventaFacId
         );
-        CambioDevolucionMarketplaceLinea::query()
+        $query = CambioDevolucionMarketplaceLinea::query()
             ->where('cambio_id', $cambio->id)
-            ->where('venta_fac_id', $ventaFacId)
-            ->get()
-            ->each(function (CambioDevolucionMarketplaceLinea $linea): void {
-                $linea->venta_fac_id = null;
-                $linea->save();
-            });
+            ->where('venta_fac_id', $ventaFacId);
+        if ($idsLimpiar !== []) {
+            $query->whereIn('id', $idsLimpiar);
+        }
+        $query->get()->each(function (CambioDevolucionMarketplaceLinea $linea): void {
+            $linea->venta_fac_id = null;
+            $linea->save();
+        });
         $otraFacId = CambioDevolucionMarketplaceLinea::query()
             ->where('cambio_id', $cambio->id)
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
             ->whereNotNull('venta_fac_id')
+            ->where('venta_fac_id', '>', 0)
             ->orderByDesc('venta_fac_id')
             ->value('venta_fac_id');
         $cambio->venta_reemplazo_id = $otraFacId ? (int) $otraFacId : null;
@@ -520,11 +538,19 @@ final class CambioDevolucionMarketplaceService
      * @param  array<int|string, mixed>  $preciosCargados  Precio por id de línea «A devolver» (modo grilla).
      * @return array{ok:bool,error?:string,cambio?:CambioDevolucionMarketplace,mensaje?:string}
      */
-    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null, array $preciosCargados = []): array
-    {
+    /**
+     * @param  array<int|string, mixed>  $preciosCargados
+     * @param  list<int|string>|null  $lineaIds
+     */
+    public function emitirNcOriginal(
+        CambioDevolucionMarketplace $cambio,
+        ?string $modoPrecio = null,
+        array $preciosCargados = [],
+        ?array $lineaIds = null,
+    ): array {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $this->assertTransicion($cambio, CambioDevolucionMarketplaceEstadosSupport::NC_ORIGINAL);
-        $resultado = $this->ncService->emitirNcOriginal($cambio, $modo, $preciosCargados);
+        $resultado = $this->ncService->emitirNcOriginal($cambio, $modo, $preciosCargados, $lineaIds);
         if (empty($resultado['ok'])) {
             return $resultado;
         }

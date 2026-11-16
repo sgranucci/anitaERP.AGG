@@ -29,11 +29,12 @@ final class CambioDevolucionMarketplaceNcService
      * Nota de crédito de la factura de reemplazo, por un error de carga.
      * Acredita lo facturado y reingresa el stock para poder facturar de nuevo.
      *
+     * @param  list<int|string>|null  $lineaIds  Líneas de reemplazo del legajo a anular (obligatorio).
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
-    public function emitirNcReemplazo(CambioDevolucionMarketplace $cambio): array
+    public function emitirNcReemplazo(CambioDevolucionMarketplace $cambio, ?array $lineaIds = null): array
     {
-        $cambio->loadMissing(['localVenta', 'ventaReemplazo']);
+        $cambio->loadMissing(['localVenta', 'ventaReemplazo', 'lineas.articulo']);
         $ventaId = (int) ($cambio->venta_reemplazo_id ?? 0);
         if ($ventaId <= 0) {
             return ['ok' => false, 'error' => 'No hay factura de reemplazo vigente.'];
@@ -50,9 +51,15 @@ final class CambioDevolucionMarketplaceNcService
             return ['ok' => false, 'error' => 'Factura de reemplazo inexistente.'];
         }
 
-        $total = round(abs((float) $venta->total), 2);
+        try {
+            $parcial = $this->emisionesNcReemplazo($cambio, $venta, $lineaIds, true);
+        } catch (\InvalidArgumentException $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        $total = round((float) $parcial['total'], 2);
         if ($total <= 0) {
-            return ['ok' => false, 'error' => 'La factura de reemplazo no tiene importe.'];
+            return ['ok' => false, 'error' => 'La selección no tiene importe para acreditar.'];
         }
 
         try {
@@ -61,17 +68,23 @@ final class CambioDevolucionMarketplaceNcService
             return ['ok' => false, 'error' => $e->getMessage()];
         }
 
+        $opciones = [
+            'medios_forzados' => $medios,
+            'local_venta_id' => (int) $cambio->local_venta_id,
+            'motivo_devolucion_id' => (int) $motivo->id,
+            'omitir_reingreso_stock' => false,
+            'registrar_historial' => false,
+        ];
+        if (! empty($parcial['parcial'])) {
+            $opciones['venta_emision_ids'] = $parcial['ids'];
+            $opciones['cantidades_por_emision'] = $parcial['cantidades'];
+        }
+
         $resultado = $this->notaCreditoService->generarDesdeFactura(
             $ventaId,
             null,
             'Error de reemplazo. Legajo Nº '.$cambio->numero,
-            [
-                'medios_forzados' => $medios,
-                'local_venta_id' => (int) $cambio->local_venta_id,
-                'motivo_devolucion_id' => (int) $motivo->id,
-                'omitir_reingreso_stock' => false,
-                'registrar_historial' => false,
-            ]
+            $opciones
         );
 
         if (empty($resultado['ok'])) {
@@ -97,11 +110,124 @@ final class CambioDevolucionMarketplaceNcService
     }
 
     /**
+     * Preview de la NC de lo devuelto por modo de precio (sin emitir).
+     *
+     * @param  array<int|string, mixed>  $preciosCargados
+     * @param  list<int|string>|null  $lineaIds
+     * @return array<string, array{ok:bool,total?:float,cantidad_pares?:float,lineas?:list<array<string,mixed>>,avisos?:list<string>,error?:string}>
+     */
+    public function previsualizarNcOriginalPorModo(
+        CambioDevolucionMarketplace $cambio,
+        array $preciosCargados = [],
+        ?array $lineaIds = null,
+    ): array {
+        $cambio->loadMissing(['lineas.articulo', 'ventaOriginal.venta_emisiones']);
+        $venta = $cambio->ventaOriginal;
+        $out = [];
+        foreach (array_keys(CambioDevolucionMarketplacePrecioSupport::MODOS) as $modo) {
+            if (! $venta) {
+                $out[$modo] = ['ok' => false, 'error' => 'Factura original inexistente.'];
+
+                continue;
+            }
+            try {
+                $aDevolver = $this->lineasADevolver($cambio, $venta, $modo, $preciosCargados, $lineaIds, false);
+            } catch (\InvalidArgumentException $e) {
+                $out[$modo] = ['ok' => false, 'error' => $e->getMessage()];
+
+                continue;
+            }
+            $lineas = $aDevolver['detalle'] ?? [];
+            $cantidadPares = 0.0;
+            $total = 0.0;
+            foreach ($lineas as $fila) {
+                $cantidadPares += (float) ($fila['cantidad'] ?? 0);
+                $total += (float) ($fila['subtotal'] ?? 0);
+            }
+            $out[$modo] = [
+                'ok' => true,
+                'total' => round($total, 2),
+                'cantidad_pares' => round($cantidadPares, 4),
+                'lineas' => $lineas,
+                'avisos' => array_values(array_filter([(string) ($aDevolver['aviso'] ?? '')])),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Líneas «A devolver» para el panel de preview / selección.
+     *
+     * @return list<array{linea_id:int,articulo_id:int,sku:string,descripcion:string,cantidad:float,precio_unitario:float,subtotal:float}>
+     */
+    public function devolverParaPreview(CambioDevolucionMarketplace $cambio): array
+    {
+        $cambio->loadMissing(['lineas.articulo']);
+        $out = [];
+        foreach ($cambio->lineas as $linea) {
+            if ((string) $linea->tipo !== CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER) {
+                continue;
+            }
+            $cant = round((float) $linea->cantidad, 4);
+            $precio = round((float) $linea->precio_unitario, 4);
+            $out[] = [
+                'linea_id' => (int) $linea->id,
+                'articulo_id' => (int) $linea->articulo_id,
+                'sku' => trim((string) ($linea->articulo?->sku ?? '')),
+                'descripcion' => trim((string) ($linea->descripcion ?: $linea->articulo?->descripcion ?: '')),
+                'cantidad' => $cant,
+                'precio_unitario' => $precio,
+                'subtotal' => round($cant * $precio, 2),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Preview de la NC del reemplazo vigente (sin emitir).
+     *
+     * @param  list<int|string>|null  $lineaIds
+     * @return array{ok:bool,total?:float,cantidad_pares?:float,lineas?:list<array<string,mixed>>,parcial?:bool,error?:string}
+     */
+    public function previsualizarNcReemplazo(CambioDevolucionMarketplace $cambio, ?array $lineaIds = null): array
+    {
+        $cambio->loadMissing(['lineas.articulo', 'ventaReemplazo.venta_emisiones']);
+        $ventaId = (int) ($cambio->venta_reemplazo_id ?? 0);
+        if ($ventaId <= 0) {
+            return ['ok' => false, 'error' => 'No hay factura de reemplazo vigente.'];
+        }
+        $venta = $cambio->ventaReemplazo ?: Venta::query()->find($ventaId);
+        if (! $venta) {
+            return ['ok' => false, 'error' => 'Factura de reemplazo inexistente.'];
+        }
+        try {
+            $parcial = $this->emisionesNcReemplazo($cambio, $venta, $lineaIds, false);
+        } catch (\InvalidArgumentException $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+
+        return [
+            'ok' => true,
+            'total' => round((float) $parcial['total'], 2),
+            'cantidad_pares' => round((float) $parcial['cantidad_pares'], 4),
+            'lineas' => $parcial['detalle'],
+            'parcial' => (bool) $parcial['parcial'],
+        ];
+    }
+
+    /**
      * @param  array<int|string, mixed>  $preciosCargados  Precio por id de línea «A devolver» (modo grilla).
+     * @param  list<int|string>|null  $lineaIds  Obligatorio al emitir.
      * @return array{ok:bool,error?:string,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string}
      */
-    public function emitirNcOriginal(CambioDevolucionMarketplace $cambio, ?string $modoPrecio = null, array $preciosCargados = []): array
-    {
+    public function emitirNcOriginal(
+        CambioDevolucionMarketplace $cambio,
+        ?string $modoPrecio = null,
+        array $preciosCargados = [],
+        ?array $lineaIds = null,
+    ): array {
         $modo = CambioDevolucionMarketplacePrecioSupport::normalizar($modoPrecio);
         $cambio->loadMissing(['localVenta', 'ventaOriginal']);
         $ventaOriginalId = (int) $cambio->venta_original_id;
@@ -123,7 +249,7 @@ final class CambioDevolucionMarketplaceNcService
         $cambio->loadMissing('lineas');
         $venta->loadMissing('venta_emisiones');
         try {
-            $aDevolver = $this->lineasADevolver($cambio, $venta, $modo, $preciosCargados);
+            $aDevolver = $this->lineasADevolver($cambio, $venta, $modo, $preciosCargados, $lineaIds, true);
         } catch (\InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
@@ -198,15 +324,42 @@ final class CambioDevolucionMarketplaceNcService
      * Precio lleno: el unitario elegido, sin reaplicar el descuento de la factura.
      *
      * @param  array<int|string, mixed>  $preciosCargados
-     * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,precios_linea:array<int,float>,aviso:string}
+     * @param  list<int|string>|null  $lineaIds
+     * @return array{ids:list<int>,cantidades:array<int,float>,precios:array<int,float>,precios_linea:array<int,float>,detalle:list<array<string,mixed>>,aviso:string}
      */
-    private function lineasADevolver(CambioDevolucionMarketplace $cambio, Venta $venta, string $modo, array $preciosCargados = []): array
-    {
-        $lineas = $cambio->lineas
+    private function lineasADevolver(
+        CambioDevolucionMarketplace $cambio,
+        Venta $venta,
+        string $modo,
+        array $preciosCargados = [],
+        ?array $lineaIds = null,
+        bool $exigirSeleccion = false,
+    ): array {
+        $todas = $cambio->lineas
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)
             ->values();
-        if ($lineas->isEmpty()) {
+        if ($todas->isEmpty()) {
             throw new \InvalidArgumentException('No hay líneas «A devolver» para la nota de crédito.');
+        }
+
+        $idsElegidos = CambioDevolucionMarketplaceEmisionService::normalizarIds($lineaIds);
+        if ($exigirSeleccion && $idsElegidos === []) {
+            throw new \InvalidArgumentException(
+                'Indicá qué línea(s) a devolver incluir en la nota de crédito. No se emite sola con todo lo pendiente.'
+            );
+        }
+        if ($idsElegidos !== []) {
+            $porId = $todas->keyBy(static fn ($l) => (int) $l->id);
+            $lineas = collect();
+            foreach ($idsElegidos as $id) {
+                $linea = $porId->get($id);
+                if (! $linea instanceof CambioDevolucionMarketplaceLinea) {
+                    throw new \InvalidArgumentException('La línea '.$id.' no es «A devolver» de este legajo.');
+                }
+                $lineas->push($linea);
+            }
+        } else {
+            $lineas = $todas;
         }
 
         /** @var \Illuminate\Support\Collection<int, Venta_Emision> $emisiones */
@@ -215,6 +368,7 @@ final class CambioDevolucionMarketplaceNcService
         $cantidades = [];
         $precios = [];
         $preciosLinea = [];
+        $detalle = [];
         $avisos = [];
         $precioFinal = CambioDevolucionMarketplacePrecioSupport::esPrecioFinal($modo);
 
@@ -277,6 +431,15 @@ final class CambioDevolucionMarketplaceNcService
             if ($cantidades[$emisionId] - $facturada > 0.0001) {
                 throw new \InvalidArgumentException('La cantidad a devolver supera la facturada en '.$emision->detalle.'.');
             }
+            $detalle[] = [
+                'linea_id' => (int) $linea->id,
+                'articulo_id' => (int) ($linea->articulo_id ?? 0),
+                'sku' => trim((string) ($linea->articulo?->sku ?? '')),
+                'descripcion' => $nombre,
+                'cantidad' => $cantidad,
+                'precio' => $precio,
+                'subtotal' => round($cantidad * $precio, 2),
+            ];
         }
 
         $aviso = '';
@@ -290,8 +453,135 @@ final class CambioDevolucionMarketplaceNcService
             'cantidades' => $cantidades,
             'precios' => $precios,
             'precios_linea' => $preciosLinea,
+            'detalle' => $detalle,
             'aviso' => $aviso,
         ];
+    }
+
+    /**
+     * Emisiones de la FAC de reemplazo asociadas a las líneas elegidas del legajo.
+     *
+     * @param  list<int|string>|null  $lineaIds
+     * @return array{ids:list<int>,cantidades:array<int,float>,total:float,cantidad_pares:float,detalle:list<array<string,mixed>>,parcial:bool}
+     */
+    private function emisionesNcReemplazo(
+        CambioDevolucionMarketplace $cambio,
+        Venta $venta,
+        ?array $lineaIds,
+        bool $exigirSeleccion,
+    ): array {
+        $venta->loadMissing('venta_emisiones');
+        $idsElegidos = CambioDevolucionMarketplaceEmisionService::normalizarIds($lineaIds);
+        if ($exigirSeleccion && $idsElegidos === []) {
+            throw new \InvalidArgumentException(
+                'Indicá qué línea(s) de reemplazo anular con la nota de crédito. No se emite sola con todo lo pendiente.'
+            );
+        }
+
+        $reemplazos = $cambio->lineas
+            ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
+            ->filter(static fn ($l): bool => (int) ($l->venta_fac_id ?? 0) === (int) $venta->id)
+            ->values();
+        if ($reemplazos->isEmpty()) {
+            throw new \InvalidArgumentException('No hay líneas de reemplazo asociadas a la factura vigente.');
+        }
+
+        if ($idsElegidos !== []) {
+            $porId = $reemplazos->keyBy(static fn ($l) => (int) $l->id);
+            $elegidas = collect();
+            foreach ($idsElegidos as $id) {
+                $linea = $porId->get($id);
+                if (! $linea instanceof CambioDevolucionMarketplaceLinea) {
+                    throw new \InvalidArgumentException(
+                        'La línea '.$id.' no está facturada en el reemplazo vigente.'
+                    );
+                }
+                $elegidas->push($linea);
+            }
+        } else {
+            $elegidas = $reemplazos;
+        }
+
+        $emisiones = $venta->venta_emisiones ?? collect();
+        $usadas = [];
+        $ids = [];
+        $cantidades = [];
+        $detalle = [];
+        $total = 0.0;
+        $pares = 0.0;
+
+        foreach ($elegidas as $linea) {
+            $emision = $this->emisionDeReemplazoEnFac($linea, $emisiones, $usadas);
+            $emisionId = (int) $emision->id;
+            $usadas[] = $emisionId;
+            $cant = round((float) ($linea->cantidad ?? $emision->cantidad ?? 1), 4);
+            $precio = round((float) ($emision->precio ?? 0), 4);
+            $ids[] = $emisionId;
+            $cantidades[$emisionId] = round(($cantidades[$emisionId] ?? 0) + $cant, 4);
+            $sub = round($cant * $precio, 2);
+            $total = round($total + $sub, 2);
+            $pares += $cant;
+            $detalle[] = [
+                'linea_id' => (int) $linea->id,
+                'articulo_id' => (int) ($linea->articulo_id ?? $emision->articulo_id ?? 0),
+                'sku' => trim((string) ($linea->articulo?->sku ?? '')),
+                'descripcion' => trim((string) ($emision->detalle ?: $linea->descripcion ?: '')),
+                'cantidad' => $cant,
+                'precio' => $precio,
+                'subtotal' => $sub,
+            ];
+        }
+
+        $parcial = $elegidas->count() < $reemplazos->count()
+            || count($ids) < $emisiones->count();
+
+        return [
+            'ids' => array_values(array_unique($ids)),
+            'cantidades' => $cantidades,
+            'total' => $total,
+            'cantidad_pares' => $pares,
+            'detalle' => $detalle,
+            'parcial' => $parcial,
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Venta_Emision>  $emisiones
+     * @param  list<int>  $yaElegidas
+     */
+    private function emisionDeReemplazoEnFac(
+        CambioDevolucionMarketplaceLinea $linea,
+        $emisiones,
+        array $yaElegidas,
+    ): Venta_Emision {
+        $articuloId = (int) $linea->articulo_id;
+        $combinacionId = (int) ($linea->combinacion_id ?? 0);
+        $talleId = (int) ($linea->talle_id ?? 0);
+        $colorId = (int) ($linea->color_id ?? 0);
+        $candidata = $emisiones->first(function (Venta_Emision $em) use ($articuloId, $combinacionId, $talleId, $colorId, $yaElegidas) {
+            if (in_array((int) $em->id, $yaElegidas, true)) {
+                return false;
+            }
+
+            return (int) $em->articulo_id === $articuloId
+                && (int) ($em->combinacion_id ?? 0) === $combinacionId
+                && (int) ($em->talle_id ?? 0) === $talleId
+                && (int) ($em->color_id ?? 0) === $colorId;
+        });
+        if (! $candidata instanceof Venta_Emision) {
+            $candidata = $emisiones->first(function (Venta_Emision $em) use ($articuloId, $yaElegidas) {
+                return ! in_array((int) $em->id, $yaElegidas, true)
+                    && (int) $em->articulo_id === $articuloId;
+            });
+        }
+        if (! $candidata instanceof Venta_Emision) {
+            throw new \InvalidArgumentException(
+                'No se encontró en la factura de reemplazo el renglón de '
+                .trim((string) ($linea->descripcion ?: 'la línea '.$linea->id)).'.'
+            );
+        }
+
+        return $candidata;
     }
 
     private function precioActualDeLinea(CambioDevolucionMarketplace $cambio, $linea): ?float

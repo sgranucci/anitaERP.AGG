@@ -11,7 +11,9 @@
 @php
     use App\Support\Ventas\FacturacionLocal\RemitoInternoEstadosSupport;
     use App\Support\Ventas\FacturacionLocal\RemitoInternoListadoFiltros;
+    use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
     $limpiarUrl = route('facturacion_local_remitos_internos');
+    $tiposRemito = $tiposRemito ?? RemitoInternoTiposSupport::opcionesSelect();
 @endphp
 
 @section('contenido')
@@ -46,10 +48,24 @@
                 unset($qSinEstado['filtro_estado']);
                 $qSinLocal = $filtrosQuery ?? [];
                 unset($qSinLocal['filtro_local_venta_id']);
+                $qSinTipo = $filtrosQuery ?? [];
+                unset($qSinTipo['filtro_tipo']);
                 $estadoActivo = (string) ($filtros['estado'] ?? '');
                 $localActivo = (int) ($filtros['local_venta_id'] ?? 0);
+                $tipoActivo = (string) ($filtros['tipo'] ?? '');
             @endphp
             <div class="px-3 py-2 border-bottom bg-light">
+                <div class="d-flex flex-wrap align-items-center mb-2">
+                    <span class="small text-muted mr-2">Tipo</span>
+                    <a href="{{ route('facturacion_local_remitos_internos', $qSinTipo) }}"
+                       class="btn btn-sm mr-1 {{ $tipoActivo === '' ? 'btn-dark' : 'btn-outline-dark' }}">Todos</a>
+                    @foreach ($tiposRemito as $tipoKey => $tipoLabel)
+                        <a href="{{ route('facturacion_local_remitos_internos', array_merge($qSinTipo, ['filtro_tipo' => $tipoKey])) }}"
+                           class="btn btn-sm mr-1 {{ $tipoActivo === $tipoKey ? 'btn-dark' : 'btn-outline-dark' }}">
+                            {{ $tipoKey }}
+                        </a>
+                    @endforeach
+                </div>
                 <div class="d-flex flex-wrap align-items-center mb-2">
                     <span class="small text-muted mr-2">Estado</span>
                     <a href="{{ route('facturacion_local_remitos_internos', $qSinEstado) }}"
@@ -87,6 +103,7 @@
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
+                            <th>Tipo</th>
                             <th>Nº</th>
                             <th>Fecha</th>
                             <th>Estado</th>
@@ -99,6 +116,7 @@
                     <tbody>
                         @forelse ($datas as $data)
                         <tr>
+                            <td>{{ RemitoInternoTiposSupport::normalizar((string) $data->tipo) }}</td>
                             <td>{{ $data->numero }}</td>
                             <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
                             <td>{{ RemitoInternoEstadosSupport::etiqueta($data->estado) }}</td>
@@ -120,7 +138,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">Sin remitos internos.</td>
+                            <td colspan="8" class="text-center text-muted py-4">Sin remitos internos.</td>
                         </tr>
                         @endforelse
                     </tbody>

@@ -14,6 +14,7 @@ use App\Support\Ventas\FacturacionLocal\RemitoInternoEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoNumeracionSupport;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoStockSupport;
+use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
 use App\Support\Ventas\RemitoPdfAgrupacionFerliSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
@@ -65,8 +66,11 @@ class RemitoInternoService
                 throw new InvalidArgumentException('El local no tiene depósito asignado.');
             }
 
+            $tipo = RemitoInternoTiposSupport::normalizar($data['tipo'] ?? RemitoInternoTiposSupport::RIN);
+
             $remito = RemitoInterno::query()->create([
-                'numero' => RemitoInternoNumeracionSupport::reservarSiguiente($local),
+                'numero' => RemitoInternoNumeracionSupport::reservarSiguiente($local, $tipo),
+                'tipo' => $tipo,
                 'fecha' => $data['fecha'],
                 'local_venta_id' => (int) $local->id,
                 'empresa_id' => (int) ($local->empresa_id ?: 0) ?: null,
@@ -101,7 +105,8 @@ class RemitoInternoService
                 throw new InvalidArgumentException('El local no tiene depósito asignado.');
             }
 
-            $remito->update([
+            $tipo = RemitoInternoTiposSupport::normalizar($data['tipo'] ?? $remito->tipo);
+            $payloadUpdate = [
                 'fecha' => $data['fecha'],
                 'local_venta_id' => (int) $local->id,
                 'empresa_id' => (int) ($local->empresa_id ?: 0) ?: null,
@@ -109,7 +114,17 @@ class RemitoInternoService
                 'destinatario' => $data['destinatario'] ?? null,
                 'leyenda' => $data['leyenda'] ?? null,
                 'observacion' => $data['observacion'] ?? null,
-            ]);
+            ];
+
+            if ($tipo !== RemitoInternoTiposSupport::normalizar((string) $remito->tipo)) {
+                $localConPv = LocalVenta::query()
+                    ->with(['puntoventa', 'puntoventas'])
+                    ->findOrFail((int) $local->id);
+                $payloadUpdate['tipo'] = $tipo;
+                $payloadUpdate['numero'] = RemitoInternoNumeracionSupport::reservarSiguiente($localConPv, $tipo);
+            }
+
+            $remito->update($payloadUpdate);
 
             $this->sincronizarLineas($remito, $lineas);
 
@@ -128,13 +143,15 @@ class RemitoInternoService
             throw new InvalidArgumentException('El remito no tiene líneas.');
         }
 
-        return DB::transaction(function () use ($remito) {
+        $tipoDoc = RemitoInternoTiposSupport::normalizar((string) $remito->tipo);
+
+        return DB::transaction(function () use ($remito, $tipoDoc) {
             $tipoId = $this->tipoStockId(RemitoInternoStockSupport::ABREVIATURA);
             $payload = $this->armarPayloadMovimiento(
                 $remito,
                 $tipoId,
                 'R',
-                'Remito interno Nº '.$remito->numero
+                $tipoDoc.' Nº '.$remito->numero
             );
 
             $resultado = $this->movimientoStockService->guardaMovimientoStock($payload, 'create');
@@ -177,11 +194,12 @@ class RemitoInternoService
         return DB::transaction(function () use ($remito) {
             if ((int) ($remito->movimientostock_id ?: 0) > 0) {
                 $tipoId = $this->tipoStockId(RemitoInternoStockSupport::ABREVIATURA_REVERSO);
+                $tipoDoc = RemitoInternoTiposSupport::normalizar((string) $remito->tipo);
                 $payload = $this->armarPayloadMovimiento(
                     $remito,
                     $tipoId,
                     'S',
-                    'Reverso anulación remito interno Nº '.$remito->numero
+                    'Reverso anulación '.$tipoDoc.' Nº '.$remito->numero
                 );
                 $this->movimientoStockService->guardaMovimientoStock($payload, 'create');
             }
@@ -249,7 +267,8 @@ class RemitoInternoService
         if (! is_dir($path)) {
             mkdir($path, 0755, true);
         }
-        $nombre = 'remito_interno_'.$remito->numero.'.pdf';
+        $tipoDoc = RemitoInternoTiposSupport::normalizar((string) $remito->tipo);
+        $nombre = 'remito_'.strtolower($tipoDoc).'_'.$remito->numero.'.pdf';
         $full = $path.'/'.$nombre;
 
         $pdf = \App::make('dompdf.wrapper');
@@ -423,10 +442,11 @@ class RemitoInternoService
                 $sucursal = RemitoInternoNumeracionSupport::sucursalDesdeLocal($local);
             }
         }
-        $codigo = RemitoInternoNumeracionSupport::TIPO_ANITA
-            .'-'.RemitoInternoNumeracionSupport::LETRA_ANITA
-            .'-'.($sucursal !== '' ? $sucursal : '0')
-            .'-'.str_pad((string) $remito->numero, 8, '0', STR_PAD_LEFT);
+        $codigo = RemitoInternoNumeracionSupport::codigoComprobante(
+            (string) $remito->tipo,
+            $sucursal,
+            (int) $remito->numero
+        );
 
         return [
             'tipotransaccion_stock_id' => $tipotransaccionId,

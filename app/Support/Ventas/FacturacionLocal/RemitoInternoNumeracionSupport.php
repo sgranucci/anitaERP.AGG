@@ -11,31 +11,43 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Numeración remito interno de facturación local: serie ERP por sucursal (ventas.rin.{sucursal}).
+ * Numeración remito de facturación local: serie ERP por tipo + sucursal
+ * (ventas.rin.{sucursal} / ventas.rex.{sucursal}).
  * No consulta ni actualiza el Anita del local.
  */
 final class RemitoInternoNumeracionSupport
 {
-    public const TIPO_ANITA = 'RIN';
+    /** @deprecated Usar RemitoInternoTiposSupport::RIN */
+    public const TIPO_ANITA = RemitoInternoTiposSupport::RIN;
 
     public const LETRA_ANITA = 'B';
 
-    public const CODIGO_NUMERADOR_PREFIX = 'ventas.rin.';
+    public const CODIGO_NUMERADOR_PREFIX_RIN = 'ventas.rin.';
+
+    public const CODIGO_NUMERADOR_PREFIX_REX = 'ventas.rex.';
+
+    /** @deprecated Usar CODIGO_NUMERADOR_PREFIX_RIN */
+    public const CODIGO_NUMERADOR_PREFIX = self::CODIGO_NUMERADOR_PREFIX_RIN;
 
     /**
-     * Reserva el siguiente número en sistema_numerador (anitaERP).
+     * Reserva el siguiente número en sistema_numerador (anitaERP) para el tipo.
      * Debe llamarse dentro de una transacción DB.
      *
      * @param  bool  $actualizarAnita  Ignorado. El Anita del local ya no numera.
      */
-    public static function reservarSiguiente(LocalVenta $local, bool $actualizarAnita = false): int
-    {
+    public static function reservarSiguiente(
+        LocalVenta $local,
+        string $tipo = RemitoInternoTiposSupport::RIN,
+        bool $actualizarAnita = false
+    ): int {
         unset($actualizarAnita);
+
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
 
         $sucursal = self::sucursalDesdeLocal($local);
         if ($sucursal === '') {
             throw new InvalidArgumentException(
-                'El local no tiene punto de venta para numerar RIN (configure PV default).'
+                'El local no tiene punto de venta para numerar '.$tipo.' (configure PV default).'
             );
         }
 
@@ -44,7 +56,7 @@ final class RemitoInternoNumeracionSupport
             throw new InvalidArgumentException('El local no tiene empresa asignada.');
         }
 
-        $row = self::asegurarFilaNumerador($sucursal, $empresaId, '', 0);
+        $row = self::asegurarFilaNumerador($tipo, $sucursal, $empresaId, '', 0);
 
         /** @var SistemaNumerador $locked */
         $locked = SistemaNumerador::query()
@@ -54,6 +66,7 @@ final class RemitoInternoNumeracionSupport
 
         $pisoErpTabla = (int) RemitoInterno::query()
             ->where('local_venta_id', (int) $local->id)
+            ->where('tipo', $tipo)
             ->lockForUpdate()
             ->max('numero');
 
@@ -63,6 +76,7 @@ final class RemitoInternoNumeracionSupport
 
         Log::info('remito_interno.numeracion.reservado', [
             'local_venta_id' => (int) $local->id,
+            'tipo' => $tipo,
             'sucursal' => $sucursal,
             'piso_erp_tabla' => $pisoErpTabla,
             'asignado' => $siguiente,
@@ -76,14 +90,18 @@ final class RemitoInternoNumeracionSupport
      *
      * @return array{ultimo: int, clave: string, sucursal: string}
      */
-    public static function consultarUltimoAnita(LocalVenta $local): array
-    {
+    public static function consultarUltimoAnita(
+        LocalVenta $local,
+        string $tipo = RemitoInternoTiposSupport::RIN
+    ): array {
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
         $sucursal = self::sucursalDesdeLocal($local);
         if ($sucursal === '') {
             return ['ultimo' => 0, 'clave' => '', 'sucursal' => ''];
         }
 
         $anita = self::leerUltimoAnitaLocal(
+            $tipo,
             $sucursal,
             $local->anitaServidor(),
             $local->anitaIfxServer()
@@ -115,16 +133,40 @@ final class RemitoInternoNumeracionSupport
         return $codigo;
     }
 
-    public static function codigoNumerador(string $sucursal): string
+    public static function codigoNumerador(string $sucursal, string $tipo = RemitoInternoTiposSupport::RIN): string
     {
-        return self::CODIGO_NUMERADOR_PREFIX.$sucursal;
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
+        $prefix = $tipo === RemitoInternoTiposSupport::REX
+            ? self::CODIGO_NUMERADOR_PREFIX_REX
+            : self::CODIGO_NUMERADOR_PREFIX_RIN;
+
+        return $prefix.$sucursal;
+    }
+
+    /**
+     * Código de comprobante para movimiento de stock / PDF.
+     */
+    public static function codigoComprobante(string $tipo, string $sucursal, int $numero): string
+    {
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
+        $suc = $sucursal !== '' ? $sucursal : '0';
+
+        return $tipo
+            .'-'.self::LETRA_ANITA
+            .'-'.$suc
+            .'-'.str_pad((string) $numero, 8, '0', STR_PAD_LEFT);
     }
 
     /**
      * @return array{ultimo: int, clave: string}
      */
-    private static function leerUltimoAnitaLocal(string $sucursal, string $servidor, string $ifx): array
-    {
+    private static function leerUltimoAnitaLocal(
+        string $tipo,
+        string $sucursal,
+        string $servidor,
+        string $ifx
+    ): array {
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
         $api = new ApiAnita;
         $whereSuc = self::sqlSucursal('compe_sucursal', $sucursal);
         $payload = [
@@ -132,7 +174,7 @@ final class RemitoInternoNumeracionSupport
             'sistema' => 'ventas',
             'tabla' => 'compemis',
             'campos' => 'compe_numero,compe_tipo,compe_letra,compe_sucursal',
-            'whereArmado' => " WHERE compe_tipo='".self::TIPO_ANITA."' AND compe_letra='".self::LETRA_ANITA."' AND ".$whereSuc,
+            'whereArmado' => " WHERE compe_tipo='".$tipo."' AND compe_letra='".self::LETRA_ANITA."' AND ".$whereSuc,
             'servidor' => $servidor,
             'ifx_server' => $ifx,
         ];
@@ -140,19 +182,19 @@ final class RemitoInternoNumeracionSupport
         $raw = $api->apiCall($payload);
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
-            throw new RuntimeException('No se pudo leer compemis RIN en Anita Local: '.$err);
+            throw new RuntimeException('No se pudo leer compemis '.$tipo.' en Anita Local: '.$err);
         }
 
         $filaCompe = ApiAnita::primeraFilaLista((string) $raw);
         if ($filaCompe === null || ! isset($filaCompe->compe_numero)) {
             throw new RuntimeException(
-                'No existe compemis RIN/'.self::LETRA_ANITA.'/sucursal '.$sucursal.' en el bridge Local.'
+                'No existe compemis '.$tipo.'/'.self::LETRA_ANITA.'/sucursal '.$sucursal.' en el bridge Local.'
             );
         }
 
         $clave = trim((string) $filaCompe->compe_numero);
         if ($clave === '') {
-            throw new RuntimeException('compemis RIN sin compe_numero (sucursal '.$sucursal.').');
+            throw new RuntimeException('compemis '.$tipo.' sin compe_numero (sucursal '.$sucursal.').');
         }
 
         $rawNum = $api->apiCall([
@@ -184,12 +226,14 @@ final class RemitoInternoNumeracionSupport
         string $clave,
         int $numero,
         string $servidor,
-        string $ifx
+        string $ifx,
+        string $tipo = RemitoInternoTiposSupport::RIN
     ): void {
         if ($numero <= 0 || $clave === '') {
             return;
         }
 
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
         $api = new ApiAnita;
         $raw = $api->apiCall([
             'acc' => 'update',
@@ -203,23 +247,26 @@ final class RemitoInternoNumeracionSupport
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
             Log::error('remito_interno.numeracion.anita_update_fail', [
+                'tipo' => $tipo,
                 'clave' => $clave,
                 'numero' => $numero,
                 'error' => $err,
             ]);
             throw new RuntimeException(
-                'No se pudo actualizar numerador RIN Anita Local (clave '.$clave.'): '.$err
+                'No se pudo actualizar numerador '.$tipo.' Anita Local (clave '.$clave.'): '.$err
             );
         }
     }
 
     private static function asegurarFilaNumerador(
+        string $tipo,
         string $sucursal,
         int $empresaId,
         string $claveAnita,
         int $pisoAnita
     ): SistemaNumerador {
-        $codigo = self::codigoNumerador($sucursal);
+        $tipo = RemitoInternoTiposSupport::normalizar($tipo);
+        $codigo = self::codigoNumerador($sucursal, $tipo);
         $existente = SistemaNumerador::query()
             ->where('codigo', $codigo)
             ->where('empresa_id', $empresaId)
@@ -246,7 +293,7 @@ final class RemitoInternoNumeracionSupport
 
         return SistemaNumerador::query()->create([
             'codigo' => $codigo,
-            'nombre' => 'Remito interno RIN sucursal '.$sucursal,
+            'nombre' => 'Remito '.$tipo.' sucursal '.$sucursal,
             'empresa_id' => $empresaId,
             'modulo' => 'ventas',
             'ultimo_numero' => max(0, $pisoAnita),
@@ -254,7 +301,7 @@ final class RemitoInternoNumeracionSupport
             'anita_fuente' => $claveAnita !== '' ? 'numerador' : null,
             'anita_clave' => $claveAnita !== '' ? $claveAnita : null,
             'activo' => true,
-            'observacion' => 'Serie RIN de facturación local. Numera en anitaERP.',
+            'observacion' => 'Serie '.$tipo.' de facturación local. Numera en anitaERP.',
         ]);
     }
 

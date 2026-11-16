@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Ventas\FacturacionLocal\RemitoInternoTiposSupport;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ValidacionRemitoInterno extends FormRequest
 {
@@ -23,7 +25,11 @@ class ValidacionRemitoInterno extends FormRequest
             }
             $lineas[] = $linea;
         }
-        $this->merge(['lineas' => $lineas]);
+        $tipo = strtoupper(trim((string) $this->input('tipo', RemitoInternoTiposSupport::RIN)));
+        $this->merge([
+            'lineas' => $lineas,
+            'tipo' => RemitoInternoTiposSupport::normalizar($tipo),
+        ]);
     }
 
     /**
@@ -32,6 +38,7 @@ class ValidacionRemitoInterno extends FormRequest
     public function rules(): array
     {
         return [
+            'tipo' => ['required', 'string', Rule::in(array_keys(RemitoInternoTiposSupport::ETIQUETAS))],
             'fecha' => 'required|date',
             'local_venta_id' => 'required|integer|exists:local_venta,id',
             'destinatario' => 'nullable|string|max:160',
@@ -58,6 +65,7 @@ class ValidacionRemitoInterno extends FormRequest
     public function attributes(): array
     {
         return [
+            'tipo' => 'tipo de remito',
             'fecha' => 'fecha',
             'local_venta_id' => 'local',
             'lineas' => 'líneas',

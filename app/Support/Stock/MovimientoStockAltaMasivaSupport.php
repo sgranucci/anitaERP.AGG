@@ -16,9 +16,10 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 /**
  * Alta masiva de un movimiento de stock desde Excel.
  *
- * Curva: SKU, combinación, color y una columna por talle. En Ferli va a un depósito de local.
- * Pedido de fábrica (Brasil): el código va en el artículo (43-0000-00), la combinación es el color
- * y los pares de cada talle son la curva por los módulos. El catálogo sigue al depósito.
+ * Curva: SKU / Referencia Ferli, combinación o Cor, y una columna por talle.
+ * Opcional Cx (cajas): multiplica la curva. En Ferli el catálogo sigue al depósito
+ * (local → locales; fábrica → fábrica, resolviendo por combinación).
+ * Pedido de fábrica (Brasil): artículo con código, combinación/color, curva y módulos.
  */
 final class MovimientoStockAltaMasivaSupport
 {
@@ -191,7 +192,7 @@ final class MovimientoStockAltaMasivaSupport
 
     public static function etiquetaCanal(): string
     {
-        return self::esParaLocales() ? 'Locales' : 'Estándar';
+        return self::esParaLocales() ? 'según depósito' : 'Estándar';
     }
 
     /**
@@ -213,8 +214,6 @@ final class MovimientoStockAltaMasivaSupport
             $errores[] = 'Falta el depósito.';
         } elseif ($empresaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId)) {
             $errores[] = 'El depósito no pertenece a la empresa o no está autorizado para su usuario.';
-        } elseif (self::esParaLocales() && ! $pedidoFabrica && ! MovimientoStockFerliSupport::depositoEsDeLocalVenta($depositoId)) {
-            $errores[] = 'En Ferli la curva de talles va a un depósito de local. El pedido de fábrica se carga con la planilla que trae módulos.';
         }
 
         if ($tipo === null) {
@@ -259,17 +258,13 @@ final class MovimientoStockAltaMasivaSupport
     }
 
     /**
-     * Curva común en Ferli: catálogo de locales.
-     * Pedido de fábrica: el catálogo sigue al depósito (planta = fábrica).
+     * En Ferli el catálogo sigue al depósito: local → locales, resto → fábrica.
+     * La curva y el pedido de Brasil usan el mismo criterio.
      */
-    public static function ambitoCatalogo(int $depositoId, bool $pedidoFabrica): string
+    public static function ambitoCatalogo(int $depositoId, bool $pedidoFabrica = false): string
     {
         if (! self::esParaLocales()) {
             return 'NORMAL';
-        }
-
-        if (! $pedidoFabrica) {
-            return CombinacionEstadoCanalSupport::AMBITO_LOCAL;
         }
 
         return MovimientoStockFerliSupport::ambitoCatalogo($depositoId > 0 ? $depositoId : null);
@@ -309,6 +304,7 @@ final class MovimientoStockAltaMasivaSupport
         $maxCol = min(40, Coordinate::columnIndexFromString($ws->getHighestDataColumn() ?: 'A'));
         $filas = [];
         $layout = null;
+        $ultimoSkuTexto = '';
 
         for ($r = 1; $r <= $maxFila; $r++) {
             $celdas = [];
@@ -319,6 +315,7 @@ final class MovimientoStockAltaMasivaSupport
             $encabezado = self::detectarEncabezado($celdas);
             if ($encabezado !== null) {
                 $layout = $encabezado;
+                $ultimoSkuTexto = '';
 
                 continue;
             }
@@ -327,17 +324,26 @@ final class MovimientoStockAltaMasivaSupport
                 continue;
             }
 
-            $skuTexto = self::texto($celdas[$layout['sku']] ?? null);
+            $skuCelda = self::texto($celdas[$layout['sku']] ?? null);
+            if ($skuCelda !== '') {
+                $ultimoSkuTexto = $skuCelda;
+            }
+            $skuTexto = $skuCelda !== '' ? $skuCelda : $ultimoSkuTexto;
             if ($skuTexto === '' || self::esFilaTotal($skuTexto) || self::esTituloSeccion($skuTexto)) {
                 continue;
             }
 
             $pedidoFabrica = ($layout['modulos'] ?? 0) > 0;
-            $modulos = 1.0;
+            $factor = 1.0;
             if ($pedidoFabrica) {
-                $modulos = self::cantidad($celdas[$layout['modulos']] ?? null);
-                if ($modulos < 0.000001) {
+                $factor = self::cantidad($celdas[$layout['modulos']] ?? null);
+                if ($factor < 0.000001) {
                     continue;
+                }
+            } elseif (($layout['cajas'] ?? 0) > 0) {
+                $cx = self::cantidad($celdas[$layout['cajas']] ?? null);
+                if ($cx > 0.000001) {
+                    $factor = $cx;
                 }
             }
 
@@ -348,7 +354,7 @@ final class MovimientoStockAltaMasivaSupport
                 if ($cant < 0.000001) {
                     continue;
                 }
-                $cant *= $modulos;
+                $cant *= $factor;
                 $talles[(string) $medida] = ($talles[(string) $medida] ?? 0) + $cant;
                 $pares += $cant;
             }
@@ -373,6 +379,11 @@ final class MovimientoStockAltaMasivaSupport
             if ($pedidoFabrica && $codigoCombinacion !== '') {
                 $color = $color !== '' ? $color : $codigoCombinacion;
                 $codigoCombinacion = '';
+            } elseif ($codigoCombinacion === '' && $color !== '') {
+                // Planilla BOA / Cor: "1-BEIGE-CREMA" → combinación 1 + color.
+                $partesCor = self::partirCorCombinacion($color);
+                $codigoCombinacion = $partesCor['codigo'];
+                $color = $partesCor['color'];
             }
 
             $filas[] = [
@@ -382,7 +393,7 @@ final class MovimientoStockAltaMasivaSupport
                 'articulo_excel' => $skuTexto,
                 'codigo_combinacion' => $codigoCombinacion,
                 'color' => $color,
-                'modulos' => $pedidoFabrica ? $modulos : null,
+                'modulos' => ($pedidoFabrica || (($layout['cajas'] ?? 0) > 0)) ? $factor : null,
                 'pedido_fabrica' => $pedidoFabrica,
                 'talles' => $talles,
                 'pares' => $pares,
@@ -395,7 +406,7 @@ final class MovimientoStockAltaMasivaSupport
 
     /**
      * @param  array<int, mixed>  $celdas
-     * @return array{sku:int,combinacion:int,color:int,total:int,modulos:int,talles:array<int,string>}|null
+     * @return array{sku:int,combinacion:int,color:int,total:int,modulos:int,cajas:int,talles:array<int,string>}|null
      */
     private static function detectarEncabezado(array $celdas): ?array
     {
@@ -404,18 +415,22 @@ final class MovimientoStockAltaMasivaSupport
         $colorCol = 0;
         $totalCol = 0;
         $modulosCol = 0;
+        $cajasCol = 0;
         $talles = [];
 
         foreach ($celdas as $col => $valor) {
             $txt = self::normEncabezado($valor);
-            if ($txt === 'sku' || $txt === 'art' || str_starts_with($txt, 'articulo')) {
+            if ($txt === 'sku' || $txt === 'art' || str_starts_with($txt, 'articulo')
+                || str_starts_with($txt, 'referencia')) {
                 $skuCol = (int) $col;
             } elseif ($txt === 'combinacion' || $txt === 'comb' || str_starts_with($txt, 'combinacion')) {
                 $combCol = (int) $col;
-            } elseif ($txt === 'color' || str_starts_with($txt, 'color')) {
+            } elseif ($txt === 'color' || $txt === 'cor' || str_starts_with($txt, 'color')) {
                 $colorCol = (int) $col;
             } elseif ($txt === 'modulos' || $txt === 'modulo') {
                 $modulosCol = (int) $col;
+            } elseif ($txt === 'cx' || $txt === 'caja' || $txt === 'cajas') {
+                $cajasCol = (int) $col;
             } elseif (in_array($txt, ['ps', 'total', 'pares', 'totales'], true)) {
                 // Si hay dos totales (curva y gran total), queda el último.
                 $totalCol = (int) $col;
@@ -437,6 +452,7 @@ final class MovimientoStockAltaMasivaSupport
             'color' => $colorCol,
             'total' => $totalCol,
             'modulos' => $modulosCol,
+            'cajas' => $cajasCol,
             'talles' => $talles,
         ];
     }
@@ -456,14 +472,39 @@ final class MovimientoStockAltaMasivaSupport
 
     /**
      * El pedido de fábrica trae el nombre y el código juntos: «NELLIE 01 43-5004-01».
+     * La planilla BOA usa «COCA 03 (43367303)».
      */
     private static function codigoArticuloDesdeCelda(string $texto): string
     {
         if (preg_match('/(\d{2})\s*-\s*(\d{4})\s*-\s*(\d{2})/', $texto, $m) === 1) {
             return $m[1].$m[2].$m[3];
         }
+        if (preg_match('/\((\d{6,12})\)/', $texto, $m) === 1) {
+            return $m[1];
+        }
+        if (preg_match('/\b(\d{8})\b/', $texto, $m) === 1) {
+            return $m[1];
+        }
 
         return trim($texto);
+    }
+
+    /**
+     * Cor / color de fábrica: «1-BEIGE-CREMA» → código 1 + color BEIGE-CREMA.
+     *
+     * @return array{codigo:string,color:string}
+     */
+    private static function partirCorCombinacion(string $cor): array
+    {
+        $cor = trim($cor);
+        if ($cor === '') {
+            return ['codigo' => '', 'color' => ''];
+        }
+        if (preg_match('/^(\d+)\s*[-–—]\s*(.+)$/u', $cor, $m) === 1) {
+            return ['codigo' => $m[1], 'color' => trim($m[2])];
+        }
+
+        return ['codigo' => '', 'color' => $cor];
     }
 
     /**
