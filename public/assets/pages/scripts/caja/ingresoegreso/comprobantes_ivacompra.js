@@ -2025,13 +2025,8 @@
                 alert((bancoGastoActual && bancoGastoActual.mensaje) || 'Falta el banco de la cuenta de caja.');
                 return;
             }
-        } else if (payload.proveedor_id <= 0 && !payload.proveedor_nombre_eventual) {
-            alert('Indique proveedor del maestro o datos de proveedor eventual.');
-            return;
-        } else if (payload.proveedor_id <= 0 && !payload.proveedor_documento_eventual) {
-            alert('El proveedor eventual debe tener CUIT (11 dígitos).');
-            return;
         }
+        // Proveedor / eventual opcionales en I/E: el maestro formal vive en Compras.
 
         var urlDup = $('#modal-ie-comprobante-iva').data('duplicado-url');
         var empresaId = $('#empresa_id').val();
@@ -2132,14 +2127,12 @@
             iaSugerenciaHash = data.ai_sugerencia_hash || null;
             iaDecisionPendienteModal = !!iaDecisionId;
             var cab = data.cabecera || {};
-            if (cab.proveedor_id) {
-                $('#ie-cp-proveedor-id').val(cab.proveedor_id);
-                $('#ie-cp-proveedor-codigo').val(cab.proveedor_codigo || '');
-                $('#ie-cp-proveedor-nombre').val(cab.proveedor_nombre || '');
-            } else {
-                $('#ie-cp-eventual-nombre').val(cab.proveedor_nombre || '');
-                aplicarCuitEventual(cab.proveedor_documento_eventual || '');
-            }
+            // I/E: la IA no asigna maestro; eventual puede venir de IA o padrón ARCA.
+            $('#ie-cp-proveedor-id, #ie-cp-proveedor-codigo, #ie-cp-proveedor-nombre').val('');
+            $('#ie-cp-eventual-nombre').val(cab.proveedor_nombre_eventual || cab.proveedor_nombre || '');
+            aplicarCuitEventual(cab.proveedor_documento_eventual || '');
+            $('#ie-cp-eventual-condicioniva').val(cab.proveedor_condicioniva_id_eventual || '');
+            actualizarEventualSegunProveedor();
             if (cab.tipotransaccion_compra_id) {
                 aplicarTipoComprobanteEnModal(cab.tipotransaccion_compra_id, !(data.conceptos || []).length);
             }

@@ -3,8 +3,9 @@
 namespace App\Services\Caja;
 
 use App\Models\Compras\Concepto_Ivacompra;
-use App\Models\Compras\Proveedor;
+use App\Models\Configuracion\Empresa;
 use App\Services\Compras\ComprobanteProveedorPdfIaPipelineService;
+use App\Support\Caja\ProveedorEventualDesdePadronArcaSupport;
 use App\Support\Compras\PrecargaProveedor\ComprobanteProveedorPdfIaConceptoMatcherSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorIvaTasaInversaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorWscdcConstatacionSupport;
@@ -25,6 +26,7 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
         private FacturaProveedorIvaTasaInversaSupport $ivaTasaInversa,
         private PrecargaProveedorWscdcConstatacionSupport $wscdcConstatacionSupport,
         private IngresoEgresoComprobanteIvaArchivoService $archivoService,
+        private ProveedorEventualDesdePadronArcaSupport $proveedorEventualPadronArca,
     ) {}
 
     /**
@@ -34,14 +36,17 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
     {
         $pdfTempId = $this->archivoService->guardarTempDesdeUpload($pdf);
         $extraido = $this->pipeline->extraer($pdf);
-        $cuit = preg_replace('/\D+/', '', (string) ($extraido['cuit_proveedor'] ?? '')) ?? '';
+        $advertencias = [];
 
-        $proveedor = null;
-        if ($cuit !== '') {
-            $proveedor = Proveedor::query()
-                ->whereRaw("REPLACE(REPLACE(REPLACE(nroinscripcion, '-', ''), '.', ''), ' ', '') = ?", [$cuit])
-                ->first();
-        }
+        // Emisor/receptor: OCR/IA a veces pone el CUIT de la empresa como emisor → swap.
+        // En I/E no se matchea el maestro de proveedores (eso vive en Compras): solo
+        // se rellenan razón social / CUIT eventual como referencia opcional.
+        $cuits = $this->alinearCuitsEmisorReceptor($extraido, $empresaId, $advertencias);
+        $cuit = $cuits['cuit_proveedor'];
+        $extraido['cuit_proveedor'] = $cuit !== '' ? $cuit : ($extraido['cuit_proveedor'] ?? null);
+        $extraido['cuit_destinatario'] = $cuits['cuit_destinatario'] !== ''
+            ? $cuits['cuit_destinatario']
+            : ($extraido['cuit_destinatario'] ?? null);
 
         $lineasIa = is_array($extraido['lineas'] ?? null) ? $extraido['lineas'] : [];
         $lineasIa = $this->ivaTasaInversa->enriquecerLineas($lineasIa);
@@ -49,7 +54,6 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
 
         $candidatos = $this->conceptosCandidatos($empresaId);
         $conceptosAsignados = [];
-        $advertencias = [];
 
         try {
             $matcheados = $this->conceptoMatcher->matchear($candidatos, $lineasIa);
@@ -87,10 +91,39 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
             : ($numero ?: ($extraido['numero'] ?? 0)));
 
         $total = (float) ($extraido['total'] ?? 0);
+        $nombreExtraido = trim((string) (
+            $extraido['razon_social_proveedor']
+            ?? $extraido['proveedor_nombre']
+            ?? $extraido['razon_social']
+            ?? ''
+        ));
+        $condicionivaExtraida = (int) (
+            $extraido['proveedor_condicioniva_id']
+            ?? $extraido['condicioniva_id']
+            ?? 0
+        ) ?: null;
+
+        // Si la IA no trajo razón social / condición IVA, completar desde padrón ARCA.
+        $desdePadron = $this->proveedorEventualPadronArca->completar(
+            $cuit,
+            $nombreExtraido,
+            $condicionivaExtraida,
+        );
+        $nombreExtraido = $desdePadron['nombre'];
+        $condicionivaExtraida = $desdePadron['condicioniva_id'];
+        foreach ($desdePadron['advertencias'] as $aviso) {
+            if ($aviso !== '' && ! in_array($aviso, $advertencias, true)) {
+                $advertencias[] = $aviso;
+            }
+        }
+
         $cabecera = [
-            'proveedor_id' => $proveedor?->id,
-            'proveedor_nombre' => $proveedor?->nombre ?? ($extraido['razon_social_proveedor'] ?? $extraido['proveedor_nombre'] ?? ''),
+            'proveedor_id' => null,
+            'proveedor_codigo' => '',
+            'proveedor_nombre' => $nombreExtraido,
+            'proveedor_nombre_eventual' => $nombreExtraido,
             'proveedor_documento_eventual' => $cuit,
+            'proveedor_condicioniva_id_eventual' => $condicionivaExtraida,
             'letra' => $letra,
             'sucursal' => $sucursal,
             'numerocomprobante' => $nro,
@@ -105,7 +138,7 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
         // Constatación WSCDC (misma vía que precarga / API externa): corrige total ARCA.
         $resueltoWscdc = $this->wscdcConstatacionSupport->constatarYEnriquecer($extraido, [
             'empresa_id' => $empresaId,
-            'proveedor_id' => $proveedor?->id,
+            'proveedor_id' => null,
             'letra' => $letra,
             'sucursal' => $sucursal,
             'numero_factura' => $nro,
@@ -154,6 +187,49 @@ final class IngresoEgresoComprobanteIvaPdfIaCoreService
             'advertencias' => $advertencias,
             'constatacion_arca' => $resueltoWscdc['constatacion_arca'] ?? null,
         ];
+    }
+
+    /**
+     * Si el CUIT emisor leído es el de la empresa del formulario, intercambia con el
+     * destinatario (caso típico factura Simmons leída con CUIT Ferli como proveedor).
+     *
+     * @param  array<string, mixed>  $extraido
+     * @param  list<string>  $advertencias
+     * @return array{cuit_proveedor: string, cuit_destinatario: string, cuit_empresa: string}
+     */
+    private function alinearCuitsEmisorReceptor(array &$extraido, int $empresaId, array &$advertencias): array
+    {
+        $cuitEmpresa = $this->cuitSoloDigitos(
+            (string) (Empresa::query()->where('id', $empresaId)->value('nroinscripcion') ?? '')
+        );
+        $cuitProveedor = $this->cuitSoloDigitos((string) ($extraido['cuit_proveedor'] ?? ''));
+        $cuitDestinatario = $this->cuitSoloDigitos((string) ($extraido['cuit_destinatario'] ?? ''));
+
+        if ($cuitEmpresa !== '' && $cuitProveedor === $cuitEmpresa
+            && $cuitDestinatario !== '' && $cuitDestinatario !== $cuitEmpresa) {
+            $extraido['cuit_proveedor'] = $cuitDestinatario;
+            $extraido['cuit_destinatario'] = $cuitEmpresa;
+            $extraido['cuit_proveedor_origen'] = 'swap_empresa_local_ie';
+            $extraido['cuit_destinatario_origen'] = 'swap_empresa_local_ie';
+            $advertencias[] = 'El CUIT de la empresa estaba leído como proveedor; se invirtieron emisor y receptor.';
+            $cuitProveedor = $cuitDestinatario;
+            $cuitDestinatario = $cuitEmpresa;
+        } elseif ($cuitEmpresa !== '' && $cuitProveedor === $cuitEmpresa) {
+            $advertencias[] = 'El CUIT leído como proveedor es el de la empresa. '
+                .'No se asignó proveedor automático: complete razón social y CUIT del emisor.';
+            $cuitProveedor = '';
+        }
+
+        return [
+            'cuit_proveedor' => $cuitProveedor,
+            'cuit_destinatario' => $cuitDestinatario,
+            'cuit_empresa' => $cuitEmpresa,
+        ];
+    }
+
+    private function cuitSoloDigitos(string $cuit): string
+    {
+        return preg_replace('/\D+/', '', $cuit) ?? '';
     }
 
     /**

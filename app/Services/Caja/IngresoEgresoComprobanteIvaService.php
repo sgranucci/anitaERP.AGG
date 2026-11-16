@@ -421,16 +421,13 @@ class IngresoEgresoComprobanteIvaService
             $tipoTesoreria = ComprobanteProveedorTipoTesoreria::FONDO_FIJO;
         }
 
-        if ($proveedorId <= 0 && trim((string) ($payload['proveedor_nombre_eventual'] ?? '')) === '') {
-            throw new RuntimeException('Indique proveedor del maestro o datos de proveedor eventual.');
-        }
-
+        // En I/E el proveedor del maestro no es obligatorio: el ABM formal vive en Compras.
+        // Eventual (razón social / CUIT) es opcional; si hay CUIT se usa para unicidad fiscal.
         $documentoEventual = $proveedorId > 0
             ? null
             : ComprobanteProveedorUnicidadSupport::normalizarCuitDigitos((string) ($payload['proveedor_documento_eventual'] ?? ''));
-
-        if ($proveedorId <= 0 && $documentoEventual === '') {
-            throw new RuntimeException('El proveedor eventual debe tener un CUIT válido (11 dígitos).');
+        if ($documentoEventual === '') {
+            $documentoEventual = null;
         }
 
         $abreviatura = $this->abreviaturaTipo((int) ($payload['tipotransaccion_compra_id'] ?? 0));
@@ -447,13 +444,16 @@ class IngresoEgresoComprobanteIvaService
             $proveedorId > 0 ? $proveedorId : null,
             $documentoEventual,
         );
+        $nombreEventual = $proveedorId > 0
+            ? null
+            : (trim((string) ($payload['proveedor_nombre_eventual'] ?? '')) ?: null);
 
         return [
             'empresa_id' => $empresaId,
             'proveedor_id' => $proveedorId > 0 ? $proveedorId : null,
-            'proveedor_nombre_eventual' => $proveedorId > 0 ? null : trim((string) ($payload['proveedor_nombre_eventual'] ?? '')),
+            'proveedor_nombre_eventual' => $nombreEventual,
             'proveedor_documento_eventual' => $proveedorId > 0 ? null : $documentoEventual,
-            'identificacion_proveedor_cuit' => $cuitNormalizado,
+            'identificacion_proveedor_cuit' => $cuitNormalizado !== '' ? $cuitNormalizado : null,
             'proveedor_condicioniva_id_eventual' => $proveedorId > 0 ? null : ((int) ($payload['proveedor_condicioniva_id_eventual'] ?? 0) ?: null),
             'tipotransaccion_compra_id' => (int) ($payload['tipotransaccion_compra_id'] ?? 0),
             'letra' => $numeracionAutomatica
@@ -702,6 +702,17 @@ class IngresoEgresoComprobanteIvaService
      */
     private function assertUnicoComprobante(array $cabecera, ?int $excluirId): void
     {
+        $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+            isset($cabecera['proveedor_id']) ? (int) $cabecera['proveedor_id'] : null,
+            isset($cabecera['proveedor_documento_eventual'])
+                ? (string) $cabecera['proveedor_documento_eventual']
+                : null,
+        );
+        // Sin CUIT (I/E sin proveedor): no hay clave fiscal; el unique de BD permite NULL.
+        if ($cuit === '') {
+            return;
+        }
+
         ComprobanteProveedorUnicidadSupport::assertUnico(
             (int) $cabecera['empresa_id'],
             (int) $cabecera['tipotransaccion_compra_id'],

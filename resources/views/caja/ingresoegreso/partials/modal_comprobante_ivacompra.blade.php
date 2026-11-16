@@ -234,7 +234,7 @@
                                         <i class="fa fa-search"></i>
                                     </button>
                                 </div>
-                                <small class="text-muted d-block mt-1">C&oacute;digo + Enter &middot; F1 o lupa. El mismo maestro que el resto del sistema.</small>
+                                <small class="text-muted d-block mt-1">Opcional en I/E. El alta formal del proveedor es en Compras. C&oacute;digo + Enter &middot; F1 o lupa.</small>
                             </div>
                         </div>
                         <div class="form-group row align-items-center mb-0" id="ie-cp-eventual-bloque">
@@ -258,7 +258,7 @@
                                         </select>
                                     </div>
                                 </div>
-                                <small class="text-muted">Si el proveedor no est&aacute; en el maestro. El CUIT lleva los guiones al tipear.</small>
+                                <small class="text-muted">Opcional. Solo referencia del emisor (raz&oacute;n social / CUIT); no crea proveedor. El CUIT lleva los guiones al tipear.</small>
                             </div>
                         </div>
                     </div>
