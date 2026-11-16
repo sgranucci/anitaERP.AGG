@@ -5,7 +5,6 @@ namespace App\Support\Ai;
 use App\Services\Ai\AiPrompt;
 use App\Services\Ai\AiResult;
 use App\Support\ConsultaInteligente\ConsultaInteligenteNlLlmSupport;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -175,9 +174,7 @@ final class AiLlmCadenaExternaSupport
 
         try {
             $url = $prov['base_url'].'/chat/completions';
-            $res = Http::withToken($prov['api_key'])
-                ->timeout($timeout)
-                ->acceptJson()
+            $res = AiLlmHttpProxySupport::cliente($prov['api_key'], $timeout)
                 ->post($url, $payload);
 
             if (! $res->successful()) {
@@ -185,6 +182,7 @@ final class AiLlmCadenaExternaSupport
                     'proveedor' => $prov['nombre'],
                     'status' => $res->status(),
                     'body' => mb_substr($res->body(), 0, 300),
+                    'proxy' => AiLlmHttpProxySupport::hostPuertoResumen(),
                     'meta' => $prompt->meta,
                 ]);
 

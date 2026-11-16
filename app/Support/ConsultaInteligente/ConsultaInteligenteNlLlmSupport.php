@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\ConsultaInteligente;
 
-use Illuminate\Support\Facades\Http;
+use App\Support\Ai\AiLlmHttpProxySupport;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -188,14 +188,13 @@ Reglas:
 
         try {
             $url = $prov['base_url'].'/chat/completions';
-            $res = Http::withToken($prov['api_key'])
-                ->timeout($prov['timeout'])
-                ->acceptJson()
+            $res = AiLlmHttpProxySupport::cliente($prov['api_key'], $prov['timeout'])
                 ->post($url, $payload);
 
             if (! $res->successful()) {
                 Log::warning('CI LLM '.$prov['nombre'].' HTTP '.$res->status(), [
                     'body' => mb_substr($res->body(), 0, 300),
+                    'proxy' => AiLlmHttpProxySupport::hostPuertoResumen(),
                 ]);
 
                 return null;

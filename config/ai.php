@@ -148,7 +148,7 @@ return [
             'llm_redactar_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_REDACTAR_TIMEOUT', 40),
             // Si Ollama falla: misma cadena CI_LLM_* (Groq → Gemini → primary). No exige CI_LLM_ENABLED.
             'llm_failover_externo' => filter_var(env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_FAILOVER_EXTERNO', true), FILTER_VALIDATE_BOOLEAN),
-            'llm_failover_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_FAILOVER_TIMEOUT', env('CI_LLM_TIMEOUT', 8)),
+            'llm_failover_timeout' => (int) env('AI_SKILL_CONSULTAR_CONTEXTO_OPERATIVO_LLM_FAILOVER_TIMEOUT', env('CI_LLM_TIMEOUT', 30)),
         ],
 
         // Pedido por consumo (CC + depósito) → sugerencia RQ compra / sala (HITL)

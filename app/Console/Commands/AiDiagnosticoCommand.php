@@ -3,7 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Support\Ai\AiLlmCadenaExternaSupport;
+use App\Support\Ai\AiLlmHttpProxySupport;
 use App\Support\Ai\AiManualRagSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -120,6 +122,24 @@ class AiDiagnosticoCommand extends Command
         $checks['copiloto_failover'] = AiLlmCadenaExternaSupport::habilitadoParaCopiloto();
         if ($activos === []) {
             $errores[] = 'Ningún proveedor CI_LLM_* con API key (cadena vacía).';
+        }
+
+        // Crown: Groq/Gemini salen por Squid (CI_LLM_PROXY_* o ARCA_PADRON_PROXY_*).
+        $esCrown = EntornoEmpresaSupport::esCrown();
+        $proxyActivo = AiLlmHttpProxySupport::activo();
+        $proxyResumen = AiLlmHttpProxySupport::hostPuertoResumen();
+        $checks['llm_proxy'] = [
+            'entorno_crown' => $esCrown,
+            'habilitado_config' => filter_var(
+                config('consulta_inteligente.llm_proxy_habilitado', true),
+                FILTER_VALIDATE_BOOLEAN
+            ),
+            'activo' => $proxyActivo,
+            'host_puerto' => $proxyResumen,
+        ];
+        if ($esCrown && $activos !== [] && ! $proxyActivo) {
+            $errores[] = 'Crown sin proxy LLM activo (CI_LLM_PROXY_* / ARCA_PADRON_PROXY_*). '
+                .'Groq/Gemini no tienen Internet directo.';
         }
 
         $ragOn = filter_var(config('ai.rag_manuales.habilitado', true), FILTER_VALIDATE_BOOLEAN);
@@ -239,31 +259,55 @@ class AiDiagnosticoCommand extends Command
         foreach ($activos as $prov) {
             $id = $prov['id'];
             try {
-                $res = Http::withToken($prov['api_key'])
-                    ->timeout(max(8, (int) $prov['timeout']))
-                    ->acceptJson()
-                    ->post(rtrim($prov['base_url'], '/').'/chat/completions', [
-                        'model' => $prov['model'],
-                        'messages' => [
-                            ['role' => 'user', 'content' => 'Respondé solo la palabra OK'],
-                        ],
-                        'max_tokens' => 32,
-                        'temperature' => 0,
-                    ]);
+                // Misma salida que la app (Squid en Crown vía AiLlmHttpProxySupport).
+                // Por Squid 8s a veces no alcanza (Gemini); el probe usa piso 20 si hay proxy.
+                $timeoutProbe = max(
+                    AiLlmHttpProxySupport::activo() ? 20 : 8,
+                    (int) $prov['timeout']
+                );
+                $res = AiLlmHttpProxySupport::cliente(
+                    $prov['api_key'],
+                    $timeoutProbe
+                )->post(rtrim($prov['base_url'], '/').'/chat/completions', [
+                    'model' => $prov['model'],
+                    'messages' => [
+                        ['role' => 'user', 'content' => 'Respondé solo la palabra OK'],
+                    ],
+                    // gpt-oss / reasoning consumen tokens antes del content; 32 deja vacío.
+                    'max_tokens' => 128,
+                    'temperature' => 0,
+                ]);
                 $content = trim((string) data_get($res->json(), 'choices.0.message.content', ''));
                 $apiErr = data_get($res->json(), 'error.message');
+                $proxyHint = AiLlmHttpProxySupport::hostPuertoResumen();
                 if (! $res->successful()) {
-                    $out[$id] = ['ok' => false, 'error' => 'HTTP '.$res->status().' '.((string) $apiErr)];
+                    $err = 'HTTP '.$res->status().' '.((string) $apiErr);
+                    if ($proxyHint !== null) {
+                        $err .= ' [proxy '.$proxyHint.']';
+                    }
+                    $out[$id] = ['ok' => false, 'error' => $err];
                 } elseif ($content === '') {
+                    $reasoning = (int) data_get($res->json(), 'usage.completion_tokens_details.reasoning_tokens', 0);
                     $out[$id] = [
                         'ok' => false,
-                        'error' => 'content vacío (¿modelo reasoning? probá qwen/qwen3.8-27b)',
+                        'error' => $reasoning > 0
+                            ? "content vacío (reasoning_tokens={$reasoning}; subí max_tokens o cambiá modelo)"
+                            : 'content vacío (¿modelo reasoning? probá llama-3.3-70b-versatile)',
                     ];
                 } else {
-                    $out[$id] = ['ok' => true, 'detail' => mb_substr($content, 0, 40)];
+                    $detail = mb_substr($content, 0, 40);
+                    if ($proxyHint !== null) {
+                        $detail .= ' via '.$proxyHint;
+                    }
+                    $out[$id] = ['ok' => true, 'detail' => $detail];
                 }
             } catch (Throwable $e) {
-                $out[$id] = ['ok' => false, 'error' => $e->getMessage()];
+                $err = $e->getMessage();
+                $proxyHint = AiLlmHttpProxySupport::hostPuertoResumen();
+                if ($proxyHint !== null) {
+                    $err .= ' [proxy '.$proxyHint.']';
+                }
+                $out[$id] = ['ok' => false, 'error' => $err];
             }
         }
 
@@ -282,6 +326,11 @@ class AiDiagnosticoCommand extends Command
         if ($errores !== [] || $avisos !== []) {
             $acc[] = 'Revisar .env: AI_*, CI_LLM_* → php artisan config:clear';
         }
+        if (($checks['llm_proxy']['entorno_crown'] ?? false)
+            && ! ($checks['llm_proxy']['activo'] ?? false)
+            && ($checks['cadena_activa'] ?? []) !== []) {
+            $acc[] = 'Crown: configurar CI_LLM_PROXY_* o ARCA_PADRON_PROXY_* (Squid) y config:clear';
+        }
         if (! ($checks['ollama_model_presente'] ?? false)) {
             $acc[] = 'ollama list && ollama pull <modelo>  O  AI_OLLAMA_MODEL=<instalado>';
         }
@@ -294,6 +343,24 @@ class AiDiagnosticoCommand extends Command
         $acc[] = 'Re-chequear: php artisan ai:diagnostico --probe';
 
         return $acc;
+    }
+
+    /**
+     * @param  array{entorno_crown?: bool, habilitado_config?: bool, activo?: bool, host_puerto?: ?string}  $proxy
+     */
+    private function textoProxyLlm(array $proxy): string
+    {
+        if (! ($proxy['entorno_crown'] ?? false)) {
+            return 'n/a (solo Crown)';
+        }
+        if (! ($proxy['habilitado_config'] ?? true)) {
+            return 'deshabilitado (CI_LLM_PROXY_HABILITADO=false)';
+        }
+        if (! ($proxy['activo'] ?? false)) {
+            return 'NO — falta host (CI_LLM_PROXY_* / ARCA_PADRON_PROXY_*)';
+        }
+
+        return 'sí @ '.((string) ($proxy['host_puerto'] ?? ''));
     }
 
     /**
@@ -320,6 +387,7 @@ class AiDiagnosticoCommand extends Command
                 ['CI_LLM_CHAIN', implode(',', $c['ci_llm_chain'])],
                 ['Cadena activa', implode(' → ', $c['cadena_activa']) ?: '(vacía)'],
                 ['Copiloto failover', $c['copiloto_failover'] ? 'sí' : 'no'],
+                ['LLM proxy (Crown)', $this->textoProxyLlm($c['llm_proxy'] ?? [])],
                 ['Groq key/model', ($c['llm_providers']['groq']['api_key_set'] ? 'set' : 'VACÍA')
                     .' / '.$c['llm_providers']['groq']['model']],
                 ['Gemini key/model', ($c['llm_providers']['gemini']['api_key_set'] ? 'set' : 'VACÍA')

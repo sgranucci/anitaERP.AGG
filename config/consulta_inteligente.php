@@ -1,6 +1,6 @@
 <?php
 
-$timeout = (int) env('CI_LLM_TIMEOUT', 8);
+$timeout = (int) env('CI_LLM_TIMEOUT', 30);
 
 $proveedoresNombrados = [
     'groq' => [
@@ -58,4 +58,22 @@ return [
         'No escribas datos personales ni secretos en la pregunta (CUIT, DNI, mails, cuentas, claves). Usá criterios de negocio: «pedidos pendientes este mes», «cheques para depositar».'
     ),
     'llm_sanitizar_prompt' => (bool) env('CI_LLM_SANITIZAR_PROMPT', true),
+
+    /*
+    | Proxy de salida hacia Groq/Gemini (solo se aplica si EMPRESA=CROWN).
+    | Vacío / omitido = mismo Squid que ARCA_PADRON_PROXY_*. AGG/resto ignoran este bloque.
+    */
+    'llm_proxy_habilitado' => filter_var(env('CI_LLM_PROXY_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    'llm_proxy_host' => (($__ciProxyHost = trim((string) env('CI_LLM_PROXY_HOST', ''))) !== ''
+        ? $__ciProxyHost
+        : trim((string) env('ARCA_PADRON_PROXY_HOST', ''))),
+    'llm_proxy_port' => (int) ((trim((string) env('CI_LLM_PROXY_PORT', '')) !== '')
+        ? env('CI_LLM_PROXY_PORT')
+        : env('ARCA_PADRON_PROXY_PORT', 3128)),
+    'llm_proxy_user' => (($__ciProxyUser = trim((string) env('CI_LLM_PROXY_USER', ''))) !== ''
+        ? $__ciProxyUser
+        : trim((string) env('ARCA_PADRON_PROXY_USER', ''))),
+    'llm_proxy_password' => (($__ciProxyPass = (string) env('CI_LLM_PROXY_PASSWORD', '')) !== ''
+        ? $__ciProxyPass
+        : (string) env('ARCA_PADRON_PROXY_PASSWORD', '')),
 ];
