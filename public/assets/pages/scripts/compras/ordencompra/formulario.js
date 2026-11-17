@@ -13,6 +13,98 @@ $(function () {
 	var ocMonedaPesoId = parseInt($('#tabla-articulos-ordencompra').attr('data-oc-moneda-peso-id') || '1', 10);
 	var ocMostrarPeso = ($('#tabla-articulos-ordencompra').attr('data-oc-mostrar-peso') || '0') === '1';
 	var ocPedirPartidaCapex = ($('#tabla-articulos-ordencompra').attr('data-oc-pedir-partida-capex') || '1') === '1';
+	var ocCcDestinoEnCabecera = ($('#tabla-articulos-ordencompra').attr('data-oc-cc-en-cabecera') || '0') === '1';
+	var ocCotizacionEnCabecera = ($('#tabla-articulos-ordencompra').attr('data-oc-cotizacion-en-cabecera') || '0') === '1';
+
+	function ocValorCcDestinoCabecera() {
+		return String($('#centrocosto_id').val() || $('#tabla-articulos-ordencompra').attr('data-oc-cc-destino-default') || '');
+	}
+
+	function ocValorCcDestinoLinea($tr) {
+		if (ocCcDestinoEnCabecera) {
+			return ocValorCcDestinoCabecera();
+		}
+		return String($tr.find('select[name="centrocostodestino_ids[]"]').val() || '');
+	}
+
+	function ocSincronizarCcDestinoDesdeCabecera() {
+		if (!ocCcDestinoEnCabecera) {
+			return;
+		}
+		var cc = ocValorCcDestinoCabecera();
+		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo .oc-centrocostodestino-id').val(cc);
+		$('#tabla-articulos-ordencompra').attr('data-oc-cc-destino-default', cc);
+	}
+
+	function ocValorCotizacionCabecera() {
+		var v = parseFloat($('#oc_cotizacion_global').val());
+		return isFinite(v) && v > 0 ? v : 1;
+	}
+
+	function ocSincronizarCotizacionDesdeCabecera() {
+		if (!ocCotizacionEnCabecera) {
+			return;
+		}
+		var cot = ocValorCotizacionCabecera();
+		$('#oc_cotizacion_global').val(cot);
+		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo .oc-cotizacion-linea').val(cot);
+		ocScheduleTotales();
+	}
+
+	function ocPrimeraMonedaExtranjeraLineas() {
+		var mid = 0;
+		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
+			if (mid) {
+				return;
+			}
+			var m = parseInt($(this).find('.oc-moneda-linea').val(), 10) || ocMonedaPesoId;
+			if (m && m !== ocMonedaPesoId) {
+				mid = m;
+			}
+		});
+		return mid;
+	}
+
+	function ocRefrescarCotizacionCabeceraDesdeFecha(cb) {
+		if (!ocCotizacionEnCabecera) {
+			if (typeof cb === 'function') {
+				cb();
+			}
+			return;
+		}
+		var mid = ocPrimeraMonedaExtranjeraLineas();
+		if (!mid) {
+			$('#oc_cotizacion_global').val('1');
+			ocSincronizarCotizacionDesdeCabecera();
+			if (typeof cb === 'function') {
+				cb();
+			}
+			return;
+		}
+		var fecha = $('#fecha').val();
+		if (!fecha) {
+			if (typeof cb === 'function') {
+				cb();
+			}
+			return;
+		}
+		$.get(carpetaBase + '/compras/ordencompra/cotizacion-moneda-fecha', {
+			fecha: fecha,
+			moneda_id: mid
+		}).done(function (res) {
+			if (res && res.cotizacion != null) {
+				$('#oc_cotizacion_global').val(res.cotizacion);
+			}
+			ocSincronizarCotizacionDesdeCabecera();
+			if (typeof cb === 'function') {
+				cb();
+			}
+		}).fail(function () {
+			if (typeof cb === 'function') {
+				cb();
+			}
+		});
+	}
 
 	function ocFormatearCantAlt(num) {
 		if (!isFinite(num)) {
@@ -196,8 +288,8 @@ $(function () {
 			}
 			resp = resp || {};
 			$tr.data('oc-cuenta-cc', resp);
-			var $sel = $tr.find('select[name="centrocostodestino_ids[]"]');
-			if (window.ArticuloCentrocostoCuenta.permitido(resp, $sel.val())) {
+			var ccVal = ocValorCcDestinoLinea($tr);
+			if (window.ArticuloCentrocostoCuenta.permitido(resp, ccVal)) {
 				return;
 			}
 			if (!opciones.avisar) {
@@ -208,7 +300,9 @@ $(function () {
 				return;
 			}
 			var sku = String($cod.val() || '').trim();
-			var ccTexto = $.trim($sel.find('option:selected').text());
+			var ccTexto = ocCcDestinoEnCabecera
+				? $.trim($('#centrocosto_id option:selected').text())
+				: $.trim($tr.find('select[name="centrocostodestino_ids[]"] option:selected').text());
 			ocLimpiarArticuloPorCentrocosto($tr, window.ArticuloCentrocostoCuenta.mensaje(resp, sku, ccTexto));
 		});
 	}
@@ -226,12 +320,15 @@ $(function () {
 				return;
 			}
 			var payload = $tr.data('oc-cuenta-cc');
-			var $sel = $tr.find('select[name="centrocostodestino_ids[]"]');
-			if (!payload || window.ArticuloCentrocostoCuenta.permitido(payload, $sel.val())) {
+			var ccVal = ocValorCcDestinoLinea($tr);
+			if (!payload || window.ArticuloCentrocostoCuenta.permitido(payload, ccVal)) {
 				return;
 			}
 			var sku = String($tr.find('.codigoarticulo').val() || '').trim();
-			faltan.push(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, $.trim($sel.find('option:selected').text())));
+			var ccTexto = ocCcDestinoEnCabecera
+				? $.trim($('#centrocosto_id option:selected').text())
+				: $.trim($tr.find('select[name="centrocostodestino_ids[]"] option:selected').text());
+			faltan.push(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, ccTexto));
 		});
 		return faltan;
 	}
@@ -365,6 +462,10 @@ $(function () {
 	}
 
 	function ocActualizarCotizacionLinea($row) {
+		if (ocCotizacionEnCabecera) {
+			ocRefrescarCotizacionCabeceraDesdeFecha();
+			return;
+		}
 		var mid = parseInt($row.find('.oc-moneda-linea').val(), 10);
 		if (!mid) {
 			mid = ocMonedaPesoId;
@@ -392,6 +493,10 @@ $(function () {
 	}
 
 	function ocRefrescarCotizacionesExtranjerasPorFecha() {
+		if (ocCotizacionEnCabecera) {
+			ocRefrescarCotizacionCabeceraDesdeFecha();
+			return;
+		}
 		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
 			var mid = parseInt($(this).find('.oc-moneda-linea').val(), 10) || ocMonedaPesoId;
 			if (mid !== ocMonedaPesoId) {
@@ -421,17 +526,30 @@ $(function () {
 		return $s.length ? $s : $();
 	}
 
+	function ocActualizarVisibilidadMetaSub($row) {
+		if (!ocCcDestinoEnCabecera) {
+			return;
+		}
+		var $sub = ocSubRowArticulo($row);
+		if (!$sub.length) {
+			return;
+		}
+		var detalle = ($row.find('.oc-ta-detalle-linea').val() || '').trim();
+		var origen = ($row.find('.oc-precio-origen-etiqueta').val() || '').trim();
+		$sub.toggleClass('oc-meta-vacia', !detalle && !origen);
+	}
+
 	function ocRefreshOrigenPrecioResumen($row) {
 		var et = ($row.find('.oc-precio-origen-etiqueta').val() || '').trim();
 		var $div = ocSubRowArticulo($row).find('.oc-origen-precio-resumen');
-		if (!$div.length) {
-			return;
+		if ($div.length) {
+			if (!et) {
+				$div.text('—').attr('title', '');
+			} else {
+				$div.text(et).attr('title', et);
+			}
 		}
-		if (!et) {
-			$div.text('—').attr('title', '');
-			return;
-		}
-		$div.text(et).attr('title', et);
+		ocActualizarVisibilidadMetaSub($row);
 	}
 
 	function ocHtmlEsc(s) {
@@ -759,14 +877,14 @@ $(function () {
 		var $ta = $row.find('.oc-ta-detalle-linea');
 		var t = ($ta.val() || '').trim();
 		var $bd = ocSubRowArticulo($row).find('.oc-detalle-linea-badge');
-		if (!$bd.length) {
-			return;
+		if ($bd.length) {
+			if (!t.length) {
+				$bd.text('—').removeAttr('title');
+			} else {
+				$bd.text(t).attr('title', t);
+			}
 		}
-		if (!t.length) {
-			$bd.text('—').removeAttr('title');
-			return;
-		}
-		$bd.text(t).attr('title', t);
+		ocActualizarVisibilidadMetaSub($row);
 	}
 
 	$(document).on('click', '.oc-abrir-detalle-linea', function () {
@@ -843,10 +961,10 @@ $(function () {
 		} else if (puedeEditar) {
 			$cant.removeClass('oc-cant-desde-entregas').prop('readonly', false).attr('title', '');
 		}
-		var $res = ocSubRowArticulo($row).find('.oc-entregas-semanal-resumen');
-		if ($res.length) {
+		var $btnEnt = $row.find('.oc-abrir-entrega-semanal');
+		if ($btnEnt.length) {
 			if (!n) {
-				$res.text('—').removeAttr('title');
+				$btnEnt.attr('title', 'Cargar / consultar entregas semanales');
 			} else {
 				var parts = arr.map(function (e) {
 					var f = (e.fecha || '').toString();
@@ -855,8 +973,7 @@ $(function () {
 					}
 					return f + ': ' + ocFmtCantEntrega(e.cantidad);
 				});
-				var txt = n + ' entrega(s) · ' + parts.join(' · ');
-				$res.text(txt).attr('title', txt);
+				$btnEnt.attr('title', n + ' entrega(s) · ' + parts.join(' · '));
 			}
 		}
 	}
@@ -2389,7 +2506,7 @@ $(function () {
 		$clone.find('.linea-articulo-proveedor-id,.linea-codigo-articulo-proveedor,.linea-coef-conversion,.linea-um-compra-abrev').val('');
 		$clone.find('.linea-proveedor-etiqueta').text('—').attr('title', '');
 		$clone.find('.linea-conversion-hint').addClass('d-none').html('');
-		$cloneSub.find('.oc-entregas-semanal-resumen').text('—').removeAttr('title');
+		$cloneSub.addClass('oc-meta-vacia');
 		$tbody.append($clone);
 		$tbody.append($cloneSub);
 		ocRefreshDetalleLineaBadge($clone);
@@ -2398,12 +2515,19 @@ $(function () {
 		$clone.find('select').each(function () {
 			$(this).prop('selectedIndex', 0);
 		});
-		var defCc = $table.attr('data-oc-cc-destino-default');
-		if (defCc !== undefined && defCc !== null && defCc !== '') {
-			var $ccDest = $clone.find('select[name="centrocostodestino_ids[]"]');
-			if ($ccDest.find('option[value="' + defCc + '"]').length) {
-				$ccDest.val(defCc);
+		if (ocCcDestinoEnCabecera) {
+			$clone.find('.oc-centrocostodestino-id').val(ocValorCcDestinoCabecera());
+		} else {
+			var defCc = $table.attr('data-oc-cc-destino-default');
+			if (defCc !== undefined && defCc !== null && defCc !== '') {
+				var $ccDest = $clone.find('select[name="centrocostodestino_ids[]"]');
+				if ($ccDest.find('option[value="' + defCc + '"]').length) {
+					$ccDest.val(defCc);
+				}
 			}
+		}
+		if (ocCotizacionEnCabecera) {
+			$clone.find('.oc-cotizacion-linea').val(ocValorCotizacionCabecera());
 		}
 		var $newRow = $clone;
 		var $prevMain = $newRow.prevAll('tr.item-ordencompra-articulo').first();
@@ -2522,6 +2646,24 @@ $(function () {
 		var sku = String($tr.find('.codigoarticulo').val() || '').trim();
 		alert(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, textoIntentado));
 	});
+	$('#centrocosto_id').on('change', function () {
+		if (!ocCcDestinoEnCabecera) {
+			return;
+		}
+		ocSincronizarCcDestinoDesdeCabecera();
+		$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
+			ocValidarCentrocostoArticulo($(this), { avisar: false });
+		});
+	});
+	if (ocCcDestinoEnCabecera) {
+		ocSincronizarCcDestinoDesdeCabecera();
+	}
+	$('#oc_cotizacion_global').on('change input', function () {
+		ocSincronizarCotizacionDesdeCabecera();
+	});
+	if (ocCotizacionEnCabecera) {
+		ocSincronizarCotizacionDesdeCabecera();
+	}
 	$('#tabla-articulos-ordencompra tbody tr.item-ordencompra-articulo').each(function () {
 		ocValidarCentrocostoArticulo($(this), { avisar: false });
 	});
@@ -3148,7 +3290,11 @@ $(function () {
 					$row.find('.cantidad-linea').val(a.cantidad);
 					$row.find('.precio-linea').val(a.precio);
 					$row.find('select[name="moneda_linea_ids[]"]').val(a.moneda_id);
-					$row.find('select[name="centrocostodestino_ids[]"]').val(a.centrocostodestino_id);
+					if (ocCcDestinoEnCabecera) {
+						$row.find('.oc-centrocostodestino-id').val(ocValorCcDestinoCabecera());
+					} else if (a.centrocostodestino_id) {
+						$row.find('select[name="centrocostodestino_ids[]"]').val(a.centrocostodestino_id);
+					}
 					$row.find('input[name="fechaentrega_articulos[]"]').val(a.fechaentrega);
 					$row.find('.oc-unidadesxenvase').val(a.unidadesxenvase > 0 ? a.unidadesxenvase : '');
 					$row.find('.oc-um-alt-abrev').val(a.um_alternativa_abreviatura || '');

@@ -218,8 +218,19 @@
                 </div>
             </div>
 
+            @php
+                $ocCcDestinoEnCabeceraLabel = (\App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo()
+                        || \App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal())
+                    && ! \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+            @endphp
             <div class="form-group row" id="oc-centrocosto-select-row">
-                <label for="centrocosto_id" class="col-lg-4 control-label text-right pr-2 requerido">Centro costo</label>
+                <label for="centrocosto_id" class="col-lg-4 control-label text-right pr-2 requerido">
+                    @if ($ocCcDestinoEnCabeceraLabel)
+                        CC destino
+                    @else
+                        Centro costo
+                    @endif
+                </label>
                 <div class="col-lg-8">
                     <select name="centrocosto_id" id="centrocosto_id" class="form-control" required
                         data-oc-editable="{{ $soloLectura ? '0' : '1' }}"
@@ -236,6 +247,9 @@
                             </option>
                         @endforeach
                     </select>
+                    @if ($ocCcDestinoEnCabeceraLabel)
+                        <small class="form-text text-muted">Aplica a todos los renglones de la orden.</small>
+                    @endif
                     <small class="text-muted d-none" id="oc-centrocosto-via-suscripcion-ayuda">
                         En suscripciones el área se carga como centro de costo (modal F1) en el bloque de contrato.
                     </small>
@@ -473,14 +487,50 @@
                 'readonly' => ! empty($soloLectura),
             ])
 
+            @php
+                $ocCotizacionEnCabeceraUi = (\App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo()
+                        || \App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal())
+                    && ! \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+                $ocCotizacionGlobalValor = old('oc_cotizacion_global');
+                if ($ocCotizacionGlobalValor === null || $ocCotizacionGlobalValor === '') {
+                    $ocCotizacionGlobalValor = 1;
+                    if (isset($data) && $data && $data->ordencompra_articulos) {
+                        foreach ($data->ordencompra_articulos as $linCot) {
+                            if ($linCot->cotizacion !== null && (float) $linCot->cotizacion > 0) {
+                                $ocCotizacionGlobalValor = (float) $linCot->cotizacion;
+                                break;
+                            }
+                        }
+                    }
+                }
+            @endphp
             <div class="form-group row">
                 <label class="col-lg-4 control-label text-right pr-2">Moneda</label>
                 <div class="col-lg-8">
-                    <p class="form-control-plaintext mb-0 text-muted">
-                        Por rengl&oacute;n en la solapa <strong>Art&iacute;culos</strong> (columna Moneda / cotizaci&oacute;n).
-                    </p>
+                    @if ($ocCotizacionEnCabeceraUi)
+                        <p class="form-control-plaintext mb-1 text-muted">
+                            Por rengl&oacute;n en la solapa <strong>Art&iacute;culos</strong>.
+                        </p>
+                    @else
+                        <p class="form-control-plaintext mb-0 text-muted">
+                            Por rengl&oacute;n en la solapa <strong>Art&iacute;culos</strong> (columna Moneda / cotizaci&oacute;n).
+                        </p>
+                    @endif
                 </div>
             </div>
+            @if ($ocCotizacionEnCabeceraUi)
+                <div class="form-group row">
+                    <label for="oc_cotizacion_global" class="col-lg-4 control-label text-right pr-2">Cotizaci&oacute;n</label>
+                    <div class="col-lg-8">
+                        <input type="number" step="0.0001" min="0" name="oc_cotizacion_global" id="oc_cotizacion_global"
+                            class="form-control" style="max-width: 12rem;"
+                            value="{{ $ocCotizacionGlobalValor }}"
+                            {{ $soloLectura ? 'readonly' : '' }}
+                            title="Cotizaci&oacute;n de la orden; se aplica a todos los renglones">
+                        <small class="form-text text-muted">Global a la OC. Se recalcula con la fecha del documento y la moneda del rengl&oacute;n (si es extranjera).</small>
+                    </div>
+                </div>
+            @endif
             </div>
         </div>
     </div>
@@ -601,6 +651,38 @@
             -moz-appearance: textfield;
             appearance: textfield;
         }
+        /* El Bierzo: forzar ancho completo del contenedor (sin encoger a contenido). */
+        #oc-solapa-articulos .table-responsive {
+            display: block;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+        #oc-solapa-articulos #tabla-articulos-ordencompra.oc-layout-compacto {
+            table-layout: fixed !important;
+            width: 100% !important;
+            max-width: none !important;
+        }
+        #tabla-articulos-ordencompra.oc-layout-compacto .descripcionarticulo {
+            width: 100%;
+        }
+        #tabla-articulos-ordencompra.oc-layout-compacto .codigoarticulo {
+            width: 5.5rem !important;
+            max-width: 7rem !important;
+        }
+        #tabla-articulos-ordencompra.oc-layout-compacto th.oc-col-f-entrega,
+        #tabla-articulos-ordencompra.oc-layout-compacto td.oc-col-f-entrega {
+            min-width: 10rem;
+        }
+        #tabla-articulos-ordencompra.oc-layout-compacto input[name="fechaentrega_articulos[]"] {
+            min-width: 9.75rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        /* Sin entregas cargadas, no mostrar la franja meta vacía (Detalle / Origen / Entregas). */
+        #tabla-articulos-ordencompra.oc-layout-compacto tr.item-ordencompra-articulo-sub.oc-meta-vacia {
+            display: none;
+        }
     </style>
     @php
         $modoStockColorTalleInicial = old('modo_stock_color_talle', '');
@@ -620,6 +702,10 @@
         $ocPedirPartidaCapex = \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
         $ocMostrarPesoArticulo = \App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo();
         $ocEntregaSemanal = \App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal();
+        // Con peso/entregas y sin partida/CAPEX (El Bierzo): CC y cotización en cabecera.
+        $ocLayoutCompacto = ($ocMostrarPesoArticulo || $ocEntregaSemanal) && ! $ocPedirPartidaCapex;
+        $ocCcDestinoEnCabecera = $ocLayoutCompacto;
+        $ocCotizacionEnCabecera = $ocLayoutCompacto;
         $ocColspanMetaArticulos = $soloLectura ? 16 : 17;
         if (! $ocPedirPartidaCapex) {
             $ocColspanMetaArticulos -= 2;
@@ -629,6 +715,76 @@
         }
         if ($ocEntregaSemanal) {
             $ocColspanMetaArticulos += 1;
+        }
+        if ($ocCcDestinoEnCabecera) {
+            $ocColspanMetaArticulos -= 1;
+        }
+        if ($ocCotizacionEnCabecera) {
+            $ocColspanMetaArticulos -= 1;
+        }
+        if ($ocLayoutCompacto) {
+            $ocW = [
+                'articulo' => '7%',
+                'descripcion' => '30%',
+                'prov_um' => '5%',
+                'color' => '5%',
+                'talle' => '4%',
+                'cant' => '5%',
+                'entregas' => '4%',
+                'peso_unit' => '5%',
+                'peso_tot' => '5%',
+                'cant_alt' => '4%',
+                'precio' => '7%',
+                'moneda' => '5%',
+                'f_entrega' => '10%',
+                'det' => '4%',
+                'origen' => '4%',
+                'acciones' => '5%',
+            ];
+        } elseif ($ocPedirPartidaCapex) {
+            $ocW = [
+                'articulo' => '8%',
+                'descripcion' => '12%',
+                'prov_um' => '5%',
+                'color' => '5%',
+                'talle' => '4%',
+                'cant' => '5%',
+                'entregas' => '4%',
+                'peso_unit' => '4%',
+                'peso_tot' => '4%',
+                'cant_alt' => '4%',
+                'precio' => '6%',
+                'moneda' => '4%',
+                'cotiz' => '4%',
+                'f_entrega' => '6%',
+                'cc' => '6%',
+                'partida' => '12%',
+                'capex' => '11%',
+                'det' => '4%',
+                'origen' => '4%',
+                'acciones' => '3%',
+            ];
+        } else {
+            $ocW = [
+                'articulo' => '9%',
+                'descripcion' => '18%',
+                'prov_um' => '6%',
+                'color' => '6%',
+                'talle' => '5%',
+                'cant' => '5%',
+                'entregas' => '5%',
+                'peso_unit' => '5%',
+                'peso_tot' => '5%',
+                'cant_alt' => '5%',
+                'precio' => '7%',
+                'moneda' => '5%',
+                'cotiz' => '5%',
+                'f_entrega' => '7%',
+                'cc' => '8%',
+                'det' => '5%',
+                'origen' => '5%',
+                'acciones' => '4%',
+            ];
         }
         $fechaDocOc = old('fecha', (isset($data) && $data && $data->fecha) ? substr($data->fecha, 0, 10) : date('Y-m-d'));
         $ocMonedaPesoId = (int) (
@@ -643,41 +799,47 @@
     </div>
     <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
     <div class="table-responsive">
-    <table class="table table-sm table-bordered" id="tabla-articulos-ordencompra"
+    <table class="table table-sm table-bordered{{ $ocLayoutCompacto ? ' oc-layout-compacto' : '' }}" id="tabla-articulos-ordencompra"
         data-oc-cc-destino-default="{{ $centrocostoDefaultDestino }}"
+        data-oc-cc-en-cabecera="{{ $ocCcDestinoEnCabecera ? '1' : '0' }}"
+        data-oc-cotizacion-en-cabecera="{{ $ocCotizacionEnCabecera ? '1' : '0' }}"
         data-oc-moneda-peso-id="{{ $ocMonedaPesoId }}"
         data-oc-pedir-partida-capex="{{ $ocPedirPartidaCapex ? '1' : '0' }}"
         data-oc-mostrar-peso="{{ $ocMostrarPesoArticulo ? '1' : '0' }}"
         data-oc-entrega-semanal="{{ $ocEntregaSemanal ? '1' : '0' }}">
         <thead style="background:#85C1E9;color:#17202A;">
             <tr>
-                <th style="width: 9%;">Artículo</th>
-                <th style="width: 11%;">Descripción</th>
-                <th style="width: 6%;" class="text-nowrap" title="Solo si el artículo tiene filas en articulo_proveedor: UM compra y coef. del catálogo">Prov./UM</th>
-                <th class="ms-col-color-talle" style="width: 6%; display:none;">Color</th>
-                <th class="ms-col-color-talle" style="width: 5%; display:none;">Talle</th>
-                <th style="width: 5%;">Cant.</th>
+                <th style="width: {{ $ocW['articulo'] }};">Artículo</th>
+                <th class="oc-col-descripcion" style="width: {{ $ocW['descripcion'] }};">Descripción</th>
+                <th style="width: {{ $ocW['prov_um'] }};" class="text-nowrap" title="Solo si el artículo tiene filas en articulo_proveedor: UM compra y coef. del catálogo">Prov./UM</th>
+                <th class="ms-col-color-talle" style="width: {{ $ocW['color'] }}; display:none;">Color</th>
+                <th class="ms-col-color-talle" style="width: {{ $ocW['talle'] }}; display:none;">Talle</th>
+                <th style="width: {{ $ocW['cant'] }};">Cant.</th>
                 @if ($ocEntregaSemanal)
-                    <th style="width: 5%;" class="text-nowrap oc-col-entrega-semanal" title="Entregas semanales (fecha/cantidad); la suma define la cantidad">Entregas</th>
+                    <th style="width: {{ $ocW['entregas'] }};" class="text-nowrap oc-col-entrega-semanal" title="Entregas semanales (fecha/cantidad); la suma define la cantidad">Entregas</th>
                 @endif
                 @if ($ocMostrarPesoArticulo)
-                    <th style="width: 5%;" class="text-nowrap oc-col-peso" title="Peso unitario (precarga del ABM; editable)">Peso unit.</th>
-                    <th style="width: 5%;" class="text-nowrap oc-col-peso" title="Cantidad × peso unitario (se recalcula al editar)">Peso tot.</th>
+                    <th style="width: {{ $ocW['peso_unit'] }};" class="text-nowrap oc-col-peso" title="Peso unitario (precarga del ABM; editable)">Peso unit.</th>
+                    <th style="width: {{ $ocW['peso_tot'] }};" class="text-nowrap oc-col-peso" title="Cantidad × peso unitario (se recalcula al editar)">Peso tot.</th>
                 @endif
-                <th style="width: 5%;" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase) o conversión UM compra → stock">Cant. alt.</th>
-                <th style="width: 7%;">Precio</th>
-                <th style="width: 5%;">Moneda</th>
-                <th style="width: 5%;">Cotiz.</th>
-                <th style="width: 7%;">F. entrega línea</th>
-                <th style="width: 8%;">CC destino</th>
+                <th style="width: {{ $ocW['cant_alt'] }};" class="text-nowrap" title="Cantidad en unidad alternativa (cantidad × unidades x envase) o conversión UM compra → stock">Cant. alt.</th>
+                <th style="width: {{ $ocW['precio'] }};">Precio</th>
+                <th style="width: {{ $ocW['moneda'] }};">Moneda</th>
+                @if (! $ocCotizacionEnCabecera)
+                    <th style="width: {{ $ocW['cotiz'] }};">Cotiz.</th>
+                @endif
+                <th class="oc-col-f-entrega" style="width: {{ $ocW['f_entrega'] }};">F. entrega línea</th>
+                @if (! $ocCcDestinoEnCabecera)
+                    <th style="width: {{ $ocW['cc'] }};">CC destino</th>
+                @endif
                 @if ($ocPedirPartidaCapex)
-                    <th style="width: 15%;">Partida presupuesto</th>
-                    <th style="width: 14%;">CAPEX</th>
+                    <th style="width: {{ $ocW['partida'] }};">Partida presupuesto</th>
+                    <th style="width: {{ $ocW['capex'] }};">CAPEX</th>
                 @endif
-                <th style="width: 6%;">Det. línea</th>
-                <th style="width: 6%;" class="text-nowrap">Origen</th>
+                <th style="width: {{ $ocW['det'] }};">Det. línea</th>
+                <th style="width: {{ $ocW['origen'] }};" class="text-nowrap">Origen</th>
                 @if (!$soloLectura)
-                    <th style="width: 4%;"></th>
+                    <th style="width: {{ $ocW['acciones'] }};"></th>
                 @endif
             </tr>
         </thead>
@@ -858,6 +1020,14 @@
                         <input type="hidden" class="linea-um-compra-abrev" value="{{ $_apUm }}">
                         <input type="hidden" name="descuentos_linea[]" value="{{ old('descuentos_linea.'.$idx, $linea->descuento ?? '') }}">
                         <input type="hidden" name="cantidadalternativas[]" class="oc-cantidadalternativa" value="{{ $_cantAltShow }}">
+                        @if ($ocCcDestinoEnCabecera)
+                            <input type="hidden" class="oc-centrocostodestino-id" name="centrocostodestino_ids[]"
+                                value="{{ (int) old('centrocosto_id', $centrocostoDefaultDestino) }}">
+                        @endif
+                        @if ($ocCotizacionEnCabecera)
+                            <input type="hidden" class="oc-cotizacion-linea" name="cotizaciones_linea[]"
+                                value="{{ old('cotizaciones_linea.'.$idx, old('oc_cotizacion_global', $linea->cotizacion ?? $ocCotizacionGlobalValor ?? 1)) }}">
+                        @endif
                         @if ($ocEntregaSemanal)
                             <input type="hidden" class="oc-entregas-semanal-json" name="entregas_semanal_json[]" value="{{ $_entregasJson }}">
                         @endif
@@ -879,9 +1049,9 @@
                                 name="codigoarticulos[]" value="{{ old('codigoarticulos.'.$idx, optional($linea->articulos)->sku ?? '') }}" {{ $soloLectura ? 'readonly' : '' }}>
                         </div>
                     </td>
-                    <td>
+                    <td class="oc-col-descripcion">
                         <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]"
-                            value="{{ $_descLineaOc }}" readonly>
+                            value="{{ $_descLineaOc }}" readonly title="{{ $_descLineaOc }}">
                     </td>
                     <td class="align-middle px-1">
                         <small class="linea-proveedor-etiqueta text-muted d-block text-truncate" style="max-width: 6.5rem;" title="{{ e($_provEtiq) }}">{{ $_provEtiq !== '' ? $_provEtiq : '—' }}</small>
@@ -954,23 +1124,27 @@
                             @endforeach
                         </select>
                     </td>
-                    <td>
-                        <input type="number" step="0.0001" min="0" name="cotizaciones_linea[]" class="form-control oc-cotizacion-linea"
-                            value="{{ old('cotizaciones_linea.'.$idx, $linea->cotizacion ?? 1) }}" {{ $soloLectura ? 'readonly' : '' }}>
-                    </td>
-                    <td>
+                    @if (! $ocCotizacionEnCabecera)
+                        <td>
+                            <input type="number" step="0.0001" min="0" name="cotizaciones_linea[]" class="form-control oc-cotizacion-linea"
+                                value="{{ old('cotizaciones_linea.'.$idx, $linea->cotizacion ?? 1) }}" {{ $soloLectura ? 'readonly' : '' }}>
+                        </td>
+                    @endif
+                    <td class="oc-col-f-entrega">
                         <input type="date" name="fechaentrega_articulos[]" class="form-control"
                             value="{{ $feLineVal }}" {{ $soloLectura ? 'readonly' : '' }}>
                     </td>
-                    <td>
-                        <select name="centrocostodestino_ids[]" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
-                            @foreach ($centrocosto_query as $cc)
-                                <option value="{{ $cc->id }}" {{ (int) old('centrocostodestino_ids.'.$idx, $linea->centrocostodestino_id ?? $centrocostoDefaultDestino) === (int) $cc->id ? 'selected' : '' }}>
-                                    {{ $cc->codigo }}-{{ $cc->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </td>
+                    @if (! $ocCcDestinoEnCabecera)
+                        <td>
+                            <select name="centrocostodestino_ids[]" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                                @foreach ($centrocosto_query as $cc)
+                                    <option value="{{ $cc->id }}" {{ (int) old('centrocostodestino_ids.'.$idx, $linea->centrocostodestino_id ?? $centrocostoDefaultDestino) === (int) $cc->id ? 'selected' : '' }}>
+                                        {{ $cc->codigo }}-{{ $cc->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </td>
+                    @endif
                     @if ($ocPedirPartidaCapex)
                         <td class="align-middle">
                             <div class="celda-partidagasto d-flex align-items-center flex-nowrap">
@@ -1029,7 +1203,14 @@
                         </td>
                     @endif
                 </tr>
-                <tr class="item-ordencompra-articulo-sub">
+                @php
+                    $_metaOrigenTxt = ($_poEtiq !== '' && $_poEtiq !== null) ? (string) $_poEtiq : '';
+                    $_metaDetalleTxt = trim((string) old('detalle_articulos.'.$idx, $linea->detalle ?? ''));
+                    $_metaVacia = $ocLayoutCompacto
+                        && $_metaOrigenTxt === ''
+                        && $_metaDetalleTxt === '';
+                @endphp
+                <tr class="item-ordencompra-articulo-sub{{ $_metaVacia ? ' oc-meta-vacia' : '' }}">
                     <td colspan="{{ $ocColspanMetaArticulos }}" class="px-2 bg-light">
                         <div class="oc-meta-fila-una-linea">
                             <div class="oc-meta-bloque oc-meta-bloque-detalle">
@@ -1038,14 +1219,8 @@
                             </div>
                             <div class="oc-meta-bloque oc-meta-bloque-origen border-left pl-2 ml-1">
                                 <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Origen precio</span>
-                                <div class="oc-origen-precio-resumen oc-linea-item-leyenda text-body" title="{{ $_poEtiq }}">{{ $_poEtiq !== '' && $_poEtiq !== null ? $_poEtiq : '—' }}</div>
+                                <div class="oc-origen-precio-resumen oc-linea-item-leyenda text-body" title="{{ $_metaOrigenTxt }}">{{ $_metaOrigenTxt !== '' ? $_metaOrigenTxt : '—' }}</div>
                             </div>
-                            @if ($ocEntregaSemanal)
-                                <div class="oc-meta-bloque oc-meta-bloque-entregas border-left pl-2 ml-1">
-                                    <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Entregas</span>
-                                    <div class="oc-entregas-semanal-resumen oc-linea-item-leyenda text-body">—</div>
-                                </div>
-                            @endif
                         </div>
                     </td>
                 </tr>

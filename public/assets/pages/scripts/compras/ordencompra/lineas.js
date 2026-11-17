@@ -260,17 +260,29 @@
 
 			if ($target.is('select[name="moneda_linea_ids[]"]')) {
 				$target.trigger('change');
-				enfocarCampoLinea($row, 'cotizacion');
+				if (($(SELECTOR_TABLA).attr('data-oc-cotizacion-en-cabecera') || '0') === '1') {
+					enfocarCampoLinea($row, 'fechaentrega');
+				} else {
+					enfocarCampoLinea($row, 'cotizacion');
+				}
 				return;
 			}
 
-			if ($target.hasClass('oc-cotizacion-linea')) {
+			if ($target.hasClass('oc-cotizacion-linea') && $target.is('input[type="number"], input:not([type="hidden"])')) {
 				enfocarCampoLinea($row, 'fechaentrega');
 				return;
 			}
 
 			if ($target.is('input[name="fechaentrega_articulos[]"]')) {
-				enfocarCampoLinea($row, 'ccdestino');
+				if (($(SELECTOR_TABLA).attr('data-oc-cc-en-cabecera') || '0') === '1') {
+					if (($(SELECTOR_TABLA).attr('data-oc-pedir-partida-capex') || '1') === '1') {
+						enfocarCampoLinea($row, 'partidagasto');
+					} else {
+						agregarRenglonYEnfocarArticulo();
+					}
+				} else {
+					enfocarCampoLinea($row, 'ccdestino');
+				}
 				return;
 			}
 
