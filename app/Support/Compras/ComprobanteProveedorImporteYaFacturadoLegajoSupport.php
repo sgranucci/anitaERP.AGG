@@ -39,6 +39,10 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
     public static function sumarComparableEnLegajo(
         int $ordencompraId,
         ?int $excluirComprobanteId = null,
+        int $monedaDestinoId = 1,
+        mixed $cotizacionDestino = 1.0,
+        mixed $fechaDestino = null,
+        bool $convertirADestino = false,
     ): array {
         $vacio = ['importe' => 0.0, 'cantidad' => 0, 'items' => []];
         if ($ordencompraId <= 0) {
@@ -52,7 +56,13 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
             $query->where('id', '!=', $excluirComprobanteId);
         }
 
-        return self::acumular($query->orderBy('id')->get());
+        return self::acumular(
+            $query->orderBy('id')->get(),
+            $monedaDestinoId,
+            $cotizacionDestino,
+            $fechaDestino,
+            $convertirADestino,
+        );
     }
 
     /**

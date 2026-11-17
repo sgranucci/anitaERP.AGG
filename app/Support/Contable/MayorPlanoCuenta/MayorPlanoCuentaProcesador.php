@@ -1286,6 +1286,7 @@ class MayorPlanoCuentaProcesador
                 'nro_asiento' => $nroAsiento,
                 'nro_asiento_fmt' => ($mov['es_subdiario'] ?? false) ? 'S'.$nroAsiento : (string) $nroAsiento,
                 'tipo_comp' => $mov['tipo_comp'] ?? '',
+                'tipo_asiento' => trim((string) ($mov['tipo_asiento'] ?? '')),
                 'letra' => trim((string) ($mov['letra'] ?? ' ')),
                 'sucursal' => (int) ($mov['sucursal'] ?? 0),
                 'nro' => (int) ($mov['nro'] ?? 0),

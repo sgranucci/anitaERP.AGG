@@ -2,6 +2,8 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\ReglaNegocio\ReglaNegocioConsultaSupport;
+
 /**
  * Circuito AFIP exportación vs local para facturación admin, pedidos y remitos.
  *
@@ -15,12 +17,16 @@ namespace App\Support\Ventas;
  *   + tipo factura FAE (Interforming) / FAF (Ferli)
  *   + NC/ND NCE/NDE (Interforming) o NCD en PV export (Ferli; NCD también es local)
  * - Local: resto → no usar PV exportación ni tipos exclusivos de export (FAE/FAF/NCE/NDE)
+ *
+ * BRE (punto ventas.afip.circuito): set_dato circuito=exportacion|local; sin match → legacy.
  */
 final class FacturacionCircuitoAfipSupport
 {
     public const CIRCUITO_EXPORTACION = 'exportacion';
 
     public const CIRCUITO_LOCAL = 'local';
+
+    public const PUNTO_REGLA = 'ventas.afip.circuito';
 
     /**
      * Facturas solo de exportación (no aparecen en circuito local).
@@ -51,6 +57,32 @@ final class FacturacionCircuitoAfipSupport
      * @param  object|null  $tipotransaccion  Con abreviatura / codigo
      */
     public static function resolverCircuito(
+        ?object $puntoventa,
+        ?object $tipotransaccion,
+        ?string $letraCliente = null,
+        ?string $codigoDocumento = null,
+    ): string {
+        $legacy = self::resolverCircuitoLegacy($puntoventa, $tipotransaccion, $letraCliente, $codigoDocumento);
+        $d = ReglaNegocioConsultaSupport::decidirSiActivo(self::PUNTO_REGLA, [
+            'letra_cliente' => strtoupper(trim((string) $letraCliente)),
+            'codigo_documento' => strtoupper(trim((string) $codigoDocumento)),
+            'tipo_abrev' => strtoupper(trim((string) ($tipotransaccion->abreviatura ?? ''))),
+            'tipo_codigo' => (string) ($tipotransaccion->codigo ?? ''),
+            'pv_modo' => strtoupper(trim((string) ($puntoventa->modofacturacion ?? ''))),
+            'pv_webservice' => strtolower(trim((string) ($puntoventa->webservice ?? ''))),
+            'circuito_legacy' => $legacy,
+        ]);
+        if ($d !== null) {
+            $circuito = strtolower(trim((string) (ReglaNegocioConsultaSupport::stringDato($d->datos, 'circuito') ?? '')));
+            if ($circuito === self::CIRCUITO_EXPORTACION || $circuito === self::CIRCUITO_LOCAL) {
+                return $circuito;
+            }
+        }
+
+        return $legacy;
+    }
+
+    public static function resolverCircuitoLegacy(
         ?object $puntoventa,
         ?object $tipotransaccion,
         ?string $letraCliente = null,

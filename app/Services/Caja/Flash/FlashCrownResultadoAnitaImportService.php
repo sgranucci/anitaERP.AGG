@@ -607,6 +607,14 @@ final class FlashCrownResultadoAnitaImportService
         $diffHotel = abs((float) $erp->hotel - (float) $payload['hotel']) >= 0.02;
         $diffAyb = abs((float) $erp->ayb - (float) $payload['ayb']) >= 0.02;
         $diffCajaEmp = abs((float) $erp->caja_empleado - (float) $payload['caja_empleado']) >= 0.02;
+        // Attendance / soft / cashdrop: si solo miramos mesa+slot_r, un flash con GST
+        // (slot_r > 0, att/soft en 0) se marca "igual" y nunca recibe resultado Anita.
+        $diffAtt = (int) $erp->att !== (int) ($payload['att'] ?? 0);
+        $diffSoft = abs((float) $erp->soft_count - (float) ($payload['soft_count'] ?? 0)) >= 0.02;
+        $diffCashdrop = abs((float) $erp->cashdrop - (float) ($payload['cashdrop'] ?? 0)) >= 0.02;
+        $diffSoftMesas = abs((float) $erp->soft_mesas - (float) ($payload['soft_mesas'] ?? 0)) >= 0.02;
+        $diffClientesOSoft = $diffAtt || $diffSoft || $diffCashdrop || $diffSoftMesas;
+        $incompletoLocal = $erp->necesitaFallbackAnita();
 
         // Validado / ya facturado: igual se puede alinear Hotel/F&B/caja emp. (no tocan proc_*/ventas).
         if ($erp->estaValidado() || $this->yaFacturado($erp)) {
@@ -632,8 +640,16 @@ final class FlashCrownResultadoAnitaImportService
             && abs($slotErp - (float) $payload['_slot']) < 0.02
             && abs((float) $erp->ruleta_el_r - (float) $payload['ruleta_el_r']) < 0.02;
 
-        if ($igualJuego && ! $diffHotel && ! $diffAyb && ! $diffCajaEmp) {
+        if ($igualJuego && ! $diffHotel && ! $diffAyb && ! $diffCajaEmp && ! $diffClientesOSoft) {
             return ['accion' => 'omitir', 'motivo' => 'igual'];
+        }
+        // Réplica incompleta (att/soft en 0 con Anita con datos) o diff de clientes/soft:
+        // actualizar completo; no usar solo revenue (ese path no escribe att/soft_count).
+        if ($diffClientesOSoft || $incompletoLocal) {
+            return [
+                'accion' => 'actualizar',
+                'motivo' => $diffClientesOSoft ? 'att/soft/cashdrop' : 'replica_incompleta',
+            ];
         }
         if ($igualJuego && ($diffHotel || $diffAyb || $diffCajaEmp)) {
             return ['accion' => 'actualizar_revenue', 'motivo' => 'hotel/ayb/caja_emp'];

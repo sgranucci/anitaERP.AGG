@@ -13,42 +13,76 @@ Factura anticipada vs recepción: `compras:auditar-factura-anticipada-recepcion`
 
 ## Base vigente (aceptada)
 
-Corte **15/11/2026** · anticipos **solo OPA** (sin factura anticipada / recepción).  
+Corte **17/11/2026** · anticipos **solo OPA** (sin factura anticipada / recepción).  
 Ficha deuda vs ficha cuadrada en las tres (0 diferencias).  
-A partir del 16/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde.
+A partir del 18/11 el auditor compara contra esta base. Si el conjunto no se mueve más de ±1,00, el mail queda en verde.
 
 | Empresa | Delta proveedores | Delta anticipos (OPA) | **Delta conjunto** |
 |---|---:|---:|---:|
-| Biyemas | 407.510.558,72 | 432.294.428,94 | **839.804.987,66** |
+| Biyemas | 397.675.173,58 | 432.294.428,94 | **829.969.602,52** |
 | Kandiko | −161.877.377,17 | 6.680.138,63 | **−155.197.238,54** |
 | Rebisco | −297.971.512,89 | 38.874.018,07 | **−259.097.494,82** |
 
-### Biyemas — cuentas al 15/11/2026
+### Biyemas — cuentas al 17/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | −177.117.517,39 | 103.219.378,81 | 280.336.896,20 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 3.267.959.994,74 | 2.930.022.671,60 | −337.937.323,14 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | −108.698.202,24 | 161.803.308,82 | 270.501.511,06 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 3.268.516.438,25 | 2.930.579.115,11 | −337.937.323,14 |
 | 216010003 DS. FINANC. REBISCO SA. | 583.254,23 | 513.877,69 | −69.376,54 |
 | 216030002 DS. COMER. INTERCO KAN CTE | 205.396,08 | 465.385.758,28 | 465.180.362,20 |
 | 114040001 ANTICIPOS A PROVEEDORES (OPA) | −86.530.179,99 | 345.764.248,95 | 432.294.428,94 |
 
-### Kandiko — cuentas al 15/11/2026
+### Kandiko — cuentas al 17/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | 37.441.796,89 | 36.947.512,46 | −494.284,43 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.035.720.598,45 | 874.337.505,41 | −161.383.093,04 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | 52.978.788,55 | 52.484.504,12 | −494.284,43 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.036.217.877,20 | 874.834.784,16 | −161.383.093,04 |
 | 221010004 PROVEEDORES MON EXTR. NO CTES | 0,00 | 0,30 | 0,30 |
 | 114040001 ANTICIPOS A PROVEEDORES (OPA) | −1.860.550,00 | 4.819.588,63 | 6.680.138,63 |
 
-### Rebisco — cuentas al 15/11/2026
+### Rebisco — cuentas al 17/11/2026
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 211010001 PROVEEDORES MONEDA NACIONAL | 60.420.782,22 | 51.500.901,13 | −8.919.881,09 |
-| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.688.444.588,08 | 1.399.392.956,28 | −289.051.631,80 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | 83.727.844,53 | 74.807.963,44 | −8.919.881,09 |
+| 211010011 PROVEEDORES MONEDA EXTRANJERA | 1.693.553.030,95 | 1.404.501.399,15 | −289.051.631,80 |
 | 114040001 ANTICIPOS A PROVEEDORES (OPA) | −81.754.650,23 | −42.880.632,16 | 38.874.018,07 |
+
+---
+
+## Salto documentado: 16/11 → 17/11/2026
+
+La alerta del mail fue solo por el delta de Biyemas. La ficha siguió en cero. Kandiko y Rebisco no se movieron.
+
+| Empresa | Conjunto 16/11 | Conjunto 17/11 | Variación |
+|---|---:|---:|---:|
+| Biyemas | 839.804.987,66 | 829.969.602,52 | **−9.835.385,14** |
+| Kandiko | −155.197.238,54 | −155.197.238,54 | 0,00 |
+| Rebisco | −259.097.494,82 | −259.097.494,82 | 0,00 |
+
+En Biyemas solo se movió **211010001 PROVEEDORES MONEDA NACIONAL** (−9.835.385,14). Anticipos OPA, ME e intercompany con el mismo delta. Deuda de esa cuenta −177.117.517,39 → −108.698.202,24 (+68.419.315,15); mayor 103.219.378,81 → 161.803.308,82 (+58.583.930,01). La diferencia entre ambos movimientos es exactamente la variación del delta.
+
+### Origen
+
+El 16/11 a las 13:06 (después del corte 07:50) se borraron dos asientos TES de anulación de la OPP A-1-117522 (pago AOP 28785, proveedor 4428 PROCESSING DATA ARGENTINA) que acreditaban 211010001. Esos asientos ERP (creados el 03/11) convivían con el subdiario Anita `#151944` (SUBD AOP A-1-117522, Haber 9.835.385,14 en la misma cuenta, ya en el mayor desde el import). Al borrarlos sale el Haber duplicado; el mayor baja exactamente 9.835.385,14. La CT del AOP ya estaba aplicada al 100 % (saldo abierto 0), así que la deuda no se movió por este evento.
+
+Las COM del 16/11 (facturas/NC) movieron mayor y deuda por el mismo importe (+68.419.315,15) y no entran en la variación del conjunto.
+
+| Asiento | TES | Fecha | Haber 211010001 | Observación |
+|---|---|---|---:|---|
+| 174618 | n 369123 | 03/11/2026 | 364.435,39 | ANULA OPP 117522 [SUBH] T OPP A 1 117522 |
+| 174619 | n 369124 | 03/11/2026 | 9.470.949,75 | ANULA OPP 117522 [SUBH] T OPP A 1 117522 |
+| **Total** | | | **9.835.385,14** | |
+
+Queda en el mayor el asiento Anita `#151944` (TES n 5260369, SUBD AOP A-1-117522), al que se reasignó `pagoproveedor_id=28785` en el mismo momento.
+
+### Lectura
+
+- **No es descuadre de ficha.** Deuda y ficha en cero en las tres empresas.
+- El salto es la baja del Haber duplicado de la anulación OPP (asientos ERP vs subdiario Anita), sin impacto en CT abierta.
+- Se **acepta como nueva base** al 17/11/2026.
 
 ---
 

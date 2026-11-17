@@ -1,7 +1,7 @@
 <table>
     <thead>
         <tr>
-            <th colspan="11" style="font-size:14px;font-weight:bold;text-align:center;">Listado de recepciones de proveedores</th>
+            <th colspan="12" style="font-size:14px;font-weight:bold;text-align:center;">Listado de recepciones de proveedores</th>
         </tr>
         <tr>
             <th>Nº recepción</th>
@@ -10,6 +10,7 @@
             <th>COM origen</th>
             <th>Nº OC</th>
             <th>Estado</th>
+            <th>Remito/Fact.</th>
             <th>Proveedor</th>
             <th>Empresa</th>
             <th>Precio diff.</th>
@@ -26,6 +27,7 @@
             <td>{{ ($row->tipo ?? '') === 'DEVOLUCION' ? ($row->numerorecepcion_origen ?? '') : '' }}</td>
             <td>{{ $row->numeroordencompra }}</td>
             <td>{{ $row->estado }}</td>
+            <td>{{ $row->numerofactura ?: '' }}</td>
             <td>{{ $row->nombreproveedor }}</td>
             <td>{{ $row->nombreempresa }}</td>
             <td>{{ $row->fl_precio_diferencia ? 'Sí' : 'No' }}</td>

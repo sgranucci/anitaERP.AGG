@@ -31,7 +31,7 @@
 <table class="data">
     <thead>
         <tr>
-            <th>Nº</th><th>Fecha</th><th>Tipo</th><th>COM origen</th><th>OC</th><th>Proveedor</th><th>Empresa</th><th>Estado</th><th>Diff.</th>
+            <th>Nº</th><th>Fecha</th><th>Tipo</th><th>COM origen</th><th>OC</th><th>Proveedor</th><th>Empresa</th><th>Estado</th><th>Remito/Fact.</th><th>Diff.</th>
         </tr>
     </thead>
     <tbody>
@@ -45,6 +45,7 @@
             <td>{{ $row->nombreproveedor }}</td>
             <td>{{ $row->nombreempresa }}</td>
             <td>{{ $row->estado }}</td>
+            <td>{{ $row->numerofactura ?: '—' }}</td>
             <td>
                 @if($row->fl_precio_diferencia) P @endif
                 @if($row->fl_diferencia_cantidad) C @endif

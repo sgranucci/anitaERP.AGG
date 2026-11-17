@@ -92,4 +92,67 @@ class RecepcionProveedorAnitaImportOcFallbackTest extends TestCase
             )
         );
     }
+
+    public function test_numerofactura_prioriza_recm_ref_sobre_pep(): void
+    {
+        $cab = (object) [
+            'recm_ref_tipo' => 'REM',
+            'recm_ref_letra' => 'R',
+            'recm_ref_sucursal' => 1,
+            'recm_ref_nro' => 12345,
+            'recm_tipo_fac' => 'PEP',
+            'recm_letra_fac' => 'X',
+            'recm_sucursal_fac' => 1,
+            'recm_nro_fac' => 219162,
+        ];
+
+        $this->assertSame(
+            'REM R0001-12345',
+            RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab)
+        );
+    }
+
+    public function test_numerofactura_ignora_pep_en_fac_y_usa_cod_remito(): void
+    {
+        $cab = (object) [
+            'recm_ref_tipo' => '',
+            'recm_ref_nro' => 0,
+            'recm_tipo_fac' => 'PEP',
+            'recm_nro_fac' => 219162,
+            'recm_cod_remito' => 'R-9988',
+        ];
+
+        $this->assertSame(
+            'R-9988',
+            RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab)
+        );
+    }
+
+    public function test_numerofactura_usa_fac_si_no_es_oc(): void
+    {
+        $cab = (object) [
+            'recm_ref_nro' => 0,
+            'recm_tipo_fac' => 'FAC',
+            'recm_letra_fac' => 'A',
+            'recm_sucursal_fac' => 6,
+            'recm_nro_fac' => 186624,
+        ];
+
+        $this->assertSame(
+            'FAC A0006-186624',
+            RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab)
+        );
+    }
+
+    public function test_numerofactura_vacio_si_solo_hay_pep(): void
+    {
+        $cab = (object) [
+            'recm_ref_nro' => 0,
+            'recm_tipo_fac' => 'PEP',
+            'recm_nro_fac' => 219162,
+            'recm_cod_remito' => '',
+        ];
+
+        $this->assertSame('', RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab));
+    }
 }

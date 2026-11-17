@@ -3,6 +3,7 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\ApiAnita;
+use App\Support\Compras\AnitaImport\PagoproveedorAnitaImportEmpresaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Log;
 
@@ -29,8 +30,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         .'subd_nro_interno,subd_ccosto_cta,subd_ccosto_con,subd_desc_mov';
 
     /**
-     * El Bierzo: UNLOAD/WHERE sobre subd_empresa no devuelve filas (columna no usable en el bridge).
-     * El Informix /usr2/bierzo ya es el mayor de esa instalación.
+     * Ferli / El Bierzo / Crown: UNLOAD/WHERE sobre subd_empresa no es usable en el bridge.
      */
     private const SUBDIARIO_CAMPOS_SIN_EMPRESA = 'subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,'
         .'subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,'
@@ -39,6 +39,10 @@ class MayorPlanoCuentaAnitaBridgeReader
 
     private const AUXPAG_CAMPOS = 'axp_pro,axp_fecha,axp_rec,axp_tipo,axp_nro,axp_tipo_ap,axp_monto_ap,axp_cod_mon_co,'
         .'axp_sucursal,axp_empresa,axp_letra_comp,axp_nro_interno,axp_banco,axp_concepto';
+
+    /** Crown / mono: sin axp_empresa ni axp_concepto. */
+    private const AUXPAG_CAMPOS_SIN_EMPRESA = 'axp_pro,axp_fecha,axp_rec,axp_tipo,axp_nro,axp_tipo_ap,axp_monto_ap,axp_cod_mon_co,'
+        .'axp_sucursal,axp_letra_comp,axp_nro_interno,axp_banco';
 
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita(),
@@ -300,6 +304,8 @@ class MayorPlanoCuentaAnitaBridgeReader
         $t0 = microtime(true);
         $pago = [];
         $auxpag = [];
+        $auxpagSinEmpresaYaCargado = false;
+        $auxpagTieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
 
         foreach ($empresaIds as $empresaId) {
             $empresaId = (int) $empresaId;
@@ -312,17 +318,17 @@ class MayorPlanoCuentaAnitaBridgeReader
                 $this->listarPago($empresaId, $fechaDesde, $fechaHasta, $errores),
             );
 
+            // Mono (Crown): un solo UNLOAD sin axp_empresa; no repetir por empresa ERP.
+            if (! $auxpagTieneEmpresa) {
+                if ($auxpagSinEmpresaYaCargado) {
+                    continue;
+                }
+                $auxpagSinEmpresaYaCargado = true;
+            }
+
             $auxpag = array_merge(
                 $auxpag,
-                $this->listar(
-                    'che_ban',
-                    'auxpag',
-                    self::AUXPAG_CAMPOS,
-                    ' WHERE axp_empresa='.$empresaId
-                    .' AND axp_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta,
-                    $errores,
-                    'auxpag-empresa-'.$empresaId,
-                ),
+                $this->listarAuxpag($empresaId, $fechaDesde, $fechaHasta, $errores),
             );
         }
 
@@ -363,12 +369,51 @@ class MayorPlanoCuentaAnitaBridgeReader
     }
 
     /**
-     * En El Bierzo y Calzados Ferli el UNLOAD de subd_empresa (y el WHERE equivalente) no es usable.
+     * Ferli / El Bierzo / Crown: UNLOAD/WHERE sobre subd_empresa no es usable
+     * (mismo criterio que {@see AnitaAsientoImportBridgeReader}).
      */
     private function subdiarioUsaColumnaEmpresa(): bool
     {
         return ! EntornoEmpresaSupport::esElBierzo()
-            && ! EntornoEmpresaSupport::esFerli();
+            && ! EntornoEmpresaSupport::esFerli()
+            && ! EntornoEmpresaSupport::esCrown();
+    }
+
+    /**
+     * @param  list<string>  $errores
+     * @return list<object>
+     */
+    private function listarAuxpag(
+        int $empresaId,
+        int $fechaDesde,
+        int $fechaHasta,
+        array &$errores,
+    ): array {
+        $tieneEmpresa = PagoproveedorAnitaImportEmpresaSupport::auxpagTieneEmpresa();
+        $campos = $tieneEmpresa ? self::AUXPAG_CAMPOS : self::AUXPAG_CAMPOS_SIN_EMPRESA;
+        $where = $tieneEmpresa
+            ? ' WHERE axp_empresa='.$empresaId
+                .' AND axp_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta
+            : ' WHERE axp_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta;
+
+        $filas = $this->listar(
+            'che_ban',
+            'auxpag',
+            $campos,
+            $where,
+            $errores,
+            'auxpag-empresa-'.$empresaId,
+        );
+
+        if (! $tieneEmpresa) {
+            foreach ($filas as $fila) {
+                if (! isset($fila->axp_empresa)) {
+                    $fila->axp_empresa = 0;
+                }
+            }
+        }
+
+        return $filas;
     }
 
     /**

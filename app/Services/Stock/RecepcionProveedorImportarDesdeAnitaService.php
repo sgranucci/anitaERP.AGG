@@ -99,9 +99,15 @@ class RecepcionProveedorImportarDesdeAnitaService
         if ($existente) {
             $resultado['recepcion_id'] = (int) $existente->id;
             $resultado['lineas'] = $existente->recepcion_proveedor_articulos()->count();
+            $facturaRellenada = $this->sincronizarNumerofacturaSiFalta($existente, $cab, $dryRun);
             $vinculo = $this->vincularRecepcionAOcSiFalta($existente, $cab, $empresaId, $dryRun);
             $resultado['estado'] = $vinculo['estado'];
             $resultado['mensaje'] = $vinculo['mensaje'];
+            if ($facturaRellenada) {
+                $resultado['estado'] = $dryRun ? 'dry_run' : 'factura_actualizada';
+                $sufijo = 'Factura/remito rellenado desde Anita (recm_ref_*).';
+                $resultado['mensaje'] = trim(($resultado['mensaje'] ?? '').' '.$sufijo);
+            }
 
             return $resultado;
         }
@@ -170,7 +176,7 @@ class RecepcionProveedorImportarDesdeAnitaService
                     'proveedor_id' => $proveedorId,
                     'fecha' => $fecha,
                     'numerorecepcion' => $nro,
-                    'numerofactura' => '',
+                    'numerofactura' => RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab),
                     'moneda_id' => $monedaCabecera['moneda_id'],
                     'cotizacion' => $monedaCabecera['cotizacion'],
                     'estado' => $estado,
@@ -419,7 +425,7 @@ class RecepcionProveedorImportarDesdeAnitaService
                         'proveedor_id' => $proveedorId,
                         'fecha' => $fecha,
                         'numerorecepcion' => $nro,
-                        'numerofactura' => '',
+                        'numerofactura' => RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab),
                         'moneda_id' => $monedaCabecera['moneda_id'],
                         'cotizacion' => $monedaCabecera['cotizacion'],
                         'estado' => RecepcionProveedorEstados::CONFIRMADA,
@@ -688,6 +694,96 @@ class RecepcionProveedorImportarDesdeAnitaService
             ->where('anita_sucursal', $sucursal)
             ->where('anita_nro', $nro)
             ->first();
+    }
+
+    /**
+     * Rellena numerofactura vacío en COM ya importadas leyendo recm_ref_* de Anita.
+     *
+     * @return array{revisadas: int, actualizadas: int, sin_dato: int, errores: list<string>}
+     */
+    public function rellenarNumerofacturaVacias(?int $anitaNro = null, bool $dryRun = false): array
+    {
+        $stats = [
+            'revisadas' => 0,
+            'actualizadas' => 0,
+            'sin_dato' => 0,
+            'errores' => [],
+        ];
+
+        $query = Recepcion_Proveedor::query()
+            ->where(function ($q) {
+                $q->whereNull('numerofactura')->orWhere('numerofactura', '');
+            })
+            ->whereNotNull('anita_nro')
+            ->where('anita_nro', '>', 0)
+            ->orderBy('id');
+
+        if ($anitaNro !== null && $anitaNro > 0) {
+            $query->where('anita_nro', $anitaNro);
+        }
+
+        foreach ($query->get(['id', 'numerofactura', 'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro'])->chunk(200) as $lote) {
+            $nros = $lote->pluck('anita_nro')->map(static fn ($n) => (int) $n)->filter(static fn (int $n) => $n > 0)->unique()->values()->all();
+            $cabsPorClave = [];
+            try {
+                foreach (RecepcionProveedorAnitaImportSupport::listarRecepmaePorNros($nros) as $cab) {
+                    $suc = (int) ($cab->recm_sucursal ?? 0);
+                    $nro = (int) ($cab->recm_nro ?? 0);
+                    if ($nro <= 0) {
+                        continue;
+                    }
+                    $cabsPorClave[$suc.'-'.$nro] = $cab;
+                }
+            } catch (\Throwable $e) {
+                if (count($stats['errores']) < 20) {
+                    $stats['errores'][] = 'Lote Anita: '.$e->getMessage();
+                }
+
+                continue;
+            }
+
+            foreach ($lote as $recepcion) {
+                $stats['revisadas']++;
+                $sucursal = (int) ($recepcion->anita_sucursal ?? 0);
+                $nro = (int) ($recepcion->anita_nro ?? 0);
+                $cab = $cabsPorClave[$sucursal.'-'.$nro] ?? null;
+                if ($cab === null) {
+                    $stats['sin_dato']++;
+
+                    continue;
+                }
+                if (! $this->sincronizarNumerofacturaSiFalta($recepcion, $cab, $dryRun)) {
+                    $stats['sin_dato']++;
+
+                    continue;
+                }
+                $stats['actualizadas']++;
+            }
+        }
+
+        return $stats;
+    }
+
+    private function sincronizarNumerofacturaSiFalta(
+        Recepcion_Proveedor $existente,
+        object $cab,
+        bool $dryRun,
+    ): bool {
+        if (trim((string) ($existente->numerofactura ?? '')) !== '') {
+            return false;
+        }
+
+        $numero = RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab);
+        if ($numero === '') {
+            return false;
+        }
+
+        if (! $dryRun) {
+            $existente->numerofactura = $numero;
+            $existente->save();
+        }
+
+        return true;
     }
 
     /**

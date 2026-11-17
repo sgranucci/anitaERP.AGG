@@ -151,6 +151,18 @@ final class AsientoAnitaMetadatosSupport
             ];
         }
 
+        // Código ERP de venta: «FSL B-00201-00001301 Tragamone» / «FAC B-00008-00000044».
+        if (preg_match('/^([A-Z]{3})\s+([A-Z])-(\d+)-(\d+)/i', $texto, $m) === 1) {
+            return [
+                'origen' => $parseado['origen'],
+                'sistema' => '',
+                'tipo' => strtoupper($m[1]),
+                'letra' => strtoupper($m[2]),
+                'sucursal' => (int) $m[3],
+                'nro' => (int) $m[4],
+            ];
+        }
+
         return $vacio;
     }
 

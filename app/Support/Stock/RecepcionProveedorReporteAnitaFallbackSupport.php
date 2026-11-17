@@ -120,6 +120,10 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             'recm_tipo_fac as tipo_fac',
             'recm_letra_fac as letra_fac',
             'recm_sucursal_fac as sucursal_fac',
+            'recm_ref_tipo as ref_tipo',
+            'recm_ref_letra as ref_letra',
+            'recm_ref_sucursal as ref_sucursal',
+            'recm_ref_nro as ref_nro',
             'penmp_nro as nro_oc',
             'penmp_fecha as fecha_oc',
             'penmp_requisicion as nro_req',
@@ -435,12 +439,16 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
         $estado = $estadoAnita === $estadoAnul
             ? RecepcionProveedorEstados::ANULADA
             : RecepcionProveedorEstados::CONFIRMADA;
-        $facturaAnita = self::formatoFacturaAnita(
-            $row->tipo_fac ?? null,
-            $row->letra_fac ?? null,
-            $row->sucursal_fac ?? null,
-            $row->nro_fac ?? null,
-        );
+        $facturaAnita = RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera((object) [
+            'recm_ref_tipo' => $row->ref_tipo ?? null,
+            'recm_ref_letra' => $row->ref_letra ?? null,
+            'recm_ref_sucursal' => $row->ref_sucursal ?? null,
+            'recm_ref_nro' => $row->ref_nro ?? null,
+            'recm_tipo_fac' => $row->tipo_fac ?? null,
+            'recm_letra_fac' => $row->letra_fac ?? null,
+            'recm_sucursal_fac' => $row->sucursal_fac ?? null,
+            'recm_nro_fac' => $row->nro_fac ?? null,
+        ]);
 
         return [
             'tipo_fila' => 'dato',
@@ -898,14 +906,4 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
         return substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2);
     }
 
-    private static function formatoFacturaAnita($tipo, $letra, $sucursal, $nro): string
-    {
-        $nro = (int) $nro;
-        $tipo = strtoupper(trim((string) $tipo));
-        if ($nro <= 0 || in_array($tipo, ['PEP', 'OC', 'ORD', 'COM', ''], true)) {
-            return '';
-        }
-
-        return trim($tipo.' '.trim((string) $letra).sprintf('%04d', (int) $sucursal).'-'.$nro);
-    }
 }

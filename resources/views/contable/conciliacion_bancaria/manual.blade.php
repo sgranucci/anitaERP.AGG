@@ -86,8 +86,9 @@
                         <label class="form-check-label" for="solo-pendientes">Solo pendientes</label>
                     </div>
                     <div class="form-check mb-1">
-                        <input type="checkbox" class="form-check-input" id="incluir-anteriores" @checked(($prefs['incluir_anteriores_default'] ?? false))>
-                        <label class="form-check-label" for="incluir-anteriores">Incluir anteriores</label>
+                        <input type="checkbox" class="form-check-input" id="incluir-anteriores" @checked(($prefs['incluir_anteriores_default'] ?? false))
+                               title="En anitaERP muestra también asientos de fechas anteriores a la elegida (útil para cheques)">
+                        <label class="form-check-label" for="incluir-anteriores" title="En anitaERP muestra también asientos de fechas anteriores a la elegida (útil para cheques)">Incluir anteriores</label>
                     </div>
                     <button type="button" class="btn btn-sm {{ !empty($prefs['traer_banco_destacado']) ? 'btn-primary' : 'btn-outline-primary' }}" id="btn-traer-banco" title="Consulta Interbanking y persiste movimientos de la fecha">
                         <i class="fa fa-cloud-download-alt"></i> Traer del banco

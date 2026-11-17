@@ -5143,6 +5143,22 @@ $(function () {
         $.getJSON(url).done(function (p) {
             if (p && p.es_anticipada) {
                 $('#cp-legajo-anticipada-banner').removeClass('d-none');
+                var maxAnt = parseInt(p.anticipo_max_facturas, 10) || 1;
+                var planCant = parseInt(p.anticipo_plan_cantidad, 10) || 0;
+                var permiteVarias = !!p.anticipo_permite_varias || maxAnt > 1;
+                if (permiteVarias) {
+                    $('#cp-legajo-anticipada-regla').html(
+                        '— según <em>comprobantes a venir</em> se admiten hasta <strong>'
+                        + maxAnt
+                        + '</strong> factura(s) de anticipo'
+                        + (planCant > 0 ? ' (' + planCant + ' cuota/s del plan)' : '')
+                        + '; el % contractual se controla acumulado (± tolerancia).'
+                    );
+                } else {
+                    $('#cp-legajo-anticipada-regla').html(
+                        '— solo se admite <strong>una</strong> factura de anticipo, por el % contractual de la OC (± tolerancia).'
+                    );
+                }
                 var detallePct = '';
                 if (p.pct_anticipo && Number(p.pct_anticipo) > 0) {
                     detallePct = ' Anticipo esperado: '

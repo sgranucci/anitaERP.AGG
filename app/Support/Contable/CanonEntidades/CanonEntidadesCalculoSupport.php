@@ -7,15 +7,21 @@ namespace App\Support\Contable\CanonEntidades;
 /**
  * Recorre el Flash del período: 1% máquinas (solo Win > 0) y bingo según empresa.
  * Totales = suma de días (nunca un total transcripto).
+ *
+ * Parámetros de alícuota: constantes legacy, o override desde
+ * CanonEntidadesReglasSupport::resolver() / BRE (piso, tramos, plana, máquinas).
  */
 final class CanonEntidadesCalculoSupport
 {
     /**
      * @param  list<array<string, mixed>>  $dias
+     * @param  array<string, mixed>|null  $params  Salida de resolver() o overrides parciales
      * @return array<string, mixed>
      */
-    public static function calcular(array $dias, string $regla): array
+    public static function calcular(array $dias, string $regla, ?array $params = null): array
     {
+        $tarifas = self::resolverTarifas($regla, $params);
+
         $filas = [];
         $canonMaq = 0.0;
         $canonBin = 0.0;
@@ -23,8 +29,8 @@ final class CanonEntidadesCalculoSupport
         $baseBingo = 0.0;
         $diasExcluidos = 0;
         $diasConFlash = 0;
-        $pisoRestante = CanonEntidadesReglasSupport::PISO_BINGO_BIYEMAS;
-        $escalonado = CanonEntidadesReglasSupport::esBingoEscalonado($regla);
+        $pisoRestante = $tarifas['piso_bingo'];
+        $escalonado = $tarifas['bingo_escalonado'];
 
         foreach ($dias as $dia) {
             $win = round((float) ($dia['win_electronico'] ?? 0), 2);
@@ -37,7 +43,7 @@ final class CanonEntidadesCalculoSupport
             $excluidoMaq = ! $tieneFlash || $win <= 0;
             $canonMaqDia = 0.0;
             if (! $excluidoMaq) {
-                $canonMaqDia = round($win * CanonEntidadesReglasSupport::ALICUOTA_MAQUINAS, 2);
+                $canonMaqDia = round($win * $tarifas['alicuota_maquinas'], 2);
                 $canonMaq += $canonMaqDia;
                 $baseMaq += $win;
             } elseif ($tieneFlash) {
@@ -50,13 +56,13 @@ final class CanonEntidadesCalculoSupport
                 $tramo2 = min($bingo, max($pisoRestante, 0.0));
                 $tramo325 = max($bingo - $tramo2, 0.0);
                 $canonBinDia = round(
-                    $tramo2 * CanonEntidadesReglasSupport::ALICUOTA_BINGO_BIYEMAS_TRAMO1
-                    + $tramo325 * CanonEntidadesReglasSupport::ALICUOTA_BINGO_BIYEMAS_TRAMO2,
+                    $tramo2 * $tarifas['alicuota_bingo_tramo1']
+                    + $tramo325 * $tarifas['alicuota_bingo_tramo2'],
                     2
                 );
                 $pisoRestante = round($pisoRestante - $tramo2, 2);
             } else {
-                $canonBinDia = round($bingo * CanonEntidadesReglasSupport::ALICUOTA_BINGO_PLANA, 2);
+                $canonBinDia = round($bingo * $tarifas['alicuota_bingo_plana'], 2);
             }
 
             $canonBin += $canonBinDia;
@@ -93,7 +99,48 @@ final class CanonEntidadesCalculoSupport
                 'dias_con_flash' => $diasConFlash,
                 'dias_excluidos_maq' => $diasExcluidos,
             ],
+            'tarifas' => $tarifas,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $params
+     * @return array{
+     *   bingo_escalonado: bool,
+     *   piso_bingo: float,
+     *   alicuota_bingo_tramo1: float,
+     *   alicuota_bingo_tramo2: float,
+     *   alicuota_bingo_plana: float,
+     *   alicuota_maquinas: float
+     * }
+     */
+    public static function resolverTarifas(string $regla, ?array $params = null): array
+    {
+        $params = $params ?? [];
+        $escalonado = array_key_exists('bingo_escalonado', $params)
+            ? (bool) $params['bingo_escalonado']
+            : CanonEntidadesReglasSupport::esBingoEscalonado($regla);
+
+        return [
+            'bingo_escalonado' => $escalonado,
+            'piso_bingo' => self::floatParam($params, 'piso_bingo', CanonEntidadesReglasSupport::PISO_BINGO_BIYEMAS),
+            'alicuota_bingo_tramo1' => self::floatParam($params, 'alicuota_bingo_tramo1', CanonEntidadesReglasSupport::ALICUOTA_BINGO_BIYEMAS_TRAMO1),
+            'alicuota_bingo_tramo2' => self::floatParam($params, 'alicuota_bingo_tramo2', CanonEntidadesReglasSupport::ALICUOTA_BINGO_BIYEMAS_TRAMO2),
+            'alicuota_bingo_plana' => self::floatParam($params, 'alicuota_bingo_plana', CanonEntidadesReglasSupport::ALICUOTA_BINGO_PLANA),
+            'alicuota_maquinas' => self::floatParam($params, 'alicuota_maquinas', CanonEntidadesReglasSupport::ALICUOTA_MAQUINAS),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     */
+    private static function floatParam(array $params, string $clave, float $default): float
+    {
+        if (! array_key_exists($clave, $params) || $params[$clave] === null || ! is_numeric($params[$clave])) {
+            return $default;
+        }
+
+        return (float) $params[$clave];
     }
 
     /**

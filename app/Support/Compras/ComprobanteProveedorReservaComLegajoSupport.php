@@ -2,6 +2,8 @@
 
 namespace App\Support\Compras;
 
+use App\Support\ReglaNegocio\ReglaNegocioConsultaSupport;
+
 /**
  * Evita que una factura del legajo consuma COM que deben quedar para otras facturas pendientes.
  *
@@ -14,7 +16,29 @@ final class ComprobanteProveedorReservaComLegajoSupport
      * Más de esto por factura suele ser malla del import Anita (todas las COM del legajo),
      * no una asignación operativa de varios remitos a un solo comprobante.
      */
-    private const MAX_COM_POR_FACTURA_OPERATIVA = 3;
+    public const MAX_COM_POR_FACTURA_OPERATIVA = 3;
+
+    public const PUNTO_REGLA = 'compras.com.reserva_factura';
+
+    /**
+     * Tope de COM por factura operativa. BRE puede override con set_dato max_com_por_factura.
+     */
+    public static function maxComPorFacturaOperativa(): int
+    {
+        $d = ReglaNegocioConsultaSupport::decidirSiActivo(self::PUNTO_REGLA, [
+            'com_count' => null,
+            'punto_param' => 'max_com_por_factura',
+        ]);
+        if ($d !== null) {
+            $n = ReglaNegocioConsultaSupport::intDato($d->datos, 'max_com_por_factura');
+            if ($n !== null && $n > 0) {
+                return $n;
+            }
+        }
+
+        return self::MAX_COM_POR_FACTURA_OPERATIVA;
+    }
+
 
     /**
      * Si hay más de una COM seleccionada y alguna sola ya cubre el importe de la factura,
@@ -223,7 +247,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
                     $rids[] = $rid;
                 }
             }
-            if ($rids === [] || count($rids) > self::MAX_COM_POR_FACTURA_OPERATIVA) {
+            if ($rids === [] || count($rids) > self::maxComPorFacturaOperativa()) {
                 continue;
             }
 
@@ -343,7 +367,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
                 continue;
             }
             // Import Anita: factura↔todas las COM del legajo. No es un remito real.
-            if (count($rids) > self::MAX_COM_POR_FACTURA_OPERATIVA) {
+            if (count($rids) > self::maxComPorFacturaOperativa()) {
                 continue;
             }
 

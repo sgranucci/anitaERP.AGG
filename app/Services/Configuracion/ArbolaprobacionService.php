@@ -923,20 +923,13 @@ class ArbolaprobacionService
     /**
      * Umbral a partir del cual el matching pasa a piso (estilo SP).
      * Por debajo se mantienen bandas exclusivas (requis &lt; ~5M sin cambio).
+     * Delegado a ArbolAprobacionUmbralSupport (BRE opcional).
      *
      * @param  iterable<int, Arbolaprobacion_Nivel>  $nivelesCc
      */
     private function umbralPisoDobleAprobacion(iterable $nivelesCc): float
     {
-        $minAlto = null;
-        foreach ($nivelesCc as $nivel) {
-            $desde = (float) ($nivel->desdemonto ?? 0);
-            if ($desde >= 5000000.0) {
-                $minAlto = $minAlto === null ? $desde : min($minAlto, $desde);
-            }
-        }
-
-        return $minAlto ?? 5000001.0;
+        return \App\Support\Configuracion\ArbolAprobacionUmbralSupport::umbralPisoDobleAprobacion($nivelesCc);
     }
 
     /**

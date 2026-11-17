@@ -594,17 +594,7 @@ class RecepcionProveedorSurmarAnitaSyncService
 
     private function numerofacturaDesdeCabecera(object $cab): string
     {
-        $tipo = trim((string) ($cab->recm_tipo_fac ?? ''));
-        $letra = trim((string) ($cab->recm_letra_fac ?? ''));
-        $suc = (int) ($cab->recm_sucursal_fac ?? 0);
-        $nro = (int) ($cab->recm_nro_fac ?? 0);
-        if ($nro <= 0 && $tipo === '') {
-            $remito = trim((string) ($cab->recm_cod_remito ?? ''));
-
-            return $remito !== '' && $remito !== '0' ? $remito : '';
-        }
-
-        return trim(sprintf('%s %s %04d-%08d', $tipo, $letra, $suc, $nro));
+        return RecepcionProveedorAnitaImportSupport::numerofacturaDesdeCabecera($cab);
     }
 
     private function resolverProveedorId(string $codigo, int $empresaId): ?int

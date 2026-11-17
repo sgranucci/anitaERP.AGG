@@ -591,31 +591,74 @@ class ConciliacionBancariaService
 
         $anteriores = [];
         if ($incluirAnteriores) {
+            $vistosAnt = [];
+            $agregarAnterior = function (array $mov) use (&$anteriores, &$vistosAnt, $hashesContablesMes, $hashesGlobal): void {
+                if (count($anteriores) >= 800) {
+                    return;
+                }
+                $hash = (string) ($mov['hash'] ?? '');
+                if ($hash === ''
+                    || isset($vistosAnt[$hash])
+                    || isset($hashesContablesMes[$hash])
+                    || isset($hashesGlobal['contables'][$hash])
+                ) {
+                    return;
+                }
+                $mov['anterior'] = true;
+                $anteriores[] = $mov;
+                $vistosAnt[$hash] = true;
+            };
+
+            // Fuente de verdad: mayor de meses previos (el cache a veces omite cheques
+            // ya “debitados” en ERP aunque todavía no haya par de conciliación).
+            $fechaMinIb = $this->resolverFechaMinimaInterbanking($empresaId, $cuentaInterbanking);
+            $diasCheque = ConciliacionBancariaReglasSupport::diasToleranciaFechaCheque();
+            $lookbackMeses = ConciliacionBancariaReglasSupport::historicoLookbackMeses();
+            $fechaDesdeHistorico = $fechaDesde->copy()->subMonths($lookbackMeses)->startOfDay();
+            if ($fechaMinIb) {
+                $desdeIb = $fechaMinIb->copy()->subDays($diasCheque)->startOfDay();
+                if ($desdeIb->lt($fechaDesdeHistorico)) {
+                    $fechaDesdeHistorico = $desdeIb;
+                }
+            }
+            $fechaHastaHistorico = $fechaDesde->copy()->subDay()->endOfDay();
+            if ($fechaHastaHistorico->gte($fechaDesdeHistorico)) {
+                $resHist = $this->mayorPlanoService->generarDesdeFiltros([
+                    'empresa_ids' => [$empresaId],
+                    'moneda_id' => (int) ($cuentacaja->moneda_id ?? 1),
+                    'modo_periodo' => 'rango',
+                    'mes' => $mes,
+                    'anio' => $anio,
+                    'fecha_desde' => $fechaDesdeHistorico->toDateString(),
+                    'fecha_hasta' => $fechaHastaHistorico->toDateString(),
+                    'solo_moneda_origen' => false,
+                    'incluye_subdiario' => true,
+                    'modo_inclusion_asientos' => 'sin_cierre_ni_inflacion',
+                    'cuenta_desde' => $codigoCuenta,
+                    'cuenta_hasta' => $codigoCuenta,
+                    'filtro_texto' => '',
+                ]);
+                $hist = $this->extraerMovimientosContables(
+                    $this->mayorPlanoService->aplanarFilas($resHist, [], false),
+                    $cuentacajaId,
+                );
+                usort($hist, static function (array $a, array $b): int {
+                    return strcmp((string) ($b['fecha'] ?? ''), (string) ($a['fecha'] ?? ''));
+                });
+                foreach ($hist as $mov) {
+                    $agregarAnterior($mov);
+                }
+            }
+
             $cache = ConciliacionBancariaResultadoCache::leer($empresaId, $cuentacajaId, $mes, $anio, 7200);
-            foreach ($cache['pendientes_contables_otros'] ?? [] as $mov) {
+            foreach (array_merge(
+                $cache['pendientes_contables_cheques'] ?? [],
+                $cache['pendientes_contables_otros'] ?? [],
+            ) as $mov) {
                 if (! is_array($mov)) {
                     continue;
                 }
-                $hash = (string) ($mov['hash'] ?? '');
-                if ($hash === '' || isset($hashesContablesMes[$hash]) || isset($hashesGlobal['contables'][$hash])) {
-                    continue;
-                }
-                $mov['anterior'] = true;
-                $anteriores[] = $mov;
-                if (count($anteriores) >= 800) {
-                    break;
-                }
-            }
-            foreach ($cache['pendientes_contables_cheques'] ?? [] as $mov) {
-                if (! is_array($mov) || count($anteriores) >= 800) {
-                    break;
-                }
-                $hash = (string) ($mov['hash'] ?? '');
-                if ($hash === '' || isset($hashesContablesMes[$hash]) || isset($hashesGlobal['contables'][$hash])) {
-                    continue;
-                }
-                $mov['anterior'] = true;
-                $anteriores[] = $mov;
+                $agregarAnterior($mov);
             }
         }
 

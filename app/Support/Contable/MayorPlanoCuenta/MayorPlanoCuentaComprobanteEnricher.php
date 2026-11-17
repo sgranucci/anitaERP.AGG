@@ -63,6 +63,7 @@ class MayorPlanoCuentaComprobanteEnricher
         $cpIds = [];
         $cobranzaIds = [];
         $recepcionIds = [];
+        $ventaIds = [];
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 continue;
@@ -93,9 +94,14 @@ class MayorPlanoCuentaComprobanteEnricher
             if ($recId > 0) {
                 $recepcionIds[$recId] = $recId;
             }
+            $ventaId = (int) ($fks['venta_id'] ?? 0);
+            if ($ventaId > 0) {
+                $ventaIds[$ventaId] = $ventaId;
+            }
         }
 
         $cobranzas = $this->cargarCobranzas(array_values($cobranzaIds));
+        $ventas = $this->cargarVentas(array_values($ventaIds));
         $devoluciones = $this->comprobantesDevueltos(array_values($recepcionIds));
 
         $numerosRemesa = [];
@@ -155,14 +161,21 @@ class MayorPlanoCuentaComprobanteEnricher
             $factura = $facturas[$cpIdFila] ?? null;
             $this->aplicarFacturaProveedor($filas[$idx], $factura);
             $this->aplicarFacturaDeLineaIe($filas[$idx], $factura);
+            $this->aplicarVenta($filas[$idx], $ventas[(int) ($filas[$idx]['venta_id'] ?? 0)] ?? null);
 
             if (trim((string) ($filas[$idx]['comprobante'] ?? '')) === '') {
                 $filas[$idx]['comprobante'] = $this->etiquetaComprobante($filas[$idx], $cobranzas);
             }
             if (trim((string) ($filas[$idx]['tipo_comp'] ?? '')) === '' && $filas[$idx]['comprobante'] !== '') {
-                $filas[$idx]['tipo_comp'] = $this->tipoCompDesdeFila($filas[$idx], $cobranzas);
+                $filas[$idx]['tipo_comp'] = $this->tipoCompDesdeFila($filas[$idx], $cobranzas, $ventas);
             }
             $this->aplicarTipoCobranza($filas[$idx], $cobranzas);
+            if (trim((string) ($filas[$idx]['tipo_comp'] ?? '')) === '') {
+                $tipoAsiento = strtoupper(trim((string) ($filas[$idx]['tipo_asiento'] ?? '')));
+                if ($tipoAsiento !== '') {
+                    $filas[$idx]['tipo_comp'] = $tipoAsiento;
+                }
+            }
             $recIdFila = (int) ($filas[$idx]['recepcionproveedor_id'] ?? 0);
             if ($recIdFila > 0 && array_key_exists($recIdFila, $devoluciones)) {
                 $filas[$idx]['descripcion'] = RecepcionProveedorAsientoDescripcionSupport::marcarTextoDevolucion(
@@ -371,6 +384,96 @@ class MayorPlanoCuentaComprobanteEnricher
     }
 
     /**
+     * Tip y número fiscal de las ventas del tramo (FSL / FME / FAC…).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array{tipo: string, letra: string, sucursal: int, nro: int}>
+     */
+    private function cargarVentas(array $ids): array
+    {
+        if ($ids === [] || ! Schema::hasTable('venta')) {
+            return [];
+        }
+
+        $query = DB::table('venta as v')
+            ->whereIn('v.id', $ids)
+            ->select(['v.id', 'v.codigo', 'v.numerocomprobante']);
+
+        if (Schema::hasTable('tipotransaccion') && Schema::hasColumn('venta', 'tipotransaccion_id')) {
+            $query->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
+                ->addSelect('tt.abreviatura');
+        }
+        if (Schema::hasTable('puntoventa') && Schema::hasColumn('venta', 'puntoventa_id')) {
+            $query->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+                ->addSelect('pv.codigo as pv_codigo');
+        }
+
+        $out = [];
+        foreach ($query->get() as $row) {
+            $tipo = strtoupper(substr(trim((string) ($row->abreviatura ?? '')), 0, 10));
+            $letra = ' ';
+            $sucursal = (int) preg_replace('/\D/', '', (string) ($row->pv_codigo ?? '')) ?: 0;
+            $nro = (int) ($row->numerocomprobante ?? 0);
+            $codigo = trim((string) ($row->codigo ?? ''));
+            if ($codigo !== '' && preg_match('/^([A-Z]{3})\s+([A-Z])-(\d+)-(\d+)/i', $codigo, $m) === 1) {
+                if ($tipo === '') {
+                    $tipo = strtoupper($m[1]);
+                }
+                $letra = strtoupper($m[2]);
+                $sucursal = (int) $m[3];
+                $nro = (int) $m[4];
+            }
+            if ($tipo === '') {
+                continue;
+            }
+            $out[(int) $row->id] = [
+                'tipo' => $tipo,
+                'letra' => $letra !== '' ? $letra : ' ',
+                'sucursal' => $sucursal,
+                'nro' => $nro,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Tip de una venta ERP es FSL/FAC/…; no dejar Tip vacío con «Venta #id».
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}|null  $venta
+     */
+    private function aplicarVenta(array &$fila, ?array $venta): void
+    {
+        if ($venta === null || trim((string) ($venta['tipo'] ?? '')) === '') {
+            return;
+        }
+
+        if (trim((string) ($fila['tipo_comp'] ?? '')) === '') {
+            $fila['tipo_comp'] = strtoupper(trim((string) $venta['tipo']));
+        }
+
+        $comp = trim((string) ($fila['comprobante'] ?? ''));
+        $esPlaceholder = $comp === '' || preg_match('/^Venta #\d+$/', $comp) === 1;
+        if (! $esPlaceholder || (int) ($venta['nro'] ?? 0) <= 0) {
+            return;
+        }
+
+        $formateado = MayorPlanoCuentaSupport::formatearComprobante(
+            (string) $venta['tipo'],
+            (string) ($venta['letra'] ?? ' '),
+            (int) ($venta['sucursal'] ?? 0),
+            (int) $venta['nro'],
+        );
+        if ($formateado !== '') {
+            $fila['comprobante'] = $formateado;
+            $fila['letra'] = (string) ($venta['letra'] ?? ' ');
+            $fila['sucursal'] = (int) ($venta['sucursal'] ?? 0);
+            $fila['nro'] = (int) $venta['nro'];
+        }
+    }
+
+    /**
      * Tip de una cobranza es COB o COA, nunca una palabra del nombre del cliente.
      *
      * @param  array<string, mixed>  $fila
@@ -468,9 +571,16 @@ class MayorPlanoCuentaComprobanteEnricher
     /**
      * @param  array<string, mixed>  $fila
      * @param  array<int, array{tipo: string, numero: int}>  $cobranzas
+     * @param  array<int, array{tipo: string, letra: string, sucursal: int, nro: int}>  $ventas
      */
-    private function tipoCompDesdeFila(array $fila, array $cobranzas = []): string
+    private function tipoCompDesdeFila(array $fila, array $cobranzas = [], array $ventas = []): string
     {
+        $ventaId = (int) ($fila['venta_id'] ?? 0);
+        if ($ventaId > 0) {
+            $tipoVenta = strtoupper(trim((string) ($ventas[$ventaId]['tipo'] ?? '')));
+
+            return $tipoVenta !== '' ? $tipoVenta : 'FAC';
+        }
         if ((int) ($fila['remesa_id'] ?? 0) > 0) {
             return 'REM';
         }

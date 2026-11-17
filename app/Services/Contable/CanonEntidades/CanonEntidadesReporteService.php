@@ -60,7 +60,11 @@ final class CanonEntidadesReporteService
             $flashReporte['filas'] ?? [],
             $empresaId,
         );
-        $calculo = CanonEntidadesCalculoSupport::calcular($dias, (string) $identidad['regla']);
+        $calculo = CanonEntidadesCalculoSupport::calcular(
+            $dias,
+            (string) $identidad['regla'],
+            is_array($identidad) ? $identidad : null
+        );
         $totales = $calculo['totales'];
         $cuenta = CanonEntidadesCuentaSupport::resolver($empresaId);
         $conciliacion = $this->conciliacionService->conciliar(

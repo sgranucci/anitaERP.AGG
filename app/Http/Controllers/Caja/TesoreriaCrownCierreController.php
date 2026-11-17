@@ -69,13 +69,12 @@ class TesoreriaCrownCierreController extends Controller
             'clave_cajero' => ['nullable', 'string'],
             'clave_cajero_nueva' => ['nullable', 'string'],
             'clave_cajero_repetir' => ['nullable', 'string'],
-        ];
-        if (! $calculo['supera']) {
-            $reglas['estado'] = ['required', Rule::in([
+            'estado' => ['required', Rule::in([
                 TesoreriaCrownCierreSupport::CONFORME,
                 TesoreriaCrownCierreSupport::REVISION,
-            ])];
-        }
+                TesoreriaCrownCierreSupport::AUDITORIA,
+            ])],
+        ];
         $datos = $request->validate($reglas);
         $usuario = $this->tesoreria($datos['firma_usuario'], $datos['firma_password']);
         if ($usuario instanceof \Illuminate\Http\RedirectResponse) {
@@ -97,12 +96,12 @@ class TesoreriaCrownCierreController extends Controller
             return back()->with('mensaje-error', 'Tesorería y el cajero tienen que ser dos personas.')->withInput();
         }
 
-        $estado = $calculo['supera']
-            ? TesoreriaCrownCierreSupport::AUDITORIA
-            : $datos['estado'];
+        $estado = $datos['estado'];
         $detalle = trim((string) ($datos['observacion'] ?? ''));
-        if ($calculo['supera']) {
+        if ($calculo['supera'] && $estado === TesoreriaCrownCierreSupport::AUDITORIA) {
             $detalle = trim($detalle.' La diferencia supera la tolerancia y el cierre pasa a auditoría.');
+        } elseif ($calculo['supera']) {
+            $detalle = trim($detalle.' La diferencia supera la tolerancia; tesorería cerró sin exigir firma de auditoría.');
         }
 
         $creado = DB::transaction(function () use ($ctx, $calculo, $estado, $usuario, $detalle) {

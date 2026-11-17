@@ -4,10 +4,13 @@ namespace App\Support\Caja;
 
 use App\Models\Configuracion\Parametro_Sistema;
 use App\Support\Configuracion\ParametroSistemaSupport;
+use App\Support\ReglaNegocio\ReglaNegocioConsultaSupport;
 
 /**
  * Parámetros editables de la asignación automática de CHT en programa de pagos.
  * Default solo si aún no hay fila en parametro_sistema; la pantalla los muestra y permite cambiarlos.
+ *
+ * BRE (punto caja.programa_pago.cheques_param): puede override anticipo_maximo / faltante_tolerancia_pct.
  */
 final class ProgramaPagoAsignarChequesConfigSupport
 {
@@ -22,7 +25,22 @@ final class ProgramaPagoAsignarChequesConfigSupport
     /** Porcentaje entero (10 = 10%). */
     public const FALTANTE_TOLERANCIA_PCT_DEFAULT = 10.0;
 
+    public const PUNTO_REGLA = 'caja.programa_pago.cheques_param';
+
     public static function anticipoMaximo(): float
+    {
+        $d = ReglaNegocioConsultaSupport::decidirSiActivo(self::PUNTO_REGLA, self::contextoRegla());
+        if ($d !== null) {
+            $v = ReglaNegocioConsultaSupport::floatDato($d->datos, 'anticipo_maximo');
+            if ($v !== null) {
+                return max(0.0, $v);
+            }
+        }
+
+        return self::anticipoMaximoLegacy();
+    }
+
+    public static function anticipoMaximoLegacy(): float
     {
         return max(0.0, ParametroSistemaSupport::decimal(
             self::CLAVE_ANTICIPO_MAXIMO,
@@ -43,10 +61,35 @@ final class ProgramaPagoAsignarChequesConfigSupport
      */
     public static function faltanteToleranciaPct(): float
     {
+        $d = ReglaNegocioConsultaSupport::decidirSiActivo(self::PUNTO_REGLA, self::contextoRegla());
+        if ($d !== null) {
+            $v = ReglaNegocioConsultaSupport::floatDato($d->datos, 'faltante_tolerancia_pct');
+            if ($v !== null) {
+                return max(0.0, $v);
+            }
+        }
+
+        return self::faltanteToleranciaPctLegacy();
+    }
+
+    public static function faltanteToleranciaPctLegacy(): float
+    {
         return max(0.0, ParametroSistemaSupport::decimal(
             self::CLAVE_FALTANTE_TOLERANCIA_PCT,
             self::FALTANTE_TOLERANCIA_PCT_DEFAULT
         ));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function contextoRegla(): array
+    {
+        return [
+            'anticipo_maximo_legacy' => self::anticipoMaximoLegacy(),
+            'faltante_tolerancia_pct_legacy' => self::faltanteToleranciaPctLegacy(),
+            'punto_param' => 'cheques_param',
+        ];
     }
 
     public static function guardarAnticipoMaximo(float $importe): void

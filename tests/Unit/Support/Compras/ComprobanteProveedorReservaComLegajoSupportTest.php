@@ -7,6 +7,22 @@ use PHPUnit\Framework\TestCase;
 
 class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
 {
+    public function test_max_com_por_factura_default_sin_bre(): void
+    {
+        $this->assertSame(
+            3,
+            ComprobanteProveedorReservaComLegajoSupport::maxComPorFacturaOperativa()
+        );
+        $this->assertSame(
+            ComprobanteProveedorReservaComLegajoSupport::MAX_COM_POR_FACTURA_OPERATIVA,
+            ComprobanteProveedorReservaComLegajoSupport::maxComPorFacturaOperativa()
+        );
+        $this->assertSame(
+            'compras.com.reserva_factura',
+            ComprobanteProveedorReservaComLegajoSupport::PUNTO_REGLA
+        );
+    }
+
     public function test_bloquea_dos_com_cuando_una_sola_cubre_el_importe(): void
     {
         $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoComQueCubrenSolas(

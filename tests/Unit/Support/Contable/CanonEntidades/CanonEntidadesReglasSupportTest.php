@@ -42,4 +42,15 @@ class CanonEntidadesReglasSupportTest extends TestCase
     {
         $this->assertSame('30-68240367-1', CanonEntidadesReglasSupport::formatearCuit('30682403671'));
     }
+
+    public function test_resolver_legacy_coincide_con_resolver_sin_bre(): void
+    {
+        $legacy = CanonEntidadesReglasSupport::resolverLegacy('30-68240367-1');
+        $actual = CanonEntidadesReglasSupport::resolver('30-68240367-1');
+
+        $this->assertSame($legacy['regla'], $actual['regla']);
+        $this->assertSame($legacy['codigo'], $actual['codigo']);
+        $this->assertFalse($actual['via_bre']);
+        $this->assertSame(CanonEntidadesReglasSupport::PUNTO_REGLA, 'contable.canon.alicuota');
+    }
 }

@@ -891,6 +891,7 @@
                                 'puede_ver_concepto' => $puede_ver_concepto ?? false,
                                 'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
                                 'puede_ver_capex' => $puede_ver_capex ?? false,
+                                'puede_ver_recepcion_proveedor' => $puede_ver_recepcion_proveedor ?? false,
                             ])
                         </table>
                     </div>

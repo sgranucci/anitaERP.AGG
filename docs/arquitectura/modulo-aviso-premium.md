@@ -42,7 +42,7 @@ Complementa el manual de usuario (`docs/manual-modulo-aviso/`) y `docs/arquitect
 | Pieza | Ubicación |
 |---|---|
 | Tablas | `aviso_regla`, `aviso_regla_config`, `aviso_regla_log` |
-| Motor | `AvisoReglaMotorService` + `AvisoReglaCondicionSupport` |
+| Motor | `AvisoReglaMotorService` + `AvisoReglaCondicionSupport` (wrapper → `ReglaNegocioCondicionSupport`; BRE sync: `docs/arquitectura/regla-negocio-motor.md`) |
 | UI diseñador | `configuracion/aviso-regla` (WHEN/IF/THEN) |
 | Enganche | `ModuloAvisoEventBus::emit` → evalúa reglas si motor ON |
 | Default | motor_habilitado = false (listo, dormido) |

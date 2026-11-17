@@ -60,6 +60,15 @@ final class TesoreriaCrownCierreSupport
         return in_array($estado, [self::CONFORME, self::REVISADA, self::CIERRE_AUDITORIA], true);
     }
 
+    /**
+     * Estados que ya no frenan Cerrar jornada. Auditoría queda registrada para
+     * revisión posterior; tesorería puede cerrar el día sin firma de auditor.
+     */
+    public static function permiteCerrarJornada(string $estado): bool
+    {
+        return self::terminal($estado) || $estado === self::AUDITORIA;
+    }
+
     public static function tolerancia(): float
     {
         return ParametroSistemaSupport::decimal(

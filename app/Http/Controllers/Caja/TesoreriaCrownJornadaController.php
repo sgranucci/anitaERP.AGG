@@ -1008,7 +1008,7 @@ class TesoreriaCrownJornadaController extends Controller
             return back()
                 ->with(
                     'mensaje-error',
-                    'Quedan '.count($bloqueos).' caja(s) sin cierre terminado ('.$cajas.'). Resolvelas en el panel «Resolver para cerrar la jornada».'
+                    'Quedan '.count($bloqueos).' caja(s) sin cierre que permita cerrar la jornada ('.$cajas.'). Resolvelas en el panel «Resolver para cerrar la jornada».'
                 )
                 ->with('bloqueos_cierre_jornada', $bloqueos);
         }

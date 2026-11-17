@@ -85,7 +85,8 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             <th>Proveedor</th>
                             <th>Empresa</th>
                             <th>Estado</th>
-                            <th>Factura</th>
+                            <th>Remito/Fact.</th>
+                            <th>Factura CxP</th>
                             <th>Orden de pago</th>
                             <th>Diferencias</th>
                             <th>Acciones</th>
@@ -139,6 +140,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             <td>
                                 @include('stock.recepcion_proveedor.partials.estado_badge', ['estado' => $row->estado ?? ''])
                             </td>
+                            <td>{{ $row->numerofactura ?: '—' }}</td>
                             <td>
                                 @include('includes.listado.celda_enlace', [
                                     'filaEnlace' => $row,

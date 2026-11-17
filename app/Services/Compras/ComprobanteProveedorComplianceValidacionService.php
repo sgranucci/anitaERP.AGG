@@ -887,8 +887,15 @@ class ComprobanteProveedorComplianceValidacionService
             $errores[] = '[WSCDC '.($err['code'] ?? '?').'] '.$err['msg'];
         }
 
+        // En rechazo (R) las observaciones de ARCA son el motivo concreto (ej. obs 104 PV≠CAE).
+        // Van a errores para que pago / API / pantalla muestren el detalle, no solo el genérico.
         foreach (($respuesta['observaciones'] ?? []) as $obs) {
-            $avisos[] = '[WSCDC obs '.($obs['code'] ?? '?').'] '.$obs['msg'];
+            $linea = '[WSCDC obs '.($obs['code'] ?? '?').'] '.$obs['msg'];
+            if ($resultadoAfip === 'R') {
+                $errores[] = $linea;
+            } else {
+                $avisos[] = $linea;
+            }
         }
 
         if ($resultadoAfip === 'R') {
