@@ -27,7 +27,8 @@ class LibroIvaDigitalComprasGenerador
     /**
      * @param  array{
      *     prorrateo_cf_global?: bool,
-     *     completar_compras_anita?: bool
+     *     completar_compras_anita?: bool,
+     *     compras_fecha_iva?: bool
      * }  $opciones
      * @return array{
      *     compras_cbte: string,
@@ -41,6 +42,7 @@ class LibroIvaDigitalComprasGenerador
         $hasta = date('Y-m-t', strtotime($desde));
         $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
         $completarAnita = (bool) ($opciones['completar_compras_anita'] ?? true);
+        $preferirFechaIva = (bool) ($opciones['compras_fecha_iva'] ?? false);
         $cuitInformante = LibroIvaDigitalComprasCuitSupport::soloDigitos(
             (string) (Empresa::query()->whereKey($empresaId)->value('nroinscripcion') ?? ''),
         );
@@ -97,6 +99,7 @@ class LibroIvaDigitalComprasGenerador
                     $compra,
                     $fila['conceptos'],
                     $prorrateoGlobal,
+                    $preferirFechaIva,
                 );
                 if ($registro === null) {
                     continue;
@@ -179,6 +182,7 @@ class LibroIvaDigitalComprasGenerador
                 &$nrosInternosUsados,
                 &$cbtesUsados,
                 $prorrateoGlobal,
+                $preferirFechaIva,
                 &$registros,
                 &$omitidosSinCuit,
                 &$omitidosCuitInformante,
@@ -194,7 +198,7 @@ class LibroIvaDigitalComprasGenerador
                     return;
                 }
 
-                $registro = $this->armarRegistroCompra($cp, $prorrateoGlobal);
+                $registro = $this->armarRegistroCompra($cp, $prorrateoGlobal, $preferirFechaIva);
                 if ($registro === null) {
                     return;
                 }
@@ -277,6 +281,7 @@ class LibroIvaDigitalComprasGenerador
                 'neto_nc' => $totalesPortal['total_neto_nc'],
                 'prorrateo_cf_global' => $prorrateoGlobal,
                 'completar_compras_anita' => $completarAnita,
+                'compras_fecha_iva' => $preferirFechaIva,
             ],
         ];
     }
@@ -372,8 +377,11 @@ class LibroIvaDigitalComprasGenerador
     /**
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}|null
      */
-    private function armarRegistroCompra(Comprobante_Proveedor $cp, bool $prorrateoGlobal): ?array
-    {
+    private function armarRegistroCompra(
+        Comprobante_Proveedor $cp,
+        bool $prorrateoGlobal,
+        bool $preferirFechaIva = false,
+    ): ?array {
         $letra = strtoupper((string) ($cp->letra ?: 'A'));
         if (! LibroIvaDigitalComprasAnitaArmadoSupport::esTipoInformableIvaCompras(
             $cp->tipotransaccion_compras,
@@ -411,6 +419,7 @@ class LibroIvaDigitalComprasGenerador
         $fechaArchivo = LibroIvaDigitalComprasAnitaArmadoSupport::fechaArchivoCompras(
             $cp->fechacomprobante,
             $cp->fechaiva,
+            $preferirFechaIva,
         );
         if ($fechaArchivo === null) {
             return null;

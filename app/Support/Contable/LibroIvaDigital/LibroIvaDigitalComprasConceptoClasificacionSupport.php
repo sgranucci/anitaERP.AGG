@@ -55,6 +55,11 @@ final class LibroIvaDigitalComprasConceptoClasificacionSupport
         $tipo = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
         $tasa = ConceptoIvacompraFormulaSupport::tasaEfectiva($concepto);
 
+        // Débitos/créditos bancarios: otro tributo (campo 22), nunca IVA ni exento.
+        if (self::esImpuestoDebitosCreditos($nombre)) {
+            return ['destino' => 'otros', 'tasa' => 0.0];
+        }
+
         if ($tipo === '' || $tipo === 'N') {
             $resuelto = self::resolverTipoNoInformado($concepto, $nombre);
             $tipo = $resuelto['tipo'];
@@ -67,6 +72,16 @@ final class LibroIvaDigitalComprasConceptoClasificacionSupport
             $tasa = self::tasaDesdeColumnaONombre($concepto, $nombre);
         }
 
+        // «I» sin alícuota conocida no puede ir a LID 0003 con impuesto ≠ 0.
+        if ($tipo === 'I' && $tasa <= 0) {
+            $resuelto = self::resolverTipoNoInformado($concepto, $nombre);
+            if ($resuelto['tipo'] !== 'I' && $resuelto['tipo'] !== 'G') {
+                $tipo = $resuelto['tipo'];
+            } else {
+                return ['destino' => 'otros', 'tasa' => 0.0];
+            }
+        }
+
         return [
             'destino' => LibroIvaDigitalComprasImportesSupport::destinoRubroLid(
                 (int) preg_replace('/\D+/', '', $codigo),
@@ -76,6 +91,16 @@ final class LibroIvaDigitalComprasConceptoClasificacionSupport
             ),
             'tasa' => $tasa,
         ];
+    }
+
+    /** Impuesto al débito/crédito bancario: no es IVA computable. */
+    public static function esImpuestoDebitosCreditos(string $nombre): bool
+    {
+        $n = strtoupper($nombre);
+        $esDeb = str_contains($n, 'DEB') || str_contains($n, 'DEBIT');
+        $esCred = str_contains($n, 'CRED') || str_contains($n, 'CREDIT');
+
+        return $esDeb && $esCred;
     }
 
     private static function cargar(): void

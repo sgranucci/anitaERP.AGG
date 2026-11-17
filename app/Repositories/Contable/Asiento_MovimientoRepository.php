@@ -3,11 +3,13 @@
 namespace App\Repositories\Contable;
 
 use App\Models\Contable\Asiento_Movimiento;
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Auth;
+use InvalidArgumentException;
 
 class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterface
 {
@@ -160,6 +162,11 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 						$monto = 0;
 						$debeLin = NumeroDecimalLocalSupport::aFloat($debes[$i] ?? null);
 						$haberLin = NumeroDecimalLocalSupport::aFloat($haberes[$i] ?? null);
+						if ($debeLin > 0 && $haberLin > 0) {
+							throw new InvalidArgumentException(
+								AsientoBalanceSupport::mensajeLineasConDebeYHaber([$i], 'asiento')
+							);
+						}
 						if ($debeLin != 0)
 							$monto = $debeLin;
 
@@ -193,6 +200,11 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 					$monto = 0;
 					$debeLin = NumeroDecimalLocalSupport::aFloat($debes[$i_movimiento] ?? null);
 					$haberLin = NumeroDecimalLocalSupport::aFloat($haberes[$i_movimiento] ?? null);
+					if ($debeLin > 0 && $haberLin > 0) {
+						throw new InvalidArgumentException(
+							AsientoBalanceSupport::mensajeLineasConDebeYHaber([$i_movimiento], 'asiento')
+						);
+					}
 					if ($debeLin != 0)
 						$monto = $debeLin;
 

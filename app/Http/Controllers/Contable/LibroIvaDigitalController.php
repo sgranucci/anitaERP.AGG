@@ -134,7 +134,8 @@ class LibroIvaDigitalController extends Controller
      *     prorrateo_cf_global: bool,
      *     coeficiente_iva_indirecto: float,
      *     completar_compras_anita: bool,
-     *     completar_fsl_anita: bool
+     *     completar_fsl_anita: bool,
+     *     compras_fecha_iva: bool
      * }
      */
     private function opcionesDesdeFiltros(array $filtros): array
@@ -145,6 +146,7 @@ class LibroIvaDigitalController extends Controller
             'coeficiente_iva_indirecto' => (float) ($filtros['coeficiente_iva_indirecto'] ?? 1.0),
             'completar_compras_anita' => (bool) ($filtros['completar_compras_anita'] ?? true),
             'completar_fsl_anita' => (bool) ($filtros['completar_fsl_anita'] ?? true),
+            'compras_fecha_iva' => (bool) ($filtros['compras_fecha_iva'] ?? false),
         ];
     }
 
@@ -157,7 +159,13 @@ class LibroIvaDigitalController extends Controller
             'empresa_id' => $filtros['empresa_id'],
             'periodo' => $filtros['periodo'],
         ]);
-        foreach (['por_fecha_jornada', 'prorrateo_cf_global', 'completar_compras_anita', 'completar_fsl_anita'] as $campo) {
+        foreach ([
+            'por_fecha_jornada',
+            'prorrateo_cf_global',
+            'completar_compras_anita',
+            'completar_fsl_anita',
+            'compras_fecha_iva',
+        ] as $campo) {
             ReportePreferenciasUsuario::persistirBool(
                 self::PREFERENCIAS_CLAVE,
                 $campo,
@@ -187,6 +195,7 @@ class LibroIvaDigitalController extends Controller
             'prorrateo_cf_global' => (int) ($filtros['prorrateo_cf_global'] ?? 0),
             'completar_compras_anita' => (int) ($filtros['completar_compras_anita'] ?? 0),
             'completar_fsl_anita' => (int) ($filtros['completar_fsl_anita'] ?? 0),
+            'compras_fecha_iva' => (int) ($filtros['compras_fecha_iva'] ?? 0),
         ];
         if (EntornoEmpresaSupport::esCrown()) {
             $query['coeficiente_iva_indirecto'] = number_format(
@@ -227,7 +236,8 @@ class LibroIvaDigitalController extends Controller
      *     prorrateo_cf_global:int,
      *     coeficiente_iva_indirecto:float,
      *     completar_compras_anita:int,
-     *     completar_fsl_anita:int
+     *     completar_fsl_anita:int,
+     *     compras_fecha_iva:int
      * }
      */
     private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
@@ -290,6 +300,12 @@ class LibroIvaDigitalController extends Controller
             'coeficiente_iva_indirecto' => $this->coeficienteIvaIndirectoDesdeRequest($request),
             'completar_compras_anita' => $this->boolFiltro($request, 'completar_compras_anita', true) ? 1 : 0,
             'completar_fsl_anita' => $this->boolFiltro($request, 'completar_fsl_anita', true) ? 1 : 0,
+            // Ferli: por defecto fecha IVA en el TXT; resto: fecha impresa del comprobante.
+            'compras_fecha_iva' => $this->boolFiltro(
+                $request,
+                'compras_fecha_iva',
+                EntornoEmpresaSupport::esFerli(),
+            ) ? 1 : 0,
         ];
     }
 

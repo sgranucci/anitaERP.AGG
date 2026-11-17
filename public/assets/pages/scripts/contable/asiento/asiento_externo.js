@@ -706,9 +706,11 @@ var totalHaberAsiento = 0;
 			.off('change.asientoExt input.asientoExt', '#cuenta-asiento-table .debeasiento')
 			.on('change.asientoExt input.asientoExt', '#cuenta-asiento-table .debeasiento', function (event) {
 				event.preventDefault();
+				var $tr = $(this).closest('tr');
+				exclusividadDebeHaberFilaAsiento($tr, 'debe');
 				if (event.type === 'change') {
-					soltarSaldoSugeridoSiLoEdito($(this).closest('tr'));
-					marcaAsientoLineaManual($(this).closest('tr'));
+					soltarSaldoSugeridoSiLoEdito($tr);
+					marcaAsientoLineaManual($tr);
 				}
 				sumaMontoAsiento();
 				actualizarSaldoSugeridoAsientoIe();
@@ -718,9 +720,11 @@ var totalHaberAsiento = 0;
 			.off('change.asientoExt input.asientoExt', '#cuenta-asiento-table .haberasiento')
 			.on('change.asientoExt input.asientoExt', '#cuenta-asiento-table .haberasiento', function (event) {
 				event.preventDefault();
+				var $tr = $(this).closest('tr');
+				exclusividadDebeHaberFilaAsiento($tr, 'haber');
 				if (event.type === 'change') {
-					soltarSaldoSugeridoSiLoEdito($(this).closest('tr'));
-					marcaAsientoLineaManual($(this).closest('tr'));
+					soltarSaldoSugeridoSiLoEdito($tr);
+					marcaAsientoLineaManual($tr);
 				}
 				sumaMontoAsiento();
 				actualizarSaldoSugeridoAsientoIe();
@@ -1085,6 +1089,55 @@ var totalHaberAsiento = 0;
 			maximumFractionDigits: 2
 		});
 	}
+
+	/**
+	 * Una línea no puede tener Debe y Haber juntos (OPP 46358: el balance
+	 * aparentaba cerrar y ERP/Anita guardaban importes distintos).
+	 */
+	function exclusividadDebeHaberFilaAsiento($tr, origen) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $debe = $tr.find('.debeasiento');
+		var $haber = $tr.find('.haberasiento');
+		var debe = parseMontoAsiento($debe.val());
+		var haber = parseMontoAsiento($haber.val());
+		if (!(debe > 0.000001) || !(haber > 0.000001)) {
+			return;
+		}
+		if (origen === 'debe') {
+			$haber.val('');
+		} else {
+			$debe.val('');
+		}
+	}
+
+	/**
+	 * @returns {{ok:boolean, mensaje?:string, $tr?:JQuery}}
+	 */
+	function validarLineasAsientoSinDebeYHaber() {
+		var mala = null;
+		$('#tbody-cuenta-asiento-table tr.item-cuenta-asiento').each(function (idx) {
+			var $tr = $(this);
+			var debe = parseMontoAsiento($tr.find('.debeasiento').val());
+			var haber = parseMontoAsiento($tr.find('.haberasiento').val());
+			if (debe > 0.000001 && haber > 0.000001) {
+				mala = { n: idx + 1, $tr: $tr };
+				return false;
+			}
+		});
+		if (!mala) {
+			return { ok: true };
+		}
+		return {
+			ok: false,
+			mensaje: 'La línea ' + mala.n + ' del asiento tiene importe en Debe y en Haber. Deje solo un lado.',
+			$tr: mala.$tr
+		};
+	}
+
+	window.validarLineasAsientoSinDebeYHaber = validarLineasAsientoSinDebeYHaber;
+	window.exclusividadDebeHaberFilaAsiento = exclusividadDebeHaberFilaAsiento;
 
 	function sumaMontoAsiento()
 	{

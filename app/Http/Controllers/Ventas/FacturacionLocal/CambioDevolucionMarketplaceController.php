@@ -606,18 +606,24 @@ class CambioDevolucionMarketplaceController extends Controller
             ->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_REEMPLAZO)
             ->filter(static fn ($linea): bool => (int) ($linea->venta_fac_id ?? 0) <= 0)
             ->count();
-        $previewFac = $puedeOperarFacturacion && $reemplazosPendientes > 0 && ! $editable
+        // Abierto sigue siendo editable (se pueden corregir líneas) y también emite FAC:
+        // el panel de preview/checkboxes no puede depender de !editable.
+        $mostrarPreviewFac = $puedeOperarFacturacion
+            && $reemplazosPendientes > 0
+            && ! $esSoloDevolucion
+            && $estado !== CambioDevolucionMarketplaceEstadosSupport::BORRADOR;
+        $previewFac = $mostrarPreviewFac
             ? $this->previewFacturaReemplazo($data)
             : null;
         $facVigenteId = (int) ($data->venta_reemplazo_id ?? 0);
-        $previewNcReemplazo = $puedeOperarFacturacion && $facVigenteId > 0 && ! $editable
+        $previewNcReemplazo = $puedeOperarFacturacion && $facVigenteId > 0
             ? $this->previewNcReemplazo($data)
             : null;
         $previewNcDevolver = $data->exists
-            && ! $editable
             && (int) ($data->venta_nc_id ?? 0) <= 0
             && $data->lineas->where('tipo', CambioDevolucionMarketplaceCatalogoSupport::TIPO_DEVOLVER)->isNotEmpty()
             && ! CambioDevolucionMarketplaceEstadosSupport::esTerminal($estado)
+            && $estado !== CambioDevolucionMarketplaceEstadosSupport::BORRADOR
             ? $this->previewNcDevolver($data)
             : null;
 

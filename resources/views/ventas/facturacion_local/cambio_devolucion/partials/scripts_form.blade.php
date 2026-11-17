@@ -31,6 +31,12 @@ window.cdmIdsSeleccionados = function (selector) {
     });
     return ids;
 };
+/** Modo de precio de la NC de lo devuelto: form de emisión, o el select de preview previo. */
+window.cdmModoPrecioDevolucion = function () {
+    var sel = document.querySelector('.cdm-form-emitir-nc [name=modo_precio]')
+        || document.querySelector('.cdm-modo-precio-devolucion');
+    return sel && sel.value ? sel.value : 'grilla';
+};
 window.cdmSincronizarLineaIdsEnForm = function (form, ids) {
     if (!form) {
         return;
@@ -117,9 +123,10 @@ window.cdmRenderPreviewFac = function (modo) {
         });
     }
     var selected = window.cdmIdsSeleccionados('.cdm-fac-linea-check');
-    // Primera vez: sin selección previa en DOM → arrancar vacío (no auto-todo).
+    // Primera vez: si hay una sola pendiente, la marcamos; si hay varias, vacío (no auto-todo).
     if (!document.querySelector('.cdm-fac-linea-check') && selected.length === 0) {
-        selected = [];
+        var pend = preview.pendientes || [];
+        selected = pend.length === 1 && pend[0].linea_id ? [pend[0].linea_id] : [];
     }
     window.cdmRenderTablaSeleccion({
         tbodyId: 'cdm-preview-fac-tbody',
@@ -205,10 +212,14 @@ window.cdmRenderPreviewNcReemplazo = function () {
     var selected = window.cdmIdsSeleccionados('.cdm-nc-reemplazo-linea-check');
     var precios = {};
     (preview.lineas || []).forEach(function (l) { precios[l.linea_id] = l.precio; });
+    var pendNcR = preview.pendientes || preview.lineas || [];
+    if (!document.querySelector('.cdm-nc-reemplazo-linea-check') && selected.length === 0) {
+        selected = pendNcR.length === 1 && pendNcR[0].linea_id ? [pendNcR[0].linea_id] : [];
+    }
     window.cdmRenderTablaSeleccion({
         tbodyId: 'cdm-preview-nc-reemplazo-tbody',
         checkClass: 'cdm-nc-reemplazo-linea-check',
-        pendientes: preview.pendientes || preview.lineas || [],
+        pendientes: pendNcR,
         preciosPorLinea: precios,
         selectedIds: selected,
     });
@@ -262,10 +273,14 @@ window.cdmRenderPreviewNcDevolver = function (modo) {
         }
     });
     var selected = window.cdmIdsSeleccionados('.cdm-nc-devolver-linea-check');
+    var pendNcD = preview.pendientes || [];
+    if (!document.querySelector('.cdm-nc-devolver-linea-check') && selected.length === 0) {
+        selected = pendNcD.length === 1 && pendNcD[0].linea_id ? [pendNcD[0].linea_id] : [];
+    }
     window.cdmRenderTablaSeleccion({
         tbodyId: 'cdm-preview-nc-devolver-tbody',
         checkClass: 'cdm-nc-devolver-linea-check',
-        pendientes: preview.pendientes || [],
+        pendientes: pendNcD,
         preciosPorLinea: precios,
         selectedIds: selected,
     });
@@ -324,7 +339,11 @@ window.cdmConfirmarFac = function (form, pregunta) {
     window.cdmRenderPreviewFac(modo);
     var ids = window.cdmIdsSeleccionados('.cdm-fac-linea-check');
     if (!ids.length) {
-        alert('Indicá qué línea(s) de reemplazo facturar. No se emite sola con todo lo pendiente.');
+        var panelFac = document.getElementById('cdm-preview-fac-panel');
+        if (panelFac) {
+            panelFac.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        alert('Indicá qué línea(s) de reemplazo facturar en el preview de arriba (columna Incluir). No se emite sola con todo lo pendiente.');
         return false;
     }
     var fila = window.cdmFilaPreviewModo(preview, modo);
@@ -378,7 +397,11 @@ window.cdmConfirmarNcReemplazo = function (form) {
     window.cdmRenderPreviewNcReemplazo();
     var ids = window.cdmIdsSeleccionados('.cdm-nc-reemplazo-linea-check');
     if (!ids.length) {
-        alert('Indicá qué línea(s) del reemplazo anular con la nota de crédito.');
+        var panelNcR = document.getElementById('cdm-preview-nc-reemplazo-panel');
+        if (panelNcR) {
+            panelNcR.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        alert('Indicá qué línea(s) del reemplazo anular en el preview de arriba (columna Incluir).');
         return false;
     }
     window.cdmSincronizarLineaIdsEnForm(form, ids);
@@ -411,7 +434,11 @@ window.cdmConfirmarNcDevolver = function (form) {
     window.cdmRenderPreviewNcDevolver(modo);
     var ids = window.cdmIdsSeleccionados('.cdm-nc-devolver-linea-check');
     if (!ids.length) {
-        alert('Indicá qué línea(s) a devolver incluir en la nota de crédito.');
+        var panelNcD = document.getElementById('cdm-preview-nc-devolver-panel');
+        if (panelNcD) {
+            panelNcD.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        alert('Indicá qué línea(s) a devolver en el preview de arriba (columna Incluir).');
         return false;
     }
     var preview = window.cdmPreviewNcDevolver;
@@ -462,8 +489,7 @@ document.addEventListener('DOMContentLoaded', function () {
             window.cdmRenderPreviewNcReemplazo();
         }
         if (ev.target && ev.target.classList && ev.target.classList.contains('cdm-nc-devolver-linea-check')) {
-            var formNc = document.querySelector('.cdm-form-emitir-nc [name=modo_precio]');
-            window.cdmRenderPreviewNcDevolver(formNc ? formNc.value : 'grilla');
+            window.cdmRenderPreviewNcDevolver(window.cdmModoPrecioDevolucion());
         }
     });
 
@@ -484,9 +510,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         form.querySelectorAll('.cdm-nc-precio').forEach(function (inp) {
             inp.addEventListener('input', function () {
-                var s = form.querySelector('[name=modo_precio]');
-                window.cdmRenderPreviewNcDevolver(s ? s.value : 'grilla');
+                window.cdmRenderPreviewNcDevolver(window.cdmModoPrecioDevolucion());
             });
+        });
+    });
+    // Select de precio sin name (preview previo a RECIBIDO): mismo modo que verá el operador.
+    document.querySelectorAll('.cdm-modo-precio-devolucion').forEach(function (select) {
+        select.addEventListener('change', function () {
+            window.cdmRenderPreviewNcDevolver(select.value);
         });
     });
 
@@ -498,9 +529,7 @@ document.addEventListener('DOMContentLoaded', function () {
         window.cdmRenderPreviewNcReemplazo();
     }
     if (window.cdmPreviewNcDevolver) {
-        var primerNc = document.querySelector('.cdm-form-emitir-nc [name=modo_precio]')
-            || document.querySelector('.cdm-modo-precio-devolucion');
-        window.cdmRenderPreviewNcDevolver(primerNc ? primerNc.value : 'grilla');
+        window.cdmRenderPreviewNcDevolver(window.cdmModoPrecioDevolucion());
     }
 });
 </script>

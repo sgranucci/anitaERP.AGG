@@ -259,9 +259,8 @@ var brutoSpIe = 0;
 				return;
 			}
 
-			if (!asientoIeBalanceado())
+			if (!validarBalanceAsientoIe())
 			{
-				validarBalanceAsientoIe();
 				flError = true;
 				muestraVentanaAsiento();
 			}
@@ -300,6 +299,12 @@ var brutoSpIe = 0;
 		function continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento)
 		{
 			var flError = false;
+
+			if (!validarBalanceAsientoIe()) {
+				liberarBannerGrabacionIe();
+				muestraVentanaAsiento();
+				return;
+			}
 
 			// Una sola cuenta de caja en 0 + asiento con importe → copiar total asiento al monto
 			copiarTotalAsientoAUnicaCuentaCajaSiCorresponde();
@@ -1790,6 +1795,21 @@ var brutoSpIe = 0;
 
 	function validarBalanceAsientoIe()
 	{
+		if (typeof window.validarLineasAsientoSinDebeYHaber === 'function') {
+			var ambos = window.validarLineasAsientoSinDebeYHaber();
+			if (!ambos.ok) {
+				alert(ambos.mensaje);
+				if (ambos.$tr && ambos.$tr.length) {
+					var foco = ambos.$tr.find('.haberasiento').get(0) || ambos.$tr.find('.debeasiento').get(0);
+					if (foco && typeof enfocarCampoAsiento === 'function') {
+						enfocarCampoAsiento(foco);
+					} else if (foco) {
+						foco.focus();
+					}
+				}
+				return false;
+			}
+		}
 		if (!asientoIeBalanceado()) {
 			alert('Problemas en el asiento, no coincide el debe con el haber');
 			return false;

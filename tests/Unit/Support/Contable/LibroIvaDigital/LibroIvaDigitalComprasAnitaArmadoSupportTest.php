@@ -46,6 +46,18 @@ class LibroIvaDigitalComprasAnitaArmadoSupportTest extends TestCase
         );
     }
 
+    public function test_archivo_compras_puede_preferir_fecha_iva(): void
+    {
+        $this->assertSame(
+            '20261002',
+            LibroIvaDigitalComprasAnitaArmadoSupport::fechaArchivoCompras('20260928', '20261002', true),
+        );
+        $this->assertSame(
+            '20260928',
+            LibroIvaDigitalComprasAnitaArmadoSupport::fechaArchivoCompras('20260928', '', true),
+        );
+    }
+
     public function test_archivo_compras_sin_fecha_impresa_usa_contabilizacion(): void
     {
         $this->assertSame(

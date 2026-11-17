@@ -63,6 +63,9 @@ final class IngresoEgresoCuadreCajaAsientoSupport
      */
     public static function assertCuadre(array $data): void
     {
+        // Antes del cuadre caja↔asiento: Debe+Haber en la misma línea engaña los totales.
+        AsientoBalanceSupport::assertLineasSinDebeYHaber($data, 'asiento');
+
         $totalesCaja = self::totalesOperacionCaja($data);
         $totalesAsiento = self::totalesAsiento($data);
 

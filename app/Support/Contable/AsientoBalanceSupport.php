@@ -11,17 +11,90 @@ use Illuminate\Support\Facades\DB;
  *
  * Incidente Biyemas 363199–363201: el ABM escribía ctamov línea a línea y, ante
  * error posterior, el rollback MySQL dejaba ctamov parcial (huérfano y desbalanceado).
+ *
+ * Incidente Ferli OPP 46358: una línea con Debe y Haber a la vez hacía pasar el
+ * balance (suma ambos lados) pero ERP guardaba solo el Haber y Anita combinaba
+ * abs(debe+haber) → asiento desbalanceado y ctamov distinto.
  */
 final class AsientoBalanceSupport
 {
     public const TOLERANCIA = 0.009;
 
     /**
+     * Índices 0-based de líneas con importe en Debe y en Haber a la vez.
+     *
+     * @param  array<int, mixed>  $debes
+     * @param  array<int, mixed>  $haberes
+     * @return list<int>
+     */
+    public static function indicesLineasConDebeYHaber(array $debes, array $haberes): array
+    {
+        $debes = array_values($debes);
+        $haberes = array_values($haberes);
+        $q = max(count($debes), count($haberes));
+        $out = [];
+
+        for ($i = 0; $i < $q; $i++) {
+            $debe = self::parseMonto($debes[$i] ?? null);
+            $haber = self::parseMonto($haberes[$i] ?? null);
+            if ($debe > 0 && $haber > 0) {
+                $out[] = $i;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload  debes/haberes o debeasientos/haberasientos
+     * @return list<int> índices 0-based
+     */
+    public static function indicesLineasConDebeYHaberDesdePayload(array $payload): array
+    {
+        $debes = $payload['debes'] ?? $payload['debeasientos'] ?? [];
+        $haberes = $payload['haberes'] ?? $payload['haberasientos'] ?? [];
+
+        return self::indicesLineasConDebeYHaber(
+            is_array($debes) ? $debes : [],
+            is_array($haberes) ? $haberes : [],
+        );
+    }
+
+    /**
+     * @param  list<int>  $indices0
+     */
+    public static function mensajeLineasConDebeYHaber(array $indices0, string $contexto = 'asiento'): string
+    {
+        $nros = array_map(static fn (int $i): int => $i + 1, $indices0);
+        $lista = implode(', ', $nros);
+        $plural = count($nros) > 1;
+
+        return 'El '.$contexto.' tiene '
+            .($plural ? 'líneas' : 'una línea')
+            .' con importe en Debe y en Haber a la vez'
+            .' (línea'.($plural ? 's' : '').' '.$lista.').'
+            .' Deje solo un lado en cada movimiento.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function assertLineasSinDebeYHaber(array $payload, string $contexto = 'asiento'): void
+    {
+        $indices = self::indicesLineasConDebeYHaberDesdePayload($payload);
+        if ($indices !== []) {
+            throw new \InvalidArgumentException(self::mensajeLineasConDebeYHaber($indices, $contexto));
+        }
+    }
+
+    /**
      * Totales desde arrays del formulario ABM / payload Anita (debes[] / haberes[]).
      *
      * @param  array<int, mixed>  $debes
      * @param  array<int, mixed>  $haberes
-     * @return array{total_debe: float, total_haber: float, diferencia: float, lineas_con_importe: int, balanceado: bool}
+     * @return array{total_debe: float, total_haber: float, diferencia: float, lineas_con_importe: int, balanceado: bool, lineas_debe_y_haber: list<int>}
      */
     public static function totalesDesdeDebeHaber(array $debes, array $haberes): array
     {
@@ -29,6 +102,7 @@ final class AsientoBalanceSupport
         $totalDebe = 0.0;
         $totalHaber = 0.0;
         $lineas = 0;
+        $ambos = [];
 
         for ($i = 0; $i < $q; $i++) {
             $debe = self::parseMonto($debes[$i] ?? null);
@@ -40,6 +114,9 @@ final class AsientoBalanceSupport
             }
 
             $lineas++;
+            if ($debe > 0 && $haber > 0) {
+                $ambos[] = $i;
+            }
             if ($debe > 0) {
                 $totalDebe += $debe;
             }
@@ -57,7 +134,8 @@ final class AsientoBalanceSupport
             'total_haber' => $totalHaber,
             'diferencia' => $diferencia,
             'lineas_con_importe' => $lineas,
-            'balanceado' => abs($diferencia) <= self::TOLERANCIA,
+            'balanceado' => $ambos === [] && abs($diferencia) <= self::TOLERANCIA,
+            'lineas_debe_y_haber' => $ambos,
         ];
     }
 
@@ -162,13 +240,15 @@ final class AsientoBalanceSupport
         $totalDebe = round($totalDebe, 4);
         $totalHaber = round($totalHaber, 4);
         $diferencia = round($totalDebe - $totalHaber, 4);
+        $ambos = self::indicesLineasConDebeYHaber($debes, $haberes);
 
         return [
             'total_debe' => $totalDebe,
             'total_haber' => $totalHaber,
             'diferencia' => $diferencia,
             'lineas_con_importe' => count($lineas),
-            'balanceado' => ! $sinCotizacion && abs($diferencia) <= $tolerancia,
+            'balanceado' => $ambos === [] && ! $sinCotizacion && abs($diferencia) <= $tolerancia,
+            'lineas_debe_y_haber' => $ambos,
             'monedas_mezcladas' => true,
             'sin_cotizacion' => $sinCotizacion,
         ];
@@ -202,6 +282,9 @@ final class AsientoBalanceSupport
      */
     public static function assertBalanceadoDesdePayload(array $payload, string $contexto = 'asiento'): void
     {
+        // Primero: Debe+Haber en la misma línea engaña al total (incidente OPP 46358).
+        self::assertLineasSinDebeYHaber($payload, $contexto);
+
         $totales = self::totalesDesdePayload($payload);
 
         if ($totales['lineas_con_importe'] < 2) {

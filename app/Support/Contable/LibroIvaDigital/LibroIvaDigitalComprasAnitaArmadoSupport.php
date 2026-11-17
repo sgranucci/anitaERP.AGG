@@ -49,8 +49,12 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
      * @param  list<array{concepto: int, importe: float}>  $conceptos
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}|null
      */
-    public static function armarRegistro(array $compra, array $conceptos, bool $prorrateoGlobal): ?array
-    {
+    public static function armarRegistro(
+        array $compra,
+        array $conceptos,
+        bool $prorrateoGlobal,
+        bool $preferirFechaIva = false,
+    ): ?array {
         $letra = strtoupper(substr(trim((string) ($compra['com_letra'] ?? 'A')), 0, 1));
         $tipoAbrev = (string) ($compra['com_tipo'] ?? '');
         $tipo = self::tipoPorAbreviatura($tipoAbrev);
@@ -92,6 +96,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $fechaComprobante = self::fechaArchivoCompras(
             $compra['com_fecha'] ?? null,
             $compra['com_fecha_iva'] ?? null,
+            $preferirFechaIva,
         );
         if ($fechaComprobante === null) {
             return null;
@@ -530,12 +535,20 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
     }
 
     /**
-     * Fecha que va en el archivo de compras: la impresa del comprobante.
-     * La de contabilización solo entra si no hay fecha de comprobante.
+     * Fecha que va en el archivo de compras (campo 1 del CBTE).
+     * Por defecto: impresa del comprobante; si falta, la de IVA/contabilización.
+     * Con $preferirFechaIva (tilde en pantalla; default Ferli): prioriza fecha IVA.
      * El período del libro sigue filtrándose por fecha IVA.
      */
-    public static function fechaArchivoCompras(mixed $fechaComprobante, mixed $fechaContabilizacion): ?string
-    {
+    public static function fechaArchivoCompras(
+        mixed $fechaComprobante,
+        mixed $fechaContabilizacion,
+        bool $preferirFechaIva = false,
+    ): ?string {
+        if ($preferirFechaIva) {
+            return self::fechaYmd($fechaContabilizacion) ?? self::fechaYmd($fechaComprobante);
+        }
+
         return self::fechaYmd($fechaComprobante) ?? self::fechaYmd($fechaContabilizacion);
     }
 

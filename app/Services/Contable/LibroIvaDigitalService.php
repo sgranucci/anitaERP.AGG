@@ -89,6 +89,7 @@ class LibroIvaDigitalService
                 'coeficiente_iva_indirecto' => max(0.0, (float) ($opciones['coeficiente_iva_indirecto'] ?? 1.0)),
                 'completar_compras_anita' => (bool) ($opciones['completar_compras_anita'] ?? true),
                 'completar_fsl_anita' => (bool) ($opciones['completar_fsl_anita'] ?? true),
+                'compras_fecha_iva' => (bool) ($opciones['compras_fecha_iva'] ?? false),
             ],
             'validaciones' => [],
         ];
@@ -191,12 +192,13 @@ class LibroIvaDigitalService
         $periodo = (string) ($resultado['periodo']['etiqueta'] ?? date('Y-m'));
         $sufijoFecha = ! empty($resultado['opciones']['por_fecha_jornada']) ? '_jornada' : '';
         $sufijoProrrateo = ! empty($resultado['opciones']['prorrateo_cf_global']) ? '_prorrateo' : '';
+        $sufijoComprasFecha = ! empty($resultado['opciones']['compras_fecha_iva']) ? '_fechaiva' : '';
         $dir = storage_path('framework/cache');
         if (! is_dir($dir)) {
             throw new \RuntimeException('No existe el directorio de caché de Laravel.');
         }
 
-        $zipPath = $dir.'/'.$prefijoZip.'_'.$empresaId.'_'.$periodo.$sufijoFecha.$sufijoProrrateo.'.zip';
+        $zipPath = $dir.'/'.$prefijoZip.'_'.$empresaId.'_'.$periodo.$sufijoFecha.$sufijoProrrateo.$sufijoComprasFecha.'.zip';
         if (file_exists($zipPath)) {
             @unlink($zipPath);
         }

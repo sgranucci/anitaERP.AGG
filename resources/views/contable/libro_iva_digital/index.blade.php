@@ -8,6 +8,7 @@
     use App\Support\Configuracion\EntornoEmpresaSupport;
     use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalArchivosSupport;
     $esCrown = EntornoEmpresaSupport::esCrown();
+    $esFerli = EntornoEmpresaSupport::esFerli();
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -90,8 +91,26 @@
                     <div class="form-group row">
                         <span class="col-lg-2 control-label pt-2">Compras</span>
                         <div class="col-lg-8">
-                            <input type="hidden" name="prorrateo_cf_global" value="0">
+                            <input type="hidden" name="compras_fecha_iva" value="0">
                             <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="compras_fecha_iva"
+                                       id="compras_fecha_iva" value="1"
+                                       @checked(! empty($filtros['compras_fecha_iva']))>
+                                <label class="form-check-label" for="compras_fecha_iva">
+                                    Usar fecha de IVA en el archivo (campo 1 del CBTE)
+                                </label>
+                            </div>
+                            <small class="form-text text-muted mb-2 d-block">
+                                El per&iacute;odo siempre se arma por fecha de IVA.
+                                Con el tilde, cada rengl&oacute;n del TXT lleva la fecha de IVA
+                                en lugar de la impresa del comprobante.
+                                @if ($esFerli)
+                                    En Ferli viene marcado por defecto.
+                                @endif
+                            </small>
+
+                            <input type="hidden" name="prorrateo_cf_global" value="0">
+                            <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="prorrateo_cf_global"
                                        id="prorrateo_cf_global" value="1"
                                        @checked(! empty($filtros['prorrateo_cf_global']))>
@@ -187,6 +206,12 @@
                             fecha del comprobante
                         @endif.
                         Compras:
+                        @if (! empty($resultado['opciones']['compras_fecha_iva']) || ! empty($resultado['compras']['resumen']['compras_fecha_iva']))
+                            fecha de IVA en el TXT
+                        @else
+                            fecha del comprobante en el TXT
+                        @endif
+                        ;
                         @if (! empty($resultado['opciones']['prorrateo_cf_global']) || ! empty($resultado['compras']['resumen']['prorrateo_cf_global']))
                             prorrateo CF global (computable = 0)
                         @elseif ($esCrown && abs((float) ($resultado['opciones']['coeficiente_iva_indirecto'] ?? 1) - 1.0) > 0.000001)

@@ -287,6 +287,12 @@ final class ConceptoIvacompraFormulaSupport
         if ($esRet) {
             return 'V';
         }
+        // Débitos/créditos bancarios no son IVA (van a Otros tributos en el LID).
+        $esDebCred = (str_contains($n, 'deb') || str_contains($n, 'debit'))
+            && (str_contains($n, 'cred') || str_contains($n, 'credit'));
+        if ($esDebCred) {
+            return null;
+        }
         if ($esIva || str_contains($n, 'impuesto')) {
             return 'I';
         }

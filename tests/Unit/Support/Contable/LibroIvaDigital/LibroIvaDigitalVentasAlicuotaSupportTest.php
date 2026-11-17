@@ -582,6 +582,55 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         );
     }
 
+    public function test_compra_impuesto_en_alicuota_cero_pasa_a_otros_tributos(): void
+    {
+        // Caso BBVA: gravado 21% + «IMPUESTO A LOS DEB Y CRED» mal puesto en 0003.
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '001',
+                'punto_venta' => 1,
+                'numero_comprobante' => 300426,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30500003193',
+                'importe_total' => 10598.35,
+                'credito_fiscal_computable' => 10287.05,
+                'cantidad_alicuotas' => 2,
+            ],
+            'alicuotas' => [
+                [
+                    'tipo_comprobante' => '001',
+                    'punto_venta' => 1,
+                    'numero_comprobante' => 300426,
+                    'neto_gravado' => 311.3,
+                    'alicuota_iva' => '0005',
+                    'impuesto_liquidado' => 56.6,
+                ],
+                [
+                    'tipo_comprobante' => '001',
+                    'punto_venta' => 1,
+                    'numero_comprobante' => 300426,
+                    'neto_gravado' => 0.0,
+                    'alicuota_iva' => '0003',
+                    'impuesto_liquidado' => 10230.45,
+                ],
+            ],
+        ]);
+
+        $this->assertCount(1, $registro['alicuotas']);
+        $this->assertSame('0005', $registro['alicuotas'][0]['alicuota_iva']);
+        $this->assertEqualsWithDelta(56.6, $registro['alicuotas'][0]['impuesto_liquidado'], 0.001);
+        $this->assertEqualsWithDelta(56.6, $registro['cabecera']['credito_fiscal_computable'], 0.001);
+        $this->assertEqualsWithDelta(10230.45, $registro['cabecera']['otros_tributos'], 0.001);
+        $this->assertEqualsWithDelta(
+            0.0,
+            LibroIvaDigitalComprasImportesSupport::residualCabecera(
+                $registro['cabecera'],
+                $registro['alicuotas'],
+            ),
+            0.02,
+        );
+    }
+
     public function test_descuento_gravado_netea_el_neto_y_cierra_la_alicuota(): void
     {
         $neto = LibroIvaDigitalComprasImportesSupport::absolutoInformable(1503418.05 + (-559911.93));

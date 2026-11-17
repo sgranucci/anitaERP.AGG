@@ -101,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function () {
                             @csrf
                             <button type="submit" class="btn btn-info">Continuar sin reemplazo (reembolso)</button>
                         </form>
-                    @elseif (can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
+                    @elseif (!empty($previewFac) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                         <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1 cdm-form-emitir-fac"
                               onsubmit="return window.cdmConfirmarFac(this, '¿Emitir la factura del par que se lleva? Debe haber turno abierto en el local.');">
                             @csrf
@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     @endif
                 @endif
 
-                @if (($puedeFacturarAgregado ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
+                @if (($puedeFacturarAgregado ?? false) && !empty($previewFac) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1 cdm-form-emitir-fac"
                           onsubmit="return window.cdmConfirmarFac(this, '¿Facturar solo el reemplazo agregado? La factura anterior queda.');">
                         @csrf
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     </form>
                 @endif
 
-                @if (($puedeRefacturar ?? false) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
+                @if (($puedeRefacturar ?? false) && !empty($previewFac) && can('emitir-fac-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_fac_cambio_devolucion_marketplace', $data->id) }}" class="form-inline d-inline-flex align-items-center mr-2 mb-1 cdm-form-emitir-fac"
                           onsubmit="return window.cdmConfirmarFac(this, '¿Facturar de nuevo el reemplazo? El legajo sigue hasta el cierre.');">
                         @csrf

@@ -879,16 +879,24 @@ class AsientoRepository implements AsientoRepositoryInterface
 				$debeLin = $debes[$i_movimiento] ?? 0.0;
 				$haberLin = $haberes[$i_movimiento] ?? 0.0;
 
+				// Defensa: Debe+Haber juntos (OPP 46358) — assertBalanceado ya lo corta;
+				// no combinar abs(debe+haber) ni pisar el Debe con el Haber.
+				if ($debeLin > 0 && $haberLin > 0) {
+					throw new \InvalidArgumentException(
+						AsientoBalanceSupport::mensajeLineasConDebeYHaber([$i_movimiento], 'asiento (Anita ctamov)')
+					);
+				}
+
 				if ($debeLin > 0)
 				{
 					$d_h = 'D';
 					$monto = $debeLin;
 				}
 
-				if (($haberLin != 0 || $debeLin < 0) && $haberLin != 0)
+				if ($haberLin != 0)
 				{
 					$d_h = 'H';
-					$monto = abs($haberLin + $debeLin);
+					$monto = abs($haberLin);
 				}
 
 				// Línea sin importe: no grabar ctamov (evita ctav_d_h indefinido; no altera líneas con debe/haber válidos).

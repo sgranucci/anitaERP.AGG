@@ -62,6 +62,45 @@ class LibroIvaDigitalComprasConceptoClasificacionSupportTest extends TestCase
         $this->assertEqualsWithDelta(21.0, $clas['tasa'], 0.001);
     }
 
+    public function test_impuesto_debitos_creditos_va_a_otros_tributos(): void
+    {
+        $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar(
+            $this->concepto('10', 'IMPUESTO A LOS DEB Y CRED', 'I', '1'),
+        );
+
+        $this->assertSame('otros', $clas['destino']);
+        $this->assertTrue(
+            LibroIvaDigitalComprasConceptoClasificacionSupport::esImpuestoDebitosCreditos(
+                'IMPUESTO A LOS DEB Y CRED',
+            ),
+        );
+    }
+
+    public function test_iva_sin_alicuota_no_va_a_lid_cero_con_impuesto(): void
+    {
+        $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar(
+            $this->concepto('104', 'IVA IMPORTACIONES', 'I', '9'),
+        );
+
+        $this->assertSame('otros', $clas['destino']);
+    }
+
+    public function test_impuesto_debitos_creditos_va_a_otros_tributos(): void
+    {
+        foreach (['N', 'I', ''] as $tipo) {
+            $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar(
+                $this->concepto('10', 'IMPUESTO A LOS DEB Y CRED', $tipo, '1'),
+            );
+            $this->assertSame('otros', $clas['destino'], "tipo={$tipo}");
+            $this->assertSame(0.0, $clas['tasa']);
+        }
+        $this->assertTrue(
+            LibroIvaDigitalComprasConceptoClasificacionSupport::esImpuestoDebitosCreditos(
+                'IMPUESTO A LOS DEB Y CRED',
+            ),
+        );
+    }
+
     private function concepto(
         string $codigo,
         string $nombre,

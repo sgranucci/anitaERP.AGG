@@ -73,8 +73,9 @@ final class LibroIvaDigitalComprasImportesSupport
         $registro = self::reubicarAlicuotasHuerfanas($registro);
         $registro = self::absorberAlicuotasSinNeto($registro);
         $registro = self::reconciliarAlicuotasRedondeo($registro);
+        $registro = self::equilibrarResidual($registro);
 
-        return self::equilibrarResidual($registro);
+        return self::sincronizarCreditoFiscal($registro);
     }
 
     /**
@@ -249,15 +250,14 @@ final class LibroIvaDigitalComprasImportesSupport
         foreach ($alicuotas as $i => $fila) {
             $codigo = str_pad((string) ($fila['alicuota_iva'] ?? $fila['codigo_lid'] ?? ''), 4, '0', STR_PAD_LEFT);
             $tasa = self::TASA_POR_LID[$codigo] ?? 0.0;
-            if ($tasa <= 0) {
-                continue;
-            }
             $neto = (float) ($fila['neto_gravado'] ?? $fila['neto'] ?? 0);
             $iva = (float) ($fila['impuesto_liquidado'] ?? $fila['iva'] ?? 0);
-            if (abs($neto) > 0.0001 && abs($iva) < 0.0001) {
-                $sinIva[$i] = ['neto' => $neto, 'tasa' => $tasa];
+            // Neto gravado sin IVA: solo alícuotas con tasa > 0.
+            if ($tasa > 0 && abs($neto) > 0.0001 && abs($iva) < 0.0001) {
+                $sinIva[$i] = ['neto' => $neto, 'tasa' => $tasa, 'codigo' => $codigo];
             } elseif (abs($iva) > 0.0001 && abs($neto) < 0.0001) {
-                $sinNeto[$i] = ['iva' => $iva, 'tasa' => $tasa];
+                // Incluye 0003: el IVA mal clasificado se puede pegar al neto si la tasa cierra.
+                $sinNeto[$i] = ['iva' => $iva, 'tasa' => $tasa, 'codigo' => $codigo];
             }
         }
 
@@ -279,9 +279,14 @@ final class LibroIvaDigitalComprasImportesSupport
             }
 
             $neto = (float) ($alicuotas[$elegido]['neto_gravado'] ?? $alicuotas[$elegido]['neto'] ?? 0);
+            $codigoDestino = (string) ($sinIva[$elegido]['codigo'] ?? $alicuotas[$iIva]['alicuota_iva'] ?? '');
             $registro['alicuotas'][$iIva]['neto_gravado'] = $neto;
+            $registro['alicuotas'][$iIva]['alicuota_iva'] = $codigoDestino;
             if (isset($registro['alicuotas'][$iIva]['neto'])) {
                 $registro['alicuotas'][$iIva]['neto'] = $neto;
+            }
+            if (isset($registro['alicuotas'][$iIva]['codigo_lid'])) {
+                $registro['alicuotas'][$iIva]['codigo_lid'] = $codigoDestino;
             }
             unset($registro['alicuotas'][$elegido]);
             $usadosNeto[$elegido] = true;
@@ -347,8 +352,9 @@ final class LibroIvaDigitalComprasImportesSupport
     }
 
     /**
-     * IVA sin neto y sin pareja para reubicar (ej. concepto I 10.5% sin G):
-     * se mueve a Otros tributos para no fallar el control de alícuota ARCA.
+     * IVA sin neto y sin pareja para reubicar (ej. concepto I 10.5% sin G),
+     * o impuesto en alícuota 0% (0003): ARCA rechaza «impuesto liquidado ≠ 0».
+     * Se mueve a Otros tributos (campo 22).
      *
      * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}
@@ -367,8 +373,17 @@ final class LibroIvaDigitalComprasImportesSupport
             $tasa = self::TASA_POR_LID[$codigo] ?? 0.0;
             $neto = (float) ($fila['neto_gravado'] ?? $fila['neto'] ?? 0);
             $iva = (float) ($fila['impuesto_liquidado'] ?? $fila['iva'] ?? 0);
-            if ($tasa > 0 && abs($neto) < 0.0001 && abs($iva) > 0.0001) {
+            $ivaEnCero = $tasa <= 0 && abs($iva) > 0.0001;
+            $ivaSinNeto = $tasa > 0 && abs($neto) < 0.0001 && abs($iva) > 0.0001;
+            if ($ivaEnCero || $ivaSinNeto) {
                 $ivaHuerfano += $iva;
+                if ($ivaEnCero && abs($neto) > 0.0001) {
+                    $fila['impuesto_liquidado'] = 0.0;
+                    if (array_key_exists('iva', $fila)) {
+                        $fila['iva'] = 0.0;
+                    }
+                    $conservar[] = $fila;
+                }
                 continue;
             }
             $conservar[] = $fila;
@@ -384,6 +399,29 @@ final class LibroIvaDigitalComprasImportesSupport
             (float) ($registro['cabecera']['otros_tributos'] ?? 0) + $ivaHuerfano,
             2,
         );
+
+        return $registro;
+    }
+
+    /**
+     * Sin prorrateo CF global, el crédito computable debe = suma del impuesto liquidado.
+     *
+     * @param  array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}  $registro
+     * @return array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}
+     */
+    public static function sincronizarCreditoFiscal(array $registro): array
+    {
+        $ivaSum = 0.0;
+        foreach ($registro['alicuotas'] ?? [] as $fila) {
+            $ivaSum += (float) ($fila['impuesto_liquidado'] ?? $fila['iva'] ?? 0);
+        }
+        $ivaSum = round($ivaSum, 2);
+        $cf = round((float) ($registro['cabecera']['credito_fiscal_computable'] ?? 0), 2);
+        // Prorrateo global: CF queda en 0 aunque haya IVA en alícuotas.
+        if (abs($cf) < 0.001 && $ivaSum > 0.001) {
+            return $registro;
+        }
+        $registro['cabecera']['credito_fiscal_computable'] = $ivaSum;
 
         return $registro;
     }

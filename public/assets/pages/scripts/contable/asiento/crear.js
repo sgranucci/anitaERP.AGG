@@ -158,11 +158,13 @@
 
 		$('.debe').on('change input', function (event) {
 			event.preventDefault();
+			exclusividadDebeHaberFilaAbm($(this).closest('tr'), 'debe');
 			sumaMonto();
 		});
 
 		$('.haber').on('change input', function (event) {
 			event.preventDefault();
+			exclusividadDebeHaberFilaAbm($(this).closest('tr'), 'haber');
 			sumaMonto();
 		});
 
@@ -175,6 +177,42 @@
 			event.preventDefault();
 			asientoOnMonedaChange(this);
 		});
+	}
+
+	/** OPP 46358: no dejar Debe y Haber cargados en la misma línea. */
+	function exclusividadDebeHaberFilaAbm($tr, origen) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $debe = $tr.find('.debe');
+		var $haber = $tr.find('.haber');
+		var debe = parseMonto($debe.val());
+		var haber = parseMonto($haber.val());
+		if (!(debe > 0.000001) || !(haber > 0.000001)) {
+			return;
+		}
+		if (origen === 'debe') {
+			$haber.val('');
+		} else {
+			$debe.val('');
+		}
+	}
+
+	function validarLineasAbmSinDebeYHaber() {
+		var mensaje = null;
+		$('#tbody-cuenta-table tr.item-cuenta').each(function (idx) {
+			if (mensaje) {
+				return false;
+			}
+			var $tr = $(this);
+			var debe = parseMonto($tr.find('.debe').first().val());
+			var haber = parseMonto($tr.find('.haber').first().val());
+			if (debe > 0.000001 && haber > 0.000001) {
+				mensaje = 'La línea ' + (idx + 1) + ' del asiento tiene importe en Debe y en Haber. Deje solo un lado.';
+				$tr.find('.haber').first().trigger('focus');
+			}
+		});
+		return mensaje;
 	}
 
 	/**
@@ -1158,6 +1196,11 @@
 		}
 
 		sumaMonto();
+		var lineaDebeYHaber = validarLineasAbmSinDebeYHaber();
+		if (lineaDebeYHaber) {
+			alert(lineaDebeYHaber);
+			return;
+		}
 		var totDebe = parseMonto($('#totaldebe').val());
 		var totHaber = parseMonto($('#totalhaber').val());
 		var diff = Math.round((totDebe - totHaber) * 100) / 100;

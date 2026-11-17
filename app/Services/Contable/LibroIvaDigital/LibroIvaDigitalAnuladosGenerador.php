@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 class LibroIvaDigitalAnuladosGenerador
 {
     /**
-     * @param  array{por_fecha_jornada?: bool}  $opciones
+     * @param  array{por_fecha_jornada?: bool, compras_fecha_iva?: bool}  $opciones
      * @return array{ventas: string, compras: string, resumen: array<string, int>}
      */
     public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
@@ -19,9 +19,10 @@ class LibroIvaDigitalAnuladosGenerador
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde)).' 23:59:59';
         $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
+        $preferirFechaIva = (bool) ($opciones['compras_fecha_iva'] ?? false);
 
         $lineasVentas = $this->ventasAnuladas($empresaId, $desde, $hasta, $porFechaJornada);
-        $lineasCompras = $this->comprasAnuladas($empresaId, $desde, $hasta);
+        $lineasCompras = $this->comprasAnuladas($empresaId, $desde, $hasta, $preferirFechaIva);
 
         return [
             'ventas' => implode("\r\n", $lineasVentas),
@@ -49,8 +50,12 @@ class LibroIvaDigitalAnuladosGenerador
     /**
      * @return list<string>
      */
-    private function comprasAnuladas(int $empresaId, string $desde, string $hasta): array
-    {
+    private function comprasAnuladas(
+        int $empresaId,
+        string $desde,
+        string $hasta,
+        bool $preferirFechaIva = false,
+    ): array {
         $rows = DB::table('comprobante_proveedor as cp')
             ->join('comprobante_proveedor_estado as cpe', function ($join): void {
                 $join->on('cpe.comprobante_proveedor_id', '=', 'cp.id')
@@ -81,6 +86,7 @@ class LibroIvaDigitalAnuladosGenerador
             $fechaComprobante = LibroIvaDigitalComprasAnitaArmadoSupport::fechaArchivoCompras(
                 $row->fechacomprobante,
                 $row->fechaiva,
+                $preferirFechaIva,
             );
             if ($fechaComprobante === null) {
                 continue;
