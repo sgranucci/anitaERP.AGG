@@ -67,6 +67,23 @@ class CanonEntidadesCalculoSupportTest extends TestCase
         $this->assertEquals(59_640.00, $out['totales']['canon_bin']);
     }
 
+    public function test_override_params_cambia_piso_y_alicuotas(): void
+    {
+        // Piso 1.000.000 al 1% + excedente al 2%.
+        $out = CanonEntidadesCalculoSupport::calcular([
+            $this->dia('2026-07-01', 0, 1_500_000.00),
+        ], CanonEntidadesReglasSupport::REGLA_BIYEMAS, [
+            'bingo_escalonado' => true,
+            'piso_bingo' => 1_000_000.0,
+            'alicuota_bingo_tramo1' => 0.01,
+            'alicuota_bingo_tramo2' => 0.02,
+        ]);
+
+        // 1.000.000×1% + 500.000×2% = 10.000 + 10.000 = 20.000
+        $this->assertEquals(20_000.00, $out['filas'][0]['canon_bin']);
+        $this->assertEquals(1_000_000.0, $out['tarifas']['piso_bingo']);
+    }
+
     public function test_totales_son_suma_de_dias(): void
     {
         $out = CanonEntidadesCalculoSupport::calcular([
@@ -95,9 +112,10 @@ class CanonEntidadesCalculoSupportTest extends TestCase
             ['fecha' => '2026-07-28', 'tipo' => 'BIN', 'haber' => 123_045.00],
         ]);
 
-        $this->assertEquals(181_545.00, $filas[0]['canon_bin']);
+        // 1.500.000×2% + 4.086.000×3,25% = 30.000 + 132.795 = 162.795
+        $this->assertEquals(162_795.00, $filas[0]['canon_bin']);
         $this->assertEquals(123_045.00, $filas[0]['haber_bin']);
-        $this->assertEquals(58_500.00, $filas[0]['dif_dia']);
+        $this->assertEquals(39_750.00, $filas[0]['dif_dia']);
     }
 
     public function test_dia_sin_flash_no_resta_ni_computa_maquinas(): void

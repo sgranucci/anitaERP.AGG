@@ -15,6 +15,7 @@ use App\Support\Contable\MayorConcepto\MayorConceptoPeriodoProcesador;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
 use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Contable\MayorFuenteConsultaSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRecepcionAnitaEnricher;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -36,6 +37,7 @@ class MayorConceptoReporteService
         private readonly MayorConceptoConciliacionAsientoSupport $conciliacionAsientoSupport,
         private readonly MayorConceptoOrdencompraVistaEnricher $ordencompraVistaEnricher,
         private readonly MayorConceptoOperacionVistaEnricher $operacionVistaEnricher,
+        private readonly MayorPlanoCuentaRecepcionAnitaEnricher $recepcionAnitaEnricher,
     ) {}
 
     /**
@@ -1193,8 +1195,10 @@ class MayorConceptoReporteService
     private function enriquecerOrdencompraIds(array $filas): array
     {
         $filas = $this->ordencompraVistaEnricher->enriquecer($filas, $this->bridgeReader());
+        $filas = $this->operacionVistaEnricher->enriquecer($filas);
 
-        return $this->operacionVistaEnricher->enriquecer($filas);
+        // Enlaza COM → recepcion_proveedor (solo vista; no toca asientos).
+        return $this->recepcionAnitaEnricher->enriquecer($filas);
     }
 
     /**

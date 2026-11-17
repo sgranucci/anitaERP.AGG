@@ -12,9 +12,67 @@ class RecepcionProveedorAnitaImportSupport
 
     private static bool $monedaIdPorCodigoAnitaCargado = false;
 
+    /**
+     * Campos recepmae para import/vínculo COM.
+     * recm_ref_* = factura/remito proveedor; recm_*_fac = PEP/OC (no confundir).
+     */
+    private const CAMPOS_CABECERA = 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac,recm_ref_tipo,recm_ref_letra,recm_ref_sucursal,recm_ref_nro';
+
+    /** Tipos en recm_*_fac / recm_ref_* que no son factura/remito de proveedor. */
+    private const TIPOS_NO_FACTURA_REMITO = ['PEP', 'OC', 'ORD', 'COM', ''];
+
     public static function sistemaCompras(): string
     {
         return (string) config('recepcion_proveedor.anita.sistema_compras', 'compras');
+    }
+
+    public static function camposCabeceraImport(): string
+    {
+        return RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(self::CAMPOS_CABECERA);
+    }
+
+    /**
+     * Nº factura/remito proveedor desde cabecera Anita (para recepcion_proveedor.numerofactura).
+     * Prioridad: recm_ref_* → recm_*_fac (si no es PEP/OC) → recm_cod_remito (Surmar).
+     */
+    public static function numerofacturaDesdeCabecera(object $cabecera): string
+    {
+        $desdeRef = self::formatoComprobanteAnita(
+            $cabecera->recm_ref_tipo ?? '',
+            $cabecera->recm_ref_letra ?? '',
+            $cabecera->recm_ref_sucursal ?? 0,
+            $cabecera->recm_ref_nro ?? 0
+        );
+        if ($desdeRef !== '') {
+            return $desdeRef;
+        }
+
+        $desdeFac = self::formatoComprobanteAnita(
+            $cabecera->recm_tipo_fac ?? '',
+            $cabecera->recm_letra_fac ?? '',
+            $cabecera->recm_sucursal_fac ?? 0,
+            $cabecera->recm_nro_fac ?? 0
+        );
+        if ($desdeFac !== '') {
+            return $desdeFac;
+        }
+
+        $remito = trim((string) ($cabecera->recm_cod_remito ?? ''));
+
+        return ($remito !== '' && $remito !== '0') ? $remito : '';
+    }
+
+    public static function formatoComprobanteAnita(mixed $tipo, mixed $letra, mixed $sucursal, mixed $nro): string
+    {
+        $nro = (int) $nro;
+        $tipo = strtoupper(trim((string) $tipo));
+        if ($nro <= 0 || in_array($tipo, self::TIPOS_NO_FACTURA_REMITO, true)) {
+            return '';
+        }
+
+        $letra = trim((string) $letra);
+
+        return trim($tipo.' '.$letra.sprintf('%04d', (int) $sucursal).'-'.$nro);
     }
 
     public static function fechaAnitaDesde(string $fechaIso): int
@@ -50,9 +108,7 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
-                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
-            ),
+            'campos' => self::camposCabeceraImport(),
             'orderBy' => 'recm_fecha, recm_sucursal, recm_nro',
             'whereArmado' => $where,
         ];
@@ -99,9 +155,7 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
-                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
-            ),
+            'campos' => self::camposCabeceraImport(),
             'whereArmado' => $where,
             'limit' => 'FIRST 1',
         ]));
@@ -127,9 +181,7 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
-                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
-            ),
+            'campos' => self::camposCabeceraImport(),
             'orderBy' => 'recm_sucursal, recm_nro',
             'whereArmado' => $where,
         ]));
@@ -277,9 +329,7 @@ class RecepcionProveedorAnitaImportSupport
             'acc' => 'list',
             'sistema' => self::sistemaCompras(),
             'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
-            'campos' => RecepcionProveedorAnitaEsquemaSupport::camposRecepmae(
-                'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac'
-            ),
+            'campos' => self::camposCabeceraImport(),
             'orderBy' => 'recm_sucursal, recm_nro',
             'whereArmado' => self::whereRecepmaePorOrdencompra($numeroOc),
         ]));

@@ -164,7 +164,7 @@ class ComprobanteProveedorControlesLegajoService
             && $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $resultado['ok'] = false;
             $resultado['errores'][] = 'OC anticipada sin COM: use el modo «Factura contra orden de compra» (factura anticipada). '
-                .'Solo se admite una factura de anticipo; luego facture contra la recepción.';
+                .'Luego podrá facturar contra la recepción cuando las COM coincidan.';
 
             return $resultado;
         }
@@ -191,6 +191,9 @@ class ComprobanteProveedorControlesLegajoService
                     $modoCarga,
                     $total,
                     $excluirComprobanteId,
+                    $monedaId,
+                    $cotizacionFactura,
+                    $fechaComprobanteYmd,
                 );
                 foreach ($analisisAnticipo['errores'] as $errAnticipo) {
                     $resultado['ok'] = false;
@@ -207,6 +210,9 @@ class ComprobanteProveedorControlesLegajoService
                     $ordencompra,
                     $total,
                     $excluirComprobanteId,
+                    $monedaId,
+                    $cotizacionFactura,
+                    $fechaComprobanteYmd,
                 );
                 if (! $tope['ok'] && $tope['error']) {
                     $resultado['ok'] = false;
@@ -331,6 +337,9 @@ class ComprobanteProveedorControlesLegajoService
                 $ordencompra,
                 $importeFactura,
                 $excluirComprobanteId,
+                $monedaId,
+                $cotizacionFactura,
+                $fechaComprobanteYmd,
             );
             if (! $topeOc['ok'] && $topeOc['error']) {
                 $resultado['ok'] = false;

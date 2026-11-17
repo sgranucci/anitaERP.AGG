@@ -160,6 +160,12 @@ class OrdencompraLegajoBandejaPaqueteService
         $importeAnticipoEsperado = ($esAnticipada && $pctAnticipo > 0)
             ? \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::importeEsperado($oc)
             : null;
+        $planAnticipo = $esAnticipada
+            ? \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::planComprobantesAVenir($oc)
+            : ['cantidad' => 0, 'monto' => 0.0, 'permite_varias' => false];
+        $maxAnticipos = $esAnticipada
+            ? \App\Support\Compras\ComprobanteProveedorAnticipoPctSupport::maxFacturasAnticipo($oc)
+            : 1;
 
         return [
             'ordencompra_id' => (int) $oc->id,
@@ -167,6 +173,9 @@ class OrdencompraLegajoBandejaPaqueteService
             'es_anticipada' => $esAnticipada,
             'pct_anticipo' => $pctAnticipo,
             'importe_anticipo_esperado' => $importeAnticipoEsperado,
+            'anticipo_permite_varias' => (bool) ($planAnticipo['permite_varias'] ?? false),
+            'anticipo_max_facturas' => $maxAnticipos,
+            'anticipo_plan_cantidad' => (int) ($planAnticipo['cantidad'] ?? 0),
             'permite_asignar_com' => ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc),
             'mensaje_bloquea_com_anticipada' => ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc)
                 ? null

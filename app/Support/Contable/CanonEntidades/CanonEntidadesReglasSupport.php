@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Support\Contable\CanonEntidades;
 
+use App\Support\ReglaNegocio\ReglaNegocioConsultaSupport;
+
 /**
  * Alícuotas del canon entidad de bien público (F2015).
  * Máquinas es 1% en las tres empresas; bingo cambia (Biyemas escalonado).
+ *
+ * BRE (punto contable.canon.alicuota): puede override regla/codigo/bingo_escalonado/piso/alícuotas.
+ * Sin match → legacy hardcode por CUIT/nombre.
  */
 final class CanonEntidadesReglasSupport
 {
@@ -46,10 +51,70 @@ final class CanonEntidadesReglasSupport
 
     public const TOLERANCIA = 1.0;
 
+    public const PUNTO_REGLA = 'contable.canon.alicuota';
+
     /**
      * @return array<string, mixed>
      */
     public static function resolver(string $cuit, string $nombre = ''): array
+    {
+        $base = self::resolverLegacy($cuit, $nombre);
+        $d = ReglaNegocioConsultaSupport::decidirSiActivo(self::PUNTO_REGLA, [
+            'cuit' => $base['cuit'],
+            'cuit_formateado' => self::formatearCuit((string) $base['cuit']),
+            'nombre' => $nombre,
+            'regla_legacy' => $base['regla'],
+        ]);
+        if ($d === null) {
+            return $base;
+        }
+
+        $regla = ReglaNegocioConsultaSupport::stringDato($d->datos, 'regla') ?? $base['regla'];
+        $codigo = ReglaNegocioConsultaSupport::stringDato($d->datos, 'codigo');
+        if ($codigo === null || $codigo === '') {
+            $codigo = self::codigoCorto((string) $regla);
+        }
+        $bingo = ReglaNegocioConsultaSupport::boolDato($d->datos, 'bingo_escalonado');
+        $piso = ReglaNegocioConsultaSupport::floatDato($d->datos, 'piso_bingo');
+        $ali1 = ReglaNegocioConsultaSupport::floatDato($d->datos, 'alicuota_bingo_tramo1');
+        $ali2 = ReglaNegocioConsultaSupport::floatDato($d->datos, 'alicuota_bingo_tramo2');
+        $aliPlana = ReglaNegocioConsultaSupport::floatDato($d->datos, 'alicuota_bingo_plana');
+        $aliMaq = ReglaNegocioConsultaSupport::floatDato($d->datos, 'alicuota_maquinas');
+        $tolerancia = ReglaNegocioConsultaSupport::floatDato($d->datos, 'tolerancia');
+
+        $bingoEscalonado = $bingo ?? ($regla === self::REGLA_BIYEMAS);
+
+        return array_merge($base, [
+            'regla' => $regla,
+            'codigo' => $codigo,
+            'reconocida' => $regla !== self::REGLA_PLANA,
+            'bingo_escalonado' => $bingoEscalonado,
+            'etiqueta_bingo' => $bingoEscalonado
+                ? sprintf(
+                    '%s%% hasta $%s + %s%% excedente',
+                    self::pctLabel($ali1 ?? self::ALICUOTA_BINGO_BIYEMAS_TRAMO1),
+                    number_format($piso ?? self::PISO_BINGO_BIYEMAS, 0, ',', '.'),
+                    self::pctLabel($ali2 ?? self::ALICUOTA_BINGO_BIYEMAS_TRAMO2)
+                )
+                : sprintf('%s%% del total de ventas de bingo', self::pctLabel($aliPlana ?? self::ALICUOTA_BINGO_PLANA)),
+            'etiqueta_maquinas' => sprintf(
+                '%s%% Win Electrónico (días +)',
+                self::pctLabel($aliMaq ?? self::ALICUOTA_MAQUINAS)
+            ),
+            'piso_bingo' => $piso ?? ($bingoEscalonado ? self::PISO_BINGO_BIYEMAS : null),
+            'alicuota_bingo_tramo1' => $ali1,
+            'alicuota_bingo_tramo2' => $ali2,
+            'alicuota_bingo_plana' => $aliPlana,
+            'alicuota_maquinas' => $aliMaq,
+            'tolerancia' => $tolerancia ?? self::TOLERANCIA,
+            'via_bre' => true,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function resolverLegacy(string $cuit, string $nombre = ''): array
     {
         $cuitNorm = self::normalizarCuit($cuit);
         $regla = match ($cuitNorm) {
@@ -74,6 +139,7 @@ final class CanonEntidadesReglasSupport
             'cuenta_codigo' => self::CUENTA_CODIGO,
             'cuenta_etiqueta' => self::CUENTA_ETIQUETA,
             'tolerancia' => self::TOLERANCIA,
+            'via_bre' => false,
         ];
     }
 
@@ -136,5 +202,15 @@ final class CanonEntidadesReglasSupport
         ];
 
         return strtr($texto, $map);
+    }
+
+    private static function pctLabel(float $ratio): string
+    {
+        $pct = $ratio * 100;
+        if (abs($pct - round($pct)) < 0.0001) {
+            return (string) (int) round($pct);
+        }
+
+        return rtrim(rtrim(number_format($pct, 2, ',', ''), '0'), ',');
     }
 }

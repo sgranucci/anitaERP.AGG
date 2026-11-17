@@ -170,9 +170,10 @@ Configuración comprobante proveedor
             <div class="card-header">
                 <h3 class="card-title">Tolerancia de % de anticipo</h3>
                 <p class="text-muted mb-0 mt-1" style="font-size:12px;">
-                    Una sola para toda la instalación. La OC anticipada declara un %; la factura de anticipo
-                    (una sola por OC) debe coincidir con total OC × ese %. Por encima de esta tolerancia la
-                    factura queda en borrador y pasa a Mis aprobaciones para liberación.
+                    Una sola para toda la instalación. La OC anticipada declara un %. Sin plan (o un solo ítem)
+                    en «Comprobantes a venir», una sola factura debe coincidir con total OC × ese %. Con varias
+                    cuotas en el plan se admiten varias anticipadas y el % se controla acumulado. Por encima
+                    de esta tolerancia la factura queda en borrador y pasa a Mis aprobaciones para liberación.
                 </p>
             </div>
             <form action="{{ route('guardar_tolerancia_anticipo_comprobante_proveedor') }}" method="POST" autocomplete="off">

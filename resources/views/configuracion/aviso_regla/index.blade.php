@@ -11,6 +11,7 @@ Reglas de aviso
         <div class="card-header">
             <h3 class="card-title mb-0"><i class="fa fa-project-diagram"></i> Motor de reglas</h3>
             <div class="card-tools">
+                <a href="{{ route('consultar_regla_negocio') }}" class="btn btn-outline-light btn-sm">Reglas de negocio</a>
                 <a href="{{ route('consultar_modulo_aviso_evento') }}" class="btn btn-outline-light btn-sm">Eventos</a>
                 <a href="{{ route('consultar_modulo_aviso') }}" class="btn btn-outline-light btn-sm">Avisos</a>
             </div>

@@ -197,7 +197,7 @@ class MayorPlanoCuentaRecepcionAnitaEnricher
     }
 
     /**
-     * Formato mayor: X0001-00159903 → letra X, sucursal 1, nro 159903.
+     * Formato mayor: X0001-00159903 o COM X0001-00159903 → letra X, sucursal 1, nro 159903.
      *
      * @return array{letra:string,sucursal:int,nro:int}|null
      */
@@ -208,7 +208,8 @@ class MayorPlanoCuentaRecepcionAnitaEnricher
             return null;
         }
 
-        if (preg_match('/^([A-Za-z])\s*0*(\d+)\s*-\s*0*(\d+)\s*$/', $texto, $m) === 1) {
+        // "COM X0001-00159903" / "FAC A0006-00186624"
+        if (preg_match('/^(?:[A-Za-z]{2,4}\s+)?([A-Za-z])\s*0*(\d+)\s*-\s*0*(\d+)\s*$/', $texto, $m) === 1) {
             return [
                 'letra' => strtoupper($m[1]),
                 'sucursal' => (int) $m[2],

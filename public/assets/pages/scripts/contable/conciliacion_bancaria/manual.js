@@ -145,7 +145,16 @@
         var blob = blobTipo(mov, lado);
         if (q && blob.indexOf(q) === -1) return false;
         var fFiltro = fechaFiltro();
-        if (fFiltro && fechaMov(mov, lado) !== fFiltro) return false;
+        if (fFiltro) {
+            var fMov = fechaMov(mov, lado);
+            // Con "Incluir anteriores": el banco queda en el día elegido;
+            // anitaERP muestra ese día y asientos previos (cheques, etc.).
+            if (lado === 'c' && document.getElementById('incluir-anteriores').checked) {
+                if (fMov && fMov > fFiltro) return false;
+            } else if (fMov !== fFiltro) {
+                return false;
+            }
+        }
         if (!pasaTipo(mov, lado)) return false;
         if (!ignorarConciliados && document.getElementById('solo-pendientes').checked) {
             var usados = lado === 'c' ? mapHashesC : mapHashesB;
@@ -165,8 +174,27 @@
 
     function listaVisible(lado) {
         var fuente = lado === 'c' ? estado.contables : estado.banco;
+        var mapa = lado === 'c' ? selC : selB;
         var imp = importeFiltro();
-        return porImporte(fuente.filter(function (m) { return pasa(m, lado); }), imp);
+        var lista = porImporte(fuente.filter(function (m) { return pasa(m, lado); }), imp);
+        // Seleccionados / sugeridos arriba y visibles aunque el filtro de importe los oculte.
+        var pinned = [];
+        var rest = [];
+        var enLista = {};
+        lista.forEach(function (m) {
+            enLista[m.hash] = true;
+            if (mapa[m.hash] || m._sugerido) pinned.push(m);
+            else rest.push(m);
+        });
+        Object.keys(mapa).forEach(function (h) {
+            if (!mapa[h] || enLista[h]) return;
+            var m = buscar(fuente, h);
+            if (m) {
+                m._sugerido = true;
+                pinned.unshift(m);
+            }
+        });
+        return pinned.concat(rest);
     }
 
     function buscar(lista, hash) {
@@ -205,6 +233,18 @@
         estado.banco.forEach(function (m) { m._sugerido = false; });
     }
 
+    function digitosRef(s) {
+        return String(s == null ? '' : s).replace(/\D+/g, '');
+    }
+
+    function refCheque(mov, lado) {
+        if (lado === 'b') {
+            return digitosRef(mov.voucher_number);
+        }
+        var m = String(mov.descripcion || '').match(/\bCh:\s*(\d{5,12})\b/i);
+        return m ? digitosRef(m[1]) : '';
+    }
+
     function marcarSugeridosDesdeBase() {
         limpiarSugeridos();
         var basesC = seleccionados('c');
@@ -212,24 +252,48 @@
         var base = null;
         var otra = null;
         var usados = null;
+        var ladoOtra = null;
         if (basesC.length === 1 && basesB.length === 0) {
             base = basesC[0];
             otra = estado.banco;
             usados = mapHashesB;
+            ladoOtra = 'b';
         } else if (basesB.length === 1 && basesC.length === 0) {
             base = basesB[0];
             otra = estado.contables;
             usados = mapHashesC;
+            ladoOtra = 'c';
         } else if (basesC.length === 1 && basesB.length === 1) {
-            return;
+            return false;
         } else {
-            return;
+            return false;
         }
+        var refBase = refCheque(base, ladoOtra === 'b' ? 'c' : 'b');
+        var porRef = [];
+        var porImp = [];
         otra.forEach(function (m) {
-            if (!usados[m.hash] && Math.abs(Math.abs(m.importe) - Math.abs(base.importe)) <= tolerancia) {
-                m._sugerido = true;
-            }
+            if (usados[m.hash]) return;
+            var mismoImp = Math.abs(Math.abs(m.importe) - Math.abs(base.importe)) <= tolerancia;
+            var mismaRef = refBase && refCheque(m, ladoOtra) === refBase;
+            if (mismoImp || mismaRef) m._sugerido = true;
+            if (mismaRef) porRef.push(m);
+            if (mismoImp) porImp.push(m);
         });
+        // Match único → tildar el otro lado (mismo Ch: o un solo importe).
+        var elegidos = porRef.length === 1 ? porRef : (porImp.length === 1 ? porImp : []);
+        if (elegidos.length !== 1) return false;
+        var m = elegidos[0];
+        m._sugerido = true;
+        if (ladoOtra === 'c') {
+            selC = {};
+            selC[m.hash] = true;
+        } else {
+            selB = {};
+            selB[m.hash] = true;
+        }
+        focoLado = ladoOtra;
+        focoHash = m.hash;
+        return true;
     }
 
     function filaHtml(mov, lado, imp) {
@@ -264,30 +328,9 @@
         return modo || 'auto';
     }
 
-    function pintarDetalle() {
-        var panel = document.getElementById('panel-detalle');
-        var ladoLbl = document.getElementById('detalle-lado');
-        var mov = null;
-        var lado = focoLado;
-        if (focoHash) {
-            mov = buscar(lado === 'c' ? estado.contables : estado.banco, focoHash);
-        }
-        if (!mov) {
-            var sels = seleccionados('c').concat(seleccionados('b'));
-            if (sels.length === 1) {
-                mov = sels[0];
-                lado = seleccionados('c').length ? 'c' : 'b';
-            }
-        }
-        if (!mov) {
-            ladoLbl.textContent = '';
-            panel.innerHTML = '<p class="text-muted small mb-0">Elegí un movimiento para ver el detalle. Clic = selección exclusiva · Ctrl+clic = multi-selección.</p>';
-            return;
-        }
-        ladoLbl.textContent = lado === 'c' ? 'anitaERP' : 'Banco';
-        var rows = '';
+    function filasDetalleMov(mov, lado) {
         if (lado === 'c') {
-            rows = [
+            var rows = [
                 ['Fecha', escapar(mov.fecha_fmt || mov.fecha || '')],
                 ['Tipo', escapar(mov.tipo_comp || '')],
                 ['Asiento', escapar(mov.nro_asiento_fmt || '')],
@@ -298,22 +341,92 @@
                 ['Descripción', escapar(mov.descripcion || '')],
             ];
             if (mov.anterior) rows.push(['Origen', 'Pendiente anterior']);
-        } else {
-            rows = [
-                ['Fecha', escapar(String(mov.process_date || '').substring(0, 10))],
-                ['Concepto IB', escapar(mov.code_description_ib || '')],
-                ['Concepto banco', escapar(mov.code_description_bank || '')],
-                ['Comprobante', escapar(mov.voucher_number || '')],
-                ['D/C', escapar(mov.debit_credit_type || '')],
-                ['Importe', dinero(mov.importe)],
-                ['Monto extracto', dinero(mov.amount)],
-            ];
+            return rows;
         }
-        panel.innerHTML = '<dl class="cm-detalle-kv mb-0">'
+        return [
+            ['Fecha', escapar(String(mov.process_date || '').substring(0, 10))],
+            ['Concepto IB', escapar(mov.code_description_ib || '')],
+            ['Concepto banco', escapar(mov.code_description_bank || '')],
+            ['Comprobante', escapar(mov.voucher_number || '')],
+            ['D/C', escapar(mov.debit_credit_type || '')],
+            ['Importe', dinero(mov.importe)],
+            ['Monto extracto', dinero(mov.amount)],
+        ];
+    }
+
+    function htmlDetalleKv(rows) {
+        return '<dl class="cm-detalle-kv mb-0">'
             + rows.map(function (r) {
                 return '<dt>' + r[0] + '</dt><dd>' + r[1] + '</dd>';
             }).join('')
             + '</dl>';
+    }
+
+    function pintarDetalle() {
+        var panel = document.getElementById('panel-detalle');
+        var ladoLbl = document.getElementById('detalle-lado');
+        var cSel = seleccionados('c');
+        var bSel = seleccionados('b');
+
+        if (cSel.length === 1 && bSel.length === 1) {
+            var diff = Math.round((cSel[0].importe - bSel[0].importe) * 100) / 100;
+            ladoLbl.textContent = 'Par sugerido';
+            panel.innerHTML = '<p class="small mb-2 '
+                + (Math.abs(diff) <= tolerancia ? 'text-success' : 'text-warning') + '">'
+                + (Math.abs(diff) <= tolerancia
+                    ? 'Par listo. Tocá el botón verde <strong>Conciliar</strong> o apretá <kbd>Enter</kbd>.'
+                    : 'Importes distintos (dif. ' + dinero(diff) + '). Conciliar / Enter pide confirmación.')
+                + '</p>'
+                + '<div class="cm-par-bloque mb-2"><div class="small font-weight-bold text-muted mb-1">anitaERP</div>'
+                + htmlDetalleKv(filasDetalleMov(cSel[0], 'c')) + '</div>'
+                + '<div class="cm-par-bloque"><div class="small font-weight-bold text-muted mb-1">Banco</div>'
+                + htmlDetalleKv(filasDetalleMov(bSel[0], 'b')) + '</div>';
+            return;
+        }
+
+        var mov = null;
+        var lado = focoLado;
+        if (focoHash) {
+            mov = buscar(lado === 'c' ? estado.contables : estado.banco, focoHash);
+        }
+        if (!mov) {
+            var sels = cSel.concat(bSel);
+            if (sels.length === 1) {
+                mov = sels[0];
+                lado = cSel.length ? 'c' : 'b';
+            }
+        }
+        if (!mov) {
+            ladoLbl.textContent = '';
+            panel.innerHTML = '<p class="text-muted small mb-0">Elegí un movimiento para ver el detalle. Clic = selección exclusiva · Ctrl+clic = multi-selección.</p>';
+            return;
+        }
+        ladoLbl.textContent = lado === 'c' ? 'anitaERP' : 'Banco';
+        panel.innerHTML = htmlDetalleKv(filasDetalleMov(mov, lado));
+    }
+
+    function filaPorHash(lado, hash) {
+        return document.querySelector('.js-fila[data-lado="' + lado + '"][data-hash="' + hash + '"]');
+    }
+
+    function resaltarParEnListas() {
+        ['c', 'b'].forEach(function (lado) {
+            var mapa = lado === 'c' ? selC : selB;
+            Object.keys(mapa).forEach(function (h) {
+                if (!mapa[h]) return;
+                var el = filaPorHash(lado, h);
+                if (!el) return;
+                el.classList.add('cm-flash');
+                if (el.scrollIntoView) {
+                    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+                setTimeout(function () { el.classList.remove('cm-flash'); }, 1800);
+            });
+        });
+        if (focoHash) {
+            var focoEl = filaPorHash(focoLado, focoHash);
+            if (focoEl && typeof focoEl.focus === 'function') focoEl.focus();
+        }
     }
 
     function actualizarTotales() {
@@ -341,15 +454,26 @@
         if (paresN) paresN.textContent = String((estado.pares || []).length);
 
         var aviso = document.getElementById('aviso-multimatch');
+        var btnConc = document.getElementById('btn-conciliar');
+        var listo = nC > 0 && nB > 0 && Math.abs(diff) <= tolerancia;
+        if (btnConc) {
+            btnConc.classList.toggle('cm-conciliar-listo', listo);
+            btnConc.innerHTML = listo
+                ? 'Conciliar <span class="cm-enter-hint">Enter</span>'
+                : 'Conciliar';
+        }
         if (nC === 1 && nB === 1) {
-            aviso.textContent = Math.abs(diff) <= tolerancia
-                ? 'Listo para conciliar 1:1.'
-                : 'Importes distintos: Enter pide confirmación.';
-            aviso.className = 'small ' + (Math.abs(diff) <= tolerancia ? 'text-success' : 'text-warning');
+            if (Math.abs(diff) <= tolerancia) {
+                aviso.innerHTML = 'Par listo — <strong>Conciliar</strong> o <kbd>Enter</kbd>';
+                aviso.className = 'small text-success font-weight-bold';
+            } else {
+                aviso.innerHTML = 'Importes distintos — <strong>Conciliar</strong> / <kbd>Enter</kbd> pide confirmación.';
+                aviso.className = 'small text-warning';
+            }
         } else if (nC > 0 && nB > 0 && (nC > 1 || nB > 1)) {
             if (Math.abs(diff) <= tolerancia) {
-                aviso.textContent = 'Sumas iguales (' + nC + ':' + nB + '). Enter concilia el grupo.';
-                aviso.className = 'small text-success';
+                aviso.innerHTML = 'Sumas iguales (' + nC + ':' + nB + ') — <strong>Conciliar</strong> o <kbd>Enter</kbd>';
+                aviso.className = 'small text-success font-weight-bold';
             } else {
                 aviso.textContent = 'Multi-selección ' + nC + ':' + nB + ' — diferencia ' + dinero(diff) + '.';
                 aviso.className = 'small text-muted';
@@ -549,17 +673,6 @@
 
         actualizarTotales();
         pintarDetalle();
-
-        var sugerido = document.querySelector('.cm-fila.cm-sugerido');
-        if (sugerido && sugerido.scrollIntoView) {
-            sugerido.scrollIntoView({ block: 'nearest' });
-        }
-        if (focoHash) {
-            var focoEl = document.querySelector('.js-fila[data-lado="' + focoLado + '"][data-hash="' + focoHash + '"]');
-            if (focoEl && focoEl.scrollIntoView) {
-                focoEl.scrollIntoView({ block: 'nearest' });
-            }
-        }
     }
 
     function seleccionar(lado, hash, multi) {
@@ -575,8 +688,14 @@
         }
         focoLado = lado;
         focoHash = hash;
-        marcarSugeridosDesdeBase();
+        // Match único (mismo Ch: o un solo importe) → tilda el otro lado.
+        var autoPar = !multi && marcarSugeridosDesdeBase();
         pintar();
+        if (autoPar) {
+            resaltarParEnListas();
+            document.getElementById('estado-cruce').textContent =
+                'Par sugerido y tildado. Enter o Conciliar · Esc limpia.';
+        }
     }
 
     function limpiarSeleccion() {
@@ -814,6 +933,18 @@
     function sugerir() {
         var c = seleccionados('c');
         var b = seleccionados('b');
+        if (c.length === 1 && b.length === 1) {
+            limpiarSugeridos();
+            c[0]._sugerido = true;
+            b[0]._sugerido = true;
+            focoLado = 'c';
+            focoHash = c[0].hash;
+            pintar();
+            resaltarParEnListas();
+            document.getElementById('estado-cruce').textContent =
+                'Ya hay un par 1:1. Enter o Conciliar para confirmar · Esc limpia.';
+            return;
+        }
         var base = null;
         var ladoBase = null;
         if (c.length === 1 && b.length === 0) {
@@ -832,20 +963,35 @@
         }
         var otra = ladoBase === 'c' ? estado.banco : estado.contables;
         var usados = ladoBase === 'c' ? mapHashesB : mapHashesC;
+        var ladoOtra = ladoBase === 'c' ? 'b' : 'c';
+        var refBase = refCheque(base, ladoBase);
         var mejor = null;
         var mejorDiff = 1e12;
+        var mejorPorRef = null;
         otra.forEach(function (m) {
             if (usados[m.hash]) return;
             var d = Math.abs(Math.abs(m.importe) - Math.abs(base.importe));
+            if (refBase && refCheque(m, ladoOtra) === refBase) {
+                if (!mejorPorRef || d < Math.abs(Math.abs(mejorPorRef.importe) - Math.abs(base.importe))) {
+                    mejorPorRef = m;
+                }
+            }
             if (d < mejorDiff) {
                 mejorDiff = d;
                 mejor = m;
             }
         });
-        if (!mejor || mejorDiff > 1) {
+        if (mejorPorRef) {
+            mejor = mejorPorRef;
+            mejorDiff = Math.abs(Math.abs(mejor.importe) - Math.abs(base.importe));
+        }
+        if (!mejor || (mejorDiff > 1 && !mejorPorRef)) {
             alert('No hay un importe cercano entre los pendientes.');
             return;
         }
+        limpiarSugeridos();
+        base._sugerido = true;
+        mejor._sugerido = true;
         if (ladoBase === 'c') {
             selC = {};
             selC[base.hash] = true;
@@ -861,8 +1007,10 @@
             focoLado = 'c';
             focoHash = mejor.hash;
         }
-        marcarSugeridosDesdeBase();
         pintar();
+        resaltarParEnListas();
+        document.getElementById('estado-cruce').textContent =
+            'Par sugerido (' + dinero(mejor.importe) + '). Enter o Conciliar · Esc limpia.';
     }
 
     function exportar() {

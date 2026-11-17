@@ -295,7 +295,7 @@
                         value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) }}">
                     <small class="form-text text-muted">
                         @if (!empty($comPolitica['tiene_com']))
-                            Legajo anticipado: la primera factura va sin COM (anticipo). La recepción queda para una factura posterior.
+                            Legajo anticipado: puede cargar factura(s) anticipada(s) sin COM según el plan de comprobantes a venir. Luego podrá aplicar a recepción.
                         @else
                             OC anticipada sin COM todavía → factura anticipada. Puede haber varias en el mismo legajo.
                         @endif

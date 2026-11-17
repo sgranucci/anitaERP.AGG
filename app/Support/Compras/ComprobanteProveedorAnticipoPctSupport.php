@@ -15,11 +15,16 @@ use App\Support\Seguridad\UsuarioOperativoSupport;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * % de anticipo contractual en la OC y gate de la única factura anticipada.
+ * % de anticipo contractual en la OC y gate de facturas anticipadas.
+ *
+ * Sin plan (o un solo ítem) en «Comprobantes a venir»: una sola factura de anticipo
+ * por el % de la OC. Con varias cuotas/comprobantes en el plan: se admiten hasta esa
+ * cantidad de anticipadas; el % se controla acumulado (no factura a factura).
  *
  * Base del esperado: {@see OrdencompraTotalesResumen::desdeModelo} campo `total`
  * (neto + IVA, o precio total si el proveedor no discrimina IVA).
- * La factura se compara por su `total` (importe bruto del comprobante).
+ * La factura se compara por su `total` (importe bruto del comprobante),
+ * convertido a la moneda de la OC ({@see importeEnMonedaOc}) para no mezclar $ y USD.
  */
 final class ComprobanteProveedorAnticipoPctSupport
 {
@@ -150,6 +155,52 @@ final class ComprobanteProveedorAnticipoPctSupport
         return round((float) ($resumen['total'] ?? 0), 2);
     }
 
+    /**
+     * Moneda de referencia del total OC (primera línea).
+     */
+    public static function monedaReferenciaOc(Ordencompra $ordencompra): int
+    {
+        $ordencompra->loadMissing(['ordencompra_articulos']);
+        $primer = collect($ordencompra->ordencompra_articulos ?? [])->sortBy('id')->first();
+
+        return max(1, (int) ($primer->moneda_id ?? 1));
+    }
+
+    /**
+     * Cotización de la línea de referencia (pesos por unidad ME).
+     */
+    public static function cotizacionReferenciaOc(Ordencompra $ordencompra): float
+    {
+        $ordencompra->loadMissing(['ordencompra_articulos']);
+        $primer = collect($ordencompra->ordencompra_articulos ?? [])->sortBy('id')->first();
+
+        return (float) ($primer->cotizacion ?? 1);
+    }
+
+    /**
+     * Lleva un importe de la factura a la moneda del total OC.
+     * Sin esto, FC en $ vs OC en USD dispara falso “supera el total de la OC”.
+     */
+    public static function importeEnMonedaOc(
+        Ordencompra $ordencompra,
+        float $importe,
+        int $monedaOrigenId = 1,
+        mixed $cotizacionOrigen = 1.0,
+        mixed $fechaOrigen = null,
+    ): float {
+        return ComprobanteProveedorMonedaMotor::convertirTolerante(
+            abs($importe),
+            $monedaOrigenId,
+            $cotizacionOrigen,
+            $fechaOrigen,
+            self::monedaReferenciaOc($ordencompra),
+            self::cotizacionReferenciaOc($ordencompra),
+            $fechaOrigen,
+            'importe de la factura',
+            'total de la OC',
+        );
+    }
+
     public static function importeEsperado(Ordencompra $ordencompra): float
     {
         $pct = self::pctAnticipoOc($ordencompra);
@@ -158,6 +209,59 @@ final class ComprobanteProveedorAnticipoPctSupport
         }
 
         return round(self::totalOc($ordencompra) * $pct / 100.0, 2);
+    }
+
+    /**
+     * Plan «Comprobantes a venir» de la OC: cuántas facturas/cuotas se esperan.
+     *
+     * Cada fila de cuota cuenta 1. Si el comprobante no tiene cuotas cargadas,
+     * cuenta {@see Ordencompra_Comprobante::$cantidadcuota} (mínimo 1).
+     *
+     * @return array{cantidad: int, monto: float, permite_varias: bool}
+     */
+    public static function planComprobantesAVenir(?Ordencompra $ordencompra): array
+    {
+        $vacio = ['cantidad' => 0, 'monto' => 0.0, 'permite_varias' => false];
+        if (! $ordencompra || ! Schema::hasTable('ordencompra_comprobante')) {
+            return $vacio;
+        }
+
+        $ordencompra->loadMissing(['ordencompra_comprobantes.ordencompra_comprobante_cuotas']);
+        $cantidad = 0;
+        $monto = 0.0;
+
+        foreach ($ordencompra->ordencompra_comprobantes ?? [] as $comp) {
+            $cuotas = $comp->ordencompra_comprobante_cuotas ?? collect();
+            if ($cuotas->isNotEmpty()) {
+                $cantidad += $cuotas->count();
+                $monto += (float) $cuotas->sum(static fn ($c) => (float) ($c->monto ?? 0));
+
+                continue;
+            }
+
+            $n = max(1, (int) ($comp->cantidadcuota ?? 0));
+            $cantidad += $n;
+            $monto += (float) ($comp->monto ?? 0);
+        }
+
+        return [
+            'cantidad' => $cantidad,
+            'monto' => round($monto, 2),
+            'permite_varias' => $cantidad > 1,
+        ];
+    }
+
+    /**
+     * Tope de facturas de anticipo según el plan de la OC (mínimo 1).
+     */
+    public static function maxFacturasAnticipo(?Ordencompra $ordencompra): int
+    {
+        $plan = self::planComprobantesAVenir($ordencompra);
+        if ($plan['cantidad'] <= 0) {
+            return 1;
+        }
+
+        return max(1, $plan['cantidad']);
     }
 
     public static function desvioPct(float $importeIngresado, float $importeEsperado): float
@@ -252,8 +356,12 @@ final class ComprobanteProveedorAnticipoPctSupport
      *     total_oc: float,
      *     importe_esperado: float,
      *     importe_ingresado: float,
+     *     importe_acumulado: float,
      *     desvio_pct: float,
      *     tolerancia: float,
+     *     max_anticipos: int,
+     *     permite_varias: bool,
+     *     plan_cantidad: int,
      *     otras_anticipadas: list<array{id: int, estado: string}>,
      *     errores: list<string>,
      *     avisos: list<string>
@@ -264,6 +372,9 @@ final class ComprobanteProveedorAnticipoPctSupport
         string $modoCarga,
         float $totalFactura,
         ?int $excluirComprobanteId = null,
+        int $monedaFacturaId = 1,
+        mixed $cotizacionFactura = 1.0,
+        mixed $fechaFactura = null,
     ): array {
         $vacio = [
             'aplica' => false,
@@ -274,8 +385,12 @@ final class ComprobanteProveedorAnticipoPctSupport
             'total_oc' => 0.0,
             'importe_esperado' => 0.0,
             'importe_ingresado' => round(abs($totalFactura), 2),
+            'importe_acumulado' => round(abs($totalFactura), 2),
             'desvio_pct' => 0.0,
             'tolerancia' => self::toleranciaPct(),
+            'max_anticipos' => 1,
+            'permite_varias' => false,
+            'plan_cantidad' => 0,
             'otras_anticipadas' => [],
             'errores' => [],
             'avisos' => [],
@@ -297,8 +412,18 @@ final class ComprobanteProveedorAnticipoPctSupport
         $pct = self::pctAnticipoOc($ordencompra);
         $totalOc = self::totalOc($ordencompra);
         $esperado = self::importeEsperado($ordencompra);
-        $ingresado = round(abs($totalFactura), 2);
+        // Comparar en moneda OC: FC en $ vs esperado en USD no es desvío real.
+        $ingresado = self::importeEnMonedaOc(
+            $ordencompra,
+            $totalFactura,
+            $monedaFacturaId,
+            $cotizacionFactura,
+            $fechaFactura,
+        );
         $tol = self::toleranciaPct();
+        $plan = self::planComprobantesAVenir($ordencompra);
+        $maxAnticipos = self::maxFacturasAnticipo($ordencompra);
+        $permiteVarias = $plan['permite_varias'];
         $otras = self::otrasAnticipadasSinCom((int) $ordencompra->id, $excluirComprobanteId);
         $errores = [];
         $avisos = [];
@@ -307,27 +432,68 @@ final class ComprobanteProveedorAnticipoPctSupport
             $errores[] = 'La OC anticipada no tiene % de anticipo. Completelo en la orden de compra antes de cargar la factura.';
         }
 
-        $okUnicidad = $otras === [];
+        $okUnicidad = count($otras) < $maxAnticipos;
         if (! $okUnicidad) {
             $ids = implode(', ', array_map(static fn (array $f) => '#'.$f['id'], $otras));
-            $errores[] = 'Solo se admite una factura de anticipo por OC. Ya existe: '.$ids.'.';
+            if ($permiteVarias) {
+                $errores[] = sprintf(
+                    'El plan de comprobantes a venir admite hasta %d factura(s) de anticipo; ya hay %d: %s.',
+                    $maxAnticipos,
+                    count($otras),
+                    $ids
+                );
+            } else {
+                $errores[] = 'Solo se admite una factura de anticipo por OC. Ya existe: '.$ids.'.';
+            }
         }
 
-        $desvio = self::desvioPct($ingresado, $esperado);
-        $okPct = $pct > 0 && self::dentroDeTolerancia($ingresado, $esperado, $tol);
-        $requiereAprobacion = $pct > 0 && $okUnicidad && ! $okPct;
+        // Con plan multi-cuota el % se mira acumulado (cuotas parciales OK).
+        // Sin plan / una sola: la factura debe coincidir con el % contractual.
+        $yaAnticipo = abs((float) ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableAnticipadasSinCom(
+            (int) $ordencompra->id,
+            $excluirComprobanteId,
+            self::monedaReferenciaOc($ordencompra),
+            self::cotizacionReferenciaOc($ordencompra),
+            $fechaFactura,
+        )['importe']);
+        $acumulado = round($yaAnticipo + $ingresado, 2);
 
-        if ($requiereAprobacion) {
-            $avisos[] = sprintf(
-                'El anticipo cargado ($%s) difiere del esperado $%s (%s%% del total OC $%s) en %s%% (tolerancia %s%%). '
-                .'Queda en borrador hasta liberación en Mis aprobaciones.',
-                number_format($ingresado, 2, ',', '.'),
-                number_format($esperado, 2, ',', '.'),
-                number_format($pct, 2, ',', '.'),
-                number_format($totalOc, 2, ',', '.'),
-                number_format($desvio, 2, ',', '.'),
-                number_format($tol, 2, ',', '.')
-            );
+        if ($permiteVarias) {
+            $topeEsperado = round($esperado * (1 + $tol / 100.0), 2);
+            $okPct = $pct <= 0 || $acumulado <= $topeEsperado + 0.05;
+            $desvio = $esperado > 0.0001
+                ? round(max(0.0, $acumulado - $esperado) / $esperado * 100.0, 4)
+                : ($acumulado > 0.0001 ? 100.0 : 0.0);
+            // Parciales bajo el esperado no piden aprobación; solo el exceso acumulado.
+            $requiereAprobacion = $pct > 0 && $okUnicidad && ! $okPct;
+            if ($requiereAprobacion) {
+                $avisos[] = sprintf(
+                    'La suma de anticipos ($%s) supera el %s%% contractual ($%s del total OC $%s) en %s%% (tolerancia %s%%). '
+                    .'Queda en borrador hasta liberación en Mis aprobaciones.',
+                    number_format($acumulado, 2, ',', '.'),
+                    number_format($pct, 2, ',', '.'),
+                    number_format($esperado, 2, ',', '.'),
+                    number_format($totalOc, 2, ',', '.'),
+                    number_format($desvio, 2, ',', '.'),
+                    number_format($tol, 2, ',', '.')
+                );
+            }
+        } else {
+            $desvio = self::desvioPct($ingresado, $esperado);
+            $okPct = $pct > 0 && self::dentroDeTolerancia($ingresado, $esperado, $tol);
+            $requiereAprobacion = $pct > 0 && $okUnicidad && ! $okPct;
+            if ($requiereAprobacion) {
+                $avisos[] = sprintf(
+                    'El anticipo cargado ($%s) difiere del esperado $%s (%s%% del total OC $%s) en %s%% (tolerancia %s%%). '
+                    .'Queda en borrador hasta liberación en Mis aprobaciones.',
+                    number_format($ingresado, 2, ',', '.'),
+                    number_format($esperado, 2, ',', '.'),
+                    number_format($pct, 2, ',', '.'),
+                    number_format($totalOc, 2, ',', '.'),
+                    number_format($desvio, 2, ',', '.'),
+                    number_format($tol, 2, ',', '.')
+                );
+            }
         }
 
         return [
@@ -339,8 +505,12 @@ final class ComprobanteProveedorAnticipoPctSupport
             'total_oc' => $totalOc,
             'importe_esperado' => $esperado,
             'importe_ingresado' => $ingresado,
+            'importe_acumulado' => $acumulado,
             'desvio_pct' => $desvio,
             'tolerancia' => $tol,
+            'max_anticipos' => $maxAnticipos,
+            'permite_varias' => $permiteVarias,
+            'plan_cantidad' => $plan['cantidad'],
             'otras_anticipadas' => $otras,
             'errores' => $errores,
             'avisos' => $avisos,
@@ -349,6 +519,7 @@ final class ComprobanteProveedorAnticipoPctSupport
 
     /**
      * Tope: suma de facturas del legajo (incl. la actual) no puede superar total OC + tolerancia.
+     * Importes se normalizan a la moneda de la OC (FC en $ vs OC en USD).
      *
      * @return array{ok: bool, error: ?string, ya_facturado: float, proyectado: float, tope: float}
      */
@@ -356,14 +527,30 @@ final class ComprobanteProveedorAnticipoPctSupport
         Ordencompra $ordencompra,
         float $importeFacturaActual,
         ?int $excluirComprobanteId = null,
+        int $monedaFacturaId = 1,
+        mixed $cotizacionFactura = 1.0,
+        mixed $fechaFactura = null,
     ): array {
         $totalOc = self::totalOc($ordencompra);
         $tol = self::toleranciaPct();
+        $monedaOcId = self::monedaReferenciaOc($ordencompra);
+        $cotizacionOc = self::cotizacionReferenciaOc($ordencompra);
         $ya = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
             (int) $ordencompra->id,
             $excluirComprobanteId,
+            $monedaOcId,
+            $cotizacionOc,
+            $fechaFactura,
+            true,
         );
-        $proyectado = round((float) $ya['importe'] + abs($importeFacturaActual), 2);
+        $actualEnOc = self::importeEnMonedaOc(
+            $ordencompra,
+            $importeFacturaActual,
+            $monedaFacturaId,
+            $cotizacionFactura,
+            $fechaFactura,
+        );
+        $proyectado = round((float) $ya['importe'] + $actualEnOc, 2);
         $tope = round($totalOc * (1 + $tol / 100.0), 2);
         $ok = $totalOc <= 0.0001 || $proyectado <= $tope + 0.05;
 
@@ -382,7 +569,7 @@ final class ComprobanteProveedorAnticipoPctSupport
     }
 
     /**
-     * Residual esperado para factura final: total OC − anticipo ya aplicado.
+     * Residual esperado para factura final: total OC − anticipo ya aplicado (misma moneda OC).
      */
     public static function residualTrasAnticipo(Ordencompra $ordencompra, ?int $excluirComprobanteId = null): float
     {
@@ -390,6 +577,8 @@ final class ComprobanteProveedorAnticipoPctSupport
         $anticipo = (float) ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableAnticipadasSinCom(
             (int) $ordencompra->id,
             $excluirComprobanteId,
+            self::monedaReferenciaOc($ordencompra),
+            self::cotizacionReferenciaOc($ordencompra),
         )['importe'];
 
         return round(max(0.0, $totalOc - abs($anticipo)), 2);

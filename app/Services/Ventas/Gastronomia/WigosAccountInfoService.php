@@ -66,9 +66,20 @@ final class WigosAccountInfoService
                 throw new RuntimeException($this->mensajeErrorHttpWigos($response->status(), $response->json()));
             }
 
+            $raw = trim((string) $response->body());
+            // AccountInfoJSON a veces responde HTTP 200 con cuerpo "null" cuando no hay cuenta.
+            if ($raw === '' || strcasecmp($raw, 'null') === 0) {
+                throw new InvalidArgumentException(
+                    'Wigos no encontró datos para esa tarjeta. Pase de nuevo o verifique que esté activa en el sistema.'
+                );
+            }
+
             $json = $response->json();
             if (! is_array($json)) {
-                throw new RuntimeException('La respuesta de Wigos no es JSON válido.');
+                throw new RuntimeException(
+                    'La respuesta de Wigos no es JSON válido'
+                    .(strlen($raw) > 0 ? ' (recibió: '.mb_substr($raw, 0, 80).').' : '.')
+                );
             }
 
             return $this->parsearRespuesta($json);

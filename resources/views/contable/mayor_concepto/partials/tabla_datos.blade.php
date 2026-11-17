@@ -140,7 +140,31 @@
                     @endif
                 </td>
                 <td>{{ $fila['tipo_comp'] ?? '' }}</td>
-                <td>{{ $fila['comprobante'] ?? '' }}</td>
+                <td>
+                    @php
+                        $textoComprobanteMc = trim((string) ($fila['comprobante'] ?? ''));
+                        $recepcionIdMc = (int) ($fila['recepcionproveedor_id'] ?? 0);
+                        $puedeVerRecepcionMc = $puede_ver_recepcion_proveedor ?? false;
+                        $hrefComprobanteMc = null;
+                        if ($puedeVerRecepcionMc && $recepcionIdMc > 0
+                            && strtoupper(trim((string) ($fila['tipo_comp'] ?? ''))) === 'COM') {
+                            $hrefComprobanteMc = route('editar_recepcion_proveedor', [
+                                'id' => $recepcionIdMc,
+                                'origen' => 'modal_consulta',
+                                'vista' => 'consulta',
+                            ]);
+                        }
+                    @endphp
+                    @if ($textoComprobanteMc !== '')
+                        @if ($hrefComprobanteMc)
+                            <a href="{{ $hrefComprobanteMc }}" target="_blank" rel="noopener" class="text-primary" title="Consultar recepción COM">
+                                {{ $textoComprobanteMc }}
+                            </a>
+                        @else
+                            {{ $textoComprobanteMc }}
+                        @endif
+                    @endif
+                </td>
                 <td>{{ $fila['cheque'] ?? '' }}</td>
                 <td>
                     @if ((int) ($fila['nro_oc'] ?? 0) > 0)

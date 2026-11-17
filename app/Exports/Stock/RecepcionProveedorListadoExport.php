@@ -19,7 +19,7 @@ class RecepcionProveedorListadoExport implements FromView, WithColumnWidths, Wit
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'L';
 
     /** @var array<string, mixed> */
     private array $filtros = [];
@@ -59,7 +59,7 @@ class RecepcionProveedorListadoExport implements FromView, WithColumnWidths, Wit
     {
         return [
             'A' => 14, 'B' => 12, 'C' => 12, 'D' => 14, 'E' => 10, 'F' => 10,
-            'G' => 28, 'H' => 22, 'I' => 12, 'J' => 10, 'K' => 30,
+            'G' => 18, 'H' => 28, 'I' => 22, 'J' => 12, 'K' => 10, 'L' => 30,
         ];
     }
 

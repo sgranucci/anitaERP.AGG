@@ -1176,6 +1176,19 @@ Route::delete('configuracion/aviso-regla/{id}', 'Configuracion\AvisoReglaControl
 Route::put('configuracion/aviso-regla-motor', 'Configuracion\AvisoReglaController@actualizarMotor')->name('actualizar_aviso_regla_motor');
 Route::post('configuracion/aviso-regla/{id}/probar', 'Configuracion\AvisoReglaController@probar')->name('probar_aviso_regla');
 
+Route::get('configuracion/regla-negocio', 'Configuracion\ReglaNegocioController@index')->name('consultar_regla_negocio');
+Route::get('configuracion/regla-negocio/crear', 'Configuracion\ReglaNegocioController@crear')->name('crear_regla_negocio');
+Route::post('configuracion/regla-negocio', 'Configuracion\ReglaNegocioController@guardar')->name('guardar_regla_negocio');
+Route::get('configuracion/regla-negocio/{id}/editar', 'Configuracion\ReglaNegocioController@editar')->name('editar_regla_negocio');
+Route::put('configuracion/regla-negocio/{id}', 'Configuracion\ReglaNegocioController@actualizar')->name('actualizar_regla_negocio');
+Route::delete('configuracion/regla-negocio/{id}', 'Configuracion\ReglaNegocioController@eliminar')->name('eliminar_regla_negocio');
+Route::put('configuracion/regla-negocio-motor', 'Configuracion\ReglaNegocioController@actualizarMotor')->name('actualizar_regla_negocio_motor');
+Route::post('configuracion/regla-negocio/{id}/probar', 'Configuracion\ReglaNegocioController@probar')->name('probar_regla_negocio');
+Route::post('configuracion/regla-negocio/{id}/toggle-activo', 'Configuracion\ReglaNegocioController@togglearActivo')->name('toggle_regla_negocio_activo');
+Route::post('configuracion/regla-negocio/{id}/restaurar/{versionId}', 'Configuracion\ReglaNegocioController@restaurarVersion')->name('restaurar_regla_negocio_version');
+
+
+
 Route::get('configuracion/user-task-sla', 'Configuracion\UserTaskSlaController@editar')
     ->name('editar_user_task_sla');
 Route::put('configuracion/user-task-sla', 'Configuracion\UserTaskSlaController@actualizar')

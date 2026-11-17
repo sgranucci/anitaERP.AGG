@@ -179,6 +179,9 @@ class ComprobanteProveedorAnticipoDesvioAvisoService
             (string) ($comprobante->modo_carga ?? ''),
             (float) ($comprobante->total ?? 0),
             (int) $comprobante->id,
+            (int) ($comprobante->moneda_id ?? 1),
+            (float) ($comprobante->cotizacion ?? 1),
+            $comprobante->fechacomprobante?->format('Y-m-d'),
         );
     }
 
