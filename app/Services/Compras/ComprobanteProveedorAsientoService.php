@@ -449,7 +449,7 @@ class ComprobanteProveedorAsientoService
                 $tipoConcepto,
                 $codigoConcepto
             );
-            // E y descuentos 80/81 conservan signo; el resto del asiento opera en absoluto.
+            // Conceptos con permiteMontoNegativo conservan signo; el resto opera en absoluto.
             $monto = $permiteNegativo ? $montoRaw : round(abs($montoRaw), 2);
             if (abs($monto) < 0.0001) {
                 continue;
@@ -473,8 +473,10 @@ class ComprobanteProveedorAsientoService
                 continue;
             }
 
-            // Negativo permitido: se netea al neto (no se postea Debe/Haber aparte).
-            if ($monto < 0) {
+            // Negativo de neto/descuento/exento: se netea al Debe de gasto (no Haber aparte).
+            // Negativo de impuesto/percepción: sigue al Debe con signo y luego pasa a Haber.
+            if ($monto < 0
+                && ComprobanteProveedorConceptoIvaTipos::negativoAjustaNetoGasto($tipoConcepto, $codigoConcepto)) {
                 $ajusteDescuentoNeto = round($ajusteDescuentoNeto + $monto, 2);
 
                 continue;
@@ -942,6 +944,12 @@ class ComprobanteProveedorAsientoService
             );
             $lineasDebe = array_merge($lineasDebeGasto, $lineasDebe);
         }
+
+        // IVA/percepciones en negativo: Debe < 0 → Haber en la cuenta del concepto.
+        [$lineasDebe, $lineasHaberExtra] = ComprobanteProveedorAsientoCuadreSupport::moverImportesNegativosAHaber(
+            $lineasDebe,
+            $lineasHaberExtra
+        );
 
         if ($lineasDebe === []) {
             throw new RuntimeException('No hay conceptos con monto para contabilizar.');

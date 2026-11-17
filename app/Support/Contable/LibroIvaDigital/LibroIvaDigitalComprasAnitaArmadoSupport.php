@@ -273,12 +273,13 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             $alicuotas = [];
         }
 
+        // Misma regla que desglosarComprobante ERP: conservar signo por alícuota.
         $filas = [];
         foreach ($alicuotas as $row) {
-            $neto = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['neto'] ?? 0));
-            $iva = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['iva'] ?? 0));
+            $neto = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) ($row['neto'] ?? 0));
+            $iva = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) ($row['iva'] ?? 0));
             $tasa = (float) ($row['tasa'] ?? 0);
-            if ($neto <= 0 && $iva <= 0) {
+            if (abs($neto) < 0.0001 && abs($iva) < 0.0001) {
                 continue;
             }
             $filas[] = [
@@ -297,11 +298,11 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         return [
             'no_integra' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::importeNeteado($noIntegra),
             'exento' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::importeNeteado($exento),
-            'perc_iva' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIva),
-            'perc_nacional' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percNac),
-            'perc_iibb' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIibb),
-            'perc_municipal' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percMun),
-            'imp_interno' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($impInterno),
+            'perc_iva' => LibroIvaDigitalComprasImportesSupport::importeNeteado($percIva),
+            'perc_nacional' => LibroIvaDigitalComprasImportesSupport::importeNeteado($percNac),
+            'perc_iibb' => LibroIvaDigitalComprasImportesSupport::importeNeteado($percIibb),
+            'perc_municipal' => LibroIvaDigitalComprasImportesSupport::importeNeteado($percMun),
+            'imp_interno' => LibroIvaDigitalComprasImportesSupport::importeNeteado($impInterno),
             'otros' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::importeNeteado($otros),
             'cantidad_alicuotas' => $cantidad,
             'credito_computable' => $cantidad > 0 ? $credito : 0.0,

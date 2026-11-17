@@ -117,4 +117,46 @@ class IngresoEgresoSolicitudpagoAsientoCuadreTest extends TestCase
             IngresoEgresoSolicitudpagoSupport::reemplazarPiernaFinanciera($asientoSp, [])
         );
     }
+
+    public function test_opp_con_contrapartida_haber_conserva_diferencia_y_egresa_neto(): void
+    {
+        // SP 5.500.000 = banco 5.200.000 + Haber otra cuenta 300.000.
+        $asientoSp = [
+            [
+                'cuentacontable_id' => 100,
+                'codigo' => '521010001',
+                'debe' => 5500000.00,
+                'haber' => '',
+            ],
+            [
+                'cuentacontable_id' => 48,
+                'codigo' => '111050016',
+                'debe' => '',
+                'haber' => 5200000.00,
+            ],
+            [
+                'cuentacontable_id' => 200,
+                'codigo' => '213010023',
+                'debe' => '',
+                'haber' => 300000.00,
+            ],
+        ];
+        $caja = [[
+            'cuentacontable_id' => 41,
+            'codigo' => '111050009',
+            'debe' => '',
+            'haber' => 5200000.00,
+        ]];
+
+        $ajustado = IngresoEgresoSolicitudpagoSupport::reemplazarPiernaFinanciera($asientoSp, $caja);
+
+        $this->assertCount(3, $ajustado);
+        $this->assertSame(100, (int) $ajustado[0]['cuentacontable_id']);
+        $this->assertEqualsWithDelta(5500000.00, (float) $ajustado[0]['debe'], 0.001);
+        $this->assertSame(200, (int) $ajustado[1]['cuentacontable_id']);
+        $this->assertEqualsWithDelta(300000.00, (float) $ajustado[1]['haber'], 0.001);
+        $this->assertSame(41, (int) $ajustado[2]['cuentacontable_id']);
+        $this->assertEqualsWithDelta(5200000.00, (float) $ajustado[2]['haber'], 0.001);
+        $this->assertNotContains('111050016', array_column($ajustado, 'codigo'));
+    }
 }

@@ -68,8 +68,9 @@
                     </a>
                     @if (! empty($puedeImportarConfidencial))
                         <button type="button" class="btn btn-sm btn-outline-warning" id="btn-analizar-confidencial"
-                                data-url="{{ route('analizar_confidencial_liquidacion_sueldos', ['id' => $liq->id]) }}">
-                            <i class="fa fa-user-secret"></i> Importar n&oacute;mina confidencial
+                                data-url="{{ route('analizar_confidencial_liquidacion_sueldos', ['id' => $liq->id]) }}"
+                                title="Paridad / migraci&oacute;n desde Anita (auxconf). El armado operativo es Calcular.">
+                            <i class="fa fa-user-secret"></i> Paridad confidencial (Anita)
                         </button>
                     @endif
                 </div>

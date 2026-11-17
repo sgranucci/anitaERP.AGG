@@ -113,9 +113,8 @@ final class ComprobanteProveedorDebeGastoSupport
                 continue;
             }
             if ($monto < 0) {
-                // Descuentos E/80/81: restan del neto del reparto.
-                if (ComprobanteProveedorConceptoIvaTipos::esDescuento($codigo)
-                    || ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
+                // Gravado/exento/descuentos en negativo: restan del neto del reparto.
+                if (ComprobanteProveedorConceptoIvaTipos::negativoAjustaNetoGasto($tipo, $codigo)) {
                     $total = round($total + $monto, 2);
                 }
 

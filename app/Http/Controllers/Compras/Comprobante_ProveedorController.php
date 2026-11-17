@@ -73,6 +73,8 @@ use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\TipotransaccionCompraBienUsoSupport;
 use App\Services\Compras\ComprobanteProveedorBienUsoProvisorioService;
+use App\Services\Compras\ComprobanteProveedorReversoContableService;
+use App\Support\Compras\ComprobanteProveedorReversoContableSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
@@ -111,6 +113,7 @@ class Comprobante_ProveedorController extends Controller
         private TrackingPdfResolverService $trackingPdfResolver,
         private ComprobanteProveedorInternoPdfService $pdfInternoService,
         private ComprobanteProveedorBienUsoProvisorioService $bienUsoProvisorioService,
+        private ComprobanteProveedorReversoContableService $reversoContableService,
     ) {}
 
     public function index(Request $request)
@@ -1306,6 +1309,46 @@ class Comprobante_ProveedorController extends Controller
         );
     }
 
+    /**
+     * Preview JSON del reverso contable compensatorio (modal del index).
+     */
+    public function previsualizarReversoContable(int $id): JsonResponse
+    {
+        can(ComprobanteProveedorReversoContableSupport::SLUG_PERMISO);
+
+        try {
+            $preview = $this->reversoContableService->previsualizar($id);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['ok' => true] + $preview);
+    }
+
+    /**
+     * Crea NCJ (o NC con asiento) en mes abierto, clona conceptos, contabiliza y aplica CC.
+     */
+    public function revertirContable(Request $request, int $id)
+    {
+        can(ComprobanteProveedorReversoContableSupport::SLUG_PERMISO);
+
+        $fecha = $request->input('fecha_contable');
+        try {
+            $resultado = $this->reversoContableService->revertir(
+                $id,
+                is_string($fecha) ? $fecha : null
+            );
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('comprobante_proveedor', $this->queryRetornoListado($request))
+                ->with('errores', ['No se pudo revertir contablemente. Motivo: '.$e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('editar_comprobante_proveedor', ['id' => $resultado['nc_id']] + $this->queryRetornoListado($request))
+            ->with('mensaje', $resultado['mensaje']);
+    }
+
     public function verFacturaPdf(Request $request, int $id): Response
     {
         if (! can('editar-comprobante-proveedor', false)
@@ -2423,6 +2466,12 @@ class Comprobante_ProveedorController extends Controller
         $filtros['_columnas'] = $columnasVisibles;
 
         $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
+        $reversoYaMap = [];
+        if (can(ComprobanteProveedorReversoContableSupport::SLUG_PERMISO, false)) {
+            $reversoYaMap = ComprobanteProveedorReversoContableSupport::mapaYaReversados(
+                $datas->pluck('id')
+            );
+        }
         $cortes = ['activo' => false];
         if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], ComprobanteProveedorListadoFiltros::camposOrdenables()) !== []) {
             $cortes = $this->comprobanteRepository->cortesComprobanteProveedor($filtros);
@@ -2446,6 +2495,7 @@ class Comprobante_ProveedorController extends Controller
 
         return [
             'datas' => $datas,
+            'reversoYaMap' => $reversoYaMap,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => $camposFiltro,

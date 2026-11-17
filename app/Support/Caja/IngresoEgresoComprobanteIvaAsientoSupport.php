@@ -132,9 +132,6 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
             $cuentaId = self::cuentaDebe($concepto, $modelo, $empresaLinea);
 
             if (ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipo) && ! $esImpuestoInterno) {
-                if ($monto < 0) {
-                    continue;
-                }
                 if ($cuentaId <= 0) {
                     $avisos[] = self::avisoSinCuenta($conceptoId, (string) $modelo->nombre, true);
                     if ($exigirCuentas) {
@@ -144,6 +141,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                         );
                     }
                 }
+                // Monto negativo (ajuste Edesur / NC parcial): resta del Debe (signo en importe).
                 $impuestos[] = self::linea(
                     $cuentaId,
                     $monto,
@@ -171,6 +169,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
             }
 
             if ($monto < 0) {
+                // Gravado/exento/descuento negativo: resta del neto imputable.
                 $neto = round($neto + $monto, 2);
 
                 continue;

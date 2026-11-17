@@ -169,6 +169,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Sueldos — Guía rápida de liquidación',
+                'bajada' => 'Circuito corto del mes: legajo, novedades, carga masiva, calcular corrida, revisar recibos y cerrar (con bajadas de pantalla).',
+                'url' => route('guia_rapida_sueldos'),
+                'icono' => 'fa-bolt',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'UIF — Clientes, premios e informes',
                 'bajada' => 'Clientes y premios, informe mensual Excel/PDF/XML, congelados, conciliación Wigos y tablas maestras.',
                 'url' => route('manual_uif'),

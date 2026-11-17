@@ -46,11 +46,13 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             self::acumularConcepto($resultado, $concepto);
         }
 
+        // Conservar signo por alícuota (p. ej. Edesur +27 % / −21 %): abs() por bucket
+        // inflaba neto/IVA y rompía total vs suma. El TXT admite importe negativo.
         $filasAlicuota = [];
         foreach ($resultado['alicuotas'] as $tasaKey => $row) {
-            $neto = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['neto'] ?? 0));
-            $iva = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['iva'] ?? 0));
-            if ($neto <= 0 && $iva <= 0) {
+            $neto = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) ($row['neto'] ?? 0));
+            $iva = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) ($row['iva'] ?? 0));
+            if (abs($neto) < 0.0001 && abs($iva) < 0.0001) {
                 continue;
             }
             $filasAlicuota[] = [
@@ -63,13 +65,13 @@ final class LibroIvaDigitalConceptoIvacompraSupport
         }
         $resultado['exento'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['exento']);
         $resultado['no_integra'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['no_integra']);
-        $resultado['neto_gravado'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['neto_gravado']);
-        $resultado['iva'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['iva']);
-        $resultado['perc_iva'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_iva']);
-        $resultado['perc_iibb'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_iibb']);
-        $resultado['perc_municipal'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_municipal']);
-        $resultado['perc_nacional'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_nacional']);
-        $resultado['imp_interno'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['imp_interno']);
+        $resultado['neto_gravado'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['neto_gravado']);
+        $resultado['iva'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['iva']);
+        $resultado['perc_iva'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['perc_iva']);
+        $resultado['perc_iibb'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['perc_iibb']);
+        $resultado['perc_municipal'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['perc_municipal']);
+        $resultado['perc_nacional'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['perc_nacional']);
+        $resultado['imp_interno'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['imp_interno']);
         $resultado['otros'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) ($resultado['otros'] ?? 0));
 
         $esC = strtoupper($letra) === 'C';

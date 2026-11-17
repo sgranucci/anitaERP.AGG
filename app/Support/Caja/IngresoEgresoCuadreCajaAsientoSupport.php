@@ -83,7 +83,7 @@ final class IngresoEgresoCuadreCajaAsientoSupport
         }
 
         // La caja es el neto. El asiento puede ser mayor: retenciones de una OPA,
-        // o los gastos del DTC en una cobranza de tarjeta (el bruto acredita la tarjeta).
+        // gastos del DTC en cobranza de tarjeta, o contrapartida Haber no-banco de una SP/OPP.
         $asientoEsperado = round($totalOperacion + self::importeAsientoPorEncimaDeLaCaja($data), 2);
         if ($totalOperacion > self::TOLERANCIA
             && abs($asientoEsperado - $totalAsiento) > self::TOLERANCIA) {
@@ -263,13 +263,41 @@ final class IngresoEgresoCuadreCajaAsientoSupport
 
     /**
      * Importe que está en el asiento y no entra a la cuenta de caja:
-     * retenciones de una OPA, o gastos del DTC de una cobranza de tarjeta.
+     * retenciones de una OPA, gastos del DTC de una cobranza de tarjeta,
+     * o Haber no-banco del asiento de una SP (OPP) que se paga por un neto menor.
      *
      * @param  array<string, mixed>  $data
      */
     private static function importeAsientoPorEncimaDeLaCaja(array $data): float
     {
-        return round(self::retencionesPrecalculadas($data) + self::gastosLiquidacionTarjeta($data), 2);
+        return round(
+            self::retencionesPrecalculadas($data)
+            + self::gastosLiquidacionTarjeta($data)
+            + self::contrapartidaHaberNoBancoSp($data),
+            2
+        );
+    }
+
+    /**
+     * Haber no-caja/banco del asiento de la SP (OPP). La caja egresa el neto
+     * y el asiento queda por el bruto de la solicitud.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function contrapartidaHaberNoBancoSp(array $data): float
+    {
+        if (array_key_exists('contrapartida_haber_no_banco', $data)) {
+            return round(max(0, (float) $data['contrapartida_haber_no_banco']), 2);
+        }
+
+        $spId = (int) ($data['solicitudpago_id'] ?? 0);
+        if ($spId <= 0) {
+            return 0.0;
+        }
+
+        $sp = \App\Models\Solicitudpago\Solicitudpago::query()->find($spId);
+
+        return IngresoEgresoSolicitudpagoSupport::contrapartidaHaberNoBanco($sp);
     }
 
     /**

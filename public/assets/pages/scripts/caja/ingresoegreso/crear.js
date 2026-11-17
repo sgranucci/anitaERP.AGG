@@ -15,6 +15,7 @@ var ABREV_TRANSFERENCIA_IE = 'TRA';
 var ABREV_CANJE_CHEQUE_IE = 'CANJE';
 var montoPendienteSp = 0;
 var retencionesSpIe = 0;
+var contrapartidaSpIe = 0;
 var brutoSpIe = 0;
    
     $(function () {
@@ -36,6 +37,7 @@ var brutoSpIe = 0;
 		flModificaAsiento = false;
 		montoPendienteSp = parseFloat($('#solicitudpago_monto_pendiente').val() || '0') || 0;
 		retencionesSpIe = parseFloat($('#solicitudpago_monto_pendiente').attr('data-retenciones') || '0') || 0;
+		contrapartidaSpIe = parseFloat($('#solicitudpago_monto_pendiente').attr('data-contrapartida') || '0') || 0;
 		brutoSpIe = parseFloat($('#solicitudpago_monto_pendiente').attr('data-bruto') || '0') || 0;
 		if (parseInt($('#solicitudpago_id').val() || '0', 10) > 0) {
 			// Forzar regeneración del asiento desde cuentas de la SP
@@ -310,7 +312,7 @@ var brutoSpIe = 0;
 			var totalAsientoCmp = totalDebeAsiento >= totalHaberAsientoCmp ? totalDebeAsiento : totalHaberAsientoCmp;
 			var totalOperacionCmp = (totalDebe >= totalHaber) ? totalDebe : totalHaber;
 			var asientoEsperado = totalOperacionCmp;
-			var porEncimaDeLaCaja = retencionesSpIe + gastosLiquidacionTarjetaIe();
+			var porEncimaDeLaCaja = retencionesSpIe + contrapartidaSpIe + gastosLiquidacionTarjetaIe();
 			if (porEncimaDeLaCaja > 0.009) {
 				asientoEsperado = Math.round((totalOperacionCmp + porEncimaDeLaCaja) * 100) / 100;
 			}
@@ -1146,7 +1148,7 @@ var brutoSpIe = 0;
 		var debe = parseTotalAsientoCampo($("#totaldebeasiento").val());
 		var haber = parseTotalAsientoCampo($("#totalhaberasiento").val());
 		var totalAsiento = debe >= haber ? debe : haber;
-		var porEncimaDeLaCaja = retencionesSpIe + gastosLiquidacionTarjetaIe();
+		var porEncimaDeLaCaja = retencionesSpIe + contrapartidaSpIe + gastosLiquidacionTarjetaIe();
 		if (porEncimaDeLaCaja > 0.009) {
 			totalAsiento = Math.round((totalAsiento - porEncimaDeLaCaja) * 100) / 100;
 		}
@@ -1842,6 +1844,9 @@ var brutoSpIe = 0;
 			if (retencionesSpIe > 0.009) {
 				detalle = 'el importe a transferir (' + montoPendienteSp.toFixed(2)
 					+ ', monto ' + brutoSpIe.toFixed(2) + ' menos retenciones ' + retencionesSpIe.toFixed(2) + ')';
+			} else if (contrapartidaSpIe > 0.009) {
+				detalle = 'el importe a egresar (' + montoPendienteSp.toFixed(2)
+					+ ', monto ' + brutoSpIe.toFixed(2) + ' menos contrapartida ' + contrapartidaSpIe.toFixed(2) + ')';
 			}
 			alert(
 				'El total del pago (' + actual.toFixed(2) + ') debe ser exactamente ' + detalle
@@ -1869,7 +1874,9 @@ var brutoSpIe = 0;
 		var diff = Math.round((actual - montoPendienteSp) * 100) / 100;
 		var etiqueta = retencionesSpIe > 0.009
 			? ('A transferir: ' + montoPendienteSp.toFixed(2) + ' (monto ' + brutoSpIe.toFixed(2) + ' − retenciones ' + retencionesSpIe.toFixed(2) + ')')
-			: ('Monto fijo SP: ' + montoPendienteSp.toFixed(2));
+			: (contrapartidaSpIe > 0.009
+				? ('A egresar: ' + montoPendienteSp.toFixed(2) + ' (SP ' + brutoSpIe.toFixed(2) + ' − contrapartida ' + contrapartidaSpIe.toFixed(2) + ')')
+				: ('Monto fijo SP: ' + montoPendienteSp.toFixed(2)));
 		var txt = etiqueta + ' — cargado: ' + actual.toFixed(2);
 		if (Math.abs(diff) <= 0.02) {
 			$aviso.removeClass('d-none alert-warning alert-danger').addClass('alert-success')

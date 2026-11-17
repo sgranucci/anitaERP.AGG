@@ -426,3 +426,40 @@
         </div>
     </div>
 </div>
+
+{{-- Reverso contable compensatorio (NC en mes abierto) --}}
+<div class="modal fade" id="modal-reverso-contable-cp" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="form-reverso-contable-cp">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-undo"></i> Reverso contable</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        Se crea una <strong>NC con asiento</strong> en el mes abierto, con los mismos conceptos e importes,
+                        y se aplica en cuenta corriente a esta factura. La factura original no se borra ni se edita.
+                    </p>
+                    <div class="alert alert-light border small mb-3" id="reverso-contable-cp-resumen">
+                        Cargando…
+                    </div>
+                    <div class="form-group mb-0">
+                        <label for="reverso-contable-cp-fecha">Fecha contable de la NC</label>
+                        <input type="date" class="form-control" name="fecha_contable" id="reverso-contable-cp-fecha"
+                               value="{{ date('Y-m-d') }}" required>
+                        <small class="form-text text-muted">Debe caer en un período abierto de cuentas a pagar.</small>
+                    </div>
+                    <p class="text-danger small mt-2 mb-0 d-none" id="reverso-contable-cp-error"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning" id="reverso-contable-cp-confirmar" disabled>
+                        Crear NC y aplicar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -34,6 +34,33 @@ class LibroIvaDigitalConceptoIvacompraExentoNegativoTest extends TestCase
         $this->assertEqualsWithDelta(920.0, $totales['alicuotas'][0]['neto'], 0.001);
     }
 
+    public function test_edesur_conserva_alicuota_21_negativa_junto_a_27(): void
+    {
+        $totales = LibroIvaDigitalConceptoIvacompraSupport::desglosarComprobante([
+            $this->concepto('G', 1000000.0, '74', 27.0),
+            $this->concepto('I', 270000.0, '327', 27.0),
+            $this->concepto('G', -3909003.0, '51', 21.0),
+            $this->concepto('I', -820890.63, '321', 21.0),
+            $this->concepto('P', 1014987.01, '103'),
+        ], 'A');
+
+        $porTasa = [];
+        foreach ($totales['alicuotas'] as $fila) {
+            $porTasa[(string) round((float) $fila['tasa'], 1)] = $fila;
+        }
+
+        $this->assertArrayHasKey('27', $porTasa);
+        $this->assertArrayHasKey('21', $porTasa);
+        $this->assertEqualsWithDelta(1000000.0, $porTasa['27']['neto'], 0.001);
+        $this->assertEqualsWithDelta(270000.0, $porTasa['27']['iva'], 0.001);
+        $this->assertEqualsWithDelta(-3909003.0, $porTasa['21']['neto'], 0.001);
+        $this->assertEqualsWithDelta(-820890.63, $porTasa['21']['iva'], 0.001);
+        $this->assertEqualsWithDelta(-2909003.0, $totales['neto_gravado'], 0.001);
+        $this->assertEqualsWithDelta(-550890.63, $totales['iva'], 0.001);
+        $this->assertEqualsWithDelta(-550890.63, $totales['credito_computable'], 0.001);
+        $this->assertEqualsWithDelta(1014987.01, $totales['perc_iva'], 0.001);
+    }
+
     private function concepto(string $tipo, float $monto, string $codigo, float $tasa = 0.0): Comprobante_Proveedor_Concepto
     {
         $ci = new Concepto_Ivacompra([

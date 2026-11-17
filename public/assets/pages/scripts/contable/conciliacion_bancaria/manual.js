@@ -263,37 +263,17 @@
             otra = estado.contables;
             usados = mapHashesC;
             ladoOtra = 'c';
-        } else if (basesC.length === 1 && basesB.length === 1) {
-            return false;
         } else {
-            return false;
+            return;
         }
         var refBase = refCheque(base, ladoOtra === 'b' ? 'c' : 'b');
-        var porRef = [];
-        var porImp = [];
         otra.forEach(function (m) {
             if (usados[m.hash]) return;
             var mismoImp = Math.abs(Math.abs(m.importe) - Math.abs(base.importe)) <= tolerancia;
             var mismaRef = refBase && refCheque(m, ladoOtra) === refBase;
+            // Solo marca visualmente; el tilde lo pone el usuario o "Sugerir par".
             if (mismoImp || mismaRef) m._sugerido = true;
-            if (mismaRef) porRef.push(m);
-            if (mismoImp) porImp.push(m);
         });
-        // Match único → tildar el otro lado (mismo Ch: o un solo importe).
-        var elegidos = porRef.length === 1 ? porRef : (porImp.length === 1 ? porImp : []);
-        if (elegidos.length !== 1) return false;
-        var m = elegidos[0];
-        m._sugerido = true;
-        if (ladoOtra === 'c') {
-            selC = {};
-            selC[m.hash] = true;
-        } else {
-            selB = {};
-            selB[m.hash] = true;
-        }
-        focoLado = ladoOtra;
-        focoHash = m.hash;
-        return true;
     }
 
     function filaHtml(mov, lado, imp) {
@@ -678,24 +658,20 @@
     function seleccionar(lado, hash, multi) {
         var mapa = lado === 'c' ? selC : selB;
         if (!multi) {
+            var yaActivo = !!mapa[hash];
             if (lado === 'c') selC = {};
             else selB = {};
             mapa = lado === 'c' ? selC : selB;
-            mapa[hash] = true;
+            // Clic en el único tildado → destilda; clic en otro → deja solo ese.
+            if (!yaActivo) mapa[hash] = true;
         } else {
             mapa[hash] = !mapa[hash];
             if (!mapa[hash]) delete mapa[hash];
         }
         focoLado = lado;
         focoHash = hash;
-        // Match único (mismo Ch: o un solo importe) → tilda el otro lado.
-        var autoPar = !multi && marcarSugeridosDesdeBase();
+        marcarSugeridosDesdeBase();
         pintar();
-        if (autoPar) {
-            resaltarParEnListas();
-            document.getElementById('estado-cruce').textContent =
-                'Par sugerido y tildado. Enter o Conciliar · Esc limpia.';
-        }
     }
 
     function limpiarSeleccion() {

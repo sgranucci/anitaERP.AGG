@@ -10,6 +10,7 @@ use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sueldos\Novedad_SueldosRepositoryInterface;
 use App\Support\Archivo\TextoUtf8Support;
+use App\Support\Contable\AsientoImportColumnasSupport;
 use App\Support\Stock\PrecioImportColumnasSupport;
 use App\Support\Sueldos\NovedadSueldosCatalogo;
 use App\Support\Sueldos\NovedadSueldosImportColumnasSupport;
@@ -38,10 +39,19 @@ class NovedadSueldosImportService
         array $mappingOverride,
         ?int $empresaIdForm,
         ?int $hoja1Based = null,
-        ?int $filaEncabezadoManual = null
+        ?int $filaEncabezadoManual = null,
+        ?string $modoColumnas = null,
+        ?string $csvSeparador = null
     ): array {
         $archivo = TextoUtf8Support::asegurarCsvUtf8($archivo);
-        $leido = $this->leerHoja($archivo, $hoja1Based, $filaEncabezadoManual, $mappingOverride);
+        $leido = $this->leerHoja(
+            $archivo,
+            $hoja1Based,
+            $filaEncabezadoManual,
+            $mappingOverride,
+            $modoColumnas,
+            $csvSeparador
+        );
         if (isset($leido['error'])) {
             return $leido['error'];
         }
@@ -83,10 +93,24 @@ class NovedadSueldosImportService
         $requeridosOk = ($leido['mapa']['legajo'] ?? null) !== null
             && ($leido['mapa']['concepto_codigo'] ?? null) !== null;
 
+        $advertencias = $leido['advertencias'] ?? [];
+        if (! $requeridosOk) {
+            $advertencias[] = NovedadSueldosImportColumnasSupport::esModoNumero($leido['modo_columnas'] ?? null)
+                ? 'Asigná en el mapeo Legajo y Código concepto a las columnas del archivo (Columna 1, 2…).'
+                : 'Faltan columnas obligatorias: legajo y código de concepto.';
+        }
+
+        $porNumero = NovedadSueldosImportColumnasSupport::esModoNumero($leido['modo_columnas'] ?? null);
+
         return [
             'ok' => $requeridosOk && $ok > 0,
             'headers' => $leido['headers'],
             'mapping' => $leido['mapa'],
+            'mapping_ui' => NovedadSueldosImportColumnasSupport::mappingParaUi(
+                $leido['mapa'],
+                $leido['headers'],
+                $porNumero
+            ),
             'campos' => NovedadSueldosImportColumnasSupport::metaCampos(),
             'filas_preview' => $filasPreview,
             'totales' => [
@@ -98,12 +122,24 @@ class NovedadSueldosImportService
             ],
             'errores' => $erroresSample,
             'fila_encabezado' => $leido['fila_encabezado'],
-            'fila_encabezado_automatica' => $filaEncabezadoManual === null,
+            'fila_encabezado_automatica' => (bool) ($leido['fila_encabezado_automatica'] ?? ($filaEncabezadoManual === null)),
+            'sin_encabezado' => (bool) ($leido['sin_encabezado'] ?? false),
+            'modo_columnas' => $leido['modo_columnas'] ?? NovedadSueldosImportColumnasSupport::MODO_COLUMNAS_TITULO,
             'hojas' => $leido['hojas'],
             'hoja_seleccionada' => $leido['hoja_seleccionada'],
             'hoja_nombre' => $leido['hoja_nombre'],
             'hay_mas_filas' => $totalDatos > self::MAX_PREVIEW,
-            'advertencias' => $requeridosOk ? [] : ['Faltan columnas obligatorias: legajo y código de concepto.'],
+            'advertencias' => $advertencias,
+            'csv_separador' => AsientoImportColumnasSupport::valorFormularioSeparadorCsv(
+                (string) ($leido['csv_separador_form'] ?? 'auto')
+            ),
+            'csv_separador_detectado' => AsientoImportColumnasSupport::valorFormularioSeparadorCsv(
+                (string) ($leido['csv_delimiter'] ?? ';')
+            ),
+            'csv_separador_automatico' => (bool) ($leido['csv_separador_automatico'] ?? false),
+            'csv_separador_etiqueta' => AsientoImportColumnasSupport::etiquetaSeparadorCsv(
+                (string) ($leido['csv_delimiter'] ?? ';')
+            ),
         ];
     }
 
@@ -116,10 +152,19 @@ class NovedadSueldosImportService
         array $mappingOverride,
         ?int $empresaIdForm,
         ?int $hoja1Based = null,
-        ?int $filaEncabezadoManual = null
+        ?int $filaEncabezadoManual = null,
+        ?string $modoColumnas = null,
+        ?string $csvSeparador = null
     ): array {
         $archivo = TextoUtf8Support::asegurarCsvUtf8($archivo);
-        $leido = $this->leerHoja($archivo, $hoja1Based, $filaEncabezadoManual, $mappingOverride);
+        $leido = $this->leerHoja(
+            $archivo,
+            $hoja1Based,
+            $filaEncabezadoManual,
+            $mappingOverride,
+            $modoColumnas,
+            $csvSeparador
+        );
         if (isset($leido['error'])) {
             return [
                 'importados' => 0,
@@ -192,57 +237,124 @@ class NovedadSueldosImportService
         UploadedFile $archivo,
         ?int $hoja1Based,
         ?int $filaEncabezadoManual,
-        array $mappingOverride
+        array $mappingOverride,
+        ?string $modoColumnas = null,
+        ?string $csvSeparador = null
     ): array {
+        $modo = NovedadSueldosImportColumnasSupport::normalizarModoColumnas($modoColumnas);
+        $porNumero = NovedadSueldosImportColumnasSupport::esModoNumero($modo);
+
+        $separadorResuelto = AsientoImportColumnasSupport::resolverSeparadorCsv($archivo, $csvSeparador);
+        $delimiter = $separadorResuelto['delimiter'];
+        $separadorAutomatico = (bool) $separadorResuelto['automatico'];
+
         $hojas = PrecioImportColumnasSupport::hojasParaSelector($archivo);
         $hojaIndice0 = PrecioImportColumnasSupport::indiceHojaDesdeRequest($hoja1Based, count($hojas));
         $hojaSeleccionada = $hojas[$hojaIndice0] ?? $hojas[0] ?? ['indice' => 1, 'nombre' => 'Hoja1'];
 
-        $hoja = Excel::toArray(new NovedadSueldosImportLecturaCruda(), $archivo)[$hojaIndice0] ?? [];
+        $hoja = Excel::toArray(new NovedadSueldosImportLecturaCruda($delimiter), $archivo)[$hojaIndice0] ?? [];
         if ($hoja === []) {
             return [
                 'error' => [
                     'ok' => false,
-                    'mensaje' => 'La hoja seleccionada no tiene filas legibles.',
+                    'mensaje' => 'La hoja seleccionada no tiene filas legibles. Si es CSV, probá otro separador.',
                     'hojas' => $hojas,
                     'hoja_seleccionada' => (int) ($hojaSeleccionada['indice'] ?? 1),
                     'hoja_nombre' => (string) ($hojaSeleccionada['nombre'] ?? ''),
+                    'modo_columnas' => $modo,
+                    'csv_delimiter' => $delimiter,
+                    'csv_separador_form' => AsientoImportColumnasSupport::valorFormularioSeparadorCsv(
+                        $separadorAutomatico ? 'auto' : $delimiter
+                    ),
+                    'csv_separador_automatico' => $separadorAutomatico,
+                    'csv_separador_etiqueta' => AsientoImportColumnasSupport::etiquetaSeparadorCsv($delimiter),
                 ],
             ];
         }
 
-        $filaEncabezado = NovedadSueldosImportColumnasSupport::detectarFilaEncabezado(
-            $archivo,
-            $filaEncabezadoManual,
-            $hojaIndice0
-        );
-        $indiceEncabezado = $filaEncabezado - 1;
-        $headersRaw = $hoja[$indiceEncabezado] ?? [];
-        if (! is_array($headersRaw)) {
-            $headersRaw = [];
-        }
+        $advertencias = [];
+        $sinEncabezado = false;
+        $filaEncabezadoAutomatica = false;
 
-        $headers = [];
-        foreach ($headersRaw as $i => $celda) {
-            $titulo = trim((string) $celda);
-            $headers[] = [
-                'indice' => (int) $i,
-                'titulo' => $titulo !== '' ? $titulo : ('Columna '.((int) $i + 1)),
-            ];
-        }
+        if ($porNumero) {
+            $filaInicioDatos = ($filaEncabezadoManual !== null && $filaEncabezadoManual >= 1)
+                ? $filaEncabezadoManual
+                : 1;
+            $indiceInicioDatos = $filaInicioDatos - 1;
+            $filaEncabezado = 0;
+            $sinEncabezado = true;
+            $advertencias[] = 'Modo sin título: datos desde la fila '.$filaInicioDatos.'. En el mapeo tipá el número de columna (1 = primera) o letra Excel (A, B…).';
 
-        $mapa = NovedadSueldosImportColumnasSupport::fusionarMapa(
-            NovedadSueldosImportColumnasSupport::resolverMapaDesdeEncabezados($headersRaw),
-            $mappingOverride
-        );
-
-        $filas = [];
-        for ($i = $indiceEncabezado + 1; $i < count($hoja); $i++) {
-            $fila = $hoja[$i] ?? null;
-            if (! is_array($fila) || $this->filaVacia($fila)) {
-                continue;
+            $filas = [];
+            for ($i = $indiceInicioDatos; $i < count($hoja); $i++) {
+                $fila = $hoja[$i] ?? null;
+                if (! is_array($fila) || $this->filaVacia($fila)) {
+                    continue;
+                }
+                $filas[$i + 1] = $fila;
             }
-            $filas[$i + 1] = $fila;
+            $headers = NovedadSueldosImportColumnasSupport::headersSinteticosDesdeFilas(array_values($filas));
+            $mapaAuto = array_fill_keys(NovedadSueldosImportColumnasSupport::campos(), null);
+            $mapa = NovedadSueldosImportColumnasSupport::fusionarMapa($mapaAuto, $mappingOverride, true, []);
+        } else {
+            $filaEncabezado = NovedadSueldosImportColumnasSupport::detectarFilaEncabezado(
+                $archivo,
+                $filaEncabezadoManual,
+                $hojaIndice0,
+                $delimiter
+            );
+            $filaEncabezadoAutomatica = $filaEncabezadoManual === null || $filaEncabezadoManual < 1;
+            $indiceEncabezado = $filaEncabezado - 1;
+            $headersRaw = $hoja[$indiceEncabezado] ?? [];
+            if (! is_array($headersRaw)) {
+                $headersRaw = [];
+            }
+
+            if (! NovedadSueldosImportColumnasSupport::pareceFilaEncabezado($headersRaw)) {
+                return [
+                    'error' => [
+                        'ok' => false,
+                        'mensaje' => 'No se detectó fila de títulos en la fila '.$filaEncabezado
+                            .' de «'.($hojaSeleccionada['nombre'] ?? '').'». Indicá la fila, usá «Por número de columna (sin título)», o cambiá el separador CSV.',
+                        'fila_encabezado' => $filaEncabezado,
+                        'modo_columnas' => $modo,
+                        'hojas' => $hojas,
+                        'hoja_seleccionada' => (int) ($hojaSeleccionada['indice'] ?? 1),
+                        'hoja_nombre' => (string) ($hojaSeleccionada['nombre'] ?? ''),
+                        'csv_delimiter' => $delimiter,
+                        'csv_separador_form' => AsientoImportColumnasSupport::valorFormularioSeparadorCsv(
+                            $separadorAutomatico ? 'auto' : $delimiter
+                        ),
+                        'csv_separador_automatico' => $separadorAutomatico,
+                        'csv_separador_etiqueta' => AsientoImportColumnasSupport::etiquetaSeparadorCsv($delimiter),
+                    ],
+                ];
+            }
+
+            $headers = [];
+            foreach ($headersRaw as $i => $celda) {
+                $titulo = trim((string) $celda);
+                $headers[] = [
+                    'indice' => (int) $i,
+                    'titulo' => $titulo !== '' ? $titulo : ('Columna '.((int) $i + 1)),
+                ];
+            }
+
+            $mapa = NovedadSueldosImportColumnasSupport::fusionarMapa(
+                NovedadSueldosImportColumnasSupport::resolverMapaDesdeEncabezados($headersRaw),
+                $mappingOverride,
+                false,
+                $headersRaw
+            );
+
+            $filas = [];
+            for ($i = $indiceEncabezado + 1; $i < count($hoja); $i++) {
+                $fila = $hoja[$i] ?? null;
+                if (! is_array($fila) || $this->filaVacia($fila)) {
+                    continue;
+                }
+                $filas[$i + 1] = $fila;
+            }
         }
 
         return [
@@ -250,9 +362,18 @@ class NovedadSueldosImportService
             'hoja_seleccionada' => (int) ($hojaSeleccionada['indice'] ?? 1),
             'hoja_nombre' => (string) ($hojaSeleccionada['nombre'] ?? ''),
             'fila_encabezado' => $filaEncabezado,
+            'fila_encabezado_automatica' => $filaEncabezadoAutomatica,
+            'sin_encabezado' => $sinEncabezado,
+            'modo_columnas' => $modo,
             'headers' => $headers,
             'mapa' => $mapa,
             'filas' => $filas,
+            'advertencias' => $advertencias,
+            'csv_delimiter' => $delimiter,
+            'csv_separador_form' => AsientoImportColumnasSupport::valorFormularioSeparadorCsv(
+                $separadorAutomatico ? 'auto' : $delimiter
+            ),
+            'csv_separador_automatico' => $separadorAutomatico,
         ];
     }
 

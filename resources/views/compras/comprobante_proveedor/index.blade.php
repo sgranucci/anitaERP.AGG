@@ -48,6 +48,7 @@
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $workbenchJs = public_path('assets/pages/scripts/compras/comprobante_proveedor/workbench.js');
+    $reversoContableJs = public_path('assets/pages/scripts/compras/comprobante_proveedor/reverso_contable.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -55,6 +56,7 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/workbench.js') }}?v={{ file_exists($workbenchJs) ? filemtime($workbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/reverso_contable.js') }}?v={{ file_exists($reversoContableJs) ? filemtime($reversoContableJs) : time() }}"></script>
 @include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
@@ -292,6 +294,22 @@
                                         <i class="fa fa-check"></i>
                                     </button>
                                 </form>
+                                @endif
+                                @php
+                                    $puedeReversoContable = ! $facturaDeIngresoEgreso
+                                        && can(\App\Support\Compras\ComprobanteProveedorReversoContableSupport::SLUG_PERMISO, false)
+                                        && \App\Support\Compras\ComprobanteProveedorReversoContableSupport::puedeMostrarBoton($data)
+                                        && empty(($reversoYaMap ?? [])[(int) $data->id]);
+                                @endphp
+                                @if ($puedeReversoContable)
+                                <button type="button"
+                                        class="btn-accion-tabla tooltipsC text-warning js-reverso-contable-cp"
+                                        title="Revertir contable (NC compensatoria en mes abierto)"
+                                        data-id="{{ (int) $data->id }}"
+                                        data-preview-url="{{ route('preview_reverso_contable_comprobante_proveedor', $data->id) }}"
+                                        data-action-url="{{ route('revertir_contable_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}">
+                                    <i class="fa fa-undo"></i>
+                                </button>
                                 @endif
                                 @if (! $facturaDeIngresoEgreso && can('borrar-comprobante-proveedor', false))
                                 <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline form-eliminar">

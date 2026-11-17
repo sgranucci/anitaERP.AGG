@@ -75,6 +75,23 @@ class ComprobanteProveedorAsientoCuadreSupportTest extends TestCase
         $this->assertEqualsWithDelta(1110.0, array_sum(array_column($ajustadas, 'importe')), 0.001);
     }
 
+    public function test_mueve_iva_negativo_del_debe_al_haber(): void
+    {
+        $debe = [
+            ['cuentacontable_id' => 1, 'importe' => 5000.00, 'origen' => 'neto_manual'],
+            ['cuentacontable_id' => 2, 'importe' => 1200.00, 'origen' => 'impuesto'],
+            ['cuentacontable_id' => 3, 'importe' => -820.89, 'origen' => 'impuesto'],
+        ];
+
+        [$debeOut, $haberExtra] = ComprobanteProveedorAsientoCuadreSupport::moverImportesNegativosAHaber($debe);
+
+        $this->assertCount(2, $debeOut);
+        $this->assertCount(1, $haberExtra);
+        $this->assertEqualsWithDelta(820.89, $haberExtra[0]['importe'], 0.001);
+        $this->assertSame(3, $haberExtra[0]['cuentacontable_id']);
+        $this->assertEqualsWithDelta(6200.0, array_sum(array_column($debeOut, 'importe')), 0.001);
+    }
+
     public function test_descuento_neto_no_toca_impuestos_si_hay_neto(): void
     {
         $lineas = [

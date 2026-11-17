@@ -46,7 +46,35 @@ final class ComprobanteProveedorAsientoCuadreSupport
     }
 
     /**
-     * Netea descuentos negativos (exento E / códigos 80-81) contra líneas DEBE de neto.
+     * Impuestos/percepciones en negativo llegan como Debe < 0; pasan al Haber (abs)
+     * para no dejar importes negativos en el asiento y restar crédito fiscal / percepción.
+     *
+     * @param  list<array<string, mixed>>  $lineasDebe
+     * @param  list<array<string, mixed>>  $lineasHaberExtra
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    public static function moverImportesNegativosAHaber(array $lineasDebe, array $lineasHaberExtra = []): array
+    {
+        $debe = [];
+        foreach ($lineasDebe as $linea) {
+            $importe = round((float) ($linea['importe'] ?? 0), 2);
+            if ($importe < -0.0001) {
+                $linea['importe'] = round(abs($importe), 2);
+                $lineasHaberExtra[] = $linea;
+
+                continue;
+            }
+            if (abs($importe) < 0.0001) {
+                continue;
+            }
+            $debe[] = $linea;
+        }
+
+        return [$debe, $lineasHaberExtra];
+    }
+
+    /**
+     * Netea descuentos negativos (exento E / códigos 80-81 / gravado) contra líneas DEBE de neto.
      * No crea Haber ni importes negativos: el descuento reduce el Debe de mercadería.
      *
      * @param  list<array<string, mixed>>  $lineasDebe

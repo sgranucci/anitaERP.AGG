@@ -594,9 +594,11 @@
         </div>
 		@include('stock.movimientostock.template')
             </div>{{-- /ms-surmar-col-items --}}
+            @if (! empty($modo_surmar))
             <div class="col-12 col-lg-5 ms-surmar-col-etiq mt-3 mt-lg-0" id="ms-surmar-col-etiq" style="display:none;">
                 @include('stock.movimientostock.partials.panel_etiquetas_surmar')
             </div>
+            @endif
         </div>{{-- /ms-surmar-workbench --}}
 
         <div class="row mt-2">

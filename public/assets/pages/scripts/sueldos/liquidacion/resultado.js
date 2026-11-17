@@ -147,7 +147,7 @@
         var btn = document.getElementById('btn-analizar-confidencial');
         if (!btn) return;
         var url = btn.getAttribute('data-url');
-        mostrarOverlay('Analizando nómina confidencial…', 'Consulta Anita auxconf/auxconfh sin modificar datos.');
+        mostrarOverlay('Analizando paridad confidencial…', 'Consulta Anita auxconf/auxconfh (paridad/migración) sin modificar datos.');
         fetch(url, {
             method: 'POST',
             credentials: 'same-origin',
@@ -175,10 +175,10 @@
     function ejecutarConfidencial() {
         var btn = document.getElementById('btn-ejecutar-confidencial');
         if (!btn || btn.disabled || !planActual) return;
-        if (!window.confirm('¿Confirmar importación de nómina confidencial a esta corrida?')) return;
+        if (!window.confirm('¿Confirmar importación de paridad confidencial (Anita) a esta corrida? El armado operativo es Calcular.')) return;
         var url = (document.getElementById('btn-analizar-confidencial').getAttribute('data-url') || '')
             .replace('/analizar', '/ejecutar');
-        mostrarOverlay('Importando nómina confidencial…', 'Persistiendo recibos. No cierre la página.');
+        mostrarOverlay('Importando paridad confidencial…', 'Persistiendo recibos desde Anita. No cierre la página.');
         fetch(url, {
             method: 'POST',
             credentials: 'same-origin',

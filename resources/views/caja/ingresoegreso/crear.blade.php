@@ -44,6 +44,8 @@
         @if (! empty($solicitudpagoOrigen))
             @php
                 $montoSpUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoADesembolsar($solicitudpagoOrigen);
+                $brutoUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
+                $contrapartidaUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::contrapartidaHaberNoBanco($solicitudpagoOrigen);
             @endphp
             <div class="alert alert-info">
                 <strong>Pago desde solicitud de pago #{{ $solicitudpagoOrigen->codigo }}</strong>
@@ -63,7 +65,6 @@
                     y el asiento imputa anticipos a proveedores.
                     @php
                         $retUi = \App\Support\Solicitudpago\SolicitudpagoRetencionCalculoSupport::totalImportes($solicitudpagoOrigen);
-                        $brutoUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
                     @endphp
                     @if ($retUi >= 0.01)
                         <br>
@@ -82,6 +83,15 @@
                 @else
                     Tipo de transacción: {{ \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($solicitudpagoOrigen) }}.
                     El asiento contable se arma con las cuentas de la solicitud.
+                    @if ($contrapartidaUi >= 0.01)
+                        <br>
+                        Contrapartida contable (Haber no bancario en la SP):
+                        <strong>{{ number_format($contrapartidaUi, 2, ',', '.') }}</strong>.
+                        Se egresa
+                        <strong>{{ number_format($montoSpUi, 2, ',', '.') }}</strong>
+                        (monto SP {{ number_format($brutoUi, 2, ',', '.') }} menos la contrapartida).
+                        El asiento queda por el bruto de la solicitud.
+                    @endif
                 @endif
                 Al guardar, la solicitud AUTORIZADA pasa a PAGADA, se emite el PDF de la orden de pago y se vuelve al listado de solicitudes.
                 <a href="{{ route('editar_solicitudpago', $solicitudpagoOrigen->id) }}" target="_blank" rel="noopener">

@@ -349,9 +349,13 @@ final class LibroIvaDigitalIvaSimpleSupport
             }
 
             foreach ($registro['alicuotas'] ?? [] as $alicuota) {
-                $neto = abs((float) ($alicuota['neto_gravado'] ?? $alicuota['neto'] ?? 0));
-                $iva = abs((float) ($alicuota['impuesto_liquidado'] ?? $alicuota['iva'] ?? 0));
-                if ($neto <= 0.0001 && $iva <= 0.0001) {
+                // NC: abs + bucket restitución. Factura con alícuota negativa (Edesur):
+                // conservar signo para que reste del crédito fiscal (igual que el débito).
+                $netoRaw = (float) ($alicuota['neto_gravado'] ?? $alicuota['neto'] ?? 0);
+                $ivaRaw = (float) ($alicuota['impuesto_liquidado'] ?? $alicuota['iva'] ?? 0);
+                $neto = $restitucion ? abs($netoRaw) : round($netoRaw, 2);
+                $iva = $restitucion ? abs($ivaRaw) : round($ivaRaw, 2);
+                if (abs($neto) <= 0.0001 && abs($iva) <= 0.0001) {
                     continue;
                 }
                 $fila = [

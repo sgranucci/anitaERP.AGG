@@ -5,18 +5,31 @@ namespace App\Support\Stock\Surmar;
 use App\ApiAnita;
 use App\Models\Stock\UnidadmedidaSurmar;
 use App\Support\Stock\Surmar\RecepcionProveedorSurmarAnitaBridgeSupport;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Unidades «en que separa» de Anita Surmar (stkumd).
  * El Bierzo usa otra tabla/ids (unidadmedida): no reutilizar.
+ * Tabla `unidadmedida_surmar` solo existe en EL BIERZO (migración gated).
  */
 final class SurmarUnidadmedidaSeparaSupport
 {
+    private static ?bool $tablaDisponible = null;
+
+    private static function tablaDisponible(): bool
+    {
+        return self::$tablaDisponible ??= Schema::hasTable('unidadmedida_surmar');
+    }
+
     /**
      * @return list<array{id:int, abreviatura:string, nombre:string}>
      */
     public static function listadoParaSelector(bool $sincronizarSiVacio = true): array
     {
+        if (! self::tablaDisponible()) {
+            return [];
+        }
+
         if ($sincronizarSiVacio && UnidadmedidaSurmar::query()->count() === 0) {
             self::sincronizarDesdeAnita();
         }
@@ -36,7 +49,7 @@ final class SurmarUnidadmedidaSeparaSupport
     public static function abreviatura(?int $id): string
     {
         $id = (int) ($id ?? 0);
-        if ($id <= 0) {
+        if ($id <= 0 || ! self::tablaDisponible()) {
             return 'UN';
         }
         $abr = UnidadmedidaSurmar::query()->whereKey($id)->value('abreviatura');
@@ -46,12 +59,17 @@ final class SurmarUnidadmedidaSeparaSupport
 
     public static function existe(int $id): bool
     {
-        return $id > 0 && UnidadmedidaSurmar::query()->whereKey($id)->exists();
+        return $id > 0
+            && self::tablaDisponible()
+            && UnidadmedidaSurmar::query()->whereKey($id)->exists();
     }
 
     /** Default Surmar: BIN (id 2) si existe; si no, primera. */
     public static function idDefault(): int
     {
+        if (! self::tablaDisponible()) {
+            return 2;
+        }
         if (self::existe(2)) {
             return 2;
         }
@@ -65,6 +83,10 @@ final class SurmarUnidadmedidaSeparaSupport
      */
     public static function sincronizarDesdeAnita(): array
     {
+        if (! self::tablaDisponible()) {
+            return ['insertados' => 0, 'actualizados' => 0, 'total' => 0];
+        }
+
         $bridge = RecepcionProveedorSurmarAnitaBridgeSupport::parametrosBridge();
         $api = new ApiAnita();
         $raw = $api->apiCall(array_merge($bridge, [

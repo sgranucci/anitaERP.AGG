@@ -20,17 +20,57 @@ use InvalidArgumentException;
 /**
  * Pago IE vinculado a solicitud de pago: monto fijo, tipo OPP (o OPA si ANTICIPADA)
  * y asiento desde cuentas SP o anticipo a proveedores.
+ *
+ * OPP con Haber no-caja/banco en el asiento de la SP: el I/E egresa el neto
+ * (monto SP − esa contrapartida) y el asiento contable conserva el Haber extra.
+ * No aplica a OPA (anticipo / cuenta corriente).
  */
 class IngresoEgresoSolicitudpagoSupport
 {
     public static function montoADesembolsar(?Solicitudpago $sp): float
     {
         $bruto = self::montoPendiente($sp);
-        if (! self::esPagoOpa($sp)) {
-            return $bruto;
+        if (self::esPagoOpa($sp)) {
+            return round(max(0.0, $bruto - SolicitudpagoRetencionCalculoSupport::totalImportes($sp)), 2);
         }
 
-        return round(max(0.0, $bruto - SolicitudpagoRetencionCalculoSupport::totalImportes($sp)), 2);
+        return round(max(0.0, $bruto - self::contrapartidaHaberNoBanco($sp)), 2);
+    }
+
+    /**
+     * Haber del asiento SP que no es pierna financiera (111xxx): se conserva
+     * en el asiento del I/E y no se egresa por caja/banco.
+     */
+    public static function contrapartidaHaberNoBanco(?Solicitudpago $sp): float
+    {
+        if ($sp === null || self::esPagoOpa($sp)) {
+            return 0.0;
+        }
+
+        if (! $sp->relationLoaded('cuentas')) {
+            $sp->load(['cuentas.cuentacontables']);
+        }
+
+        $total = 0.0;
+        foreach ($sp->getRelation('cuentas') as $cta) {
+            if (strtoupper((string) ($cta->debe_haber ?? '')) !== 'H') {
+                continue;
+            }
+            $monto = round(abs((float) ($cta->monto ?? 0)), 2);
+            if ($monto < 0.01) {
+                continue;
+            }
+            $cuenta = $cta->relationLoaded('cuentacontables')
+                ? $cta->getRelation('cuentacontables')
+                : $cta->cuentacontables;
+            $codigo = (string) ($cuenta->codigo ?? '');
+            if (self::esCodigoCajaBanco($codigo)) {
+                continue;
+            }
+            $total += $monto;
+        }
+
+        return round($total, 2);
     }
 
     public static function montoPendiente(?Solicitudpago $sp): float
@@ -474,7 +514,8 @@ class IngresoEgresoSolicitudpagoSupport
     /**
      * La pierna de caja es el importe real del pago. Si el asiento de la SP
      * no coincidía con el monto (p. ej. importado de Anita), escala el Debe
-     * no-banco para que cierre. Conserva retenciones (Haber no-banco).
+     * no-banco para que cierre. Conserva retenciones / contrapartida (Haber no-banco).
+     * Si ya cierra (gasto + Haber no-banco + caja neta), no toca importes.
      *
      * @param  list<array<string, mixed>>  $sinBanco
      * @param  list<array<string, mixed>>  $lineasCaja
@@ -983,6 +1024,7 @@ class IngresoEgresoSolicitudpagoSupport
         $actual = self::totalOperacionDesdeRequest($data);
         if (abs($actual - $esperado) > 0.02) {
             $retenciones = SolicitudpagoRetencionCalculoSupport::totalImportes($sp);
+            $contrapartida = self::contrapartidaHaberNoBanco($sp);
             $mensaje = 'El total del pago ('.number_format($actual, 2, ',', '.').') debe ser exactamente '
                 .number_format($esperado, 2, ',', '.');
             if ($retenciones >= 0.01) {
@@ -990,6 +1032,11 @@ class IngresoEgresoSolicitudpagoSupport
                     .number_format(self::montoPendiente($sp), 2, ',', '.')
                     .' menos retenciones precalculadas '
                     .number_format($retenciones, 2, ',', '.').')';
+            } elseif ($contrapartida >= 0.01) {
+                $mensaje .= ' (monto de la solicitud '
+                    .number_format(self::montoPendiente($sp), 2, ',', '.')
+                    .' menos contrapartida contable '
+                    .number_format($contrapartida, 2, ',', '.').')';
             } else {
                 $mensaje .= ' (monto pendiente de la solicitud)';
             }

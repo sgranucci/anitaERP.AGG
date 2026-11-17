@@ -103,4 +103,18 @@ class IngresoEgresoCuadreCajaAsientoSupportTest extends TestCase
             'retenciones_precalculadas' => 0,
         ]);
     }
+
+    public function test_opp_con_contrapartida_acepta_caja_neta_y_asiento_bruto(): void
+    {
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'cuentacaja_ids' => [52],
+            'montos' => [5200000],
+            'debeasientos' => [5500000, '', ''],
+            'haberasientos' => ['', 5200000, 300000],
+            'contrapartida_haber_no_banco' => 300000,
+            'retenciones_precalculadas' => 0,
+        ]);
+
+        $this->assertTrue(true);
+    }
 }

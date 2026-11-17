@@ -27,12 +27,21 @@ class ComprobanteProveedorConceptoIvaTiposTest extends TestCase
         $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esExento('G', '50'));
     }
 
-    public function test_no_permite_negativo_en_gravado_ni_iva_ordinario(): void
+    public function test_permite_negativo_en_gravado_e_iva_ordinario(): void
     {
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('G', '50'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('I', '503'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('N', '2'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('G', '50'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('G', '51'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('I', '321'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('I', '503'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('N', '2'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('P', '103'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('', '99'));
         $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esDescuento('50'));
+        // Gravado/neto negativo → ajusta gasto; IVA/percepción negativo → Haber del concepto.
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::negativoAjustaNetoGasto('G', '51'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::negativoAjustaNetoGasto('E', '1'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::negativoAjustaNetoGasto('I', '321'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::negativoAjustaNetoGasto('P', '103'));
     }
 
     public function test_impuesto_interno_es_neto_de_gasto_sin_ser_mercaderia(): void

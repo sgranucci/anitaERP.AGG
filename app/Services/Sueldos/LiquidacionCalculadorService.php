@@ -89,19 +89,12 @@ class LiquidacionCalculadorService
         }
 
         return DB::transaction(function () use ($liquidacion, $conceptos, $acumDefs, $overrides, $empleados, $parametros) {
-            // Conserva recibos importados (nómina confidencial); borra solo motor ERP.
-            $recibosImportados = Liquidacion_Recibo_Sueldos::query()
-                ->where('liquidacion_id', $liquidacion->id)
-                ->where('origen', Liquidacion_Recibo_Sueldos::ORIGEN_AUXCONF)
-                ->pluck('id');
-            EloquentAuditDeleteSupport::exceptIds(
-                Liquidacion_Detalle_Sueldos::query()->where('liquidacion_id', $liquidacion->id),
-                $recibosImportados->all(),
-                'recibo_id'
+            // Regenera toda la corrida (motor + eventual import auxconf de paridad).
+            EloquentAuditDeleteSupport::each(
+                Liquidacion_Detalle_Sueldos::query()->where('liquidacion_id', $liquidacion->id)
             );
-            EloquentAuditDeleteSupport::exceptIds(
-                Liquidacion_Recibo_Sueldos::query()->where('liquidacion_id', $liquidacion->id),
-                $recibosImportados->all()
+            EloquentAuditDeleteSupport::each(
+                Liquidacion_Recibo_Sueldos::query()->where('liquidacion_id', $liquidacion->id)
             );
             Liquidacion_Acumulador_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
 
@@ -111,22 +104,8 @@ class LiquidacionCalculadorService
             $snapshots = [];
             $ahora = Carbon::now();
 
-            $numeroRecibo = (int) Liquidacion_Recibo_Sueldos::query()
-                ->where('liquidacion_id', $liquidacion->id)
-                ->max('numero_recibo');
+            $numeroRecibo = 0;
             $tot = ['rem' => 0.0, 'norem' => 0.0, 'desc' => 0.0, 'neto' => 0.0];
-            // Incluye totales de importados ya persistidos.
-            $aggImport = Liquidacion_Recibo_Sueldos::query()
-                ->where('liquidacion_id', $liquidacion->id)
-                ->where('origen', Liquidacion_Recibo_Sueldos::ORIGEN_AUXCONF)
-                ->selectRaw('COALESCE(SUM(total_remunerativo),0) rem, COALESCE(SUM(total_no_remunerativo),0) norem, COALESCE(SUM(total_descuentos),0) descuentos, COALESCE(SUM(neto_a_pagar),0) neto')
-                ->first();
-            if ($aggImport) {
-                $tot['rem'] = (float) $aggImport->rem;
-                $tot['norem'] = (float) $aggImport->norem;
-                $tot['desc'] = (float) $aggImport->descuentos;
-                $tot['neto'] = (float) $aggImport->neto;
-            }
             $planPendientes = [];
             $erroresFormula = [];
 
@@ -179,8 +158,7 @@ class LiquidacionCalculadorService
                     'redondeo' => 0,
                     'neto_a_pagar' => $rec['neto'],
                     'estado' => 'calculado',
-                    'origen' => Liquidacion_Recibo_Sueldos::ORIGEN_MOTOR,
-                    'confidencial' => false,
+                    ...self::atributosOrigenReciboMotor($emp),
                 ]);
 
                 $nro = 0;
@@ -1068,15 +1046,26 @@ class LiquidacionCalculadorService
     }
 
     /**
+     * Origen del recibo al persistir desde el motor (incluye flag del legajo).
+     *
+     * @return array{origen: string, confidencial: bool}
+     */
+    public static function atributosOrigenReciboMotor(Empleado_Sueldos $emp): array
+    {
+        return [
+            'origen' => Liquidacion_Recibo_Sueldos::ORIGEN_MOTOR,
+            'confidencial' => (bool) ($emp->confidencial ?? false),
+        ];
+    }
+
+    /**
      * @return \Illuminate\Support\Collection<int, Empleado_Sueldos>
      */
     private function empleados(Liquidacion_Sueldos $liq)
     {
+        // Incluye legajos confidenciales: misma corrida que la nómina normal.
         $query = Empleado_Sueldos::query()
             ->where('empresa_id', $liq->empresa_id)
-            ->where(function ($q) {
-                $q->whereNull('confidencial')->orWhere('confidencial', false);
-            })
             ->with(['categoria', 'motivoegreso'])
             ->orderBy('legajo');
 

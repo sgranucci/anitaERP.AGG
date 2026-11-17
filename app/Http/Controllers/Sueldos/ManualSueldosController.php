@@ -20,6 +20,7 @@ class ManualSueldosController extends ManualDocumentoController
     protected string $etiquetaModulo = 'Sueldos y jornales';
 
     protected array $atajos = [
+        ['label' => 'Guía rápida liquidación', 'route' => 'guia_rapida_sueldos'],
         ['label' => 'Empleados', 'route' => 'consultar_empleado_sueldos'],
         ['label' => 'Conceptos', 'route' => 'consultar_concepto_sueldos'],
         ['label' => 'Liquidación', 'route' => 'consultar_liquidacion_sueldos'],

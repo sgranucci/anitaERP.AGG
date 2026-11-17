@@ -4,6 +4,7 @@ namespace App\Support\Sueldos;
 
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Detalle_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
@@ -196,6 +197,10 @@ final class SueldosAsientoAgrupador
             $advertencias[] = 'No vino el AS 3522: se imputó el neto de los recibos en sueldos a pagar.';
         }
 
+        // Centavos por CC al sumar AS unilaterales redondeados por legajo.
+        // El neto (3522 / a_pagar) no se toca: el ajuste va a REDONDEO (concepto 3000).
+        self::absorberRedondeoPorCentro($acum, $empresaId, $advertencias);
+
         $cuentaIds = [];
         $ccIds = [];
         foreach ($acum as $fila) {
@@ -378,6 +383,96 @@ final class SueldosAsientoAgrupador
             'total_debe' => round($debe, 2),
             'total_haber' => round($haber, 2),
         ];
+    }
+
+    /**
+     * Absorbe desbalances de centavos por centro de costo en la cuenta REDONDEO
+     * (AS del concepto 3000). Solo actúa bajo la tolerancia de cabecera ($1) y
+     * nunca toca sueldos a pagar.
+     *
+     * @param  array<string, array{cuenta_id: int, cc_id: int, dh: string, importe: float, observacion: string}>  $acum
+     * @param  list<string>  $advertencias
+     */
+    private static function absorberRedondeoPorCentro(array &$acum, int $empresaId, array &$advertencias): void
+    {
+        $tolDiario = SueldosAsientoCuadreSupport::tolerancia();
+        // Misma cota que SueldosAsientoCalidadCierreSupport::toleranciaCabecera().
+        $tolMax = 1.00;
+        $redondeoId = self::cuentaRedondeoId($empresaId);
+        if ($redondeoId === null) {
+            return;
+        }
+
+        $porCc = [];
+        foreach ($acum as $fila) {
+            $importe = round((float) $fila['importe'], 2);
+            if ($importe < 0.01) {
+                continue;
+            }
+            $cc = (int) $fila['cc_id'];
+            if ($fila['dh'] === 'D') {
+                $porCc[$cc]['d'] = ($porCc[$cc]['d'] ?? 0.0) + $importe;
+            } else {
+                $porCc[$cc]['h'] = ($porCc[$cc]['h'] ?? 0.0) + $importe;
+            }
+        }
+
+        $absorbido = 0.0;
+        foreach ($porCc as $ccId => $totales) {
+            $diff = round((float) ($totales['d'] ?? 0) - (float) ($totales['h'] ?? 0), 2);
+            if (abs($diff) < $tolDiario || abs($diff) >= $tolMax) {
+                continue;
+            }
+
+            if ($diff > 0) {
+                // Debe de más: bajar el gasto de redondeo si alcanza; si no, haber en REDONDEO.
+                $claveD = self::clave($redondeoId, (int) $ccId, 'D');
+                $disponible = isset($acum[$claveD]) ? round((float) $acum[$claveD]['importe'], 2) : 0.0;
+                if ($disponible + 0.001 >= $diff) {
+                    $acum[$claveD]['importe'] = round($disponible - $diff, 2);
+                } else {
+                    self::sumar(
+                        $acum,
+                        $redondeoId,
+                        (int) $ccId,
+                        'H',
+                        $diff,
+                        '3000 Ajuste redondeo diario'
+                    );
+                }
+            } else {
+                self::sumar(
+                    $acum,
+                    $redondeoId,
+                    (int) $ccId,
+                    'D',
+                    abs($diff),
+                    '3000 Ajuste redondeo diario'
+                );
+            }
+            $absorbido = round($absorbido + abs($diff), 2);
+        }
+
+        if ($absorbido >= 0.01) {
+            $advertencias[] = 'Se absorbió $ '.number_format($absorbido, 2, ',', '.')
+                .' de redondeo diario en la cuenta REDONDEO para balancear el asiento por centro de costo.';
+        }
+    }
+
+    private static function cuentaRedondeoId(int $empresaId): ?int
+    {
+        $concepto = Concepto_Sueldos::query()
+            ->where('codigo', 3000)
+            ->first(['id', 'codigo', 'descripcion', 'tipo']);
+        if ($concepto !== null) {
+            $resuelto = SueldosAsientoMapeoSupport::resolver($empresaId, $concepto);
+            $id = (int) ($resuelto['cuenta_debe_id'] ?? 0);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+
+        return self::cuentaIdPorCodigo($empresaId, '521060017');
     }
 
     /**

@@ -4584,6 +4584,8 @@ Route::delete('compras/comprobante-proveedor/{id}/con-precarga', 'Compras\Compro
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/{id}/reverso-contable/preview', 'Compras\Comprobante_ProveedorController@previsualizarReversoContable')->name('preview_reverso_contable_comprobante_proveedor')->whereNumber('id');
+Route::post('compras/comprobante-proveedor/{id}/reverso-contable', 'Compras\Comprobante_ProveedorController@revertirContable')->name('revertir_contable_comprobante_proveedor')->whereNumber('id');
 Route::post('compras/comprobante-proveedor/{id}/bienes-uso-provisorios', 'Compras\Comprobante_ProveedorController@guardarBienesUsoProvisorios')->name('guardar_bienes_uso_provisorios_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/liberar-bloqueo-pago', 'Compras\Comprobante_ProveedorController@liberarBloqueoPago')->name('liberar_bloqueo_pago_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/excluir-circuito-pago', 'Compras\Comprobante_ProveedorController@excluirCircuitoPago')->name('excluir_circuito_pago_comprobante_proveedor');
@@ -5097,6 +5099,9 @@ Route::get('caja/tesoreria-crown/manual/descargar-word', 'Caja\ManualTesoreriaCr
 Route::get('sueldos/manual', 'Sueldos\ManualSueldosController@index')->name('manual_sueldos');
 Route::get('sueldos/manual/descargar-pdf', 'Sueldos\ManualSueldosController@descargarPdf')->name('manual_sueldos_pdf');
 Route::get('sueldos/manual/descargar-word', 'Sueldos\ManualSueldosController@descargarWord')->name('manual_sueldos_word');
+Route::get('sueldos/guia-rapida', 'Sueldos\ManualGuiaRapidaSueldosController@index')->name('guia_rapida_sueldos');
+Route::get('sueldos/guia-rapida/descargar-pdf', 'Sueldos\ManualGuiaRapidaSueldosController@descargarPdf')->name('guia_rapida_sueldos_pdf');
+Route::get('sueldos/guia-rapida/descargar-word', 'Sueldos\ManualGuiaRapidaSueldosController@descargarWord')->name('guia_rapida_sueldos_word');
 Route::get('sueldos/manual-lsd', 'Sueldos\ManualLsdSueldosController@index')->name('manual_lsd_sueldos');
 Route::get('sueldos/manual-lsd/descargar-pdf', 'Sueldos\ManualLsdSueldosController@descargarPdf')->name('manual_lsd_sueldos_pdf');
 Route::get('sueldos/manual-lsd/descargar-word', 'Sueldos\ManualLsdSueldosController@descargarWord')->name('manual_lsd_sueldos_word');

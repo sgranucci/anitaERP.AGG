@@ -94,16 +94,36 @@ final class ComprobanteProveedorConceptoIvaTipos
     }
 
     /**
-     * Exento (E / código 1) y descuentos 80/81: admiten monto negativo en compras.
-     * El asiento los suma al neto (con signo); IVA Digital conserva el signo cargado.
+     * Conceptos de factura de compra que admiten monto negativo (como Anita).
+     * Exento/descuentos 80-81, gravado/neto e impuestos/percepciones (p. ej. Edesur
+     * con subtotal e IVA 21 % en negativo junto a alícuotas 27 %).
+     * El asiento: neto/descuento restan del Debe de gasto; impuestos van al Haber
+     * de la cuenta del concepto. IVA Digital conserva el signo cargado.
      */
     public static function permiteMontoNegativo(?string $tipoconcepto, string|int|null $codigo = null): bool
     {
-        if (self::esDescuento($codigo)) {
+        if (self::esDescuento($codigo) || self::esExento($tipoconcepto, $codigo)) {
             return true;
         }
 
-        return self::esExento($tipoconcepto, $codigo);
+        return self::esNeto($tipoconcepto) || self::esImpuesto($tipoconcepto);
+    }
+
+    /**
+     * Negativo que reduce el Debe de gasto/neto (no se postea Haber en la cuenta del concepto).
+     * Impuestos/percepciones negativos van a la cuenta del concepto (Haber).
+     */
+    public static function negativoAjustaNetoGasto(?string $tipoconcepto, string|int|null $codigo = null): bool
+    {
+        if (! self::permiteMontoNegativo($tipoconcepto, $codigo)) {
+            return false;
+        }
+
+        if (self::esImpuesto($tipoconcepto) && ! self::esImpuestoInterno($tipoconcepto, $codigo)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

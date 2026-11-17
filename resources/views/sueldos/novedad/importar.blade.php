@@ -15,6 +15,17 @@ window.novedadImportPreviewUrl = @json(route('preview_importar_novedad_sueldos')
     use App\Support\Sueldos\NovedadSueldosImportColumnasSupport;
     $camposMeta = NovedadSueldosImportColumnasSupport::metaCampos();
     $unaEmpresa = ($empresa_query ?? collect())->count() === 1;
+    $prefsImport = $prefsImport ?? [];
+    $prefsMapping = $prefsMapping ?? [];
+    $pref = static function (string $campo, mixed $default = null) use ($prefsImport): mixed {
+        if (old($campo) !== null) {
+            return old($campo);
+        }
+
+        return array_key_exists($campo, $prefsImport) && $prefsImport[$campo] !== null && $prefsImport[$campo] !== ''
+            ? $prefsImport[$campo]
+            : $default;
+    };
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -35,15 +46,21 @@ window.novedadImportPreviewUrl = @json(route('preview_importar_novedad_sueldos')
             <form action="{{ route('procesar_importar_novedad_sueldos') }}" id="form-importar-novedad" method="POST" enctype="multipart/form-data" class="form-horizontal" autocomplete="off">
                 @csrf
                 <div class="card-body">
+                    @php
+                        $modoColumnas = (string) $pref('modo_columnas', NovedadSueldosImportColumnasSupport::MODO_COLUMNAS_TITULO);
+                        $csvSep = (string) $pref('csv_separador', 'auto');
+                        $filaEncabezadoPref = $pref('fila_encabezado', '');
+                        $empresaPref = $pref('empresa_id', null);
+                    @endphp
                     <p class="text-muted mb-3">
-                        La fila de títulos se detecta sola. Si el Excel usa otros nombres, asignalos en el mapeo.
+                        Indicá si el archivo trae fila de títulos. Si usa otros nombres, corregí el mapeo en la vista previa.
                         Con fecha desde, la novedad se repite en cada corrida mientras esté vigente.
-                        Se graban solo las filas en verde.
+                        Se graban solo las filas en verde. La configuración (modo, separador, mapeo) se recuerda por usuario.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
                         'empresa_query' => $empresa_query,
-                        'empresa_id' => old('empresa_id'),
+                        'empresa_id' => $empresaPref,
                         'col_label' => 'col-lg-3 text-right pr-2',
                         'col_input' => 'col-lg-4',
                         'required' => false,
@@ -58,11 +75,32 @@ window.novedadImportPreviewUrl = @json(route('preview_importar_novedad_sueldos')
                     </div>
 
                     <div class="form-group row">
-                        <label for="fila_encabezado" class="col-lg-3 control-label text-right pr-2">Fila encabezado</label>
-                        <div class="col-lg-2">
-                            <input type="number" name="fila_encabezado" id="fila_encabezado" class="form-control form-control-sm" min="1" max="50" value="{{ old('fila_encabezado', '') }}" placeholder="Auto">
+                        <label class="col-lg-3 control-label text-right pr-2 requerido">Columnas</label>
+                        <div class="col-lg-9">
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="modo_columnas_titulo" name="modo_columnas" value="titulo"
+                                       class="custom-control-input js-modo-columnas"
+                                       @checked($modoColumnas === NovedadSueldosImportColumnasSupport::MODO_COLUMNAS_TITULO)>
+                                <label class="custom-control-label" for="modo_columnas_titulo">Por título de encabezado</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="modo_columnas_numero" name="modo_columnas" value="numero"
+                                       class="custom-control-input js-modo-columnas"
+                                       @checked($modoColumnas === NovedadSueldosImportColumnasSupport::MODO_COLUMNAS_NUMERO)>
+                                <label class="custom-control-label" for="modo_columnas_numero">Por número de columna (sin título)</label>
+                            </div>
+                            <div class="text-muted small mt-1" id="ayuda-modo-columnas">
+                                Con título: se detecta la fila de encabezados. Sin título: datos desde la primera fila; mapeá Legajo / Concepto a Columna 1, 2…
+                            </div>
                         </div>
-                        <div class="col-lg-5 col-form-label text-muted small">Vacío = detectar automáticamente</div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="fila_encabezado" id="label-fila-encabezado" class="col-lg-3 control-label text-right pr-2">Fila del encabezado</label>
+                        <div class="col-lg-2">
+                            <input type="number" name="fila_encabezado" id="fila_encabezado" class="form-control form-control-sm" min="1" max="50" value="{{ $filaEncabezadoPref }}" placeholder="Auto">
+                        </div>
+                        <div class="col-lg-5 col-form-label text-muted small" id="ayuda-fila-encabezado">Vacío = detectar automáticamente</div>
                     </div>
 
                     <div class="form-group row">
@@ -77,6 +115,22 @@ window.novedadImportPreviewUrl = @json(route('preview_importar_novedad_sueldos')
                         </div>
                     </div>
 
+                    <div class="form-group row" id="panel-csv-separador">
+                        <label for="csv_separador" class="col-lg-3 control-label text-right pr-2">Separador CSV</label>
+                        <div class="col-lg-3">
+                            <select name="csv_separador" id="csv_separador" class="form-control form-control-sm">
+                                <option value="auto" @selected($csvSep === 'auto' || $csvSep === '')>Automático (detectar)</option>
+                                <option value="," @selected($csvSep === ',')>Coma (,)</option>
+                                <option value=";" @selected($csvSep === ';')>Punto y coma (;)</option>
+                                <option value="tab" @selected($csvSep === 'tab')>Tabulación</option>
+                                <option value="|" @selected($csvSep === '|')>Pipe (|)</option>
+                            </select>
+                        </div>
+                        <div class="col-lg-6 col-form-label text-muted small" id="ayuda-csv-separador">
+                            Para CSV/TXT. Con «Automático» se detecta por el contenido. En Excel se ignora.
+                        </div>
+                    </div>
+
                     <input type="hidden" name="hoja_indice" id="hoja_indice" value="{{ old('hoja_indice', 1) }}">
                     <div class="form-group row d-none" id="panel-hoja-excel">
                         <label for="hoja_indice_select" class="col-lg-3 control-label text-right pr-2">Hoja</label>
@@ -86,7 +140,10 @@ window.novedadImportPreviewUrl = @json(route('preview_importar_novedad_sueldos')
                     </div>
 
                     <div class="border rounded p-2 mb-3 bg-light" id="panel-mapeo-columnas">
-                        <div class="small font-weight-bold mb-2">Mapeo de columnas</div>
+                        <div class="small font-weight-bold mb-1">Mapeo de columnas</div>
+                        <div class="text-muted small mb-2" id="ayuda-mapeo-columnas">
+                            Con título: nombre del encabezado (ej. <code>legajo</code>). Sin título: número (1 = primera) o letra Excel (A, B…).
+                        </div>
                         <div class="row">
                             @foreach ($camposMeta as $campo => $meta)
                                 <div class="col-md-4 col-lg-3 mb-2">
@@ -96,9 +153,10 @@ window.novedadImportPreviewUrl = @json(route('preview_importar_novedad_sueldos')
                                             <span class="text-danger">*</span>
                                         @endif
                                     </label>
-                                    <select name="mapping[{{ $campo }}]" id="map_{{ $campo }}" class="form-control form-control-sm map-campo" data-campo="{{ $campo }}">
-                                        <option value="">—</option>
-                                    </select>
+                                    <input type="text" name="mapping[{{ $campo }}]" id="map_{{ $campo }}"
+                                           class="form-control form-control-sm map-campo" data-campo="{{ $campo }}"
+                                           value="{{ old('mapping.'.$campo, $prefsMapping[$campo] ?? '') }}"
+                                           autocomplete="off" placeholder="—">
                                 </div>
                             @endforeach
                         </div>

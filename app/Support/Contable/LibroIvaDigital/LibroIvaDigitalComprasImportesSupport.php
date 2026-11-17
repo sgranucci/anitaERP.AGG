@@ -7,9 +7,10 @@ namespace App\Support\Contable\LibroIvaDigital;
 /**
  * Importes de compras para el TXT (RG 4597).
  *
- * Los descuentos (concepto 80/81, etc.) vienen con signo negativo: hay que
- * netearlos. Si se toma abs() por renglón, el neto se infla, el IVA no
- * cierra con la alícuota y el total no coincide con la suma.
+ * Los descuentos (concepto 80/81, etc.) y ajustes por alícuota (p. ej. Edesur
+ * gravado/IVA 21 % en negativo junto a 27 %) vienen con signo: hay que
+ * netearlos. Si se toma abs() por renglón o por bucket de alícuota, el neto
+ * se infla, el IVA no cierra con la alícuota y el total no coincide con la suma.
  */
 final class LibroIvaDigitalComprasImportesSupport
 {

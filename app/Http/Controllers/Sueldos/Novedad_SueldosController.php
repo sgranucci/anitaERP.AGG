@@ -12,6 +12,7 @@ use App\Repositories\Sueldos\Novedad_SueldosRepositoryInterface;
 use App\Services\Sueldos\NovedadSueldosImportService;
 use App\Support\Sueldos\NovedadSueldosCatalogo;
 use App\Support\Sueldos\NovedadSueldosImportColumnasSupport;
+use App\Support\Sueldos\NovedadSueldosImportPreferenciasUsuario;
 use App\Support\Sueldos\NovedadSueldosListadoFiltros;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -153,6 +154,8 @@ class Novedad_SueldosController extends Controller
 
         return view('sueldos.novedad.importar', [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'prefsImport' => NovedadSueldosImportPreferenciasUsuario::leer(),
+            'prefsMapping' => NovedadSueldosImportPreferenciasUsuario::mapping(),
         ]);
     }
 
@@ -175,6 +178,8 @@ class Novedad_SueldosController extends Controller
         $request->validate([
             'archivo' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
             'empresa_id' => 'nullable|integer',
+            'modo_columnas' => 'nullable|in:titulo,numero',
+            'csv_separador' => 'nullable|string|max:5',
             'fila_encabezado' => 'nullable|integer|min:1|max:50',
             'hoja_indice' => 'nullable|integer|min:1|max:50',
             'mapping' => 'nullable|array',
@@ -183,6 +188,8 @@ class Novedad_SueldosController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '120');
 
+        NovedadSueldosImportPreferenciasUsuario::persistirDesdeRequest($request);
+
         $empresaId = (int) $request->input('empresa_id', 0);
 
         return response()->json($this->importService->preview(
@@ -190,7 +197,9 @@ class Novedad_SueldosController extends Controller
             is_array($request->input('mapping')) ? $request->input('mapping') : [],
             $empresaId > 0 ? $empresaId : null,
             $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
-            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+            $request->input('modo_columnas'),
+            $request->input('csv_separador')
         ));
     }
 
@@ -201,6 +210,8 @@ class Novedad_SueldosController extends Controller
         $request->validate([
             'archivo' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
             'empresa_id' => 'nullable|integer',
+            'modo_columnas' => 'nullable|in:titulo,numero',
+            'csv_separador' => 'nullable|string|max:5',
             'fila_encabezado' => 'nullable|integer|min:1|max:50',
             'hoja_indice' => 'nullable|integer|min:1|max:50',
             'mapping' => 'nullable|array',
@@ -209,13 +220,17 @@ class Novedad_SueldosController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '300');
 
+        NovedadSueldosImportPreferenciasUsuario::persistirDesdeRequest($request);
+
         $empresaId = (int) $request->input('empresa_id', 0);
         $r = $this->importService->import(
             $request->file('archivo'),
             is_array($request->input('mapping')) ? $request->input('mapping') : [],
             $empresaId > 0 ? $empresaId : null,
             $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
-            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+            $request->input('modo_columnas'),
+            $request->input('csv_separador')
         );
 
         $msg = 'Importadas: '.$r['importados'].' · Omitidas: '.$r['omitidos'].' · Con error: '.$r['errores'];

@@ -8,10 +8,61 @@
     var previewXhr = null;
     var ultimasHojasDetectadas = null;
     var sincronizandoMapa = false;
+    // No usar el disabled del botón para autorizar el submit: grabacion-bloqueo-submit
+    // lo apaga en captura antes de que corra este handler, y eso abortaba el POST.
+    var importacionHabilitada = false;
 
     function archivoSeleccionado() {
         var input = document.getElementById('archivo');
         return input && input.files && input.files.length > 0;
+    }
+
+    function modoColumnasActual() {
+        var checked = document.querySelector('input[name="modo_columnas"]:checked');
+        return checked ? checked.value : 'titulo';
+    }
+
+    function esArchivoCsv() {
+        var input = document.getElementById('archivo');
+        if (!input || !input.files || !input.files.length) {
+            return false;
+        }
+        var nombre = String(input.files[0].name || '').toLowerCase();
+        return nombre.endsWith('.csv') || nombre.endsWith('.txt');
+    }
+
+    function sincronizarPanelCsvSeparador() {
+        var $select = $('#csv_separador');
+        var $ayuda = $('#ayuda-csv-separador');
+        if (esArchivoCsv()) {
+            $select.addClass('border-primary');
+            $ayuda.text('CSV/TXT: si el preview sale vacío o en una sola columna, cambiá el separador (coma o punto y coma) y volvé a previsualizar.');
+        } else if (archivoSeleccionado()) {
+            $select.removeClass('border-primary');
+            $ayuda.text('Archivo Excel: el separador no se usa.');
+        } else {
+            $select.removeClass('border-primary');
+            $ayuda.text('Para CSV/TXT. Con «Automático» se detecta por el contenido. En Excel se ignora.');
+        }
+    }
+
+    function sincronizarUiModoColumnas() {
+        var porNumero = modoColumnasActual() === 'numero';
+        if (porNumero) {
+            $('#label-fila-encabezado').text('Primera fila de datos');
+            $('#ayuda-fila-encabezado').text('Vacío = fila 1. No hay fila de títulos: se leen todas las filas desde ahí.');
+            $('#fila_encabezado').attr('placeholder', '1');
+            $('#ayuda-modo-columnas').text('Sin título: en el mapeo tipá el número de columna (1 = primera) o letra Excel (A, B…).');
+            $('#ayuda-mapeo-columnas').html('Sin título: número (1 = primera) o letra Excel (A, B…). Vacío = sin mapear ese campo.');
+            $('.map-campo').attr('placeholder', 'ej. 1 o A');
+        } else {
+            $('#label-fila-encabezado').text('Fila del encabezado');
+            $('#ayuda-fila-encabezado').text('Vacío = detectar automáticamente');
+            $('#fila_encabezado').attr('placeholder', 'Auto');
+            $('#ayuda-modo-columnas').text('Con título: se detecta la fila de encabezados. Si el Excel usa otros nombres, tipá el nombre en el mapeo.');
+            $('#ayuda-mapeo-columnas').html('Con título: nombre del encabezado (ej. <code>legajo</code>). También acepta número/letra. Vacío = usa la detección automática.');
+            $('.map-campo').attr('placeholder', 'ej. legajo');
+        }
     }
 
     function escHtml(texto) {
@@ -87,24 +138,21 @@
         mostrarPanelHoja(true);
     }
 
-    function poblarSelectsMapeo(headers, mapping) {
+    function poblarInputsMapeo(mappingUi) {
         sincronizandoMapa = true;
         $('.map-campo').each(function () {
-            var $sel = $(this);
-            var campo = $sel.data('campo');
-            var actual = mapping && mapping[campo] != null ? String(mapping[campo]) : '';
-            $sel.empty().append($('<option></option>').val('').text('—'));
-            (headers || []).forEach(function (h) {
-                $sel.append(
-                    $('<option></option>')
-                        .val(h.indice)
-                        .text((h.indice + 1) + ': ' + h.titulo)
-                        .prop('selected', String(h.indice) === actual)
-                );
-            });
-            if (actual !== '' && $sel.val() !== actual) {
-                $sel.val(actual);
+            var $input = $(this);
+            var campo = $input.data('campo');
+            var actual = mappingUi && mappingUi[campo] != null ? String(mappingUi[campo]) : '';
+            // No pisa lo que el operador está tipando si el foco está en ese campo.
+            if (document.activeElement === this) {
+                return;
             }
+            // Conserva valor tipado/recordado si la detección no resolvió este campo.
+            if (actual === '' && $.trim(String($input.val() || '')) !== '') {
+                return;
+            }
+            $input.val(actual);
         });
         sincronizandoMapa = false;
     }
@@ -120,12 +168,13 @@
         if (!data || (data.mensaje && !data.headers)) {
             $estado.removeClass().addClass('badge badge-danger').text('Error');
             $contenido.html('<p class="text-danger small mb-0">' + escHtml(data && data.mensaje ? data.mensaje : 'No se pudo analizar.') + '</p>');
+            importacionHabilitada = false;
             $btnConfirmar.prop('disabled', true);
             return;
         }
 
-        if (data.headers) {
-            poblarSelectsMapeo(data.headers, data.mapping || {});
+        if (data.mapping_ui) {
+            poblarInputsMapeo(data.mapping_ui);
         }
 
         var hayOk = data.totales && data.totales.ok > 0;
@@ -138,10 +187,27 @@
         }
 
         var html = '';
-        if (data.fila_encabezado) {
-            html += '<p class="small mb-1">Encabezado fila <strong>' + escHtml(data.fila_encabezado) + '</strong>';
+        if (data.sin_encabezado) {
+            html += '<p class="small mb-1"><strong>Sin fila de títulos</strong> · datos desde la fila 1';
             if (data.hoja_nombre) {
                 html += ' · hoja ' + escHtml(data.hoja_nombre);
+            }
+            html += '</p>';
+        } else if (data.fila_encabezado) {
+            html += '<p class="small mb-1">Encabezado fila <strong>' + escHtml(data.fila_encabezado) + '</strong>';
+            if (data.fila_encabezado_automatica) {
+                html += ' <span class="text-muted">(detectada)</span>';
+            }
+            if (data.hoja_nombre) {
+                html += ' · hoja ' + escHtml(data.hoja_nombre);
+            }
+            html += '</p>';
+        }
+
+        if (data.csv_separador_etiqueta && esArchivoCsv()) {
+            html += '<p class="small mb-2">Separador CSV: <strong>' + escHtml(data.csv_separador_etiqueta) + '</strong>';
+            if (data.csv_separador_automatico) {
+                html += ' <span class="text-muted">(detectado)</span>';
             }
             html += '</p>';
         }
@@ -200,7 +266,8 @@
         }
 
         $contenido.html(html || '<p class="text-muted small mb-0">Sin filas de datos.</p>');
-        $btnConfirmar.prop('disabled', !hayOk);
+        importacionHabilitada = !!hayOk;
+        $btnConfirmar.prop('disabled', !importacionHabilitada);
     }
 
     function solicitarPreview() {
@@ -259,16 +326,27 @@
     }
 
     $(function () {
+        sincronizarUiModoColumnas();
+        sincronizarPanelCsvSeparador();
+
         $('#archivo').on('change', function () {
             var ok = archivoSeleccionado();
             $('#btn-preview-import-novedad').prop('disabled', !ok);
+            importacionHabilitada = false;
             $('#btn-confirmar-import-novedad').prop('disabled', true);
+            sincronizarPanelCsvSeparador();
             if (ok) {
                 $('#hoja_indice').val(1);
                 ultimasHojasDetectadas = null;
                 programarPreview();
             } else {
                 $('#panel-preview-import-novedad').hide();
+            }
+        });
+
+        $('#csv_separador').on('change', function () {
+            if (archivoSeleccionado()) {
+                programarPreview();
             }
         });
 
@@ -281,6 +359,15 @@
 
         $('#btn-preview-import-novedad').on('click', solicitarPreview);
 
+        $('#form-importar-novedad').on('change', 'input[name="modo_columnas"]', function () {
+            sincronizarUiModoColumnas();
+            // Al cambiar de modo, el mapeo anterior no aplica.
+            $('.map-campo').val('');
+            if (archivoSeleccionado()) {
+                programarPreview();
+            }
+        });
+
         $('#form-importar-novedad').on('change', '#fila_encabezado, #empresa_id, .map-campo', function () {
             if (sincronizandoMapa) {
                 return;
@@ -289,6 +376,8 @@
                 programarPreview();
             }
         });
+
+        // Mientras tipan el mapeo, no disparamos preview en cada tecla: solo al salir del campo (change).
 
         $('#form-importar-novedad').on('keydown', 'input', function (e) {
             if (e.key === 'Enter') {
@@ -300,7 +389,7 @@
         });
 
         $('#form-importar-novedad').on('submit', function (e) {
-            if ($('#btn-confirmar-import-novedad').prop('disabled') || !archivoSeleccionado()) {
+            if (!importacionHabilitada || !archivoSeleccionado()) {
                 e.preventDefault();
                 return;
             }

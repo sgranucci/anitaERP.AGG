@@ -318,8 +318,10 @@ class Liquidacion_SueldosController extends Controller
                 ->with('error', 'No hay conceptos activos para liquidar. Cargue conceptos antes de calcular.');
         }
 
-        $msg = 'Corrida calculada: '.$resumen['recibos'].' recibo(s). Neto total $ '
-            .number_format($resumen['total_neto'], 2, ',', '.');
+        $liq->refresh();
+        $totalesVisibles = LiquidacionConfidencialSeguridadSupport::totalesVisiblesCorrida($liq);
+        $msg = 'Corrida calculada: '.$totalesVisibles['cantidad'].' recibo(s). Neto total $ '
+            .number_format($totalesVisibles['neto'], 2, ',', '.');
         $errN = (int) ($resumen['errores_formula_count'] ?? 0);
         if ($errN > 0) {
             $sample = collect($resumen['errores_formula'] ?? [])->take(3)
