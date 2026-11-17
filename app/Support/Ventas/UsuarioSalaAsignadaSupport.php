@@ -5,7 +5,9 @@ namespace App\Support\Ventas;
 use App\Models\Configuracion\Sala;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -16,6 +18,23 @@ use Illuminate\Support\Facades\Session;
  */
 final class UsuarioSalaAsignadaSupport
 {
+    /**
+     * Código de sala Crown → grupo_codigo de centrocosto (maestro contable).
+     *
+     * @var array<string, string>
+     */
+    private const SALA_A_GRUPO_CENTROCOSTO = [
+        'CAT' => '13',
+        'CIP' => '2',
+        'LGR' => '3',
+        'VIE' => '4',
+        'GRO' => '5',
+        'EFA' => '6',
+        'CHO' => '7',
+        'VRE' => '9',
+        'CSA' => '16',
+    ];
+
     public static function activo(): bool
     {
         return EntornoEmpresaSupport::esCrown();
@@ -48,6 +67,67 @@ final class UsuarioSalaAsignadaSupport
     }
 
     /**
+     * @return list<string>
+     */
+    public static function codigosDesdeSesion(): array
+    {
+        if (! self::activo()) {
+            return [];
+        }
+
+        return collect(Session::get('usuario_salas', []))
+            ->map(function ($s) {
+                if (is_array($s)) {
+                    return strtoupper(trim((string) ($s['codigo'] ?? '')));
+                }
+                if (is_object($s)) {
+                    return strtoupper(trim((string) ($s->codigo ?? '')));
+                }
+
+                return '';
+            })
+            ->filter(fn (string $codigo) => $codigo !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Centros de costo del/los casinos asignados (vía grupo_codigo).
+     * Vacío = sin recorte por sala/grupo.
+     *
+     * @return list<int>
+     */
+    public static function centrocostoIdsAlcance(): array
+    {
+        $codigosSala = self::codigosDesdeSesion();
+        if ($codigosSala === []) {
+            return [];
+        }
+
+        $grupos = [];
+        foreach ($codigosSala as $codigo) {
+            $grupo = self::SALA_A_GRUPO_CENTROCOSTO[$codigo] ?? null;
+            if ($grupo !== null && $grupo !== '') {
+                $grupos[] = $grupo;
+            }
+        }
+        $grupos = array_values(array_unique($grupos));
+        if ($grupos === []) {
+            return [];
+        }
+
+        return DB::table('centrocosto')
+            ->whereIn('grupo_codigo', $grupos)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Salas para formularios / chips (Crown). Sin asignación = todas; con ≥1 = solo esas.
      *
      * @return Collection<int, Sala>
@@ -71,9 +151,9 @@ final class UsuarioSalaAsignadaSupport
     }
 
     /**
-     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
+     * @param  Builder<\Illuminate\Database\Eloquent\Model>|QueryBuilder  $query
      */
-    public static function aplicarFiltro(Builder $query, string $column = 'sala_id', bool $incluirNull = false): void
+    public static function aplicarFiltro(Builder|QueryBuilder $query, string $column = 'sala_id', bool $incluirNull = false): void
     {
         if (! self::activo()) {
             return;

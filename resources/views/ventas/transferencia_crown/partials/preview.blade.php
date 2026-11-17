@@ -62,8 +62,39 @@
 @endforeach
 
 @if ((int) ($resumen['errores'] ?? 0) > 0)
+    @php
+        $cuitsSinCliente = [];
+        foreach ($filas as $filaErr) {
+            if ((string) ($filaErr['estado'] ?? '') !== 'error') {
+                continue;
+            }
+            $msgErr = mb_strtolower((string) ($filaErr['mensaje'] ?? ''));
+            if (! str_contains($msgErr, 'sin cliente anita')) {
+                continue;
+            }
+            $cuitErr = preg_replace('/\D+/', '', (string) ($filaErr['cuit'] ?? '')) ?? '';
+            if (strlen($cuitErr) === 11) {
+                $cuitsSinCliente[$cuitErr] = true;
+            }
+        }
+        $qCuitsSinCliente = count($cuitsSinCliente);
+    @endphp
     <div class="alert alert-warning">
         Hay {{ (int) $resumen['errores'] }} comprobantes que no se pueden generar. El motivo está en la columna Aviso.
+        @if ($qCuitsSinCliente > 0 && ! empty($rutaPrecargaClientes) && ! empty($token))
+            <form method="post" action="{{ $rutaPrecargaClientes }}" class="mt-2 mb-0 d-inline-block" id="form-precarga-clientes-arca">
+                @csrf
+                <input type="hidden" name="token" value="{{ $token }}">
+                <button type="submit" class="btn btn-sm btn-outline-primary"
+                    onclick="return confirm('Se consultará el padrón ARCA y se darán de alta {{ $qCuitsSinCliente }} cliente(s) faltante(s) con código Anita secuencial. ¿Continuar?');">
+                    <i class="fa fa-user-plus"></i>
+                    Precargar {{ $qCuitsSinCliente }} cliente{{ $qCuitsSinCliente === 1 ? '' : 's' }} desde padrón ARCA
+                </button>
+            </form>
+            <div class="small text-muted mt-1">
+                Alta con datos de constancia de inscripción ARCA y numeración Anita (siguiente código libre). Luego se reconsulta el preview.
+            </div>
+        @endif
     </div>
 @endif
 
@@ -81,6 +112,9 @@
                 <th>Comprobante</th>
                 <th>Fecha</th>
                 <th>Cliente</th>
+                @if (! empty($preview['mostrar_pago']))
+                    <th>Pago</th>
+                @endif
                 <th class="text-right">Gravado</th>
                 <th class="text-right">IVA</th>
                 <th class="text-right">Total</th>
@@ -121,7 +155,21 @@
                         @endif
                     </td>
                     <td class="text-nowrap">{{ ! empty($fila['fecha']) ? \Carbon\Carbon::parse($fila['fecha'])->format('d/m/Y') : '' }}</td>
-                    <td>{{ $fila['nombre'] ?? '' }}</td>
+                    <td>
+                        {{ $fila['nombre'] ?? '' }}
+                        @if (! empty($fila['cuit']))
+                            <div class="small text-muted">{{ $fila['cuit'] }}</div>
+                        @endif
+                    </td>
+                    @if (! empty($preview['mostrar_pago']))
+                        <td class="small text-nowrap">
+                            @if (! empty($fila['es_cuenta_corriente']))
+                                <span class="badge badge-warning">Cuenta corriente</span>
+                            @else
+                                {{ $fila['payment_type'] ?? '—' }}
+                            @endif
+                        </td>
+                    @endif
                     <td class="text-right">{{ number_format($signo * $gravado, 2, ',', '.') }}</td>
                     <td class="text-right">{{ number_format($signo * $iva, 2, ',', '.') }}</td>
                     <td class="text-right">{{ number_format($signo * (float) ($fila['total'] ?? 0), 2, ',', '.') }}</td>
@@ -147,7 +195,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="9" class="text-center text-muted">No hay comprobantes en el rango.</td>
+                    <td colspan="{{ ! empty($preview['mostrar_pago']) ? 10 : 9 }}" class="text-center text-muted">No hay comprobantes en el rango.</td>
                 </tr>
             @endforelse
         </tbody>

@@ -28,6 +28,10 @@ final class IngresoEgresoCuadreCajaAsientoSupport
      */
     public static function aplicarMontoAsientoSiCajaEnCero(array &$data): bool
     {
+        if (IngresoEgresoOperacionVariaSupport::esOpvDesdeData($data)) {
+            return false;
+        }
+
         $indices = self::indicesCuentasCajaCargadas($data);
         if (count($indices) !== 1) {
             return false;
@@ -65,6 +69,12 @@ final class IngresoEgresoCuadreCajaAsientoSupport
     {
         // Antes del cuadre caja↔asiento: Debe+Haber en la misma línea engaña los totales.
         AsientoBalanceSupport::assertLineasSinDebeYHaber($data, 'asiento');
+
+        if (IngresoEgresoOperacionVariaSupport::esOpvDesdeData($data)) {
+            IngresoEgresoOperacionVariaSupport::assertAsientoSolo($data);
+
+            return;
+        }
 
         $totalesCaja = self::totalesOperacionCaja($data);
         $totalesAsiento = self::totalesAsiento($data);

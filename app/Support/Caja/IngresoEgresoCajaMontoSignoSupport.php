@@ -25,7 +25,8 @@ final class IngresoEgresoCajaMontoSignoSupport
     public static function signoPersistencia(?Tipotransaccion_Caja $tipo): int
     {
         if (IngresoEgresoTransferenciaSupport::esTransferencia($tipo)
-            || IngresoEgresoCanjeChequeSupport::esCanje($tipo)) {
+            || IngresoEgresoCanjeChequeSupport::esCanje($tipo)
+            || IngresoEgresoOperacionVariaSupport::esOpv($tipo)) {
             return 1;
         }
         if ($tipo && strtoupper(trim((string) ($tipo->signo ?? ''))) !== 'I') {
@@ -50,7 +51,8 @@ final class IngresoEgresoCajaMontoSignoSupport
     public static function aBaseDatos(float $montoFormulario, ?Tipotransaccion_Caja $tipo): float
     {
         if (IngresoEgresoTransferenciaSupport::esTransferencia($tipo)
-            || IngresoEgresoCanjeChequeSupport::esCanje($tipo)) {
+            || IngresoEgresoCanjeChequeSupport::esCanje($tipo)
+            || IngresoEgresoOperacionVariaSupport::esOpv($tipo)) {
             return round($montoFormulario, 2);
         }
 
@@ -72,7 +74,8 @@ final class IngresoEgresoCajaMontoSignoSupport
     public static function aFormulario(float $montoDb, ?Tipotransaccion_Caja $tipo): float
     {
         if (IngresoEgresoTransferenciaSupport::esTransferencia($tipo)
-            || IngresoEgresoCanjeChequeSupport::esCanje($tipo)) {
+            || IngresoEgresoCanjeChequeSupport::esCanje($tipo)
+            || IngresoEgresoOperacionVariaSupport::esOpv($tipo)) {
             return round($montoDb, 2);
         }
 

@@ -6,7 +6,8 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Fuentes Anita para sync de depmae.
- * Crown: varias (cncadmin→CIP, acncadmin→AC). AGG: vacío → sync por empresa_id.
+ * Crown: una fuente por bridge local de sala (código repetible entre salas).
+ * Default: CIP/CAT/LGR/GRO + AC. AGG: vacío → sync por empresa_id.
  */
 final class DepmaeAnitaFuentesSupport
 {
@@ -37,21 +38,13 @@ final class DepmaeAnitaFuentesSupport
         $sistema = (string) config('stock.anita_stkmov.sistema_ventas', 'ventas');
         $empresaId = (int) (config('cliente.EMPRESA_DEFAULT_ID') ?? 1);
 
+        // Bridges locales Crown (misma pauta que Flash / transferencias ventas).
         return self::normalizarLista([
-            [
-                'ifx_server' => 'cncadmin',
-                'sala_codigo' => 'CIP',
-                'empresa_id' => $empresaId,
-                'path_sistema' => $path,
-                'sistema' => $sistema,
-            ],
-            [
-                'ifx_server' => 'acncadmin',
-                'sala_codigo' => 'AC',
-                'empresa_id' => $empresaId,
-                'path_sistema' => $path,
-                'sistema' => $sistema,
-            ],
+            ['ifx_server' => 'cncadmin', 'sala_codigo' => 'CIP', 'empresa_id' => $empresaId, 'path_sistema' => $path, 'sistema' => $sistema],
+            ['ifx_server' => 'cancadmin', 'sala_codigo' => 'CAT', 'empresa_id' => $empresaId, 'path_sistema' => $path, 'sistema' => $sistema],
+            ['ifx_server' => 'lgncadmin', 'sala_codigo' => 'LGR', 'empresa_id' => $empresaId, 'path_sistema' => $path, 'sistema' => $sistema],
+            ['ifx_server' => 'grncadmin', 'sala_codigo' => 'GRO', 'empresa_id' => $empresaId, 'path_sistema' => $path, 'sistema' => $sistema],
+            ['ifx_server' => 'acncadmin', 'sala_codigo' => 'AC', 'empresa_id' => $empresaId, 'path_sistema' => $path, 'sistema' => $sistema],
         ]);
     }
 

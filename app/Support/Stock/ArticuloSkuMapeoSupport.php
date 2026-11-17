@@ -3,7 +3,9 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Articulo_Estado;
 use App\Models\Stock\Articulo_Sku_Mapeo;
+use App\Models\Stock\Usoarticulo;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,12 @@ use Illuminate\Support\Facades\Schema;
 final class ArticuloSkuMapeoSupport
 {
     public const MOTIVO_NOFACTURABLE_CON_M = 'nofacturable_sku_con_m';
+
+    public const NOMBRE_USO_MANTENIMIENTO = 'MANTENIMIENTO';
+
+    public const ESTADO_ACTIVO = 'ACTIVO';
+
+    public const ESTADO_INACTIVO = 'INACTIVO';
 
     /** Base numérica libre en Crown (rango 200000–299999 vacío al 2026-11-13). */
     public const BASE_SKU_NUMERICA = 200001;
@@ -74,6 +82,15 @@ final class ArticuloSkuMapeoSupport
         return ArticuloSkuMatchSupport::resolverCanonico($skuNuevo);
     }
 
+    public static function idUsoMantenimiento(): ?int
+    {
+        $id = Usoarticulo::query()
+            ->whereRaw('UPPER(TRIM(nombre)) = ?', [self::NOMBRE_USO_MANTENIMIENTO])
+            ->value('id');
+
+        return $id !== null ? (int) $id : null;
+    }
+
     /**
      * @return array{
      *   candidatos: int,
@@ -81,8 +98,11 @@ final class ArticuloSkuMapeoSupport
      *   ya_mapeados: int,
      *   omitidos: int,
      *   base: int,
-     *   filas: list<array{articulo_id:int,sku_anterior:string,sku_nuevo:string,descripcion:string}>,
+     *   usoarticulo_id: ?int,
+     *   filas: list<array{articulo_id:int,sku_anterior:string,sku_nuevo:string,descripcion:string,uso_anterior_id:?int}>,
      *   actualizados: int,
+     *   activados: int,
+     *   usos_asignados: int,
      *   mapeos: int,
      *   denormalizados: int,
      *   dry_run: bool,
@@ -92,7 +112,10 @@ final class ArticuloSkuMapeoSupport
     public static function recodificarNofacturablesConM(bool $ejecutar, ?int $base = null): array
     {
         $base = $base ?? self::BASE_SKU_NUMERICA;
-        $candidatos = self::queryCandidatosNofacturableConM()->orderBy('id')->get(['id', 'sku', 'descripcion']);
+        $usoMantenimientoId = self::idUsoMantenimiento();
+        $candidatos = self::queryCandidatosNofacturableConM()
+            ->orderBy('id')
+            ->get(['id', 'sku', 'descripcion', 'estado', 'usoarticulo_id']);
 
         $yaMapeadosIds = self::tablaExiste()
             ? Articulo_Sku_Mapeo::query()
@@ -140,6 +163,7 @@ final class ArticuloSkuMapeoSupport
                 'sku_anterior' => $skuAnterior,
                 'sku_nuevo' => $skuNuevo,
                 'descripcion' => (string) ($art->descripcion ?? ''),
+                'uso_anterior_id' => $art->usoarticulo_id !== null ? (int) $art->usoarticulo_id : null,
             ];
         }
 
@@ -149,8 +173,11 @@ final class ArticuloSkuMapeoSupport
             'ya_mapeados' => $yaMapeados,
             'omitidos' => $omitidos,
             'base' => $base,
+            'usoarticulo_id' => $usoMantenimientoId,
             'filas' => $filas,
             'actualizados' => 0,
+            'activados' => 0,
+            'usos_asignados' => 0,
             'mapeos' => 0,
             'denormalizados' => 0,
             'dry_run' => ! $ejecutar,
@@ -159,9 +186,10 @@ final class ArticuloSkuMapeoSupport
 
         if (! $ejecutar) {
             $resultado['mensaje'] = sprintf(
-                'Dry-run: %d candidatos, %d a recodificar (base %d), %d ya mapeados, %d omitidos.',
+                'Dry-run: %d inactivos no facturables con M, %d a recodificar+activar+uso %s (base %d), %d ya mapeados, %d omitidos.',
                 $resultado['candidatos'],
                 $resultado['a_recodificar'],
+                self::NOMBRE_USO_MANTENIMIENTO,
                 $base,
                 $yaMapeados,
                 $omitidos
@@ -174,12 +202,29 @@ final class ArticuloSkuMapeoSupport
             throw new \RuntimeException('Falta la tabla articulo_sku_mapeo. Correr la migración primero.');
         }
 
+        if ($usoMantenimientoId === null || $usoMantenimientoId < 1) {
+            throw new \RuntimeException(
+                'No existe usoarticulo «'.self::NOMBRE_USO_MANTENIMIENTO.'». Crearlo antes de ejecutar.'
+            );
+        }
+
         $usuarioId = Auth::id();
         $actualizados = 0;
+        $activados = 0;
+        $usosAsignados = 0;
         $mapeos = 0;
         $denormalizados = 0;
 
-        DB::transaction(function () use ($filas, $usuarioId, &$actualizados, &$mapeos, &$denormalizados) {
+        DB::transaction(function () use (
+            $filas,
+            $usuarioId,
+            $usoMantenimientoId,
+            &$actualizados,
+            &$activados,
+            &$usosAsignados,
+            &$mapeos,
+            &$denormalizados
+        ) {
             foreach ($filas as $fila) {
                 $articulo = Articulo::query()->lockForUpdate()->find($fila['articulo_id']);
                 if ($articulo === null) {
@@ -192,9 +237,31 @@ final class ArticuloSkuMapeoSupport
                     );
                 }
 
+                $estadoAnterior = strtoupper(trim((string) ($articulo->estado ?? '')));
+                $usoAnterior = $articulo->usoarticulo_id !== null ? (int) $articulo->usoarticulo_id : null;
+
                 $articulo->sku = $fila['sku_nuevo'];
+                $articulo->estado = self::ESTADO_ACTIVO;
+                $articulo->usoarticulo_id = $usoMantenimientoId;
+                // Siguen no facturables (mantenimiento).
+                $articulo->nofactura = ArticuloNofacturaSupport::NO_FACTURABLE;
                 $articulo->save();
                 $actualizados++;
+
+                if ($estadoAnterior !== self::ESTADO_ACTIVO) {
+                    Articulo_Estado::query()->create([
+                        'articulo_id' => $fila['articulo_id'],
+                        'fecha' => now(),
+                        'estado' => self::ESTADO_ACTIVO,
+                        'usuario_id' => $usuarioId,
+                        'observacion' => 'Activación + recodificación SKU no facturable con M → uso MANTENIMIENTO',
+                    ]);
+                    $activados++;
+                }
+
+                if ($usoAnterior !== $usoMantenimientoId) {
+                    $usosAsignados++;
+                }
 
                 Articulo_Sku_Mapeo::query()->create([
                     'articulo_id' => $fila['articulo_id'],
@@ -214,11 +281,16 @@ final class ArticuloSkuMapeoSupport
         });
 
         $resultado['actualizados'] = $actualizados;
+        $resultado['activados'] = $activados;
+        $resultado['usos_asignados'] = $usosAsignados;
         $resultado['mapeos'] = $mapeos;
         $resultado['denormalizados'] = $denormalizados;
         $resultado['mensaje'] = sprintf(
-            'Grabado: %d artículos recodificados, %d filas en articulo_sku_mapeo, %d denormalizados actualizados (base %d).',
+            'Grabado: %d artículos recodificados, %d activados, %d con uso %s, %d mapeos, %d denormalizados (base %d).',
             $actualizados,
+            $activados,
+            $usosAsignados,
+            self::NOMBRE_USO_MANTENIMIENTO,
             $mapeos,
             $denormalizados,
             $base
@@ -228,12 +300,15 @@ final class ArticuloSkuMapeoSupport
     }
 
     /**
+     * Inactivos, no facturables, SKU con M.
+     *
      * @return \Illuminate\Database\Eloquent\Builder<Articulo>
      */
     public static function queryCandidatosNofacturableConM()
     {
         return Articulo::query()
             ->where('nofactura', ArticuloNofacturaSupport::NO_FACTURABLE)
+            ->where('estado', self::ESTADO_INACTIVO)
             ->whereRaw('UPPER(sku) LIKE ?', ['%M%']);
     }
 
@@ -279,13 +354,14 @@ final class ArticuloSkuMapeoSupport
             throw new \RuntimeException("No se pudo escribir {$path}");
         }
 
-        fputcsv($fh, ['articulo_id', 'sku_anterior', 'sku_nuevo', 'descripcion']);
+        fputcsv($fh, ['articulo_id', 'sku_anterior', 'sku_nuevo', 'descripcion', 'uso_anterior_id']);
         foreach ($filas as $fila) {
             fputcsv($fh, [
                 $fila['articulo_id'],
                 $fila['sku_anterior'],
                 $fila['sku_nuevo'],
                 $fila['descripcion'],
+                $fila['uso_anterior_id'] ?? '',
             ]);
         }
         fclose($fh);

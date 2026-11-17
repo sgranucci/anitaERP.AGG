@@ -4,9 +4,11 @@ namespace App\Support\Stock;
 
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -79,36 +81,65 @@ final class RecepcionProveedorVisibilidadSupport
             $query->whereIn('recepcion_proveedor.empresa_id', $empresas);
         }
 
+        $centrocostosSala = UsuarioSalaAsignadaSupport::centrocostoIdsAlcance();
+        if ($centrocostosSala !== []) {
+            self::aplicarFiltroPorCentrocostos($query, $centrocostosSala);
+
+            return;
+        }
+
         $centrocostoId = self::centrocostoFiltroUsuario();
         if ($centrocostoId !== null) {
-            $query->where(function ($q) use ($centrocostoId) {
-                $q->where('recepcion_proveedor.centrocosto_id', $centrocostoId)
-                    ->orWhere(function ($q2) use ($centrocostoId) {
-                        $q2->whereNull('recepcion_proveedor.centrocosto_id')
-                            ->whereIn('recepcion_proveedor.creousuario_id', function ($sub) use ($centrocostoId) {
-                                $sub->from('usuario')
-                                    ->where('centrocosto_id', $centrocostoId)
-                                    ->select('id');
-                            });
-                    });
-            });
+            self::aplicarFiltroPorCentrocostos($query, [$centrocostoId]);
         }
     }
 
     /**
-     * OC pendientes: solo filtra por empresa asignada (no por CC destino de la OC).
+     * @param  Builder<\App\Models\Stock\Recepcion_Proveedor>  $query
+     * @param  list<int>  $centrocostoIds
+     */
+    private static function aplicarFiltroPorCentrocostos(Builder $query, array $centrocostoIds): void
+    {
+        $centrocostoIds = array_values(array_unique(array_filter(
+            array_map('intval', $centrocostoIds),
+            fn (int $id) => $id > 0
+        )));
+        if ($centrocostoIds === []) {
+            return;
+        }
+
+        $query->where(function ($q) use ($centrocostoIds) {
+            $q->whereIn('recepcion_proveedor.centrocosto_id', $centrocostoIds)
+                ->orWhere(function ($q2) use ($centrocostoIds) {
+                    $q2->whereNull('recepcion_proveedor.centrocosto_id')
+                        ->whereIn('recepcion_proveedor.creousuario_id', function ($sub) use ($centrocostoIds) {
+                            $sub->from('usuario')
+                                ->whereIn('centrocosto_id', $centrocostoIds)
+                                ->select('id');
+                        });
+                });
+        });
+    }
+
+    /**
+     * OC pendientes: empresa asignada + sala Crown si aplica.
      *
      * @param  QueryBuilder  $query
      */
     public static function aplicarFiltroOrdencompra(QueryBuilder $query, string $alias = 'oc'): void
     {
-        if (self::puedeVerTodas()) {
-            return;
+        if (! self::puedeVerTodas()) {
+            $empresas = self::empresaIdsAsignadas();
+            if (count($empresas) >= 1) {
+                $query->whereIn($alias.'.empresa_id', $empresas);
+            }
         }
 
-        $empresas = self::empresaIdsAsignadas();
-        if (count($empresas) >= 1) {
-            $query->whereIn($alias.'.empresa_id', $empresas);
+        if (UsuarioSalaAsignadaSupport::activo()
+            && Schema::hasColumn('ordencompra', 'sala_id')
+            && UsuarioSalaAsignadaSupport::idsDesdeSesion() !== []
+        ) {
+            UsuarioSalaAsignadaSupport::aplicarFiltro($query, $alias.'.sala_id', false);
         }
     }
 

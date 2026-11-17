@@ -42,4 +42,37 @@ return [
      */
     'leer_subdiario' => filter_var(env('VENTAS_TRANSFERENCIA_CROWN_LEER_SUBDIARIO', false), FILTER_VALIDATE_BOOLEAN),
 
+    /**
+     * Endpoint canónico de vouchers (trae payment_type y fiscal_point_of_sale).
+     * No usar voucher/list/v2 acá: ese sirve para totales de rendición.
+     */
+    'pxsol_list_url' => env(
+        'VENTAS_TRANSFERENCIA_CROWN_PXSOL_LIST_URL',
+        'https://gateway-prod.pxsol.com/v2/voucher/list'
+    ),
+
+    'pxsol_timeout' => max(10, (int) env('VENTAS_TRANSFERENCIA_CROWN_PXSOL_TIMEOUT', 60)),
+
+    /**
+     * Hoteles PXSOL para la transferencia por API.
+     * token_env: variable de .env con el Bearer; si falta, usa TESORERIA_CROWN_PXSOL_TOKEN.
+     *
+     * @var list<array{codigo: string, nombre: string, hotel_id: int, token_env: string, puntoventas: list<array{codigo: string, nombre: string, fiscal?: int}>}>
+     */
+    'pxsol_hoteles' => [
+        [
+            'codigo' => 'CIP',
+            'nombre' => 'Cipolletti — Casino del Río',
+            'hotel_id' => (int) env('PXSOL_HOTEL_CIP_ID', 23134),
+            'token_env' => env('PXSOL_HOTEL_CIP_TOKEN_ENV', 'TESORERIA_CROWN_PXSOL_TOKEN'),
+            'puntoventas' => [
+                [
+                    'codigo' => '00131',
+                    'nombre' => 'Hotel Cipolletti',
+                    'fiscal' => 131,
+                ],
+            ],
+        ],
+    ],
+
 ];

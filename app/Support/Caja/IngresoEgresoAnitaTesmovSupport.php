@@ -118,6 +118,12 @@ final class IngresoEgresoAnitaTesmovSupport
 
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
+        $movimiento->loadMissing(['tipotransaccioncajas']);
+        if (IngresoEgresoOperacionVariaSupport::esOpv($movimiento->tipotransaccioncajas)) {
+            // OPV: solo asiento ERP/ctamov; sin pago ni tesmov Anita.
+            return;
+        }
+
         self::grabarInterno($movimiento, 1.0, null, null, null);
     }
 
@@ -458,6 +464,10 @@ final class IngresoEgresoAnitaTesmovSupport
             'tipotransaccioncajas',
             'cheques.cuentacajas',
         ]);
+
+        if (IngresoEgresoOperacionVariaSupport::esOpv($movimiento->tipotransaccioncajas)) {
+            return;
+        }
 
         $ctx = self::contexto($movimiento);
         if ($ctx === null) {

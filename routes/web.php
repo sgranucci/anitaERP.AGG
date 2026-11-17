@@ -2515,6 +2515,11 @@ Route::get('ventas/transferencia-pxsol', 'Ventas\TransferenciaPxsolController@in
 Route::post('ventas/transferencia-pxsol/preview', 'Ventas\TransferenciaPxsolController@previsualizar')->name('previsualizar_transferencia_pxsol_crown');
 Route::post('ventas/transferencia-pxsol', 'Ventas\TransferenciaPxsolController@confirmar')->name('confirmar_transferencia_pxsol_crown');
 
+Route::get('ventas/transferencia-pxsol-api', 'Ventas\TransferenciaPxsolApiController@index')->name('transferencia_pxsol_api_crown');
+Route::post('ventas/transferencia-pxsol-api/preview', 'Ventas\TransferenciaPxsolApiController@previsualizar')->name('previsualizar_transferencia_pxsol_api_crown');
+Route::post('ventas/transferencia-pxsol-api/precargar-clientes', 'Ventas\TransferenciaPxsolApiController@precargarClientes')->name('precargar_clientes_transferencia_pxsol_api_crown');
+Route::post('ventas/transferencia-pxsol-api', 'Ventas\TransferenciaPxsolApiController@confirmar')->name('confirmar_transferencia_pxsol_api_crown');
+
 Route::get('ventas/transferencia-control', 'Ventas\TransferenciaCrownControlController@index')->name('transferencia_control_crown');
 Route::get('ventas/listar-transferencia-control/{formato}', 'Ventas\TransferenciaCrownControlController@exportar')->name('listar_transferencia_control_crown');
 

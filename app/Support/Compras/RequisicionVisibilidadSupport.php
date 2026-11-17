@@ -4,9 +4,11 @@ namespace App\Support\Compras;
 
 use App\Models\Admin\Rol;
 use App\Models\Compras\Requisicion;
+use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 
 /**
@@ -110,6 +112,8 @@ final class RequisicionVisibilidadSupport
     {
         $tabla = trim($tabla) !== '' ? $tabla : 'requisicion';
 
+        self::aplicarFiltroSalaAsignada($query, $tabla);
+
         if (self::puedeVerTodasSinRestriccion()) {
             return;
         }
@@ -140,6 +144,8 @@ final class RequisicionVisibilidadSupport
     public static function aplicarFiltroTableroSeguimiento(EloquentBuilder|QueryBuilder $query, string $tabla = 'requisicion'): void
     {
         $tabla = trim($tabla) !== '' ? $tabla : 'requisicion';
+
+        self::aplicarFiltroSalaAsignada($query, $tabla);
 
         if (self::puedeVerTodasSinRestriccion()) {
             return;
@@ -209,6 +215,26 @@ final class RequisicionVisibilidadSupport
         if (count($empresas) >= 1) {
             $query->whereIn($tabla.'.empresa_id', $empresas);
         }
+    }
+
+    /**
+     * Crown: si el usuario tiene salas asignadas, solo ve RQ de esas salas.
+     *
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
+     */
+    private static function aplicarFiltroSalaAsignada(EloquentBuilder|QueryBuilder $query, string $tabla): void
+    {
+        if (! UsuarioSalaAsignadaSupport::activo()) {
+            return;
+        }
+        if (! Schema::hasColumn('requisicion', 'sala_id')) {
+            return;
+        }
+        if (UsuarioSalaAsignadaSupport::idsDesdeSesion() === []) {
+            return;
+        }
+
+        UsuarioSalaAsignadaSupport::aplicarFiltro($query, $tabla.'.sala_id', false);
     }
 
     /**

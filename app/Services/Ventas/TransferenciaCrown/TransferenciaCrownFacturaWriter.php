@@ -10,6 +10,7 @@ use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Tipoasiento;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
@@ -172,7 +173,7 @@ final class TransferenciaCrownFacturaWriter
             throw new RuntimeException('La fecha está dentro de un período cerrado.');
         }
 
-        $cliente = $this->consumidorFinal();
+        $cliente = $this->resolverCliente($fila);
         $signo = TransferenciaCrownComprobante::esCredito($fila) ? -1 : 1;
         $total = round(abs((float) $fila['total']), 2);
         if ($total <= 0) {
@@ -236,6 +237,7 @@ final class TransferenciaCrownFacturaWriter
             ]);
 
             $this->grabarImpuestos((int) $venta->id, $fila);
+            $this->grabarCuentaCorrienteSiCorresponde($venta, $fila, $cliente, $empresaId, $monedaId, $cotizacion, $signo, $total);
             $asiento = $this->crearAsiento($venta, $fila, $usuarioId, $leyenda, $lineas, $empresaId, $fechaAsiento, $monedaId, $cotizacion, $codigo);
 
             return [
@@ -244,6 +246,46 @@ final class TransferenciaCrownFacturaWriter
                 'numeroasiento' => (string) $asiento->numeroasiento,
             ];
         });
+    }
+
+    /**
+     * Subdiario de deuda del cliente (Lana: organizar facturas por CUIT).
+     * El asiento contable usa 130110000; esta fila es la CC operativa por cliente.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private function grabarCuentaCorrienteSiCorresponde(
+        Venta $venta,
+        array $fila,
+        Cliente $cliente,
+        int $empresaId,
+        int $monedaId,
+        float $cotizacion,
+        int $signo,
+        float $total,
+    ): void {
+        if (empty($fila['es_cuenta_corriente'])) {
+            return;
+        }
+        if (Cliente_Cuentacorriente::query()->where('venta_id', (int) $venta->id)->exists()) {
+            return;
+        }
+        $vencimiento = trim((string) ($fila['fechavencimiento'] ?? ''));
+        if ($vencimiento === '') {
+            $vencimiento = (string) $venta->fecha;
+        }
+        Cliente_Cuentacorriente::query()->create([
+            'fecha' => $venta->fecha,
+            'fechavencimiento' => $vencimiento,
+            'cliente_id' => (int) $cliente->id,
+            'total' => round($total * $signo, 2),
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion,
+            'venta_id' => (int) $venta->id,
+            'cobranza_id' => null,
+            'empresa_id' => $empresaId,
+            'leyenda' => mb_substr((string) ($venta->leyenda ?? ''), 0, 240),
+        ]);
     }
 
     /**
@@ -421,6 +463,32 @@ final class TransferenciaCrownFacturaWriter
         }
 
         return $this->puntos[$codigo];
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function resolverCliente(array $fila): Cliente
+    {
+        $clienteId = (int) ($fila['cliente_id'] ?? 0);
+        if ($clienteId > 0) {
+            $cliente = Cliente::query()->find($clienteId);
+            if ($cliente !== null) {
+                return $cliente;
+            }
+        }
+        $doc = preg_replace('/\D+/', '', (string) ($fila['cuit'] ?? '')) ?? '';
+        if ($doc !== '' && ! empty($fila['es_cuenta_corriente'])) {
+            $cliente = Cliente::query()
+                ->where('numerodocumento', $doc)
+                ->orderBy('id')
+                ->first();
+            if ($cliente !== null) {
+                return $cliente;
+            }
+        }
+
+        return $this->consumidorFinal();
     }
 
     private function consumidorFinal(): Cliente

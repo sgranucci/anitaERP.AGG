@@ -81,6 +81,11 @@ final class CobranzaNumeracionTransaccion
             return true;
         }
 
+        // OPV: serie ERP propia (solo asiento; sin tesmov Anita).
+        if (IngresoEgresoOperacionVariaSupport::esOpvPorId($tipotransaccionCajaId)) {
+            return true;
+        }
+
         // COB/REM/RMI/DEV por abreviatura: Ferli usa id 12 para COB; el .env AGG (1,5,…) no aplica.
         $abrev = IngresoEgresoAnitaNumeracionSupport::abreviaturaTipo($tipotransaccionCajaId);
 
@@ -165,6 +170,11 @@ final class CobranzaNumeracionTransaccion
         }
 
         $max = self::maximoNumerotransaccionSecuencial($empresaId, $tipotransaccionCajaId, true);
+
+        // OPV: solo asiento ERP; serie MAX+1 sin semilla Anita / tesmov.
+        if (IngresoEgresoOperacionVariaSupport::esOpvPorId($tipotransaccionCajaId)) {
+            return self::siguienteDesdeMaximo($max);
+        }
 
         // OPP/EGR/ING/TRA: numerador ERP (sistema_numerador); sync Anita si está habilitado.
         if (SistemaNumeradorSupport::aplicaTipoCaja($tipotransaccionCajaId)) {

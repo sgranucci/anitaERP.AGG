@@ -2,23 +2,26 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Seguridad\Usuario;
 use App\Support\Stock\ArticuloSkuMapeoSupport;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Auth;
 
 /**
- * Recodifica SKU de artículos no facturables que contienen "M" a una serie numérica nueva.
+ * Recodifica SKU de artículos inactivos no facturables con "M", los activa y asigna uso MANTENIMIENTO.
  * Persiste el mapeo en articulo_sku_mapeo para imports/migraciones futuras.
  */
 class RecodificarSkuNofacturableConMCommand extends Command
 {
     protected $signature = 'stock:recodificar-sku-nofacturable-con-m
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
-                            {--ejecutar : Persiste SKU nuevos + filas en articulo_sku_mapeo}
+                            {--ejecutar : Persiste SKU nuevos, activa, uso MANTENIMIENTO + mapeo}
+                            {--usuario= : ID usuario auditoría (obligatorio con --ejecutar; default: primer usuario)}
                             {--base= : Primer número a usar (default '.ArticuloSkuMapeoSupport::BASE_SKU_NUMERICA.')}
                             {--csv= : Ruta CSV preview (default storage/app/sku_mapeo_nofacturable_m_preview.csv)}
                             {--mostrar=20 : Filas de muestra en consola}';
 
-    protected $description = 'Recodifica SKU no facturables con M a numéricos nuevos y guarda mapeo sku_anterior→sku_nuevo';
+    protected $description = 'Inactivos no facturables con M: recodifica SKU, activa y asigna uso MANTENIMIENTO';
 
     public function handle(): int
     {
@@ -31,6 +34,16 @@ class RecodificarSkuNofacturableConMCommand extends Command
 
         if (! $ejecutar) {
             $this->warn('Modo dry-run (pase --ejecutar para persistir).');
+        }
+
+        if ($ejecutar) {
+            $usuarioId = (int) ($this->option('usuario') ?: Usuario::query()->orderBy('id')->value('id') ?? 0);
+            if ($usuarioId <= 0 || ! Auth::loginUsingId($usuarioId)) {
+                $this->error('No se pudo autenticar usuario_id='.$usuarioId.' (requerido para articulo_estado).');
+
+                return self::FAILURE;
+            }
+            $this->line('Auditoría usuario_id: '.$usuarioId);
         }
 
         $baseOpt = $this->option('base');
@@ -53,6 +66,9 @@ class RecodificarSkuNofacturableConMCommand extends Command
         }
 
         $this->info($resultado['mensaje']);
+        if (! empty($resultado['usoarticulo_id'])) {
+            $this->line('usoarticulo_id MANTENIMIENTO: '.$resultado['usoarticulo_id']);
+        }
 
         $csv = (string) ($this->option('csv') ?: storage_path('app/sku_mapeo_nofacturable_m_preview.csv'));
         ArticuloSkuMapeoSupport::exportarCsvPreview($resultado['filas'], $csv);
@@ -62,13 +78,14 @@ class RecodificarSkuNofacturableConMCommand extends Command
         if ($mostrar > 0 && $resultado['filas'] !== []) {
             $muestra = array_slice($resultado['filas'], 0, $mostrar);
             $this->table(
-                ['ID', 'SKU anterior', 'SKU nuevo', 'Descripción'],
+                ['ID', 'SKU anterior', 'SKU nuevo', 'Uso ant.', 'Descripción'],
                 array_map(
                     static fn (array $f) => [
                         $f['articulo_id'],
                         $f['sku_anterior'],
                         $f['sku_nuevo'],
-                        mb_substr($f['descripcion'], 0, 50),
+                        $f['uso_anterior_id'] ?? '',
+                        mb_substr($f['descripcion'], 0, 45),
                     ],
                     $muestra
                 )

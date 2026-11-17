@@ -13,6 +13,7 @@ var flModificaAsiento;
 var ingresoEgresoAbrevTipo = '';
 var ABREV_TRANSFERENCIA_IE = 'TRA';
 var ABREV_CANJE_CHEQUE_IE = 'CANJE';
+var ABREV_OPV_IE = 'OPV';
 var montoPendienteSp = 0;
 var retencionesSpIe = 0;
 var contrapartidaSpIe = 0;
@@ -216,6 +217,13 @@ var brutoSpIe = 0;
 				return;
 			}
 
+			// OPV: asiento manual; no regenerar desde cuentas de caja.
+			if (esOperacionVariaIngresoEgreso()) {
+				flModificaAsiento = false;
+				continuarGrabacionTrasValidaciones();
+				return;
+			}
+
 			// Transferencia: regenera asiento on-the-fly y luego valida/graba
 			if (esTransferenciaIngresoEgreso()) {
 				flModificaAsiento = true;
@@ -306,6 +314,22 @@ var brutoSpIe = 0;
 				return;
 			}
 
+			if (esOperacionVariaIngresoEgreso()) {
+				limpiarCuentasCajaOpvIe();
+				sumaMontoAsiento();
+				totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
+				var totalHaberAsientoOpv = parseTotalAsientoCampo($("#totalhaberasiento").val());
+				var totalAsientoOpv = totalDebeAsiento >= totalHaberAsientoOpv ? totalDebeAsiento : totalHaberAsientoOpv;
+				if (totalAsientoOpv <= 0.02) {
+					alert('La operación varia (OPV) requiere un asiento contable con importe.');
+					flError = true;
+					muestraVentanaAsiento();
+				} else if (Math.abs(totalDebeAsiento - totalHaberAsientoOpv) > 0.02) {
+					alert('El asiento de la operación varia no está balanceado (Debe ≠ Haber).');
+					flError = true;
+					muestraVentanaAsiento();
+				}
+			} else {
 			// Una sola cuenta de caja en 0 + asiento con importe → copiar total asiento al monto
 			copiarTotalAsientoAUnicaCuentaCajaSiCorresponde();
 			sumaMonto();
@@ -350,6 +374,7 @@ var brutoSpIe = 0;
 					alert('Ingrese un monto en todas las cuentas de caja seleccionadas.');
 					flError = true;
 				}
+			}
 			}
 
 			if (!flError)
@@ -597,6 +622,9 @@ var brutoSpIe = 0;
 	}
 
 	function minimoRenglonesCuentaCajaIe() {
+		if (esOperacionVariaIngresoEgreso()) {
+			return 0;
+		}
 		return esTransferenciaIngresoEgreso() ? 2 : 1;
 	}
 
@@ -1175,6 +1203,15 @@ var brutoSpIe = 0;
 		let empresa_id = $('#empresa_id').val();
 		var callback = typeof onDone === 'function' ? onDone : null;
 
+		// OPV: el asiento lo arma el usuario; no pisarlo con la grilla de caja.
+		if (esOperacionVariaIngresoEgreso()) {
+			flModificaAsiento = false;
+			if (callback) {
+				callback(true);
+			}
+			return;
+		}
+
 		if (!empresa_id)
 		{
 			alert("Debe asignar empresa");
@@ -1659,7 +1696,7 @@ var brutoSpIe = 0;
 				ingresoEgresoAbrevTipo = String(data.abreviatura || '').toUpperCase();
 				actualizarAvisoTransferenciaIe();
 
-				if (data.signo == 'E' && !esTransferenciaIngresoEgreso() && !esCanjeChequesIngresoEgreso())
+				if (data.signo == 'E' && !esTransferenciaIngresoEgreso() && !esCanjeChequesIngresoEgreso() && !esOperacionVariaIngresoEgreso())
 				{
 					$("#div-ordenservicio").show();
 					$("#div-conceptogasto").show();
@@ -1672,7 +1709,7 @@ var brutoSpIe = 0;
 					$("#div-conceptogasto").hide();
 					$("#div-proveedor").hide();
 					$("#div-cbu-pago-ie").hide();
-					if (esTransferenciaIngresoEgreso() || esCanjeChequesIngresoEgreso()) {
+					if (esTransferenciaIngresoEgreso() || esCanjeChequesIngresoEgreso() || esOperacionVariaIngresoEgreso()) {
 						$('#ordenservicio_id').val('');
 						$('#conceptogasto_id').val('');
 						if (typeof limpiarProveedorEnPantalla === 'function') {
@@ -1714,6 +1751,34 @@ var brutoSpIe = 0;
 		var abr = String($opt.data('abreviatura') || '').toUpperCase();
 		var op = String($opt.data('operacion') || '').toUpperCase();
 		return abr === ABREV_CANJE_CHEQUE_IE || op === 'J';
+	}
+
+	function esOperacionVariaIngresoEgreso()
+	{
+		if (ingresoEgresoAbrevTipo === ABREV_OPV_IE) {
+			return true;
+		}
+		var $opt = $('#tipotransaccion_caja_id option:selected');
+		var abr = String($opt.data('abreviatura') || $opt.attr('data-abreviatura') || '').toUpperCase();
+		var op = String($opt.data('operacion') || $opt.attr('data-operacion') || '').toUpperCase();
+		return abr === ABREV_OPV_IE || op === 'V';
+	}
+
+	function limpiarCuentasCajaOpvIe()
+	{
+		$("#tbody-cuenta-table .item-cuenta").each(function () {
+			var $tr = $(this);
+			$tr.find('.cuentacaja_id, .cuentacaja_id_previa, .codigo, .codigo_previo, .nombre').val('');
+			$tr.find('.monto, .observacion').val('');
+			$tr.find('.cotizacion').val('0');
+		});
+		$("#tbody-cuenta-table .item-cuenta").slice(1).remove();
+		if (typeof actualizaRenglonesCuenta === 'function') {
+			actualizaRenglonesCuenta();
+		}
+		if (typeof sumaMonto === 'function') {
+			sumaMonto();
+		}
 	}
 
 	function validarReemplazosCanjeChequesIe()
@@ -1917,6 +1982,15 @@ var brutoSpIe = 0;
 		} else {
 			$('#aviso-transferencia-ie').hide();
 		}
+		if (esOperacionVariaIngresoEgreso()) {
+			$('#aviso-opv-ie').show();
+			$('#ie-card-cuentas-caja').hide();
+			limpiarCuentasCajaOpvIe();
+			flModificaAsiento = false;
+		} else {
+			$('#aviso-opv-ie').hide();
+			$('#ie-card-cuentas-caja').show();
+		}
 		asegurarRenglonesCuentaPorTipo();
 	}
 
@@ -1941,6 +2015,11 @@ var brutoSpIe = 0;
 	 */
 	function asegurarRenglonesCuentaPorTipo()
 	{
+		if (esOperacionVariaIngresoEgreso()) {
+			limpiarCuentasCajaOpvIe();
+			return;
+		}
+
 		if (esTransferenciaIngresoEgreso()) {
 			while (cantidadRenglonesCuenta() < 2) {
 				agregaUnRenglon();

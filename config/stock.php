@@ -81,10 +81,9 @@ return [
     ), fn (int $id) => $id > 0)),
 
     /*
-    | Crown: JSON de fuentes Anita → sala (código repetible por sala).
-    | Ej. [{"ifx_server":"cncadmin","sala_codigo":"CIP","empresa_id":1},
-    |      {"ifx_server":"acncadmin","sala_codigo":"AC","empresa_id":1}]
-    | Vacío en Crown = default cncadmin→CIP + acncadmin→AC. AGG: vacío = sync por empresa.
+    | Crown: JSON de fuentes Anita → sala (código repetible por sala / bridge local).
+    | Ej. CIP=cncadmin, CAT=cancadmin, LGR=lgncadmin, GRO=grncadmin, AC=acncadmin.
+    | Vacío en Crown = esas 5 fuentes (DepmaeAnitaFuentesSupport). AGG: vacío = sync por empresa.
     */
     'depmae_anita_fuentes' => env('STOCK_DEPMAE_ANITA_FUENTES', ''),
 

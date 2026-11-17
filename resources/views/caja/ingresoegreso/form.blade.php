@@ -89,6 +89,10 @@
                 monto <strong>positivo</strong> en la cuenta que recibe y <strong>negativo</strong> en la que entrega.
                 Debe y Haber de caja, y el asiento contable, deben quedar balanceados.
             </div>
+            <div id="aviso-opv-ie" class="alert alert-info py-2" style="display:none;">
+                <strong>Operación varia (OPV):</strong> solo genera el asiento contable.
+                No mueve cuentas de caja ni tesorería Anita. Armá el Debe/Haber en la solapa del asiento.
+            </div>
             @php
                 $proveedorModelIe = $data->proveedores ?? null;
                 $proveedorIdIe = old('proveedor_id', $data->proveedor_id ?? '');
@@ -153,7 +157,7 @@
     <input type="hidden" id="rendicionreceptivo_id" name="rendicionreceptivo_id" value="{{ $data->rendicionreceptivo_id ?? '' }}" />
     <h2 id="loading" style="display:none">Guardando movimiento de caja ...</h2>
 
-    <div class="card card-outline card-info mt-3 mb-0">
+    <div class="card card-outline card-info mt-3 mb-0" id="ie-card-cuentas-caja">
         <div class="card-header py-2">
             <h3 class="card-title mb-0"><i class="fa fa-wallet"></i> Cuentas de caja</h3>
         </div>

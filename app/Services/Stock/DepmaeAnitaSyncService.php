@@ -210,6 +210,13 @@ class DepmaeAnitaSyncService
                 continue;
             }
 
+            $payload = DepmaeAnitaBridgeSupport::mapPayload($row);
+            if (DepmaeAnitaExclusionSupport::debeOmitirCopiaSalaEnAc($payload['nombre'] ?? '', $salaCodigo)) {
+                $ret['omitidos']++;
+
+                continue;
+            }
+
             try {
                 if ($dryRun) {
                     $existente = Depmae::query()

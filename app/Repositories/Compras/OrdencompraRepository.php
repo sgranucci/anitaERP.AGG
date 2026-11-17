@@ -20,6 +20,7 @@ use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Ventas\UsuarioSalaAsignadaSupport;
 use App\Services\Compras\OrdencompraLegajoFacturaPdfService;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\PortalProveedorOrdencompraListadoFiltros;
@@ -393,6 +394,13 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         );
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($q, 'ordencompra.empresa_id');
+
+        if (EntornoEmpresaSupport::esCrown()
+            && Schema::hasColumn('ordencompra', 'sala_id')
+            && UsuarioSalaAsignadaSupport::idsDesdeSesion() !== []
+        ) {
+            UsuarioSalaAsignadaSupport::aplicarFiltro($q, 'ordencompra.sala_id', false);
+        }
 
         OrdencompraListadoFiltros::aplicar($q, $filtros);
     }

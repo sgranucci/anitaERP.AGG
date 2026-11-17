@@ -117,4 +117,43 @@ class IngresoEgresoCuadreCajaAsientoSupportTest extends TestCase
 
         $this->assertTrue(true);
     }
+
+    public function test_opv_acepta_asiento_sin_cuentas_caja(): void
+    {
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'tipo_abreviatura' => 'OPV',
+            'cuentacaja_ids' => [],
+            'montos' => [],
+            'debeasientos' => [1500.5, ''],
+            'haberasientos' => ['', 1500.5],
+        ]);
+
+        $this->assertTrue(true);
+    }
+
+    public function test_opv_rechaza_si_hay_cuenta_caja(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'tipo_abreviatura' => 'OPV',
+            'cuentacaja_ids' => [10],
+            'montos' => [0],
+            'debeasientos' => [100],
+            'haberasientos' => [100],
+        ]);
+    }
+
+    public function test_opv_rechaza_asiento_desbalanceado(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        IngresoEgresoCuadreCajaAsientoSupport::assertCuadre([
+            'tipo_abreviatura' => 'OPV',
+            'cuentacaja_ids' => [],
+            'montos' => [],
+            'debeasientos' => [100],
+            'haberasientos' => [50],
+        ]);
+    }
 }

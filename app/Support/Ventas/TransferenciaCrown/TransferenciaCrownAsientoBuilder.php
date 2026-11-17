@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas\TransferenciaCrown;
 
 use App\Models\Contable\Cuentacontable;
+use App\Models\Ventas\Cliente;
 use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
@@ -83,12 +84,13 @@ final class TransferenciaCrownAsientoBuilder
         $proceso = $perfil === 'pxsol' ? 'arca' : 'gastro';
         $claveVenta = TransferenciaCrownCuentaClaves::clavePv($proceso, 'venta', $sucursal);
         $claveEfectivo = TransferenciaCrownCuentaClaves::clavePv($proceso, 'efectivo', $sucursal);
+        $esCc = ! empty($fila['es_cuenta_corriente']);
 
         $lineas = [];
         $total = round((float) ($fila['total'] ?? 0), 2);
         if ($total <= 0.01) {
             $lineas[] = $this->linea($empresaId, $claveVenta, $dhIngreso, 0.01, $descripcion);
-            $lineas[] = $this->linea($empresaId, $claveEfectivo, $dhPago, 0.01, $descripcion);
+            $lineas[] = $this->lineaPago($empresaId, $fila, $esCc, $claveEfectivo, $dhPago, 0.01, $descripcion);
 
             return ['origen' => 'generado', 'nro_operacion' => 0, 'lineas' => $lineas];
         }
@@ -137,9 +139,87 @@ final class TransferenciaCrownAsientoBuilder
         if ($pago <= 0) {
             $pago = $total;
         }
-        $lineas[] = $this->linea($empresaId, $claveEfectivo, $dhPago, $pago, $descripcion);
+        $lineas[] = $this->lineaPago($empresaId, $fila, $esCc, $claveEfectivo, $dhPago, $pago, $descripcion);
 
         return ['origen' => 'generado', 'nro_operacion' => 0, 'lineas' => $lineas];
+    }
+
+    /**
+     * CC: usa cliente.cuentacontable_id (en Crown casi todos tienen 130110000).
+     * Si falta, cae a la cuenta automática puente. Contado: efectivo del PV.
+     *
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function lineaPago(
+        int $empresaId,
+        array $fila,
+        bool $esCc,
+        string $claveEfectivo,
+        string $dh,
+        float $importe,
+        string $descripcion,
+    ): array {
+        if (! $esCc) {
+            return $this->linea($empresaId, $claveEfectivo, $dh, $importe, $descripcion);
+        }
+
+        $cuentaClienteId = $this->cuentaDeudoresClienteId($empresaId, $fila);
+        if ($cuentaClienteId > 0) {
+            return $this->lineaPorId($empresaId, $cuentaClienteId, $dh, $importe, $descripcion);
+        }
+
+        return $this->linea($empresaId, TransferenciaCrownCuentaClaves::PUENTE, $dh, $importe, $descripcion);
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function cuentaDeudoresClienteId(int $empresaId, array $fila): int
+    {
+        $clienteId = (int) ($fila['cliente_id'] ?? 0);
+        if ($clienteId <= 0) {
+            return 0;
+        }
+        $cliente = Cliente::query()->find($clienteId, ['id', 'cuentacontable_id']);
+        $cuentaId = (int) ($cliente->cuentacontable_id ?? 0);
+        if ($cuentaId <= 0) {
+            return 0;
+        }
+        $cuenta = Cuentacontable::query()
+            ->whereKey($cuentaId)
+            ->where('empresa_id', $empresaId)
+            ->first(['id']);
+
+        return $cuenta !== null ? (int) $cuenta->id : 0;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function lineaPorId(int $empresaId, int $cuentaId, string $dh, float $importe, string $descripcion): array
+    {
+        $cacheKey = $empresaId.'|id:'.$cuentaId;
+        if (! isset($this->cuentaPorClave[$cacheKey])) {
+            $cuenta = Cuentacontable::query()
+                ->whereKey($cuentaId)
+                ->where('empresa_id', $empresaId)
+                ->first(['id', 'codigo', 'nombre']);
+            if ($cuenta === null) {
+                throw new RuntimeException('No está la cuenta contable id '.$cuentaId.' para la empresa '.$empresaId.'.');
+            }
+            $this->cuentaPorClave[$cacheKey] = [
+                'cuentacontable_id' => (int) $cuenta->id,
+                'codigo' => (string) $cuenta->codigo,
+                'nombre' => (string) $cuenta->nombre,
+            ];
+        }
+
+        return array_merge($this->cuentaPorClave[$cacheKey], [
+            'dh' => $dh,
+            'importe' => round($importe, 2),
+            'descripcion' => $descripcion,
+        ]);
     }
 
     /**
