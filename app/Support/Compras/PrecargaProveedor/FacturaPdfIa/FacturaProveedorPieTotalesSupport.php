@@ -554,6 +554,15 @@ final class FacturaProveedorPieTotalesSupport
         }
         // Orden importa: Per.IVA / RG antes que IVA genérico; TOTAL antes que Subtotal.
         if (preg_match('/sub[\s\-]*totals?/iu', $l)) {
+            // «Subtotal c/IVA» / «Subtotal con IVA» es bruto de ítem, no neto del pie.
+            if (preg_match('/c\s*\/\s*iva|con\s+iva/iu', $l)) {
+                return null;
+            }
+            // Encabezado de grilla (Código / Cantidad / Precio / Subtotal), no pie AFIP.
+            if (preg_match('/c[oó]digo|producto|cantidad|precio|bonif|u\.?\s*medida/iu', $l)) {
+                return null;
+            }
+
             return 'subtotal';
         }
         // «Gravado u$s 730,58» del pie clásico (no «No Gravado»).
@@ -850,14 +859,45 @@ final class FacturaProveedorPieTotalesSupport
         if ($vals['total'] <= 0 && $suma > 0) {
             $vals['total'] = $suma;
         }
-        // Si "total" quedó igual al neto pero hay IVA/percs, reconstruir.
+        // Si "total" quedó igual al "neto" pero hay IVA/percs:
+        // 1) AFIP: el "subtotal" era bruto (Subtotal c/IVA) y el IVA cierra contra total−impuestos.
+        // 2) Clásico: el total se leyó como neto → reconstruir total = suma.
         if ($vals['subtotal'] > 0
             && abs($vals['total'] - $vals['subtotal']) <= 0.05
             && ($vals['iva'] + $vals['percepcion_iva'] + $vals['percepcion_iibb']) > 0.05) {
-            $vals['total'] = $suma;
+            $impuestos = round(
+                $vals['iva'] + $vals['impuestos_internos']
+                + $vals['percepcion_iva'] + $vals['percepcion_iibb'],
+                2
+            );
+            $netoInferido = round($vals['total'] - $impuestos, 2);
+            $iva = (float) $vals['iva'];
+            if ($netoInferido > 0.05
+                && $iva > 0.05
+                && $this->ivaCierraContraNeto($iva, $netoInferido)
+                && ! $this->ivaCierraContraNeto($iva, (float) $vals['subtotal'])) {
+                $vals['subtotal'] = $netoInferido;
+            } else {
+                $vals['total'] = $suma;
+            }
         }
 
         return $vals;
+    }
+
+    /** ¿El IVA corresponde a alguna alícuota habitual sobre el neto? */
+    private function ivaCierraContraNeto(float $iva, float $neto): bool
+    {
+        if ($neto <= 0.05 || $iva <= 0.05) {
+            return false;
+        }
+        foreach ([0.105, 0.21, 0.27, 0.05, 0.025] as $tasa) {
+            if (abs(round($neto * $tasa, 2) - $iva) <= max(0.05, $iva * 0.01)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

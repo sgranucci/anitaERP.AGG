@@ -134,6 +134,11 @@ final class RecepcionProveedorOcrNumeroOcExtractor
             return false;
         }
 
+        // Importe con decimales (220000,00 / 220000.00): es precio/neto, no OC.
+        if (preg_match('/(?<!\d)'.$str.'[.,]\d{2}(?!\d)/', $texto)) {
+            return false;
+        }
+
         $anioActual = (int) date('Y');
         if ($numero >= ($anioActual - 1) * 100 && $numero <= ($anioActual + 1) * 100 + 99) {
             return false;

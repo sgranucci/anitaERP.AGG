@@ -19,6 +19,7 @@ use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\PrecargaProveedor\ComprobanteProveedorPdfIaConceptoMatcherSupport;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\ConceptoIvacompraNombreIaAprendizajeSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaPdfIaMonedaDestinoException;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaPdfIaMonedaDestinoSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorImporteParserSupport;
@@ -291,8 +292,17 @@ final class ComprobanteProveedorPdfIaService
                 'concepto_ivacompra_id' => (int) $concepto->id,
                 'codigo_concepto_anita' => $codigoAnita,
                 'monto' => (float) ($linea['importe'] ?? 0),
+                'rotulos_origen' => is_array($linea['rotulos_origen'] ?? null)
+                    ? array_values($linea['rotulos_origen'])
+                    : [],
+                'tipos_origen' => is_array($linea['tipos_origen'] ?? null)
+                    ? array_values($linea['tipos_origen'])
+                    : [],
             ];
         }
+
+        // Snapshot antes de prorrateo/coherencia que puede rearmar líneas.
+        $lineasParaAprenderNombreIa = $lineasConcepto;
 
         $tipoParaCoherencia = $tipoAbreviatura !== ''
             ? $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($tipoAbreviatura)
@@ -464,6 +474,8 @@ final class ComprobanteProveedorPdfIaService
             }
 
             DB::commit();
+
+            $this->aprenderNombreIaTrasConfirmar($lineasParaAprenderNombreIa);
 
             $cotizacionIngreso->notificarSiMarca($precarga->fresh());
 
@@ -1017,6 +1029,28 @@ final class ComprobanteProveedorPdfIaService
     }
 
     /**
+     * Enriquece nombre_ia con rótulos cortos del pie AFIP (no falla la precarga).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function aprenderNombreIaTrasConfirmar(array $lineas): void
+    {
+        try {
+            app(ConceptoIvacompraNombreIaAprendizajeSupport::class)
+                ->aprenderDesdeLineasConfirmadas($lineas);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::channel(
+                (string) config(
+                    'comprobante_proveedor_pdf_ia.log_channel',
+                    config('logging.default', 'stack')
+                )
+            )->warning('pdf_ia.nombre_ia_aprendizaje_fallo', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Cierra el ciclo de gobernanza: la sugerencia de IA terminó en una precarga grabada.
      *
      * @param  array<string, mixed>  $payloadConfirmacion
@@ -1379,14 +1413,16 @@ final class ComprobanteProveedorPdfIaService
     /**
      * Abre gravados por alícuota y valida IVA↔neto sobre los conceptos matcheados por IA.
      *
-     * @param  list<array{id_concepto: int|string, importe: float, descripcion_ia?: string, concepto_nombre?: string}>  $conceptosAsignados
+     * @param  list<array{id_concepto: int|string, importe: float, descripcion_ia?: string, concepto_nombre?: string, rotulos_origen?: list<string>, tipos_origen?: list<string>}>  $conceptosAsignados
      * @param  list<int>  $conceptoIdsPermitidos  Conceptos de la lista OC / tipo comprobante
-     * @return list<array{id_concepto: int|string, importe: float, descripcion_ia: string, concepto_nombre: string}>
+     * @return list<array{id_concepto: int|string, importe: float, descripcion_ia: string, concepto_nombre: string, rotulos_origen: list<string>, tipos_origen: list<string>}>
      */
     private function aplicarCoherenciaIvaAConceptosAsignados(
         array $conceptosAsignados,
         array $conceptoIdsPermitidos = [],
     ): array {
+        /** @var array<string, array{rotulos: list<string>, tipos: list<string>}> $origenPorCodigo */
+        $origenPorCodigo = [];
         $lineas = [];
         foreach ($conceptosAsignados as $linea) {
             $codigoAnita = $linea['id_concepto'] ?? null;
@@ -1399,6 +1435,24 @@ final class ComprobanteProveedorPdfIaService
             }
             if (! $concepto) {
                 throw new RuntimeException('Concepto IVA compra código «'.$codigoAnita.'» inexistente en ERP.');
+            }
+            $claveCodigo = (string) $concepto->codigo;
+            $rotulos = is_array($linea['rotulos_origen'] ?? null) ? array_values($linea['rotulos_origen']) : [];
+            $tipos = is_array($linea['tipos_origen'] ?? null) ? array_values($linea['tipos_origen']) : [];
+            if (! isset($origenPorCodigo[$claveCodigo])) {
+                $origenPorCodigo[$claveCodigo] = ['rotulos' => [], 'tipos' => []];
+            }
+            foreach ($rotulos as $r) {
+                $r = trim((string) $r);
+                if ($r !== '' && ! in_array($r, $origenPorCodigo[$claveCodigo]['rotulos'], true)) {
+                    $origenPorCodigo[$claveCodigo]['rotulos'][] = $r;
+                }
+            }
+            foreach ($tipos as $t) {
+                $t = strtolower(trim((string) $t));
+                if ($t !== '' && ! in_array($t, $origenPorCodigo[$claveCodigo]['tipos'], true)) {
+                    $origenPorCodigo[$claveCodigo]['tipos'][] = $t;
+                }
             }
             $lineas[] = [
                 'concepto_ivacompra_id' => (int) $concepto->id,
@@ -1420,11 +1474,15 @@ final class ComprobanteProveedorPdfIaService
             if (! $concepto) {
                 continue;
             }
+            $claveCodigo = (string) $concepto->codigo;
+            $origen = $origenPorCodigo[$claveCodigo] ?? ['rotulos' => [], 'tipos' => []];
             $resultado[] = [
                 'id_concepto' => $concepto->codigo,
                 'importe' => round((float) $linea['monto'], 2),
                 'descripcion_ia' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
                 'concepto_nombre' => (string) $concepto->nombre,
+                'rotulos_origen' => $origen['rotulos'],
+                'tipos_origen' => $origen['tipos'],
             ];
         }
 

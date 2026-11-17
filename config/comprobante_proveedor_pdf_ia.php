@@ -42,4 +42,13 @@ return [
         'scan_legacy_dir' => env('COMPROBANTE_PROVEEDOR_PDF_IA_SCAN_LEGACY_DIR', '/scan/compras/documentos'),
         'scan_legacy_max_docu' => (int) env('COMPROBANTE_PROVEEDOR_PDF_IA_SCAN_LEGACY_MAX_DOCU', 362500),
     ],
+
+    /*
+    | Al confirmar precarga PDF+IA, agregar a concepto_ivacompra.nombre_ia los
+    | rótulos cortos del pie AFIP que matchearon (no ítems de detalle).
+    */
+    'aprender_nombre_ia' => filter_var(
+        env('COMPROBANTE_PROVEEDOR_PDF_IA_APRENDER_NOMBRE_IA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
 ];

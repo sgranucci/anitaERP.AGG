@@ -17,7 +17,14 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
      * @param  list<array<string, mixed>>  $conceptosCandidatos
      * @param  list<array<string, mixed>>  $lineasIa
      * @param  array{es_monotributo?: bool}  $opciones
-     * @return list<array{id_concepto: int|string, importe: float, descripcion_ia: string, concepto_nombre: string}>
+     * @return list<array{
+     *   id_concepto: int|string,
+     *   importe: float,
+     *   descripcion_ia: string,
+     *   concepto_nombre: string,
+     *   rotulos_origen: list<string>,
+     *   tipos_origen: list<string>
+     * }>
      */
     public function matchear(array $conceptosCandidatos, array $lineasIa, array $opciones = []): array
     {
@@ -56,9 +63,19 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
                     'importe' => 0.0,
                     'descripcion_ia' => (string) $mejor['descripcion_ai'],
                     'concepto_nombre' => (string) $mejor['nombre'],
+                    'rotulos_origen' => [],
+                    'tipos_origen' => [],
                 ];
             }
             $asignados[$clave]['importe'] = round($asignados[$clave]['importe'] + $importe, 2);
+            $rotulo = trim((string) ($linea['descripcion'] ?? ''));
+            if ($rotulo !== '' && ! in_array($rotulo, $asignados[$clave]['rotulos_origen'], true)) {
+                $asignados[$clave]['rotulos_origen'][] = $rotulo;
+            }
+            $tipoOrigen = strtolower(trim((string) ($linea['tipo'] ?? '')));
+            if ($tipoOrigen !== '' && ! in_array($tipoOrigen, $asignados[$clave]['tipos_origen'], true)) {
+                $asignados[$clave]['tipos_origen'][] = $tipoOrigen;
+            }
             $usados[$clave] = true;
         }
 
