@@ -97,6 +97,11 @@ class MayorConceptoController extends Controller
             ? $this->empresaRepository->find((int) $empresaIds[0])
             : null;
         $moneda = $this->monedaRepository->find((int) ($filtros['moneda_id'] ?? 1));
+        $empresaMetaId = (int) ($empresaIds[0] ?? 0);
+        $cuentasComoDebajoLimiteMeta = MayorConceptoListadoFiltros::metaCuentasComoDebajoLimite(
+            MayorConceptoListadoFiltros::cuentasComoDebajoLimite($filtros),
+            $empresaMetaId,
+        );
 
         return view('contable.mayor_concepto.index', [
             'empresa_query' => $empresaQuery,
@@ -124,6 +129,7 @@ class MayorConceptoController extends Controller
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
             'multiempresa' => MayorConceptoListadoFiltros::esMultiempresa($filtros),
+            'cuentas_como_debajo_limite_meta' => $cuentasComoDebajoLimiteMeta,
             'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_concepto' => can('listar-conceptos-de-gastos', false) || can('editar-conceptos-de-gastos', false),
@@ -163,6 +169,16 @@ class MayorConceptoController extends Controller
             'consolidar_empresas' => ! empty($filtros['consolidar_empresas']),
             'excel_formato_numero' => $filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal(),
         ]);
+        if (
+            MayorConceptoListadoFiltros::normalizarFuenteMayor($filtros['fuente_mayor'] ?? null)
+            === \App\Support\Contable\MayorFuenteConsultaSupport::MODO_ERP
+        ) {
+            ReportePreferenciasUsuario::persistirEnteros(
+                self::PREFERENCIAS_CLAVE,
+                'cuentas_como_debajo_limite',
+                MayorConceptoListadoFiltros::cuentasComoDebajoLimite($filtros),
+            );
+        }
 
         if ($request->ajax() || $request->boolean('ajax') || $request->wantsJson()) {
             return response()->json([
@@ -442,6 +458,13 @@ class MayorConceptoController extends Controller
         } else {
             $filtros['excel_formato_numero'] = MayorConceptoExcelFormatoNumero::normalizar(
                 $filtros['excel_formato_numero'] ?? ExcelFormatoNumero::preferenciaGlobal()
+            );
+        }
+
+        if (! $request->has('cuentas_como_debajo_limite')) {
+            $filtros['cuentas_como_debajo_limite'] = ReportePreferenciasUsuario::leerEnteros(
+                self::PREFERENCIAS_CLAVE,
+                'cuentas_como_debajo_limite',
             );
         }
 

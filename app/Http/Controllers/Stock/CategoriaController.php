@@ -237,7 +237,8 @@ class CategoriaController extends Controller
             || can('editar-precios', false)
             || can('actualizar-precios', false)
             || can('listar-articulos', false)
-            || can('listar-informe-stock-local', false);
+            || can('listar-informe-stock-local', false)
+            || can('listar-reporte-historial-precios-compra', false);
     }
 
     private function findCategoriaPorCodigo(string $codigo): ?Categoria

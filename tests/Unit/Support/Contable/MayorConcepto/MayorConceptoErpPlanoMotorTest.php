@@ -245,6 +245,66 @@ class MayorConceptoErpPlanoMotorTest extends TestCase
         $this->assertSame([], $clasificado['analitico']);
     }
 
+    public function test_cuenta_fuera_del_limite_forzada_entra_como_pata(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $cuentaFuera = 113010011;
+        $this->assertGreaterThan(self::LIMITE, $cuentaFuera);
+
+        $clasificado = $motor->clasificar(
+            [
+                $this->asiento(71, 905, [
+                    $this->mov($cuentaFuera, 'Coin maquinas', 53, 'MOVIMIENTOS COMPENSABLES', 1000, false),
+                    $this->mov(411010001, 'Ventas salon', 4, 'VENTAS', 1000, true),
+                ]),
+            ],
+            [],
+            self::LIMITE,
+            [],
+            false,
+            false,
+            false,
+            [$cuentaFuera],
+        );
+
+        $this->assertCount(1, $clasificado['lineas']);
+        $linea = $clasificado['lineas'][0];
+        $this->assertSame(411010001, $linea['cuenta']);
+        $this->assertSame(0.0, $linea['debe']);
+        $this->assertSame(1000.0, $linea['haber']);
+        $this->assertArrayHasKey(71, $clasificado['analitico']);
+        $this->assertEqualsWithDelta(1000.0, $clasificado['analitico'][71]['haber'], 0.001);
+        $this->assertTrue($motor->auditar($clasificado['analitico'], $clasificado['lineas'])['cuadra']);
+    }
+
+    public function test_cuenta_forzada_no_sale_otra_vez_en_lineas_nativas(): void
+    {
+        $motor = new MayorConceptoErpPlanoMotor;
+        $cuentaFuera = 113010011;
+        $asiento = $this->asiento(72, 906, [
+            $this->mov(111010001, 'Caja', 1, 'CAJA', 500, true),
+            $this->mov($cuentaFuera, 'Coin maquinas', 53, 'MOVIMIENTOS COMPENSABLES', 500, true),
+            $this->mov(412010001, 'Ventas maquinas', 47, 'VENTA', 1000, false),
+        ]);
+        $asiento['observacion'] = 'Cierre rendición — Venta maquinas';
+
+        $clasificado = $motor->clasificar(
+            [$asiento],
+            [],
+            self::LIMITE,
+            [],
+            true,
+            false,
+            false,
+            [$cuentaFuera],
+        );
+
+        $cuentasLinea = array_map(fn ($ln) => (int) $ln['cuenta'], $clasificado['lineas']);
+        $this->assertNotContains($cuentaFuera, $cuentasLinea);
+        $this->assertContains(412010001, $cuentasLinea);
+        $this->assertEqualsWithDelta(1000.0, $clasificado['analitico'][72]['debe'], 0.001);
+    }
+
     public function test_el_auditor_marca_un_importe_distinto(): void
     {
         $motor = new MayorConceptoErpPlanoMotor;

@@ -99,6 +99,38 @@ class ReportePreferenciasUsuario
     }
 
     /**
+     * @return list<int>
+     */
+    public static function leerEnteros(string $reporte, string $campo): array
+    {
+        $valor = cache()->get(generaKey(self::clave($reporte, $campo)));
+        if (! is_array($valor)) {
+            return [];
+        }
+
+        return collect($valor)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<int|string>  $valores
+     */
+    public static function persistirEnteros(string $reporte, string $campo, array $valores): void
+    {
+        $ids = collect($valores)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        Cache::forever(generaKey(self::clave($reporte, $campo)), $ids);
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public static function persistir(string $reporte, array $data): void

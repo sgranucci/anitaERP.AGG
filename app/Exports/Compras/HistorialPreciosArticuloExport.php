@@ -15,6 +15,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
@@ -24,8 +25,6 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
-
-    private const COL_ULTIMA = 'N';
 
     private const FORMAT_IMPORTE = NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2;
 
@@ -45,6 +44,7 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
     /**
      * @param  list<array<string, mixed>>  $filas
      * @param  array<string, mixed>  $totales
+     * @param  list<string>  $meses
      */
     public function __construct(
         private array $filas,
@@ -52,6 +52,7 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
         private string $subtitulo = '',
         private array $totales = [],
         private string $modo = HistorialPreciosArticuloFiltros::MODO_RESUMEN,
+        private array $meses = [],
     ) {}
 
     public function view(): View
@@ -71,6 +72,7 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
             'subtitulo' => $this->subtitulo,
             'totales' => $this->totales,
             'modo' => $this->modo,
+            'meses' => $this->meses,
             'total_lineas' => count($this->filas),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'para_pdf' => true,
@@ -84,6 +86,25 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
 
     public function columnFormats(): array
     {
+        if ($this->esMensual()) {
+            $formats = [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'C' => NumberFormat::FORMAT_TEXT,
+            ];
+            $col = 6; // F = primer precio
+            foreach ($this->meses as $i => $ym) {
+                $formats[Coordinate::stringFromColumnIndex($col)] = self::FORMAT_IMPORTE;
+                $col++;
+                if ($i > 0) {
+                    $formats[Coordinate::stringFromColumnIndex($col)] = NumberFormat::FORMAT_NUMBER_00;
+                    $col++;
+                }
+            }
+            $formats[Coordinate::stringFromColumnIndex($col)] = NumberFormat::FORMAT_NUMBER_00;
+
+            return $formats;
+        }
+
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
@@ -117,6 +138,28 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
 
     public function columnWidths(): array
     {
+        if ($this->esMensual()) {
+            $widths = [
+                'A' => 14,
+                'B' => 36,
+                'C' => 10,
+                'D' => 28,
+                'E' => 8,
+            ];
+            $col = 6;
+            foreach ($this->meses as $i => $ym) {
+                $widths[Coordinate::stringFromColumnIndex($col)] = 11;
+                $col++;
+                if ($i > 0) {
+                    $widths[Coordinate::stringFromColumnIndex($col)] = 8;
+                    $col++;
+                }
+            }
+            $widths[Coordinate::stringFromColumnIndex($col)] = 12;
+
+            return $widths;
+        }
+
         return [
             'A' => 14,
             'B' => 36,
@@ -140,6 +183,7 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
+                $colUltima = $this->columnaUltima();
 
                 if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
@@ -164,7 +208,7 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
 
                 for ($i = 0; $i < $this->filasMetaEncabezado; $i++) {
                     $fila = $this->filaInicioMeta + $i;
-                    $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
+                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
                 }
 
                 $sheet->getStyle('A'.$this->filaInicioMeta)->applyFromArray([
@@ -182,7 +226,7 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
                 $sheet->getRowDimension($this->filaInicioMeta)->setRowHeight(28);
 
                 $sheet->getStyle(
-                    'A'.$this->filaCabecerasExcel.':'.self::COL_ULTIMA.$this->filaCabecerasExcel
+                    'A'.$this->filaCabecerasExcel.':'.$colUltima.$this->filaCabecerasExcel
                 )->applyFromArray([
                     'font' => [
                         'bold' => true,
@@ -204,6 +248,27 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
     public function title(): string
     {
         return 'Historial precios';
+    }
+
+    private function esMensual(): bool
+    {
+        return $this->modo === HistorialPreciosArticuloFiltros::MODO_MENSUAL;
+    }
+
+    private function cantidadColumnas(): int
+    {
+        if ($this->esMensual()) {
+            $nMeses = count($this->meses);
+
+            return 5 + $nMeses + max(0, $nMeses - 1) + 1;
+        }
+
+        return 14;
+    }
+
+    private function columnaUltima(): string
+    {
+        return Coordinate::stringFromColumnIndex($this->cantidadColumnas());
     }
 
     private function contarFilasMetaEncabezado(): int

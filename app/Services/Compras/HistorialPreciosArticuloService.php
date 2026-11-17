@@ -7,6 +7,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\HistorialPreciosArticuloFiltros;
 use App\Support\Compras\OrdencompraReporteCriteriosSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -23,29 +24,52 @@ class HistorialPreciosArticuloService
      * @param  array<string, mixed>  $filtros
      * @return array{
      *     filas: list<array<string, mixed>>,
-     *     totales: array{total_articulos: int, total_compras: int, con_variacion: int, sin_variacion: int}
+     *     totales: array{total_articulos: int, total_compras: int, con_variacion: int, sin_variacion: int},
+     *     meses: list<string>
      * }
      */
     public function generar(array $filtros): array
     {
         $compras = $this->consultarCompras($filtros);
         $modo = (string) ($filtros['modo'] ?? HistorialPreciosArticuloFiltros::MODO_RESUMEN);
+        $meses = $modo === HistorialPreciosArticuloFiltros::MODO_MENSUAL
+            ? HistorialPreciosArticuloFiltros::mesesDelPeriodo($filtros)
+            : [];
 
-        $filas = $modo === HistorialPreciosArticuloFiltros::MODO_DETALLE
-            ? $this->armarDetalle($compras, $filtros)
-            : $this->armarResumen($compras, $filtros);
+        $filas = match ($modo) {
+            HistorialPreciosArticuloFiltros::MODO_DETALLE => $this->armarDetalle($compras, $filtros),
+            HistorialPreciosArticuloFiltros::MODO_MENSUAL => $this->armarMensual($compras, $filtros, $meses),
+            default => $this->armarResumen($compras, $filtros),
+        };
 
         if (! empty($filtros['solo_con_variacion'])) {
             $filas = array_values(array_filter(
                 $filas,
-                static fn (array $f) => ($f['variacion_pct'] ?? null) !== null
-                    && (float) $f['variacion_pct'] != 0.0,
+                static function (array $f) use ($modo): bool {
+                    if ($modo === HistorialPreciosArticuloFiltros::MODO_MENSUAL) {
+                        if (($f['variacion_periodo_pct'] ?? null) !== null
+                            && (float) $f['variacion_periodo_pct'] != 0.0) {
+                            return true;
+                        }
+                        foreach ($f['variaciones_pct_mes'] ?? [] as $pct) {
+                            if ($pct !== null && (float) $pct != 0.0) {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    }
+
+                    return ($f['variacion_pct'] ?? null) !== null
+                        && (float) $f['variacion_pct'] != 0.0;
+                },
             ));
         }
 
         return [
             'filas' => $filas,
             'totales' => $this->totalesDesdeFilas($filas, $modo),
+            'meses' => $meses,
         ];
     }
 
@@ -108,6 +132,23 @@ class HistorialPreciosArticuloService
         $subProv = OrdencompraReporteCriteriosSupport::subtituloProveedores($filtros);
         if ($subProv !== null) {
             $partes[] = $subProv;
+        }
+
+        if (! empty($filtros['tipoarticulo_id'])) {
+            $txt = trim((string) (($filtros['tipoarticulo_codigo'] ?? '').' '.($filtros['tipoarticulo_nombre'] ?? '')));
+            $partes[] = 'Tipo: '.($txt !== '' ? $txt : 'ID '.$filtros['tipoarticulo_id']);
+        }
+        if (! empty($filtros['usoarticulo_id'])) {
+            $txt = trim((string) ($filtros['usoarticulo_nombre'] ?? ''));
+            $partes[] = 'Uso: '.($txt !== '' ? $txt : 'ID '.$filtros['usoarticulo_id']);
+        }
+        if (! empty($filtros['categoria_id'])) {
+            $txt = trim((string) (($filtros['categoria_codigo'] ?? '').' — '.($filtros['categoria_nombre'] ?? '')));
+            $partes[] = 'Categoría: '.($txt !== ' — ' ? $txt : 'ID '.$filtros['categoria_id']);
+        }
+        if (! empty($filtros['subcategoria_id'])) {
+            $txt = trim((string) (($filtros['subcategoria_codigo'] ?? '').' — '.($filtros['subcategoria_nombre'] ?? '')));
+            $partes[] = 'Subcategoría: '.($txt !== ' — ' ? $txt : 'ID '.$filtros['subcategoria_id']);
         }
 
         if (! empty($filtros['solo_con_variacion'])) {
@@ -255,6 +296,123 @@ class HistorialPreciosArticuloService
     }
 
     /**
+     * Último precio de cada mes del período + variación % vs el mes anterior con precio.
+     *
+     * @param  Collection<int, object>  $compras
+     * @param  array<string, mixed>  $filtros
+     * @param  list<string>  $meses
+     * @return list<array<string, mixed>>
+     */
+    private function armarMensual(Collection $compras, array $filtros, array $meses): array
+    {
+        if ($meses === []) {
+            return [];
+        }
+
+        $agrupacion = (string) ($filtros['agrupacion'] ?? HistorialPreciosArticuloFiltros::AGRUPACION_ARTICULO);
+        $mesesSet = array_fill_keys($meses, true);
+        /** @var array<string, array{meta: object, precios: array<string, float>, monedas: array<string, string>}> $porClave */
+        $porClave = [];
+
+        foreach ($compras as $compra) {
+            $fecha = (string) ($compra->fecha ?? '');
+            if ($fecha === '') {
+                continue;
+            }
+            try {
+                $ym = Carbon::parse($fecha)->format('Y-m');
+            } catch (\Throwable) {
+                continue;
+            }
+            if (! isset($mesesSet[$ym])) {
+                continue;
+            }
+
+            $clave = $this->claveAgrupacion($compra, $agrupacion);
+            if (! isset($porClave[$clave])) {
+                $porClave[$clave] = [
+                    'meta' => $compra,
+                    'precios' => [],
+                    'monedas' => [],
+                ];
+            }
+            // compras vienen ordenadas fecha DESC: el primero del mes es el último precio.
+            if (! isset($porClave[$clave]['precios'][$ym])) {
+                $porClave[$clave]['precios'][$ym] = round((float) ($compra->precio ?? 0), 6);
+                $porClave[$clave]['monedas'][$ym] = (string) ($compra->moneda_abrev ?? '');
+            }
+        }
+
+        $filas = [];
+        foreach ($porClave as $grupo) {
+            $meta = $grupo['meta'];
+            $preciosMes = [];
+            $variacionesPctMes = [];
+            $precioAnterior = null;
+            $primerPrecio = null;
+            $ultimoPrecio = null;
+            $monedaAbrev = '';
+
+            foreach ($meses as $ym) {
+                $precio = $grupo['precios'][$ym] ?? null;
+                $preciosMes[$ym] = $precio;
+                if ($precio === null) {
+                    $variacionesPctMes[$ym] = null;
+                    continue;
+                }
+                if ($monedaAbrev === '' && ($grupo['monedas'][$ym] ?? '') !== '') {
+                    $monedaAbrev = $grupo['monedas'][$ym];
+                }
+                if ($primerPrecio === null) {
+                    $primerPrecio = $precio;
+                }
+                if ($precioAnterior !== null && $precioAnterior > 0) {
+                    $variacionesPctMes[$ym] = round((($precio - $precioAnterior) / $precioAnterior) * 100, 2);
+                } else {
+                    $variacionesPctMes[$ym] = null;
+                }
+                $precioAnterior = $precio;
+                $ultimoPrecio = $precio;
+            }
+
+            $variacionPeriodo = null;
+            if ($primerPrecio !== null && $primerPrecio > 0 && $ultimoPrecio !== null) {
+                $variacionPeriodo = round((($ultimoPrecio - $primerPrecio) / $primerPrecio) * 100, 2);
+            }
+
+            $filas[] = [
+                'tipo_fila' => 'mensual',
+                'articulo_id' => (int) ($meta->articulo_id ?? 0),
+                'sku' => (string) ($meta->sku ?? ''),
+                'descripcion_articulo' => (string) ($meta->descripcion_articulo ?? ''),
+                'proveedor_id' => (int) ($meta->proveedor_id ?? 0),
+                'codigoproveedor' => (string) ($meta->codigoproveedor ?? ''),
+                'nombreproveedor' => (string) ($meta->nombreproveedor ?? ''),
+                'moneda_abrev' => $monedaAbrev,
+                'empresa_id' => (int) ($meta->empresa_id ?? 0),
+                'nombreempresa' => (string) ($meta->nombreempresa ?? ''),
+                'precios_mes' => $preciosMes,
+                'variaciones_pct_mes' => $variacionesPctMes,
+                'variacion_periodo_pct' => $variacionPeriodo,
+                'variacion_pct' => $variacionPeriodo,
+                'precio_ultimo' => $ultimoPrecio,
+                'precio_anterior' => $primerPrecio,
+            ];
+        }
+
+        usort($filas, static function (array $a, array $b): int {
+            $cmpSku = strcmp((string) ($a['sku'] ?? ''), (string) ($b['sku'] ?? ''));
+            if ($cmpSku !== 0) {
+                return $cmpSku;
+            }
+
+            return strcmp((string) ($a['codigoproveedor'] ?? ''), (string) ($b['codigoproveedor'] ?? ''));
+        });
+
+        return $filas;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function filaDesdeUltimaYAnterior(object $ultima, ?object $anterior, string $tipoFila): array
@@ -327,9 +485,7 @@ class HistorialPreciosArticuloService
 
         return [
             'total_articulos' => count(array_filter(array_keys($articulos), static fn ($id) => (int) $id > 0)),
-            'total_compras' => $modo === HistorialPreciosArticuloFiltros::MODO_DETALLE
-                ? count($filas)
-                : count($filas),
+            'total_compras' => count($filas),
             'con_variacion' => $conVariacion,
             'sin_variacion' => $sinVariacion,
         ];
@@ -374,5 +530,18 @@ class HistorialPreciosArticuloService
             (string) ($filtros['proveedores'] ?? ''),
             'p.codigo',
         );
+
+        if (! empty($filtros['tipoarticulo_id'])) {
+            $query->where('a.tipoarticulo_id', (int) $filtros['tipoarticulo_id']);
+        }
+        if (! empty($filtros['usoarticulo_id'])) {
+            $query->where('a.usoarticulo_id', (int) $filtros['usoarticulo_id']);
+        }
+        if (! empty($filtros['categoria_id'])) {
+            $query->where('a.categoria_id', (int) $filtros['categoria_id']);
+        }
+        if (! empty($filtros['subcategoria_id'])) {
+            $query->where('a.subcategoria_id', (int) $filtros['subcategoria_id']);
+        }
     }
 }

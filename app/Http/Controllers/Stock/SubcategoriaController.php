@@ -219,7 +219,8 @@ class SubcategoriaController extends Controller
             || can('editar-subcategorias', false)
             || can('listar-articulos', false)
             || can('editar-articulos', false)
-            || can('listar-informe-stock-local', false);
+            || can('listar-informe-stock-local', false)
+            || can('listar-reporte-historial-precios-compra', false);
     }
 
     private function findSubcategoriaPorCodigo(string $codigo): ?Subcategoria

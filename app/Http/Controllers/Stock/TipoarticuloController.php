@@ -98,4 +98,88 @@ class TipoarticuloController extends Controller
             abort(404);
         }
     }
+
+    public function consultaTipoarticulo(Request $request)
+    {
+        if (! $this->puedeConsultarTipoarticulo()) {
+            abort(403);
+        }
+
+        $consulta = trim((string) ($request->get('consulta') ?? ''));
+        $query = Tipoarticulo::query()->select('id', 'nombre', 'abreviatura');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('abreviatura', 'LIKE', '%'.$consulta.'%');
+                if (ctype_digit($consulta)) {
+                    $q->orWhere('id', (int) $consulta);
+                }
+            });
+        }
+
+        $data = $query->orderBy('nombre')->orderBy('abreviatura')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-tipo-articulo', false) || can('listar-tipo-articulo', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->abreviatura).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultatipoarticulo">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_tipoarticulo', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function leeUnTipoarticuloPorCodigo(string $codigo)
+    {
+        if (! $this->puedeConsultarTipoarticulo()) {
+            abort(403);
+        }
+
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return response()->json(null);
+        }
+
+        $fila = Tipoarticulo::query()
+            ->select('id', 'nombre', 'abreviatura')
+            ->whereRaw('UPPER(TRIM(abreviatura)) = ?', [mb_strtoupper($codigo)])
+            ->first();
+        if (! $fila && ctype_digit($codigo)) {
+            $fila = Tipoarticulo::query()->select('id', 'nombre', 'abreviatura')->find((int) $codigo);
+        }
+        if ($fila === null) {
+            return response()->json(null);
+        }
+
+        return response()->json([
+            'id' => (int) $fila->id,
+            'codigo' => (string) ($fila->abreviatura ?? ''),
+            'nombre' => (string) ($fila->nombre ?? ''),
+        ]);
+    }
+
+    private function puedeConsultarTipoarticulo(): bool
+    {
+        return can('listar-tipo-articulo', false)
+            || can('editar-tipo-articulo', false)
+            || can('listar-articulos', false)
+            || can('listar-reporte-historial-precios-compra', false);
+    }
 }

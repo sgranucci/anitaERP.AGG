@@ -1,28 +1,36 @@
+@php
+    $modoExport = $modo ?? 'resumen';
+    $mesesExport = $meses ?? [];
+    $esMensualExport = $modoExport === \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_MENSUAL;
+    $colspanExport = $esMensualExport
+        ? (5 + count($mesesExport) + max(0, count($mesesExport) - 1) + 1)
+        : 14;
+@endphp
 <table>
     @if (!empty($reservarFilaLogoExcel))
         <tbody>
             <tr>
-                <td colspan="14" style="height: 52px;">&#160;</td>
+                <td colspan="{{ $colspanExport }}" style="height: 52px;">&#160;</td>
             </tr>
         </tbody>
     @endif
     <tbody>
         <tr>
-            <td colspan="14">
+            <td colspan="{{ $colspanExport }}">
                 <strong style="font-size: 16pt;">{{ $titulo }}</strong>
             </td>
         </tr>
         <tr>
-            <td colspan="14">Generado {{ date('d/m/Y H:i') }}</td>
+            <td colspan="{{ $colspanExport }}">Generado {{ date('d/m/Y H:i') }}</td>
         </tr>
         @if (!empty($subtitulo))
             <tr>
-                <td colspan="14">{{ $subtitulo }}</td>
+                <td colspan="{{ $colspanExport }}">{{ $subtitulo }}</td>
             </tr>
         @endif
         @if (!empty($totales))
             <tr>
-                <td colspan="14">
+                <td colspan="{{ $colspanExport }}">
                     Artículos: {{ (int) ($totales['total_articulos'] ?? 0) }}
                     · Filas: {{ (int) ($totales['total_compras'] ?? 0) }}
                     · Con variación: {{ (int) ($totales['con_variacion'] ?? 0) }}
@@ -31,13 +39,14 @@
         @endif
         @if (!empty($total_lineas))
             <tr>
-                <td colspan="14">Líneas: {{ (int) $total_lineas }}</td>
+                <td colspan="{{ $colspanExport }}">Líneas: {{ (int) $total_lineas }}</td>
             </tr>
         @endif
     </tbody>
     @include('compras.historial_precios_articulo.partials.tabla_datos', [
         'filas' => $filas ?? [],
-        'modo' => $modo ?? 'resumen',
+        'modo' => $modoExport,
+        'meses' => $mesesExport,
         'para_pdf' => true,
         'para_excel' => true,
         'puede_ver_articulo' => false,

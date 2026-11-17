@@ -100,4 +100,89 @@ class UsoarticuloController extends Controller
             'arbolaprobacion_id' => $arbolId > 0 ? $arbolId : null,
         ];
     }
+
+    public function consultaUsoarticulo(Request $request)
+    {
+        if (! $this->puedeConsultarUsoarticulo()) {
+            abort(403);
+        }
+
+        $consulta = trim((string) ($request->get('consulta') ?? ''));
+        $query = Usoarticulo::query()->select('id', 'nombre');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('nombre', 'LIKE', '%'.$consulta.'%');
+                if (ctype_digit($consulta)) {
+                    $q->orWhere('id', (int) $consulta);
+                }
+            });
+        }
+
+        $data = $query->orderBy('nombre')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-uso-de-articulos', false) || can('listar-uso-de-articulos', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="3">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultausoarticulo">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_usoarticulo', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function leeUnUsoarticuloPorCodigo(string $codigo)
+    {
+        if (! $this->puedeConsultarUsoarticulo()) {
+            abort(403);
+        }
+
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return response()->json(null);
+        }
+
+        $fila = null;
+        if (ctype_digit($codigo)) {
+            $fila = Usoarticulo::query()->select('id', 'nombre')->find((int) $codigo);
+        }
+        if ($fila === null) {
+            $fila = Usoarticulo::query()
+                ->select('id', 'nombre')
+                ->whereRaw('UPPER(TRIM(nombre)) = ?', [mb_strtoupper($codigo)])
+                ->first();
+        }
+        if ($fila === null) {
+            return response()->json(null);
+        }
+
+        return response()->json([
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->id,
+            'nombre' => (string) ($fila->nombre ?? ''),
+        ]);
+    }
+
+    private function puedeConsultarUsoarticulo(): bool
+    {
+        return can('listar-uso-de-articulos', false)
+            || can('editar-uso-de-articulos', false)
+            || can('listar-articulos', false)
+            || can('listar-reporte-historial-precios-compra', false);
+    }
 }

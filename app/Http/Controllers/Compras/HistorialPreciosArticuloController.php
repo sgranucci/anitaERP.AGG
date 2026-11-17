@@ -107,6 +107,7 @@ class HistorialPreciosArticuloController extends Controller
         $subtitulo = $this->service->subtituloFiltros($filtros, $empresaQuery);
         $filas = $resultado['filas'];
         $totales = $resultado['totales'];
+        $meses = $resultado['meses'] ?? [];
         $modo = (string) ($filtros['modo'] ?? HistorialPreciosArticuloFiltros::MODO_RESUMEN);
 
         switch (strtoupper((string) $formato)) {
@@ -117,6 +118,7 @@ class HistorialPreciosArticuloController extends Controller
                     'titulo',
                     'subtitulo',
                     'modo',
+                    'meses',
                 ))->render();
                 $path = storage_path('pdf/listados');
                 if (! is_dir($path)) {
@@ -130,11 +132,11 @@ class HistorialPreciosArticuloController extends Controller
                 return response()->download($path.'/'.$nombrePdf.'.pdf');
 
             case 'EXCEL':
-                return (new HistorialPreciosArticuloExport($filas, $titulo, $subtitulo, $totales, $modo))
+                return (new HistorialPreciosArticuloExport($filas, $titulo, $subtitulo, $totales, $modo, $meses))
                     ->download('historial_precios_articulo.xlsx');
 
             case 'CSV':
-                return (new HistorialPreciosArticuloExport($filas, $titulo, $subtitulo, $totales, $modo))
+                return (new HistorialPreciosArticuloExport($filas, $titulo, $subtitulo, $totales, $modo, $meses))
                     ->download('historial_precios_articulo.csv', Excel::CSV);
         }
 

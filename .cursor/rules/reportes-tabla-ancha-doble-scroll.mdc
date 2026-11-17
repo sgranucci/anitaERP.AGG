@@ -1,0 +1,81 @@
+---
+description: Reportes con grilla ancha — scroll horizontal arriba y abajo sincronizados (tabla-ancha)
+globs: resources/views/**/*reporte*/**,resources/views/**/*_reporte/**,resources/views/**/partials/tabla*.blade.php,public/assets/css/tabla-ancha-reporte.css,public/assets/pages/scripts/admin/tabla-ancha-reporte.js
+alwaysApply: false
+---
+
+# Reportes: doble scroll horizontal (arriba + abajo)
+
+Toda **tabla ancha de reporte en pantalla** (muchas columnas, overflow horizontal) debe usar el stack **`tabla-ancha`**: barra de scroll **arriba** y barra **abajo** sincronizadas. No dejar solo `table-responsive` (scroll únicamente abajo).
+
+Complementa `reportes-consulta-paginado-export.mdc`.
+
+## Canónico
+
+| Capa | Archivo |
+|---|---|
+| CSS | `public/assets/css/tabla-ancha-reporte.css` |
+| JS | `public/assets/pages/scripts/admin/tabla-ancha-reporte.js` |
+| Markup | `data-tabla-ancha` + `.tabla-ancha-scroll-top` + `.tabla-ancha-wrap` + `table.tabla-ancha` |
+
+Referencias: `contable/flash_contable`, `caja/flash/reporte_historico`, `caja/tesoreria_crown` anexos, `stock/recepcion_conversion_control`.
+
+## Obligatorio en pantalla
+
+1. Incluir CSS y JS con `?v=filemtime` en el index del reporte.
+2. Envolver la grilla (solo vista pantalla, no PDF/Excel):
+
+```blade
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) ?: time() }}"></script>
+
+<p class="small text-muted mb-1">
+    Tabla ancha: usá la <strong>barra de scroll de arriba</strong>, o Shift + rueda del mouse / deslizá el trackpad.
+</p>
+<div class="tabla-ancha-grilla" data-tabla-ancha>
+    <div class="tabla-ancha-scroll-top" hidden>
+        <div class="tabla-ancha-scroll-top-inner"></div>
+    </div>
+    <div class="tabla-ancha-wrap">
+        <table class="table table-sm table-bordered mb-0 tabla-ancha" id="tabla-paginada">
+            …
+        </table>
+    </div>
+</div>
+```
+
+3. El JS mide el ancho de la tabla, muestra la barra superior solo si hay overflow, y sincroniza `scrollLeft` arriba ↔ abajo.
+4. PDF / Excel / CSV: **sin** este wrapper (siguen la vista de export).
+
+## Opcional (según reporte)
+
+| Modificador | Uso |
+|---|---|
+| `tabla-ancha--una-fija` + `col-fija-1` | Congelar primera columna (ej. Fecha) |
+| `col-fija-1` + `col-fija-2` | Dos columnas fijas a la izquierda |
+| `tabla-ancha--doble-cabecera` | Thead de 2 filas sticky |
+| CSS vars `--tabla-ancha-c1` / `--tabla-ancha-c2` | Anchos de columnas fijas |
+
+No inventar otro sync de scroll ni CSS duplicado: reutilizar estos assets.
+
+## Prohibido
+
+```blade
+{{-- ❌ Solo scroll abajo en reporte de muchas columnas --}}
+<div class="table-responsive">
+    <table id="tabla-paginada">…</table>
+</div>
+```
+
+```blade
+{{-- ❌ Copiar markup/JS de sync propio en el módulo --}}
+```
+
+## Comprobación rápida
+
+```bash
+rg 'data-tabla-ancha|tabla-ancha-scroll-top|tabla-ancha-reporte' resources/views/{modulo}/{recurso}/
+rg 'table-responsive' resources/views/{modulo}/{recurso}/index.blade.php
+# En reportes anchos nuevos: debe haber data-tabla-ancha, no solo table-responsive
+php artisan view:cache
+```

@@ -16,6 +16,14 @@
         return $('#form-historial-precios-articulo').length > 0;
     }
 
+    function hpaTextoCelda($tr, selector) {
+        var $td = $tr.find(selector).first();
+        if (!$td.length) {
+            return '';
+        }
+        return $.trim($td.clone().children().remove().end().text());
+    }
+
     function hpaMostrarOverlay(titulo, subtitulo) {
         var overlay = document.getElementById('hpa-reporte-overlay');
         if (!overlay) {
@@ -49,7 +57,7 @@
     }
 
     function hpaResolverProveedores($campo) {
-        var valor = hpaNormalizar($campo.find('.codigoproveedor').val());
+        var valor = hpaNormalizar($campo.find('.hpa-codigo-proveedor').val());
         var $meta = $campo.find('.metaproveedor');
 
         if (valor === '') {
@@ -68,20 +76,38 @@
         $meta.val(valor);
     }
 
-    function hpaAgregarProveedor(codigo) {
+    function hpaAgregarProveedor(codigo, nombre) {
         var $campo = $('#hpa-reporte-proveedor-campo');
-        var $inp = $campo.find('.codigoproveedor');
+        var $inp = $campo.find('.hpa-codigo-proveedor');
         var actual = hpaNormalizar($inp.val());
         var codigos = actual === '' ? [] : actual.split(/[,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
         var codigoStr = String(codigo).trim();
+        var nombreStr = String(nombre || '').trim();
 
         if (codigoStr !== '' && codigos.indexOf(codigoStr) < 0) {
             codigos.push(codigoStr);
         }
 
         $inp.val(codigos.join(','));
+        if (codigos.length === 1 && nombreStr !== '') {
+            $campo.find('.metaproveedor').val(codigoStr + ' — ' + nombreStr);
+            return;
+        }
         hpaResolverProveedores($campo);
     }
+
+    // La consulta general escribe en #codigoproveedor. Este filtro es lista de códigos.
+    window.onProveedorElegidoEnConsulta = function (fila) {
+        if (!document.getElementById('form-historial-precios-articulo')) {
+            return false;
+        }
+        var codigo = fila && fila.codigo ? String(fila.codigo).trim() : '';
+        if (codigo !== '') {
+            hpaAgregarProveedor(codigo, fila.nombre || '');
+        }
+        $('#consultaproveedorModal').modal('hide');
+        return true;
+    };
 
     function hpaBuscarProveedoresModal(consulta) {
         $.ajax({
@@ -108,7 +134,7 @@
     }
 
     function hpaAbrirModalProveedor() {
-        var valor = $('#hpa-reporte-proveedor-campo .codigoproveedor').val().trim();
+        var valor = $('#hpa-reporte-proveedor-campo .hpa-codigo-proveedor').val().trim();
         hpaBuscarProveedoresModal(valor);
         $('#consultaproveedorModal').modal('show');
     }
@@ -121,7 +147,7 @@
         if (!target || !target.classList) {
             return;
         }
-        if (target.classList.contains('codigoproveedor')) {
+        if (target.classList.contains('hpa-codigo-proveedor')) {
             e.preventDefault();
             e.stopPropagation();
             hpaAbrirModalProveedor();
@@ -158,8 +184,8 @@
             });
 
         $(document)
-            .off('change.hpareporte', '#hpa-reporte-proveedor-campo .codigoproveedor')
-            .on('change.hpareporte', '#hpa-reporte-proveedor-campo .codigoproveedor', function () {
+            .off('change.hpareporte', '#hpa-reporte-proveedor-campo .hpa-codigo-proveedor')
+            .on('change.hpareporte', '#hpa-reporte-proveedor-campo .hpa-codigo-proveedor', function () {
                 hpaResolverProveedores($('#hpa-reporte-proveedor-campo'));
             });
 
@@ -176,7 +202,7 @@
                 if (!$('#form-historial-precios-articulo').length) {
                     return;
                 }
-                var valor = $('#hpa-reporte-proveedor-campo .codigoproveedor').val().trim();
+                var valor = $('#hpa-reporte-proveedor-campo .hpa-codigo-proveedor').val().trim();
                 $('#consultaproveedor').val(valor);
                 hpaBuscarProveedoresModal(valor);
                 $(this).find('#consultaproveedor').focus();
@@ -200,10 +226,11 @@
                 e.stopImmediatePropagation();
 
                 var $trModal = $(this).closest('tr');
-                var codigo = $trModal.find('.codigo').first().text().trim();
+                var codigo = hpaTextoCelda($trModal, 'td.codigoproveedor, td.codigo');
+                var nombre = hpaTextoCelda($trModal, 'td.nombreproveedor, td.nombre');
 
                 if (codigo !== '') {
-                    hpaAgregarProveedor(codigo);
+                    hpaAgregarProveedor(codigo, nombre);
                 }
 
                 $('#consultaproveedorModal').modal('hide');

@@ -703,9 +703,11 @@ Route::delete('stock/modulo/{id}', 'Stock\ModuloController@eliminar')->name('eli
 Route::get('stock/tipoarticulo', 'Stock\TipoarticuloController@index')->name('tipoarticulo');
 Route::get('stock/tipoarticulo/crear', 'Stock\TipoarticuloController@crear')->name('crear_tipoarticulo');
 Route::post('stock/tipoarticulo', 'Stock\TipoarticuloController@guardar')->name('guardar_tipoarticulo');
-Route::get('stock/tipoarticulo/{id}/editar', 'Stock\TipoarticuloController@editar')->name('editar_tipoarticulo');
-Route::put('stock/tipoarticulo/{id}', 'Stock\TipoarticuloController@actualizar')->name('actualizar_tipoarticulo');
+Route::get('stock/tipoarticulo/{id}/editar', 'Stock\TipoarticuloController@editar')->name('editar_tipoarticulo')->middleware('modo.consulta');
+Route::put('stock/tipoarticulo/{id}', 'Stock\TipoarticuloController@actualizar')->name('actualizar_tipoarticulo')->middleware('modo.consulta');
 Route::delete('stock/tipoarticulo/{id}', 'Stock\TipoarticuloController@eliminar')->name('eliminar_tipoarticulo');
+Route::post('stock/tipoarticulo/consultatipoarticulo', 'Stock\TipoarticuloController@consultaTipoarticulo')->name('consulta_tipoarticulo');
+Route::get('stock/leertipoarticulo/{codigo}', 'Stock\TipoarticuloController@leeUnTipoarticuloPorCodigo')->name('leer_tipoarticulo');
 
 /*
  * Categorias
@@ -998,9 +1000,11 @@ Route::delete('stock/unidadmedida/{id}', 'Stock\UnidadmedidaController@eliminar'
 Route::get('stock/usoarticulo', 'Stock\UsoarticuloController@index')->name('usoarticulo');
 Route::get('stock/usoarticulo/crear', 'Stock\UsoarticuloController@crear')->name('crear_usoarticulo');
 Route::post('stock/usoarticulo', 'Stock\UsoarticuloController@guardar')->name('guardar_usoarticulo');
-Route::get('stock/usoarticulo/{id}/editar', 'Stock\UsoarticuloController@editar')->name('editar_usoarticulo');
-Route::put('stock/usoarticulo/{id}', 'Stock\UsoarticuloController@actualizar')->name('actualizar_usoarticulo');
+Route::get('stock/usoarticulo/{id}/editar', 'Stock\UsoarticuloController@editar')->name('editar_usoarticulo')->middleware('modo.consulta');
+Route::put('stock/usoarticulo/{id}', 'Stock\UsoarticuloController@actualizar')->name('actualizar_usoarticulo')->middleware('modo.consulta');
 Route::delete('stock/usoarticulo/{id}', 'Stock\UsoarticuloController@eliminar')->name('eliminar_usoarticulo');
+Route::post('stock/usoarticulo/consultausoarticulo', 'Stock\UsoarticuloController@consultaUsoarticulo')->name('consulta_usoarticulo');
+Route::get('stock/leerusoarticulo/{codigo}', 'Stock\UsoarticuloController@leeUnUsoarticuloPorCodigo')->name('leer_usoarticulo');
 
 /*
  * Punteras
@@ -1968,6 +1972,8 @@ Route::get('stock/informes-de-stock/movimientos-por-articulo', 'Stock\Movimiento
 Route::get('stock/listar-reporte-movimientos-stock-articulo/{formato?}', 'Stock\MovimientoStockArticuloReporteController@exportar')->name('listar_reporte_movimientos_stock_articulo');
 Route::get('stock/reporte-recepcion-proveedor', 'Stock\RecepcionProveedorReporteController@index')->name('reporte_recepcion_proveedor');
 Route::get('stock/listar-reporte-recepcion-proveedor/{formato?}', 'Stock\RecepcionProveedorReporteController@exportar')->name('listar_reporte_recepcion_proveedor');
+Route::get('stock/reporte-control-conversion-recepcion', 'Stock\RecepcionConversionControlController@index')->name('reporte_control_conversion_recepcion');
+Route::get('stock/listar-reporte-control-conversion-recepcion/{formato?}', 'Stock\RecepcionConversionControlController@exportar')->name('listar_reporte_control_conversion_recepcion');
 Route::get('stock/informes-de-stock/control-inventario-items', 'Stock\ControlInventarioItemsReporteController@index')->name('reporte_control_inventario_items');
 Route::get('stock/listar-reporte-control-inventario-items/{formato?}', 'Stock\ControlInventarioItemsReporteController@exportar')->name('listar_reporte_control_inventario_items');
 

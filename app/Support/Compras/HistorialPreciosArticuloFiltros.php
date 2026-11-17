@@ -2,6 +2,10 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Stock\Categoria;
+use App\Models\Stock\Subcategoria;
+use App\Models\Stock\Tipoarticulo;
+use App\Models\Stock\Usoarticulo;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -14,14 +18,21 @@ final class HistorialPreciosArticuloFiltros
 
     public const MODO_DETALLE = 'detalle';
 
+    /** Precios del período encolumnados por mes + variación % entre meses. */
+    public const MODO_MENSUAL = 'mensual';
+
     public const AGRUPACION_ARTICULO = 'articulo';
 
     public const AGRUPACION_ARTICULO_PROVEEDOR = 'articulo_proveedor';
+
+    /** Máximo de meses a encolumnar (evita tablas inmanejables). */
+    public const MAX_MESES_COLUMNAS = 24;
 
     /** @var list<array{valor: string, etiqueta: string}> */
     public const OPCIONES_MODO = [
         ['valor' => self::MODO_RESUMEN, 'etiqueta' => 'Resumen (último / anterior / variación)'],
         ['valor' => self::MODO_DETALLE, 'etiqueta' => 'Detalle de compras (todas las variaciones)'],
+        ['valor' => self::MODO_MENSUAL, 'etiqueta' => 'Por mes (columnas de precio + variación %)'],
     ];
 
     /** @var list<array{valor: string, etiqueta: string}> */
@@ -53,6 +64,22 @@ final class HistorialPreciosArticuloFiltros
         }
 
         $articuloId = (int) $request->input('articulo_id', 0);
+        $tipo = self::resolverTipoarticulo(
+            self::enteroOpcional($request->input('tipoarticulo_id')),
+            trim((string) $request->input('tipoarticulo_codigo', '')),
+        );
+        $uso = self::resolverUsoarticulo(
+            self::enteroOpcional($request->input('usoarticulo_id')),
+            trim((string) $request->input('usoarticulo_codigo', '')),
+        );
+        $categoria = self::resolverCategoria(
+            self::enteroOpcional($request->input('categoria_id')),
+            trim((string) $request->input('categoria_codigo', '')),
+        );
+        $subcategoria = self::resolverSubcategoria(
+            self::enteroOpcional($request->input('subcategoria_id')),
+            trim((string) $request->input('subcategoria_codigo', '')),
+        );
 
         return [
             'empresa_ids' => $empresaIds,
@@ -62,6 +89,18 @@ final class HistorialPreciosArticuloFiltros
             'articulo_id' => $articuloId > 0 ? $articuloId : null,
             'sku' => trim((string) $request->input('sku', '')),
             'proveedores' => trim((string) $request->input('proveedores', '')),
+            'tipoarticulo_id' => $tipo['id'],
+            'tipoarticulo_codigo' => $tipo['codigo'],
+            'tipoarticulo_nombre' => $tipo['nombre'],
+            'usoarticulo_id' => $uso['id'],
+            'usoarticulo_codigo' => $uso['codigo'],
+            'usoarticulo_nombre' => $uso['nombre'],
+            'categoria_id' => $categoria['id'],
+            'categoria_codigo' => $categoria['codigo'],
+            'categoria_nombre' => $categoria['nombre'],
+            'subcategoria_id' => $subcategoria['id'],
+            'subcategoria_codigo' => $subcategoria['codigo'],
+            'subcategoria_nombre' => $subcategoria['nombre'],
             'modo' => $modo,
             'agrupacion' => $agrupacion,
             'solo_con_variacion' => $request->boolean('solo_con_variacion'),
@@ -80,6 +119,14 @@ final class HistorialPreciosArticuloFiltros
             'articulo_id' => ! empty($filtros['articulo_id']) ? (int) $filtros['articulo_id'] : null,
             'sku' => ($filtros['sku'] ?? '') !== '' ? ($filtros['sku'] ?? null) : null,
             'proveedores' => ($filtros['proveedores'] ?? '') !== '' ? ($filtros['proveedores'] ?? null) : null,
+            'tipoarticulo_id' => ! empty($filtros['tipoarticulo_id']) ? (int) $filtros['tipoarticulo_id'] : null,
+            'tipoarticulo_codigo' => ($filtros['tipoarticulo_codigo'] ?? '') !== '' ? ($filtros['tipoarticulo_codigo'] ?? null) : null,
+            'usoarticulo_id' => ! empty($filtros['usoarticulo_id']) ? (int) $filtros['usoarticulo_id'] : null,
+            'usoarticulo_codigo' => ($filtros['usoarticulo_codigo'] ?? '') !== '' ? ($filtros['usoarticulo_codigo'] ?? null) : null,
+            'categoria_id' => ! empty($filtros['categoria_id']) ? (int) $filtros['categoria_id'] : null,
+            'categoria_codigo' => ($filtros['categoria_codigo'] ?? '') !== '' ? ($filtros['categoria_codigo'] ?? null) : null,
+            'subcategoria_id' => ! empty($filtros['subcategoria_id']) ? (int) $filtros['subcategoria_id'] : null,
+            'subcategoria_codigo' => ($filtros['subcategoria_codigo'] ?? '') !== '' ? ($filtros['subcategoria_codigo'] ?? null) : null,
             'modo' => ($filtros['modo'] ?? self::MODO_RESUMEN) !== self::MODO_RESUMEN
                 ? ($filtros['modo'] ?? null)
                 : null,
@@ -125,6 +172,18 @@ final class HistorialPreciosArticuloFiltros
             'articulo_id' => null,
             'sku' => '',
             'proveedores' => '',
+            'tipoarticulo_id' => null,
+            'tipoarticulo_codigo' => '',
+            'tipoarticulo_nombre' => '',
+            'usoarticulo_id' => null,
+            'usoarticulo_codigo' => '',
+            'usoarticulo_nombre' => '',
+            'categoria_id' => null,
+            'categoria_codigo' => '',
+            'categoria_nombre' => '',
+            'subcategoria_id' => null,
+            'subcategoria_codigo' => '',
+            'subcategoria_nombre' => '',
             'modo' => self::MODO_RESUMEN,
             'agrupacion' => self::AGRUPACION_ARTICULO,
             'solo_con_variacion' => false,
@@ -133,7 +192,61 @@ final class HistorialPreciosArticuloFiltros
 
     public static function modoValido(string $modo): bool
     {
-        return in_array($modo, [self::MODO_RESUMEN, self::MODO_DETALLE], true);
+        return in_array($modo, [self::MODO_RESUMEN, self::MODO_DETALLE, self::MODO_MENSUAL], true);
+    }
+
+    /**
+     * Meses YYYY-MM del período del filtro (inclusive), acotados a MAX_MESES_COLUMNAS.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return list<string>
+     */
+    public static function mesesDelPeriodo(array $filtros): array
+    {
+        $desde = $filtros['fecha_desde'] ?? null;
+        $hasta = $filtros['fecha_hasta'] ?? null;
+        if ($desde === null || $desde === '') {
+            return [];
+        }
+
+        try {
+            $inicio = Carbon::parse($desde)->startOfMonth();
+            $fin = ($hasta !== null && $hasta !== '')
+                ? Carbon::parse($hasta)->startOfMonth()
+                : Carbon::now()->startOfMonth();
+        } catch (\Throwable) {
+            return [];
+        }
+
+        if ($fin->lt($inicio)) {
+            [$inicio, $fin] = [$fin, $inicio];
+        }
+
+        $meses = [];
+        $cursor = $inicio->copy();
+        while ($cursor->lte($fin) && count($meses) < self::MAX_MESES_COLUMNAS) {
+            $meses[] = $cursor->format('Y-m');
+            $cursor->addMonth();
+        }
+
+        return $meses;
+    }
+
+    public static function etiquetaMes(string $ym): string
+    {
+        static $meses = [
+            1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr',
+            5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago',
+            9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
+        ];
+
+        try {
+            $fecha = Carbon::createFromFormat('Y-m', $ym);
+
+            return ($meses[(int) $fecha->month] ?? $fecha->format('m')).'/'.$fecha->format('y');
+        } catch (\Throwable) {
+            return $ym;
+        }
     }
 
     public static function agrupacionValida(string $agrupacion): bool
@@ -206,5 +319,174 @@ final class HistorialPreciosArticuloFiltros
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private static function enteroOpcional($valor): ?int
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        $id = (int) $valor;
+
+        return $id > 0 ? $id : null;
+    }
+
+    /**
+     * @return array{id: ?int, codigo: string, nombre: string}
+     */
+    private static function resolverTipoarticulo(?int $id, string $codigo): array
+    {
+        $vacio = ['id' => null, 'codigo' => '', 'nombre' => ''];
+        if ($id !== null) {
+            $fila = Tipoarticulo::query()->select('id', 'abreviatura', 'nombre')->find($id);
+            if ($fila) {
+                return [
+                    'id' => (int) $fila->id,
+                    'codigo' => (string) ($fila->abreviatura ?? ''),
+                    'nombre' => (string) ($fila->nombre ?? ''),
+                ];
+            }
+        }
+        if ($codigo === '') {
+            return $vacio;
+        }
+        $fila = Tipoarticulo::query()
+            ->select('id', 'abreviatura', 'nombre')
+            ->whereRaw('UPPER(TRIM(abreviatura)) = ?', [mb_strtoupper($codigo)])
+            ->first();
+        if (! $fila && ctype_digit($codigo)) {
+            $fila = Tipoarticulo::query()->select('id', 'abreviatura', 'nombre')->find((int) $codigo);
+        }
+        if (! $fila) {
+            return ['id' => null, 'codigo' => $codigo, 'nombre' => ''];
+        }
+
+        return [
+            'id' => (int) $fila->id,
+            'codigo' => (string) ($fila->abreviatura ?? ''),
+            'nombre' => (string) ($fila->nombre ?? ''),
+        ];
+    }
+
+    /**
+     * Uso no tiene código propio: el campo editable acepta ID o nombre exacto.
+     *
+     * @return array{id: ?int, codigo: string, nombre: string}
+     */
+    private static function resolverUsoarticulo(?int $id, string $codigo): array
+    {
+        $vacio = ['id' => null, 'codigo' => '', 'nombre' => ''];
+        if ($id !== null) {
+            $fila = Usoarticulo::query()->select('id', 'nombre')->find($id);
+            if ($fila) {
+                return [
+                    'id' => (int) $fila->id,
+                    'codigo' => (string) $fila->id,
+                    'nombre' => (string) ($fila->nombre ?? ''),
+                ];
+            }
+        }
+        if ($codigo === '') {
+            return $vacio;
+        }
+        $fila = null;
+        if (ctype_digit($codigo)) {
+            $fila = Usoarticulo::query()->select('id', 'nombre')->find((int) $codigo);
+        }
+        if (! $fila) {
+            $fila = Usoarticulo::query()
+                ->select('id', 'nombre')
+                ->whereRaw('UPPER(TRIM(nombre)) = ?', [mb_strtoupper($codigo)])
+                ->first();
+        }
+        if (! $fila) {
+            return ['id' => null, 'codigo' => $codigo, 'nombre' => ''];
+        }
+
+        return [
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->id,
+            'nombre' => (string) ($fila->nombre ?? ''),
+        ];
+    }
+
+    /**
+     * @return array{id: ?int, codigo: string, nombre: string}
+     */
+    private static function resolverCategoria(?int $id, string $codigo): array
+    {
+        $vacio = ['id' => null, 'codigo' => '', 'nombre' => ''];
+        if ($id !== null) {
+            $fila = Categoria::query()->select('id', 'codigo', 'nombre')->find($id);
+            if ($fila) {
+                return [
+                    'id' => (int) $fila->id,
+                    'codigo' => (string) ($fila->codigo ?? ''),
+                    'nombre' => (string) ($fila->nombre ?? ''),
+                ];
+            }
+        }
+        if ($codigo === '') {
+            return $vacio;
+        }
+        $fila = Categoria::query()->select('id', 'codigo', 'nombre')->where('codigo', $codigo)->first();
+        if (! $fila) {
+            $alt = ltrim($codigo, '0');
+            if ($alt !== '' && $alt !== $codigo) {
+                $fila = Categoria::query()->select('id', 'codigo', 'nombre')->where('codigo', $alt)->first();
+            }
+        }
+        if (! $fila && ctype_digit($codigo)) {
+            $fila = Categoria::query()->select('id', 'codigo', 'nombre')->find((int) $codigo);
+        }
+        if (! $fila) {
+            return ['id' => null, 'codigo' => $codigo, 'nombre' => ''];
+        }
+
+        return [
+            'id' => (int) $fila->id,
+            'codigo' => (string) ($fila->codigo ?? ''),
+            'nombre' => (string) ($fila->nombre ?? ''),
+        ];
+    }
+
+    /**
+     * @return array{id: ?int, codigo: string, nombre: string}
+     */
+    private static function resolverSubcategoria(?int $id, string $codigo): array
+    {
+        $vacio = ['id' => null, 'codigo' => '', 'nombre' => ''];
+        if ($id !== null) {
+            $fila = Subcategoria::query()->select('id', 'codigo', 'nombre')->find($id);
+            if ($fila) {
+                return [
+                    'id' => (int) $fila->id,
+                    'codigo' => (string) ($fila->codigo ?? ''),
+                    'nombre' => (string) ($fila->nombre ?? ''),
+                ];
+            }
+        }
+        if ($codigo === '') {
+            return $vacio;
+        }
+        $fila = Subcategoria::query()->select('id', 'codigo', 'nombre')->where('codigo', $codigo)->first();
+        if (! $fila) {
+            $alt = ltrim($codigo, '0');
+            if ($alt !== '' && $alt !== $codigo) {
+                $fila = Subcategoria::query()->select('id', 'codigo', 'nombre')->where('codigo', $alt)->first();
+            }
+        }
+        if (! $fila && ctype_digit($codigo)) {
+            $fila = Subcategoria::query()->select('id', 'codigo', 'nombre')->find((int) $codigo);
+        }
+        if (! $fila) {
+            return ['id' => null, 'codigo' => $codigo, 'nombre' => ''];
+        }
+
+        return [
+            'id' => (int) $fila->id,
+            'codigo' => (string) ($fila->codigo ?? ''),
+            'nombre' => (string) ($fila->nombre ?? ''),
+        ];
     }
 }

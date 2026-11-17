@@ -2,9 +2,11 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Export\ExcelFormatoNumero;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Filtros del reporte mayor por concepto (pantalla y exportaciones).
@@ -93,7 +95,87 @@ class MayorConceptoListadoFiltros
             'fuente_mayor' => self::normalizarFuenteMayor(
                 $request->input('fuente_mayor')
             ),
+            'cuentas_como_debajo_limite' => self::parsearCuentasComoDebajoLimite(
+                $request->input('cuentas_como_debajo_limite')
+            ),
         ];
+    }
+
+    /**
+     * Códigos de cuenta fuera del límite tratados como patas (solo motor ERP).
+     *
+     * Acepta array, texto con saltos/comas/espacios, o códigos con guión (112-010-001).
+     *
+     * @return list<int>
+     */
+    public static function parsearCuentasComoDebajoLimite(mixed $valor): array
+    {
+        if (is_array($valor)) {
+            $partes = $valor;
+        } else {
+            $texto = trim((string) $valor);
+            if ($texto === '') {
+                return [];
+            }
+            $partes = preg_split('/[\s,;]+/', $texto) ?: [];
+        }
+
+        return collect($partes)
+            ->map(function ($item) {
+                if (is_int($item) || is_float($item)) {
+                    return (int) $item;
+                }
+                $digitos = preg_replace('/\D+/', '', (string) $item);
+
+                return $digitos !== null && $digitos !== '' ? (int) $digitos : 0;
+            })
+            ->filter(fn (int $codigo) => $codigo > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public static function cuentasComoDebajoLimite(array $filtros): array
+    {
+        return self::parsearCuentasComoDebajoLimite($filtros['cuentas_como_debajo_limite'] ?? []);
+    }
+
+    /**
+     * @param  list<int|string>  $codigos
+     * @return list<array{codigo: int, codigo_fmt: string, nombre: string}>
+     */
+    public static function metaCuentasComoDebajoLimite(array $codigos, int $empresaId = 0): array
+    {
+        $codigos = self::parsearCuentasComoDebajoLimite($codigos);
+        sort($codigos);
+        if ($codigos === []) {
+            return [];
+        }
+
+        $codigosStr = array_map(static fn (int $c) => (string) $c, $codigos);
+        $query = DB::table('cuentacontable')->whereIn('codigo', $codigosStr);
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+        $nombres = $query->pluck('nombre', 'codigo')->all();
+
+        $out = [];
+        foreach ($codigos as $codigo) {
+            $clave = (string) $codigo;
+            $out[] = [
+                'codigo' => $codigo,
+                'codigo_fmt' => MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo),
+                'nombre' => isset($nombres[$clave])
+                    ? (string) $nombres[$clave]
+                    : (isset($nombres[$codigo]) ? (string) $nombres[$codigo] : ''),
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -621,6 +703,14 @@ class MayorConceptoListadoFiltros
 
         $out['fuente_mayor'] = self::normalizarFuenteMayor($filtros['fuente_mayor'] ?? null);
 
+        $cuentasDebajo = self::cuentasComoDebajoLimite($filtros);
+        if (
+            $cuentasDebajo !== []
+            && self::normalizarFuenteMayor($filtros['fuente_mayor'] ?? null) === MayorFuenteConsultaSupport::MODO_ERP
+        ) {
+            $out['cuentas_como_debajo_limite'] = implode("\n", $cuentasDebajo);
+        }
+
         // No filtrar consolidar_empresas=0 ni arrays empresa_ids.
         return $out;
     }
@@ -634,6 +724,10 @@ class MayorConceptoListadoFiltros
         }
         $base = self::paraQueryString($filtrosConsulta);
         $base['fuente_mayor'] = self::normalizarFuenteMayor($filtros['fuente_mayor'] ?? null);
+        $cuentasDebajo = self::cuentasComoDebajoLimite($filtros);
+        if ($cuentasDebajo !== []) {
+            $base['cuentas_como_debajo_limite'] = $cuentasDebajo;
+        }
 
         return md5(json_encode($base));
     }

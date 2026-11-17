@@ -16,7 +16,7 @@ Todo **reporte nuevo** o migrado debe seguir el stack de consulta con exportaci�
 | Ventas pedidos | `ventas/repkilocategoria` | `KiloCategoriaListadoExport` | `ventas/repkilocategoria/listado` |
 | Caja cheques | `caja/cheque/reporte` | `ChequeReporteExport` | `caja/cheque/reporte_listado` + `DompdfListadoSupport` |
 
-Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-crud.mdc` (filtros inteligentes en ABM), `reportes-pedidos-totalizacion.mdc` (kilos pedidos / kilos por categoría), **`pdf-listado-encabezado-hojas.mdc`** (PDF multipágina), **`export-excel-importes-cortes.mdc`** (importes numéricos + cortes), **`export-overlay-fetch-blob.mdc`** (banner al exportar) y **`reportes-links-modo-consulta.mdc`** (detalle en solapa sin menú).
+Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-crud.mdc` (filtros inteligentes en ABM), `reportes-pedidos-totalizacion.mdc` (kilos pedidos / kilos por categoría), **`pdf-listado-encabezado-hojas.mdc`** (PDF multipágina), **`export-excel-importes-cortes.mdc`** (importes numéricos + cortes), **`export-overlay-fetch-blob.mdc`** (banner al exportar), **`reportes-links-modo-consulta.mdc`** (detalle en solapa sin menú) y **`reportes-tabla-ancha-doble-scroll.mdc`** (scroll horizontal arriba + abajo en grillas anchas).
 
 ## UX obligatoria (pantalla)
 
@@ -33,6 +33,7 @@ Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-
 | Export PDF | `DompdfListadoSupport` + `pdf_thead_cabecera` (regla `pdf-listado-encabezado-hojas`) |
 | Export Excel | Importes `#,##0.00` numéricos; cortes en negrita (regla `export-excel-importes-cortes`) |
 | Overlay export | `fetch`+blob y ocultar al terminar (regla `export-overlay-fetch-blob`) |
+| Tabla ancha (muchas columnas) | Doble scroll horizontal arriba + abajo (`tabla-ancha`; regla `reportes-tabla-ancha-doble-scroll`) — no solo `table-responsive` |
 
 ## Backend
 

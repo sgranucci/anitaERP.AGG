@@ -68,6 +68,7 @@
         @include('compras.historial_precios_articulo.partials.tabla_datos', [
             'filas' => $filas ?? [],
             'modo' => $modo ?? 'resumen',
+            'meses' => $meses ?? [],
             'para_pdf' => true,
             'puede_ver_articulo' => false,
             'puede_ver_proveedor' => false,

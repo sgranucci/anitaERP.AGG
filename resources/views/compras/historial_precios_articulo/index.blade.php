@@ -7,7 +7,11 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/historial_precios_articulo/filtro.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/tipoarticulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/tipoarticulo/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/usoarticulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/usoarticulo/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/categoria/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/categoria/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/subcategoria/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/subcategoria/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/compras/historial_precios_articulo/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/historial_precios_articulo/filtro.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -36,6 +40,7 @@
                         Precios unitarios de recepciones de proveedor <strong>confirmadas</strong>.
                         En resumen muestra &uacute;ltimo precio, precio anterior, variaci&oacute;n %, proveedor y fecha de &uacute;ltima compra.
                         El detalle lista todas las compras del per&iacute;odo con la variaci&oacute;n respecto de la compra previa.
+                        El formato por mes encolumnado usa el &uacute;ltimo precio de cada mes del rango y la variaci&oacute;n % entre meses consecutivos con compra.
                     </p>
 
                     @php
@@ -114,7 +119,7 @@
                         <div class="{{ $colInput }}">
                             <div id="hpa-reporte-proveedor-campo">
                                 <div class="input-group mb-1">
-                                    <input type="text" name="proveedores" id="proveedores" class="form-control codigoproveedor"
+                                    <input type="text" name="proveedores" id="proveedores" class="form-control hpa-codigo-proveedor"
                                         placeholder="Vac&iacute;o = todos; c&oacute;digos separados por coma"
                                         title="F1 o lupa: consulta proveedores"
                                         autocomplete="off"
@@ -140,6 +145,80 @@
                                     Solo art&iacute;culos / compras con variaci&oacute;n de precio
                                 </label>
                             </div>
+                        </div>
+                    </div>
+
+                    @php
+                        $colLabelMitad = 'col-lg-4 control-label text-right pr-2';
+                        $colInputMitad = 'col-lg-8';
+                    @endphp
+                    <div class="row">
+                        <div class="col-lg-6">
+                            @include('stock.partials.campo_consulta_tipoarticulo', [
+                                'prefix' => 'hpa',
+                                'label' => 'Tipo de artículo',
+                                'inputName' => 'tipoarticulo_id',
+                                'inputId' => 'tipoarticulo_hpa',
+                                'codigoName' => 'tipoarticulo_codigo',
+                                'tipoarticuloId' => $filtros['tipoarticulo_id'] ?? '',
+                                'codigo' => $filtros['tipoarticulo_codigo'] ?? '',
+                                'nombre' => $filtros['tipoarticulo_nombre'] ?? '',
+                                'col_label' => $colLabelMitad,
+                                'col_input' => $colInputMitad,
+                                'siguiente' => '#usoarticulo_hpa_codigo',
+                                'mostrar_editar' => false,
+                            ])
+                        </div>
+                        <div class="col-lg-6">
+                            @include('stock.partials.campo_consulta_usoarticulo', [
+                                'prefix' => 'hpa',
+                                'label' => 'Uso',
+                                'inputName' => 'usoarticulo_id',
+                                'inputId' => 'usoarticulo_hpa',
+                                'codigoName' => 'usoarticulo_codigo',
+                                'usoarticuloId' => $filtros['usoarticulo_id'] ?? '',
+                                'codigo' => $filtros['usoarticulo_codigo'] ?? '',
+                                'nombre' => $filtros['usoarticulo_nombre'] ?? '',
+                                'col_label' => $colLabelMitad,
+                                'col_input' => $colInputMitad,
+                                'siguiente' => '#categoria_hpa_codigo',
+                                'mostrar_editar' => false,
+                            ])
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-6">
+                            @include('stock.partials.campo_consulta_categoria', [
+                                'prefix' => 'hpa',
+                                'label' => 'Categoría',
+                                'inputName' => 'categoria_id',
+                                'inputId' => 'categoria_hpa',
+                                'codigoName' => 'categoria_codigo',
+                                'categoriaId' => $filtros['categoria_id'] ?? '',
+                                'codigo' => $filtros['categoria_codigo'] ?? '',
+                                'nombre' => $filtros['categoria_nombre'] ?? '',
+                                'col_label' => $colLabelMitad,
+                                'col_input' => $colInputMitad,
+                                'siguiente' => '#subcategoria_hpa_codigo',
+                                'mostrar_editar' => false,
+                            ])
+                        </div>
+                        <div class="col-lg-6">
+                            @include('stock.partials.campo_consulta_subcategoria', [
+                                'prefix' => 'hpa',
+                                'label' => 'Subcategoría',
+                                'inputName' => 'subcategoria_id',
+                                'inputId' => 'subcategoria_hpa',
+                                'codigoName' => 'subcategoria_codigo',
+                                'subcategoriaId' => $filtros['subcategoria_id'] ?? '',
+                                'codigo' => $filtros['subcategoria_codigo'] ?? '',
+                                'nombre' => $filtros['subcategoria_nombre'] ?? '',
+                                'col_label' => $colLabelMitad,
+                                'col_input' => $colInputMitad,
+                                'siguiente' => '#btn-consultar-historial-precios',
+                                'mostrar_editar' => false,
+                                'filtra_categoria' => '#categoria_hpa',
+                            ])
                         </div>
                     </div>
 
@@ -207,6 +286,7 @@
                             @include('compras.historial_precios_articulo.partials.tabla_datos', [
                                 'filas' => $filasVista ?? [],
                                 'modo' => $filtros['modo'] ?? 'resumen',
+                                'meses' => $resultado['meses'] ?? [],
                                 'puede_ver_articulo' => $puede_ver_articulo ?? false,
                                 'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
                                 'puede_ver_recepcion' => $puede_ver_recepcion ?? false,
@@ -234,4 +314,8 @@
     </div>
 </div>
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.stock.modalconsultatipoarticulo')
+@include('includes.stock.modalconsultausoarticulo')
+@include('includes.stock.modalconsultacategoria')
+@include('includes.stock.modalconsultasubcategoria')
 @endsection

@@ -575,7 +575,9 @@
     };
 })();
 </script>
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/mayor_concepto/cuentas_debajo_limite.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/mayor_concepto/cuentas_debajo_limite.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -693,6 +695,13 @@
                         'id_prefix' => 'mco',
                         'config_key' => 'contable.mayor_concepto.fuente_erp_hasta',
                         'erp_habilitado' => (bool) config('contable.mayor_concepto.fuente_erp_habilitada', false),
+                    ])
+
+                    @include('contable.mayor_concepto.partials.cuentas_como_debajo_limite', [
+                        'filtros' => $filtros ?? [],
+                        'id_prefix' => 'mco',
+                        'erp_habilitado' => (bool) config('contable.mayor_concepto.fuente_erp_habilitada', false),
+                        'cuentas_como_debajo_limite_meta' => $cuentas_como_debajo_limite_meta ?? [],
                     ])
 
                     <input type="hidden" name="agrupacion_resumen" id="agrupacion_resumen"
@@ -840,6 +849,11 @@
                         'fuente_etiqueta' => $fuente_etiqueta ?? '',
                     ])
 
+                    @include('contable.mayor_concepto.partials.cuentas_debajo_limite_datos', [
+                        'filtros' => $filtros ?? [],
+                        'cuentas_como_debajo_limite_meta' => $cuentas_como_debajo_limite_meta ?? [],
+                    ])
+
                     @include('contable.mayor_concepto.partials.resumen_totales', [
                         'resumen' => $resumen ?? [],
                         'resumen_por_cuenta' => $resumen_por_cuenta ?? [],
@@ -926,4 +940,5 @@
     'titulo' => 'Procesando mayor por concepto…',
     'subtitulo' => 'Puede tardar varios minutos según el período. No cierre ni recargue la página.',
 ])
+@include('includes.contable.modalconsultacuentacontable')
 @endsection

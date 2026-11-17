@@ -26,6 +26,9 @@ use Illuminate\Support\Facades\DB;
  * IVA incluido (flag iva_incluido_erp, reversible): el concepto 63 / IVA crédito
  * fiscal / 521130 se fusiona al gasto de la misma operación. No toca 55 ni 58.
  * Solo reclasifica pesos: el Debe/Haber de cada pata hasta el límite no cambia.
+ *
+ * Cuentas como debajo del límite (preferencia por usuario, solo motor ERP): códigos
+ * por encima de limite_caja_banco que igual anclan como patas de disponibilidad.
  */
 class MayorConceptoErpPlanoMotor
 {
@@ -34,6 +37,9 @@ class MayorConceptoErpPlanoMotor
     private const PROVEEDOR_HASTA = 212000000;
 
     private const TOLERANCIA = 0.02;
+
+    /** @var array<int, true> Cuentas fuera del límite tratadas como patas (generar). */
+    private array $cuentasComoDebajoLimiteSet = [];
 
     /** Cuentas 412010–412999: ventas máquinas / ruletas del cierre de rendición. */
     private const VENTA_MAQUINAS_CUENTA_DESDE = 412010000;
@@ -67,11 +73,13 @@ class MayorConceptoErpPlanoMotor
         int $monedaReporteId,
         bool $soloMonedaOrigen,
         MayorConceptoMonedaConverter $monedaConverter,
+        array $cuentasComoDebajoLimite = [],
     ): array {
         $limite = (int) config('contable.mayor_concepto.limite_caja_banco', 112010008);
         $ventaMaquinasNativas = $this->ventaMaquinasLineasNativasHabilitado();
         $bingoNativas = $this->bingoLineasNativasHabilitado();
         $ivaIncluidoErp = $this->ivaIncluidoErpHabilitado();
+        $this->cuentasComoDebajoLimiteSet = $this->normalizarCuentasComoDebajoLimite($cuentasComoDebajoLimite);
         $asientos = $empresaId > 0
             ? $this->cargarAsientos($empresaId, $fechaDesdeYmd, $fechaHastaYmd, $monedaReporteId, $soloMonedaOrigen, $monedaConverter)
             : [];
@@ -97,6 +105,7 @@ class MayorConceptoErpPlanoMotor
             $ventaMaquinasNativas,
             $bingoNativas,
             $ivaIncluidoErp,
+            array_keys($this->cuentasComoDebajoLimiteSet),
         );
         $lineas = $clasificado['lineas'];
         $analitico = $clasificado['analitico'];
@@ -129,6 +138,7 @@ class MayorConceptoErpPlanoMotor
                 'motor' => 'erp_plano_limite',
                 'fuente_etiqueta' => 'ERP — mayor por concepto sobre las patas hasta el límite',
                 'limite_caja_banco' => $limite,
+                'cuentas_como_debajo_limite' => array_keys($this->cuentasComoDebajoLimiteSet),
                 'venta_maquinas_lineas_nativas' => $ventaMaquinasNativas,
                 'bingo_lineas_nativas' => $bingoNativas,
                 'iva_incluido_erp' => $ivaIncluidoErp,
@@ -160,6 +170,7 @@ class MayorConceptoErpPlanoMotor
      * @param  list<array<string, mixed>>  $asientos
      * @param  array<int, list<array<string, mixed>>>  $gastosPorAsiento
      * @param  array<int, float>  $retencionesPorAsiento  total de retenciones de la OPP, por asiento
+     * @param  list<int>  $cuentasComoDebajoLimite  códigos fuera del límite tratados como patas
      * @return array{lineas: list<array<string, mixed>>, analitico: array<int, array<string, mixed>>}
      */
     public function clasificar(
@@ -170,9 +181,11 @@ class MayorConceptoErpPlanoMotor
         bool $ventaMaquinasLineasNativas = false,
         bool $bingoLineasNativas = false,
         bool $ivaIncluidoErp = false,
+        array $cuentasComoDebajoLimite = [],
     ): array {
         $lineas = [];
         $analitico = [];
+        $forzadas = $this->normalizarCuentasComoDebajoLimite($cuentasComoDebajoLimite);
         if ($ivaIncluidoErp) {
             foreach ($gastosPorAsiento as $asientoId => $gastos) {
                 $gastosPorAsiento[$asientoId] = $this->fusionarIvaIncluidoEnItems($gastos, 'peso');
@@ -187,7 +200,8 @@ class MayorConceptoErpPlanoMotor
 
             $patas = [];
             foreach ($movimientos as $indice => $mov) {
-                if ((int) $mov['cuenta'] > 0 && (int) $mov['cuenta'] <= $limite && (float) $mov['importe'] >= 0.005) {
+                $cuenta = (int) $mov['cuenta'];
+                if ($this->esCuentaDebajoLimite($cuenta, $limite, $forzadas) && (float) $mov['importe'] >= 0.005) {
                     $patas[$indice] = $mov;
                 }
             }
@@ -223,7 +237,8 @@ class MayorConceptoErpPlanoMotor
                 foreach ($movimientos as $mov) {
                     $cuenta = (int) ($mov['cuenta'] ?? 0);
                     $importe = round((float) ($mov['importe'] ?? 0), 2);
-                    if ($cuenta <= 0 || $cuenta <= $limite || $importe < 0.005) {
+                    // Patas (≤ límite o forzadas) no salen otra vez como concepto nativo.
+                    if ($cuenta <= 0 || $this->esCuentaDebajoLimite($cuenta, $limite, $forzadas) || $importe < 0.005) {
                         continue;
                     }
                     $lineas[] = $this->linea(
@@ -2041,6 +2056,7 @@ class MayorConceptoErpPlanoMotor
     private function pesoCajaPorAsiento(array $asientoIds): array
     {
         $limite = (int) config('contable.mayor_concepto.limite_caja_banco', 112010008);
+        $forzadas = $this->cuentasComoDebajoLimiteSet;
         $pesos = [];
         foreach (array_chunk($asientoIds, 800) as $lote) {
             $filas = DB::table('asiento_movimiento as am')
@@ -2049,7 +2065,7 @@ class MayorConceptoErpPlanoMotor
                 ->get(['am.asiento_id', 'am.monto', 'cc.codigo']);
             foreach ($filas as $f) {
                 $codigo = $this->soloDigitos($f->codigo);
-                if ($codigo <= 0 || $codigo > $limite) {
+                if (! $this->esCuentaDebajoLimite($codigo, $limite, $forzadas)) {
                     continue;
                 }
                 $asientoId = (int) $f->asiento_id;
@@ -2058,6 +2074,33 @@ class MayorConceptoErpPlanoMotor
         }
 
         return $pesos;
+    }
+
+    /**
+     * @param  list<int|string>  $cuentas
+     * @return array<int, true>
+     */
+    private function normalizarCuentasComoDebajoLimite(array $cuentas): array
+    {
+        $set = [];
+        foreach ($cuentas as $cuenta) {
+            $codigo = is_int($cuenta) || is_float($cuenta)
+                ? (int) $cuenta
+                : $this->soloDigitos($cuenta);
+            if ($codigo > 0) {
+                $set[$codigo] = true;
+            }
+        }
+
+        return $set;
+    }
+
+    /**
+     * @param  array<int, true>  $forzadas
+     */
+    private function esCuentaDebajoLimite(int $cuenta, int $limite, array $forzadas): bool
+    {
+        return $cuenta > 0 && ($cuenta <= $limite || isset($forzadas[$cuenta]));
     }
 
     private function claveOrden(mixed $tipo, mixed $letra, mixed $sucursal, mixed $nro): string

@@ -28,6 +28,9 @@ class MayorConceptoReporteService
     /** Modo de fuente del request actual (auto / erp / anita). */
     private string $modoFuenteActivo = MayorFuenteConsultaSupport::MODO_ERP;
 
+    /** @var list<int> Cuentas fuera del límite tratadas como patas (solo ERP). */
+    private array $cuentasComoDebajoLimiteActivas = [];
+
     public function __construct(
         private readonly MayorConceptoPeriodoProcesador $procesador,
         private readonly MayorConceptoErpPlanoMotor $erpPlanoMotor,
@@ -56,6 +59,9 @@ class MayorConceptoReporteService
     public function generarDesdeFiltros(array $filtros): array
     {
         $this->aplicarFuenteMayorDesdeFiltros($filtros);
+        $this->cuentasComoDebajoLimiteActivas = $this->usaMotorErpNativo()
+            ? MayorConceptoListadoFiltros::cuentasComoDebajoLimite($filtros)
+            : [];
 
         $empresaIds = MayorConceptoListadoFiltros::empresaIds($filtros);
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
@@ -1076,6 +1082,7 @@ class MayorConceptoReporteService
                 $monedaReporteId,
                 $soloMonedaOrigen,
                 $this->monedaConverter,
+                $this->cuentasComoDebajoLimiteActivas,
             );
         }
 
