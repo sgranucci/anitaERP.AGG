@@ -3,20 +3,40 @@
 namespace App\Support\Ventas;
 
 use App\ApiAnita;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Numeración cliente EL BIERZO: t_comp (CLI) → numerador Anita (num_clave = tcomp_refer).
+ * Numeración automática de cliente: t_comp (CLI) → numerador Anita (num_clave = tcomp_refer).
  * El siguiente código sale de num_ult_numero + 1; si está ocupado en ERP/climae se incrementa.
+ * Activo en EL BIERZO e INTERFORMING.
  */
 final class ClienteAnitaNumeracionSupport
 {
+    /**
+     * Tope de la serie operativa al sembrar un numerador CLI en 0 (Interforming).
+     * Evita que outliers (87654, 101885, 999999) arrastren el contador.
+     */
+    private const PISO_SERIE_OPERATIVA_HASTA = 19999;
+
     public static function estaHabilitada(): bool
     {
-        return config('app.empresa') === 'EL BIERZO'
-            && filter_var(config('cliente_anita.numeracion.habilitada', true), FILTER_VALIDATE_BOOLEAN);
+        if (! filter_var(config('cliente_anita.numeracion.habilitada', true), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        return EntornoEmpresaSupport::esElBierzo()
+            || EntornoEmpresaSupport::esInterforming();
+    }
+
+    /**
+     * El alta no permite cargar el código a mano: lo asigna el numerador CLI.
+     */
+    public static function codigoAutomatico(): bool
+    {
+        return self::estaHabilitada();
     }
 
     public static function sistemaTComp(): string
@@ -141,7 +161,7 @@ final class ClienteAnitaNumeracionSupport
     public static function asignarCodigoClienteLibre(): int
     {
         $claveNumerador = self::resolverClaveNumeradorDesdeTComp();
-        $ultimoNumerador = self::leerUltimoNumeroNumerador();
+        $ultimoNumerador = self::asegurarPisoNumeradorSiVacio(self::leerUltimoNumeroNumerador());
         $desde = $ultimoNumerador + 1;
         $numero = ClienteAnitaColisionSupport::primerCodigoDisponible($desde);
         self::assertFueraDeSerieEmpleado($numero);
@@ -169,7 +189,7 @@ final class ClienteAnitaNumeracionSupport
         }
 
         try {
-            $desde = self::leerUltimoNumeroNumerador() + 1;
+            $desde = self::asegurarPisoNumeradorSiVacio(self::leerUltimoNumeroNumerador()) + 1;
             $techo = self::techoSerieCliente();
             if ($desde > $techo) {
                 return '';
@@ -264,6 +284,43 @@ final class ClienteAnitaNumeracionSupport
         }
 
         return 999999;
+    }
+
+    /**
+     * Interforming: t_comp CLI → numerador 014 quedó en 0 (no se usaba).
+     * Si arrancáramos en 1 asignaríamos huecos viejos. Usamos como piso el max de la
+     * serie operativa (hasta 19999); el alta graba el numerador con el código asignado.
+     */
+    private static function asegurarPisoNumeradorSiVacio(int $ultimoNumerador): int
+    {
+        if ($ultimoNumerador > 0 || ! EntornoEmpresaSupport::esInterforming()) {
+            return $ultimoNumerador;
+        }
+
+        $piso = self::maxCodigoSerieOperativaErp();
+        if ($piso <= 0) {
+            return 0;
+        }
+
+        Log::info('ClienteAnitaNumeracion: numerador CLI en 0; piso efectivo desde serie operativa', [
+            'piso' => $piso,
+            'hasta' => self::PISO_SERIE_OPERATIVA_HASTA,
+        ]);
+
+        return $piso;
+    }
+
+    private static function maxCodigoSerieOperativaErp(): int
+    {
+        $cast = SqlDialectSupport::castEntero('codigo');
+        $max = DB::table('cliente')
+            ->whereNotNull('codigo')
+            ->where('codigo', '!=', '')
+            ->whereRaw(SqlDialectSupport::coincideRegex('codigo'), ['^[0-9]+$'])
+            ->whereRaw($cast.' BETWEEN 1 AND ?', [self::PISO_SERIE_OPERATIVA_HASTA])
+            ->max(DB::raw($cast));
+
+        return max(0, (int) $max);
     }
 
     /**

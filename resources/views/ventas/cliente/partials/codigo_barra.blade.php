@@ -7,7 +7,8 @@
     $esCliente = isset($data) && $data instanceof Cliente;
     $codigoActual = trim((string) ($esCliente ? ($data->codigo ?? '') : ''));
     $codigoCliente = old('codigo', $codigoActual !== '' ? $codigoActual : ($data->codigo ?? ''));
-    $codigoEditable = config('app.empresa') === 'INTERFORMING';
+    $codigoEditable = config('app.empresa') === 'INTERFORMING'
+        && ! ClienteAnitaNumeracionSupport::codigoAutomatico();
     $esAlta = ! $esCliente;
     $mostrarSecuencia = ClienteCodigoSecuenciaSupport::muestraSelector($codigoActual, $esAlta);
     $secuenciaSel = old('secuencia_codigo');

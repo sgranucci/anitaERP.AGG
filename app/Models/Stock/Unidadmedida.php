@@ -87,4 +87,26 @@ class Unidadmedida extends Model implements Auditable
 						'whereArmado' => " WHERE stkum_umd = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 	}
+
+    /**
+     * Selector de UM sin abreviaturas duplicadas (ids legacy ERP + sync Anita).
+     * Prefiere el id más alto (códigos Anita 9xxx, los que usan los artículos).
+     *
+     * @return \Illuminate\Support\Collection<int, self>
+     */
+    public static function listadoParaSelectorSinDuplicados()
+    {
+        return static::query()
+            ->orderByDesc('id')
+            ->get()
+            ->unique(static function (self $um): string {
+                $abr = strtoupper(trim((string) ($um->abreviatura ?? '')));
+
+                return $abr !== '' ? $abr : strtoupper(trim((string) ($um->nombre ?? '')).'#'.$um->id);
+            })
+            ->sortBy(static function (self $um): string {
+                return strtoupper(trim((string) ($um->abreviatura ?: $um->nombre ?: '')));
+            }, SORT_NATURAL)
+            ->values();
+    }
 }

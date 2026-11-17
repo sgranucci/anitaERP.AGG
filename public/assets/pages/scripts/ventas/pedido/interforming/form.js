@@ -582,15 +582,46 @@
             $tr.find('.incluyeimpuesto').val(incluyeimpuesto);
             $tr.find('.moneda_id').val(monedaId);
 
-            var porc = parseFloat($tr.find('input[name*="[porc_fason]"]').val() || '0') || 0;
-            var precioBase = parseFloat($tr.find('.precio').val() || '0') || 0;
-            var precioFason = porc > 0 ? Math.round(precioBase * (porc / 100) * 1e6) / 1e6 : 0;
-            $tr.find('input[name*="[precio_fason]"]').val(precioFason);
-            $tr.find('input[name*="[partida]"]').val(porc > 0 ? 1 : 0);
+            $tr.find('input[name*="[partida]"]').val(
+                (parseFloat($tr.find('input[name*="[porc_fason]"]').val() || '0') || 0) > 0 ? 1 : 0
+            );
+            refrescarPrecioFasonFila($tr);
         });
     };
 
     /* --- Cantidad alternativa (a-pedido.c asigna_umd: cant * stkm_peso_aprox) --- */
+
+    function formatearCantidadValor(valor) {
+        var n = parseFloat(valor);
+        if (isNaN(n)) {
+            return '';
+        }
+        if (typeof redondearDecimales === 'function') {
+            n = redondearDecimales(n, 6);
+        } else {
+            n = Math.round(n * 1e6) / 1e6;
+        }
+        if (Math.abs(n - Math.round(n)) < 1e-9) {
+            return String(Math.round(n));
+        }
+        var s = n.toFixed(6);
+        s = s.replace(/\.?0+$/, '');
+        return s;
+    }
+
+    function formatearCantidadEnInput($input) {
+        if (!$input || !$input.length) {
+            return;
+        }
+        var raw = String($input.val() || '').trim();
+        if (raw === '') {
+            return;
+        }
+        var fmt = formatearCantidadValor(raw);
+        if (fmt !== '') {
+            $input.val(fmt);
+        }
+    }
 
     function abreviaturaUmFila($tr) {
         var $opt = $tr.find('.unidadmedida_id option:selected');
@@ -601,6 +632,35 @@
     function esUmKilo(abreviatura) {
         var a = (abreviatura || '').trim();
         return a.charAt(0) === 'k' || a.charAt(0) === 'K';
+    }
+
+    function seleccionarUmPorIdOAbreviatura($tr, umId, abreviatura) {
+        var $sel = $tr.find('.unidadmedida_id');
+        if (!$sel.length) {
+            return;
+        }
+        var id = umId ? String(umId) : '';
+        if (id && $sel.find('option[value="' + id + '"]').length) {
+            $sel.val(id);
+            return;
+        }
+        var abr = String(abreviatura || '').trim().toUpperCase();
+        if (!abr) {
+            return;
+        }
+        $sel.find('option').each(function () {
+            var optAbr = String($(this).data('abreviatura') || $(this).text() || '').trim().toUpperCase();
+            if (optAbr === abr) {
+                $sel.val($(this).val());
+                return false;
+            }
+        });
+    }
+
+    function actualizarEtiquetaUmAlter($tr, abreviatura) {
+        var abr = String(abreviatura || '').trim().toUpperCase();
+        $tr.find('.umd_alter_abreviatura').val(abr);
+        $tr.find('.umd-alter-label').text(abr !== '' ? abr : '—');
     }
 
     function convertirCantidadAlternativa($tr) {
@@ -620,22 +680,12 @@
             cantAlter = cant * peso;
         }
 
-        if (typeof redondearDecimales === 'function') {
-            cantAlter = redondearDecimales(cantAlter, 6);
-        } else {
-            cantAlter = Math.round(cantAlter * 1e6) / 1e6;
-        }
-
-        $tr.find('.cantidad_alter').val(cantAlter);
+        $tr.find('.cantidad_alter').val(formatearCantidadValor(cantAlter));
     }
 
     function aplicarDatosArticuloAFila(dataArticulo, $tr) {
         if (!dataArticulo || !$tr || !$tr.length) {
             return;
-        }
-
-        if (dataArticulo.unidadmedida_id) {
-            $tr.find('.unidadmedida_id').val(dataArticulo.unidadmedida_id);
         }
 
         var abr = '';
@@ -645,6 +695,7 @@
             abr = dataArticulo.unidadmedida.abreviatura;
         }
         $tr.find('.umd_abreviatura').val(abr);
+        seleccionarUmPorIdOAbreviatura($tr, dataArticulo.unidadmedida_id, abr);
 
         var coef = parseFloat(dataArticulo.coeficienteconversion || 0) || 0;
         $tr.find('.coeficienteconversion').val(coef > 0 ? coef : '');
@@ -652,7 +703,62 @@
         var umAlter = dataArticulo.unidadmedidaalternativa_id || '';
         $tr.find('.unidadmedida_alter_id').val(umAlter || '');
 
+        var abrAlter = '';
+        if (dataArticulo.unidadesdemedidasalternativas && dataArticulo.unidadesdemedidasalternativas.abreviatura) {
+            abrAlter = dataArticulo.unidadesdemedidasalternativas.abreviatura;
+        } else if (dataArticulo.unidadmedidaalternativa && dataArticulo.unidadmedidaalternativa.abreviatura) {
+            abrAlter = dataArticulo.unidadmedidaalternativa.abreviatura;
+        } else if (dataArticulo.um_alternativa_abreviatura) {
+            abrAlter = dataArticulo.um_alternativa_abreviatura;
+        }
+        actualizarEtiquetaUmAlter($tr, abrAlter);
+
+        var desc = dataArticulo.descripcion || dataArticulo.desc_articulo || '';
+        if (desc) {
+            $tr.find('.descripcionarticulo').val(desc).attr('title', desc);
+        }
+
         convertirCantidadAlternativa($tr);
+        formatearCantidadEnInput($tr.find('.cantidad'));
+        refrescarPrecioFasonFila($tr);
+    }
+
+    /**
+     * % fason parte cantidad; el precio sale de lista Fason (nunca precio × %).
+     */
+    function refrescarPrecioFasonFila($tr) {
+        if (!$tr || !$tr.length) {
+            return;
+        }
+        var porc = parseFloat($tr.find('input[name*="[porc_fason]"]').val() || '0') || 0;
+        var $precioFason = $tr.find('.precio_fason, input[name*="[precio_fason]"]');
+        var $monedaFason = $tr.find('.moneda_fason_id');
+        if (porc <= 0) {
+            $precioFason.val(0);
+            $monedaFason.val('');
+            $tr.find('input[name*="[partida]"]').val(0);
+            return;
+        }
+        $tr.find('input[name*="[partida]"]').val(1);
+        var articuloId = parseInt($tr.find('.articulo_id').val() || '0', 10) || 0;
+        if (articuloId <= 0) {
+            $precioFason.val(0);
+            return;
+        }
+        $.get(carpetaBase + '/ventas/pedido/precio-fason/' + articuloId)
+            .done(function (data) {
+                var precio = data && typeof data.precio !== 'undefined' ? parseFloat(data.precio) : 0;
+                if (isNaN(precio)) {
+                    precio = 0;
+                }
+                $precioFason.val(formatearCantidadValor(precio) || '0');
+                if (data && data.moneda_id) {
+                    $monedaFason.val(data.moneda_id);
+                }
+            })
+            .fail(function () {
+                $precioFason.val(0);
+            });
     }
 
     window.onArticuloSeleccionado = function (dataArticulo, ctx) {
@@ -811,17 +917,24 @@
             renumerarItems();
         });
 
-        $(document).on('input change', 'input[name*="[porc_fason]"], #tbody-items-pedido-if .precio', function () {
+        $(document).on('change', 'input[name*="[porc_fason]"]', function () {
             var $tr = $(this).closest('tr');
-            var precio = parseFloat($tr.find('.precio').val() || '0') || 0;
             var porc = parseFloat($tr.find('input[name*="[porc_fason]"]').val() || '0') || 0;
-            var precioFason = porc > 0 ? Math.round(precio * (porc / 100) * 1e6) / 1e6 : 0;
-            $tr.find('input[name*="[precio_fason]"]').val(precioFason);
             $tr.find('input[name*="[partida]"]').val(porc > 0 ? 1 : 0);
+            refrescarPrecioFasonFila($tr);
         });
 
         $(document).on('input change', '#tbody-items-pedido-if .cantidad, #tbody-items-pedido-if .unidadmedida_id', function () {
             convertirCantidadAlternativa($(this).closest('tr'));
+        });
+
+        $(document).on('blur', '#tbody-items-pedido-if .cantidad, #tbody-items-pedido-if .cantidad_alter', function () {
+            formatearCantidadEnInput($(this));
+        });
+
+        $(document).on('change', '#tbody-items-pedido-if .unidadmedida_id', function () {
+            var $tr = $(this).closest('tr');
+            $tr.find('.umd_abreviatura').val(abreviaturaUmFila($tr));
         });
 
         $(document).on('click', '#btn-cambiar-lugarentrega', function () {

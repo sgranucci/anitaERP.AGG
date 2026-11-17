@@ -86,8 +86,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$secuencia = (string) ($data['secuencia_codigo'] ?? '');
 		unset($data['secuencia_codigo']);
 
-		if (config('app.empresa') !== 'INTERFORMING')
-		{
+		if (ClienteAnitaNumeracionSupport::codigoAutomatico()
+			|| config('app.empresa') !== 'INTERFORMING'
+		) {
 			if (ClienteCodigoSecuenciaSupport::esPedidoGastronomia($secuencia)) {
 				$data['codigo'] = ClienteCodigoSecuenciaSupport::proximoGastronomia(true);
 			} elseif (ClienteCodigoEmpleadoBierzoSupport::esPedidoEmpleado($secuencia)) {
@@ -188,7 +189,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 		unset($data['secuencia_codigo']);
 
 		$clienteModelo = $this->model->findOrFail($id);
-		if (config('app.empresa') !== 'INTERFORMING') {
+		if (ClienteAnitaNumeracionSupport::codigoAutomatico()
+			|| config('app.empresa') !== 'INTERFORMING'
+		) {
 			if (ClienteCodigoSecuenciaSupport::debeReasignarAGastronomia($clienteModelo->codigo, $secuencia)) {
 				$data['codigo'] = ClienteCodigoSecuenciaSupport::proximoGastronomia(true);
 			} else {
@@ -2410,7 +2413,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita
 
 	private function ultimoCodigo(&$codigo) {
-		if (config('app.empresa') === 'EL BIERZO' && ClienteAnitaNumeracionSupport::estaHabilitada()) {
+		if (ClienteAnitaNumeracionSupport::estaHabilitada()) {
 			$numero = ClienteAnitaNumeracionSupport::asignarCodigoClienteLibre();
 			$codigo = ClienteAnitaNumeracionSupport::formatearCodigoErp($numero);
 

@@ -4,8 +4,10 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 use App\Rules\Ventas\RuleCliente;
+use App\Rules\Ventas\RuleClienteCodigoUnico;
 use App\Models\Ventas\Cliente;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 
 class ValidacionClienteProvisorio extends FormRequest
 {
@@ -44,6 +46,14 @@ class ValidacionClienteProvisorio extends FormRequest
         ];
 
         $reglas['secuencia_codigo'] = 'nullable|in:administracion,gastronomia,cliente,empleado';
+
+        if (! ClienteAnitaNumeracionSupport::codigoAutomatico()) {
+            $reglas['codigo'] = [
+                'required',
+                'max:20',
+                new RuleClienteCodigoUnico(null),
+            ];
+        }
 
         if (EntornoEmpresaSupport::esElBierzo()) {
             $reglas['emitecertificado'] = 'nullable|in:S,N,Emite Certificado,No Emite Certificado';

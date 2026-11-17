@@ -9,6 +9,7 @@ use App\Support\Stock\ArticuloAnitaAbmSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Altas y actualizaciones de artículos en el ERP desde Anita (stkmae) vía {@see ApiAnita}.
@@ -284,13 +285,17 @@ class ArticuloAnitaSyncService
     ): array {
         $umPorId = [];
         $umPorAbr = [];
-        foreach (Unidadmedida::query()->get(['id', 'abreviatura']) as $um) {
+        // Preferir ids altos (códigos Anita 9xxx) al resolver por abreviatura.
+        foreach (Unidadmedida::query()->orderBy('id')->get(['id', 'abreviatura']) as $um) {
             $umPorId[(int) $um->id] = $um;
             $abr = strtoupper(trim((string) $um->abreviatura));
             if ($abr !== '') {
                 $umPorAbr[$abr] = $um;
             }
         }
+
+        // Anita stkumd: código → abreviatura (1=UN, 2=KG, 4=LT…). No coinciden con ids legacy ERP (1=LT).
+        $anitaCodigoAAbr = $this->mapaAbreviaturaUmAnita();
 
         $articulos = Articulo::query()->get(['id', 'sku', 'unidadmedida_id', 'unidadmedidaalternativa_id']);
         $porSku = [];
@@ -310,6 +315,8 @@ class ArticuloAnitaSyncService
         $sinUmAnita = 0;
         $umSinCatalogo = 0;
         $cambios = [];
+        /** @var array<string, list<int>> ids a actualizar agrupados por destino um|alt */
+        $lotesPorDestino = [];
 
         foreach ($filas as $fila) {
             $codigo = trim((string) ($fila->stkm_articulo ?? ''));
@@ -331,7 +338,7 @@ class ArticuloAnitaSyncService
             // El texto de Anita (KG/UN/CAJ) manda: stkm_cod_umd suele estar en 0 o no coincide.
             $umDestino = $abrAnita !== '' ? ($umPorAbr[$abrAnita] ?? null) : null;
             if ($umDestino === null && $umIdAnita > 0) {
-                $umDestino = $umPorId[$umIdAnita] ?? null;
+                $umDestino = $this->resolverUmErpDesdeCodigoAnita($umIdAnita, $anitaCodigoAAbr, $umPorAbr, $umPorId);
             }
             if ($umDestino === null && ($umIdAnita > 0 || $abrAnita !== '' || trim((string) ($fila->stkm_unidad_medida ?? '')) !== '')) {
                 $umSinCatalogo++;
@@ -344,7 +351,10 @@ class ArticuloAnitaSyncService
                 $sinUmAnita++;
             }
 
-            $umAltDestino = $umAltAnita > 0 ? ($umPorId[$umAltAnita] ?? null) : null;
+            // Alt: código Anita (stkumd), nunca id ERP legacy (Anita 1=UN vs ERP 1=LT).
+            $umAltDestino = $umAltAnita > 0
+                ? $this->resolverUmErpDesdeCodigoAnita($umAltAnita, $anitaCodigoAAbr, $umPorAbr, $umPorId)
+                : null;
             $nuevoId = $umDestino !== null ? (int) $umDestino->id : null;
             $nuevoAltId = $umAltDestino !== null ? (int) $umAltDestino->id : null;
             $actualId = (int) ($articulo->unidadmedida_id ?? 0) ?: null;
@@ -356,21 +366,36 @@ class ArticuloAnitaSyncService
                 continue;
             }
 
-            $cambios[] = [
-                'sku' => (string) $articulo->sku,
-                'de' => $this->etiquetaUm($actualId, $umPorId),
-                'a' => $this->etiquetaUm($nuevoId, $umPorId),
-                'de_alt' => $this->etiquetaUm($actualAltId, $umPorId),
-                'a_alt' => $this->etiquetaUm($nuevoAltId, $umPorId),
-            ];
-
-            if (! $dryRun) {
-                $articulo->update([
-                    'unidadmedida_id' => $nuevoId,
-                    'unidadmedidaalternativa_id' => $nuevoAltId,
-                ]);
+            if (count($cambios) < 200) {
+                $cambios[] = [
+                    'sku' => (string) $articulo->sku,
+                    'de' => $this->etiquetaUm($actualId, $umPorId),
+                    'a' => $this->etiquetaUm($nuevoId, $umPorId),
+                    'de_alt' => $this->etiquetaUm($actualAltId, $umPorId),
+                    'a_alt' => $this->etiquetaUm($nuevoAltId, $umPorId),
+                ];
             }
+
+            $claveLote = ($nuevoId ?? 0).'|'.($nuevoAltId ?? 0);
+            $lotesPorDestino[$claveLote][] = (int) $articulo->id;
             $actualizados++;
+        }
+
+        if (! $dryRun && $lotesPorDestino !== []) {
+            $ahora = now();
+            foreach ($lotesPorDestino as $claveLote => $ids) {
+                [$umDest, $altDest] = array_map('intval', explode('|', $claveLote, 2));
+                foreach (array_chunk(array_values(array_unique($ids)), 1000) as $chunk) {
+                    // Update masivo (sin OwenIt): sync Anita de miles de filas.
+                    DB::table('articulo')
+                        ->whereIn('id', $chunk)
+                        ->update([
+                            'unidadmedida_id' => $umDest > 0 ? $umDest : null,
+                            'unidadmedidaalternativa_id' => $altDest > 0 ? $altDest : null,
+                            'updated_at' => $ahora,
+                        ]);
+                }
+            }
         }
 
         return [
@@ -402,7 +427,6 @@ class ArticuloAnitaSyncService
             'KGS' => 'KG',
             'KILO' => 'KG',
             'KILOGRAMO' => 'KG',
-            '1' => 'KG',
             'UN' => 'UN',
             'UNI' => 'UN',
             'UND' => 'UN',
@@ -416,9 +440,100 @@ class ArticuloAnitaSyncService
             'L' => 'LT',
             'LIT' => 'LT',
             'LITRO' => 'LT',
+            'MT' => 'MT',
+            'M' => 'MT',
+            'M3' => 'M3',
+            'TN' => 'TN',
+            'GR' => 'GR',
+            'HS' => 'HS',
+            'MIN' => 'MIN',
         ];
 
         return $alias[$s] ?? $s;
+    }
+
+    /**
+     * Código stkumd Anita → abreviatura. Fuente: Anita Interforming (1=UN … 4=LT).
+     * No usar el id ERP: ahí 1 es Litros.
+     *
+     * @return array<int, string>
+     */
+    private function mapaAbreviaturaUmAnita(): array
+    {
+        static $cache = null;
+        if (is_array($cache)) {
+            return $cache;
+        }
+
+        $cache = [];
+        try {
+            $apiAnita = new ApiAnita;
+            $filas = ApiAnita::decodificarListaFilas($apiAnita->apiCall([
+                'acc' => 'list',
+                'tabla' => 'stkumd',
+                'campos' => 'stkum_umd,stkum_abreviatura,stkum_desc',
+            ]));
+            foreach ($filas as $fila) {
+                $codigo = (int) ($fila->stkum_umd ?? 0);
+                if ($codigo <= 0) {
+                    continue;
+                }
+                $abr = $this->normalizarAbreviaturaUm((string) ($fila->stkum_abreviatura ?? ''));
+                if ($abr === '') {
+                    $abr = $this->normalizarAbreviaturaUm((string) ($fila->stkum_desc ?? ''));
+                }
+                if ($abr !== '') {
+                    $cache[$codigo] = $abr;
+                }
+            }
+        } catch (\Throwable $e) {
+            $cache = [];
+        }
+
+        // Respaldo si la API no respondió (misma tabla Anita Interforming).
+        if ($cache === []) {
+            $cache = [
+                1 => 'UN',
+                2 => 'KG',
+                3 => 'MT',
+                4 => 'LT',
+                5 => 'MIN',
+                6 => 'HS',
+                7 => 'M3',
+                8 => 'TN',
+                9 => 'GR',
+            ];
+        }
+
+        return $cache;
+    }
+
+    /**
+     * @param  array<int, string>  $anitaCodigoAAbr
+     * @param  array<string, Unidadmedida>  $umPorAbr
+     * @param  array<int, Unidadmedida>  $umPorId
+     */
+    private function resolverUmErpDesdeCodigoAnita(
+        int $codigoAnita,
+        array $anitaCodigoAAbr,
+        array $umPorAbr,
+        array $umPorId
+    ): ?Unidadmedida {
+        if ($codigoAnita <= 0) {
+            return null;
+        }
+
+        $abr = $anitaCodigoAAbr[$codigoAnita] ?? '';
+        if ($abr !== '' && isset($umPorAbr[$abr])) {
+            return $umPorAbr[$abr];
+        }
+
+        // Solo si el código Anita coincide con un id ERP del sync (9xxx), no con legacy 1=LT.
+        if ($codigoAnita >= 9000 && isset($umPorId[$codigoAnita])) {
+            return $umPorId[$codigoAnita];
+        }
+
+        return null;
     }
 
     /**
