@@ -11,6 +11,7 @@ use App\Models\Caja\TesoreriaCrownComprobanteLinea;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
+use App\Support\Caja\TesoreriaCrownBorradorSupport;
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreFiscalReader;
@@ -276,15 +277,21 @@ class TesoreriaCrownComprobanteController extends Controller
 
         $comprobante = $this->comprobanteEnAlcance($id);
         $cantidades = $comprobante->lineas->pluck('cantidad', 'valor_id');
+        $borradorGuardado = $comprobante->esBorrador()
+            && TesoreriaCrownBorradorSupport::comprobanteTieneComposicion($comprobante);
+        $cajaCerrada = $comprobante->cierreOperativo() !== null;
+        $jornadaAbierta = $comprobante->jornada->estaAbierta();
 
         return view('caja.tesoreria_crown.movimiento.editar', [
             'comprobante' => $comprobante,
             'grupos' => TesoreriaCrownComprobanteSupport::gruposEdicion($comprobante->sala_id, $comprobante->tipo),
             'cantidades' => $cantidades,
-            'cajaCerrada' => $comprobante->cierreOperativo() !== null,
+            'cajaCerrada' => $cajaCerrada,
+            'borradorGuardado' => $borradorGuardado,
             'editable' => $comprobante->esBorrador()
-                && $comprobante->jornada->estaAbierta()
-                && $comprobante->cierreOperativo() === null,
+                && $jornadaAbierta
+                && ! $cajaCerrada
+                && ! $borradorGuardado,
             'cierresFiscales' => $this->cierresFiscalesDe($comprobante),
             'pxsolCodigos' => TesoreriaCrownPxsolSupport::codigos($comprobante),
         ]);
@@ -315,6 +322,21 @@ class TesoreriaCrownComprobanteController extends Controller
         $comprobante = $this->comprobanteEnAlcance($id);
         if ($error = $this->errorBorradorAbierto($comprobante)) {
             return back()->with('mensaje-error', $error);
+        }
+        $pedirFirmas = $request->input('accion') === 'pedir-firmas';
+        $yaGuardado = TesoreriaCrownBorradorSupport::comprobanteTieneComposicion($comprobante);
+        if ($yaGuardado && ! $pedirFirmas) {
+            return back()->with(
+                'mensaje-error',
+                'La composición del borrador ya está guardada. Para cambiarla, revertí el borrador.'
+            );
+        }
+        if ($yaGuardado && $pedirFirmas) {
+            TesoreriaCrownFirmaSupport::pasarAPendiente($comprobante);
+
+            return redirect()
+                ->route('editar_tesoreria_crown_movimiento', $comprobante->id)
+                ->with('mensaje', 'Quedó pendiente: el cajero firma con su número y PIN, y tesorería con usuario y clave.');
         }
         $reglas = [
             'cantidad' => ['array'],
@@ -364,7 +386,6 @@ class TesoreriaCrownComprobanteController extends Controller
             ->map(fn ($valorId) => (int) $valorId)
             ->all();
 
-        $pedirFirmas = $request->input('accion') === 'pedir-firmas';
         $sincronizaCierresFiscales = array_key_exists('cierre_fiscal', $reglas);
 
         try {
@@ -659,13 +680,36 @@ class TesoreriaCrownComprobanteController extends Controller
         TesoreriaCrownFirmaSupport::volverABorrador($comprobante);
 
         return back()->with('mensaje', $habiaFirma
-            ? 'Volvió a borrador. Las firmas quedaron sin efecto.'
-            : 'Volvió a borrador. Podés modificar las cantidades.');
+            ? 'Volvió a borrador. Las firmas quedaron sin efecto. La composición sigue guardada: para cambiarla, revertí el borrador.'
+            : 'Volvió a borrador. La composición sigue guardada: para cambiarla, revertí el borrador.');
     }
 
     /**
-     * Descarta un borrador (también el vacío que nace al abrir Hab/Rend).
-     * No pide reversa: el borrador no quedó conforme.
+     * Vacía la composición de un borrador ya guardado. Queda vacío y se puede eliminar.
+     */
+    public function revertirBorrador(int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('crear-tesoreria-crown-movimiento');
+
+        $comprobante = $this->comprobanteEnAlcance($id);
+        if ($error = $this->errorBorradorAbierto($comprobante)) {
+            return back()->with('mensaje-error', $error);
+        }
+        if ($comprobante->revierte_id !== null) {
+            return back()->with('mensaje-error', 'Una reversa no se revierte como borrador.');
+        }
+        if (! TesoreriaCrownBorradorSupport::comprobanteTieneComposicion($comprobante)) {
+            return back()->with('mensaje-error', 'Este borrador todavía no tiene composición guardada.');
+        }
+        TesoreriaCrownBorradorSupport::vaciarComprobante($comprobante);
+
+        return back()->with('mensaje', 'Borrador revertido. Quedó vacío: podés cargar de nuevo o eliminarlo.');
+    }
+
+    /**
+     * Descarta un borrador vacío (recién abierto o ya revertido).
+     * No pide reversa: el borrador no quedó conforme. Con composición: revertir primero.
      */
     public function eliminar(int $id)
     {
@@ -681,6 +725,12 @@ class TesoreriaCrownComprobanteController extends Controller
         }
         if ($comprobante->revierte_id !== null) {
             return back()->with('mensaje-error', 'Una reversa no se borra como borrador.');
+        }
+        if (TesoreriaCrownBorradorSupport::comprobanteTieneComposicion($comprobante)) {
+            return back()->with(
+                'mensaje-error',
+                'Un borrador con composición guardada no se elimina. Revertilo para vaciarlo o seguí el circuito.'
+            );
         }
 
         $volver = [

@@ -184,12 +184,33 @@
                         </div>
                     @endif
                 </form>
+                @if (! empty($borradorGuardado) && $movimiento->jornada->estaAbierta())
+                    <div class="border rounded p-3 mt-3">
+                        <p class="text-muted small mb-2">Composición guardada: no se puede editar ni eliminar. Confirmá o revertí el borrador para vaciarlo.</p>
+                        @if (can('editar-tesoreria-crown-mesa', false))
+                            <form method="POST" action="{{ route('confirmar_tesoreria_crown_mesa', $movimiento->id) }}" class="mb-2" autocomplete="off" data-enter-campos="1">
+                                @csrf
+                                <div class="form-row">
+                                    <div class="col-md-3 mb-2"><input type="text" name="firma_usuario" class="form-control" placeholder="Usuario" autocomplete="off" value="{{ old('firma_usuario') }}" required></div>
+                                    <div class="col-md-3 mb-2"><input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password" required></div>
+                                    <div class="col-md-3 mb-2"><button type="submit" class="btn btn-success">Confirmar</button></div>
+                                </div>
+                            </form>
+                        @endif
+                        @if (can('crear-tesoreria-crown-mesa', false))
+                            <form method="POST" action="{{ route('revertir_borrador_tesoreria_crown_mesa', $movimiento->id) }}" onsubmit="return confirm('¿Revertir este borrador? Se vacía la composición y queda eliminable.');">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir borrador</button>
+                            </form>
+                        @endif
+                    </div>
+                @endif
                 @if ($editable && can('eliminar-borrador-tesoreria-crown-mesa', false))
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_mesa', $movimiento->id) }}" class="mt-3" onsubmit="return confirm('¿Eliminar este borrador? No queda una reversa.');">
                         @csrf
                         @method('DELETE')
                         <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-times-circle"></i> Eliminar borrador</button>
-                        <p class="text-muted small mb-0 mt-2">El borrador no entró al stock y no se imprime. Se borra. No se arma una reversa.</p>
+                        <p class="text-muted small mb-0 mt-2">Solo si todavía no guardaste composición. Se borra. No se arma una reversa.</p>
                     </form>
                 @endif
                 @if ($movimiento->reversa)

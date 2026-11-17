@@ -538,12 +538,25 @@
                         <span class="text-muted small ml-2">Pedir firmas guarda esta pantalla. Después el cajero firma con número y PIN, y tesorería con usuario y clave.</span>
                     @endif
                 </form>
+                @if (! empty($borradorGuardado) && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false))
+                    <div class="mt-3">
+                        <p class="text-muted small mb-2">Composición guardada: no se puede editar ni eliminar. Pedí firmas o revertí el borrador para vaciarlo.</p>
+                        <form method="POST" action="{{ route('firmar_pedir_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-primary btn-sm">Pedir firmas</button>
+                        </form>
+                        <form method="POST" action="{{ route('revertir_borrador_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline ml-1" onsubmit="return confirm('¿Revertir este borrador? Se vacía la composición y queda eliminable.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir borrador</button>
+                        </form>
+                    </div>
+                @endif
                 @if ($editable && can('crear-tesoreria-crown-movimiento', false))
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_movimiento', $comprobante->id) }}" class="mt-3" onsubmit="return confirm('¿Eliminar este borrador? No queda una reversa.');">
                         @csrf
                         @method('DELETE')
                         <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-times-circle"></i> Eliminar borrador</button>
-                        <p class="text-muted small mb-0 mt-2">Sirve también si abriste la Hab/Rend por error y todavía no la guardaste. Se borra; no se arma una reversa.</p>
+                        <p class="text-muted small mb-0 mt-2">Solo si todavía no guardaste composición. Se borra; no se arma una reversa.</p>
                     </form>
                 @endif
 
@@ -617,9 +630,9 @@
                     $hayFirma = $comprobante->entrega_at !== null || $comprobante->recibe_at !== null;
                 @endphp
                 @if ($comprobante->estado === 'P' && $comprobante->revierte_id === null && empty($cajaCerrada) && $comprobante->jornada->estaAbierta() && can('crear-tesoreria-crown-movimiento', false))
-                    <form method="POST" action="{{ route('volver_borrador_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-3" onsubmit="return confirm('{{ $hayFirma ? '¿Volver a borrador? Se borran las firmas.' : '¿Volver a cargar las cantidades? Todavía no hay firmas.' }}');">
+                    <form method="POST" action="{{ route('volver_borrador_tesoreria_crown_movimiento', $comprobante->id) }}" class="d-inline mb-3" onsubmit="return confirm('{{ $hayFirma ? '¿Volver a borrador? Se borran las firmas. La composición sigue guardada.' : '¿Volver a borrador? La composición sigue guardada; para cambiarla hay que revertir el borrador.' }}');">
                         @csrf
-                        <button type="submit" class="btn btn-outline-secondary btn-sm">{{ $hayFirma ? 'Volver a borrador' : 'Modificar cantidades' }}</button>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Volver a borrador</button>
                     </form>
                 @endif
 

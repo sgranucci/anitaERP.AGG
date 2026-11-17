@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Cajas que impiden cerrar la jornada: tienen comprobantes y el cierre vigente
- * no está en estado terminal (conforme / revisada / cierre de auditoría).
+ * no permite cerrar el día (conforme / revisada / cierre de auditoría / auditoría).
+ * Auditoría no bloquea: tesorería cierra la jornada sin firma de auditor.
  */
 final class TesoreriaCrownJornadaCierreBloqueoSupport
 {
@@ -63,7 +64,7 @@ final class TesoreriaCrownJornadaCierreBloqueoSupport
             return null;
         }
         $cierre = $fila->cierre;
-        if ($cierre !== null && TesoreriaCrownCierreSupport::terminal((string) $cierre->estado)) {
+        if ($cierre !== null && TesoreriaCrownCierreSupport::permiteCerrarJornada((string) $cierre->estado)) {
             return null;
         }
         $estado = $cierre !== null ? (string) $cierre->estado : null;
@@ -119,7 +120,7 @@ final class TesoreriaCrownJornadaCierreBloqueoSupport
         }
 
         $cierre = $fila->cierre;
-        if ($cierre !== null && TesoreriaCrownCierreSupport::terminal((string) $cierre->estado)) {
+        if ($cierre !== null && TesoreriaCrownCierreSupport::permiteCerrarJornada((string) $cierre->estado)) {
             return null;
         }
 
@@ -157,14 +158,14 @@ final class TesoreriaCrownJornadaCierreBloqueoSupport
         return match ($estado) {
             null => ['Abrí el cierre de la caja y dejalo conforme (o pasalo a auditoría).', false],
             TesoreriaCrownCierreSupport::AUDITORIA => [
-                'Cerrar auditoría (firma de otra persona). Diferencia: '
+                'Opcional: cerrar auditoría (firma de otra persona). No bloquea el cierre de jornada. Diferencia: '
                     .number_format((float) $diferencia, 2, ',', '.').'.',
                 true,
             ],
             TesoreriaCrownCierreSupport::NO_CONFORME => ['Resolvé el no conforme (revisión / ajuste / anulación).', false],
             TesoreriaCrownCierreSupport::REVISION => ['Marcá el caso como revisada o mandalo a auditoría.', false],
             TesoreriaCrownCierreSupport::REABIERTA => ['La caja quedó reabierta: volvé a cerrarla.', false],
-            default => ['Completá el circuito hasta un estado terminal (conforme, revisada o cierre de auditoría).', false],
+            default => ['Completá el circuito hasta un estado que permita cerrar la jornada.', false],
         };
     }
 
@@ -309,7 +310,7 @@ final class TesoreriaCrownJornadaCierreBloqueoSupport
         if ($bloqueos === []) {
             return 'No hay cajas que bloqueen el cierre de la jornada.';
         }
-        $lineas = ['Quedan cajas sin un cierre terminado (conforme, revisada o cierre de auditoría):'];
+        $lineas = ['Quedan cajas sin un cierre que permita cerrar la jornada:'];
         foreach ($bloqueos as $b) {
             $dif = $b['diferencia'] === null
                 ? ''

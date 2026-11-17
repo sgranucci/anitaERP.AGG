@@ -73,6 +73,11 @@
                             <i class="fa fa-check"></i> Confirmar
                         </button>
                     @endif
+                    @if (! empty($borradorGuardado) && can('editar-tesoreria-crown-slot', false))
+                        <button type="submit" form="form-slot-confirmar-guardado" class="btn btn-success btn-sm">
+                            <i class="fa fa-check"></i> Confirmar
+                        </button>
+                    @endif
                     <a href="{{ $urlVolver }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> {{ $vuelveEscritorio ? 'Volver al escritorio' : 'Volver al listado' }}
                     </a>
@@ -165,7 +170,33 @@
                         </div>
                     </div>
                 </form>
-                @if ($slot->esBorrador() && $slot->jornada->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false))
+                @if (! empty($borradorGuardado) && $slot->jornada->estaAbierta())
+                    <form method="POST" action="{{ route('confirmar_tesoreria_crown_slot', $slot->id) }}" id="form-slot-confirmar-guardado" class="mt-3" autocomplete="off" data-enter-campos="1">
+                        @csrf
+                        @if ($desdeMenu)
+                            <input type="hidden" name="origen" value="menu">
+                        @endif
+                        <p class="text-muted small mb-2">Composición guardada: no se puede editar ni eliminar. Confirmá o revertí el borrador.</p>
+                        <div class="form-row">
+                            <div class="col-md-4 mb-2">
+                                <input type="text" name="firma_usuario" class="form-control form-control-sm" placeholder="Usuario" autocomplete="off" required value="{{ old('firma_usuario') }}">
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <input type="password" name="firma_password" class="form-control form-control-sm" placeholder="Clave" autocomplete="off" required>
+                            </div>
+                        </div>
+                    </form>
+                    @if (can('crear-tesoreria-crown-slot', false))
+                        <form method="POST" action="{{ route('revertir_borrador_tesoreria_crown_slot', $slot->id) }}" class="mt-2" onsubmit="return confirm('¿Revertir este borrador? Se vacía la composición y queda eliminable.');">
+                            @csrf
+                            @if ($desdeMenu)
+                                <input type="hidden" name="origen" value="menu">
+                            @endif
+                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir borrador</button>
+                        </form>
+                    @endif
+                @endif
+                @if ($editable && $slot->esBorrador() && $slot->jornada->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false))
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_slot', $slot->id) }}" class="mt-3" onsubmit="return confirm('¿Eliminar este borrador?');">
                         @csrf
                         @method('DELETE')

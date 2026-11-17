@@ -28,8 +28,9 @@
         <div id="resolver-cierre-jornada-body" class="collapse{{ $abrirBloqueos ? ' show' : '' }}">
             <div class="card-body pb-2">
                 <p class="small text-muted mb-2">
-                    Antes de <strong>Cerrar jornada</strong>, cada caja con movimientos tiene que quedar
-                    en conforme, revisada o cierre de auditoría. Resolvé acá lo pendiente.
+                    Antes de <strong>Cerrar jornada</strong>, cada caja con movimientos tiene que tener
+                    cierre (conforme, a revisión terminada, auditoría o cierre de auditoría).
+                    Las cajas en auditoría no frenan el cierre del día.
                 </p>
 
                 <div class="table-responsive mb-3">

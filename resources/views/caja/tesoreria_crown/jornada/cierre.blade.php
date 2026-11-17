@@ -113,7 +113,7 @@
                 @if (! $cierre && ! $calculo['puede'])
                     <div class="alert alert-warning">{{ $calculo['motivo'] }}</div>
                 @elseif (! $cierre && $calculo['supera'])
-                    <div class="alert alert-warning">La diferencia supera la tolerancia de {{ $pesos($calculo['tolerancia']) }}. El cierre va a quedar en auditoría.</div>
+                    <div class="alert alert-warning">La diferencia supera la tolerancia de {{ $pesos($calculo['tolerancia']) }}. Podés dejarlo en auditoría o cerrar conforme / a revisión; la jornada no exige firma de auditor.</div>
                 @endif
 
                 <div class="tc-cierre-trabajo">
@@ -282,26 +282,26 @@
                     <form method="POST" action="{{ route('cerrar_tesoreria_crown_cierre', ['jornada' => $asignacion->jornada_id, 'cajero' => $asignacion->cajero_crown_id]) }}" class="form-horizontal form--label-right" data-enter-campos="1">
                         @csrf
                         @include('includes.form-error')
-                        @if ($calculo['supera'])
-                            <div class="form-group row">
-                                <label class="col-lg-4 control-label text-right pr-2">Resultado del cierre</label>
-                                <div class="col-lg-8">
-                                    <p class="form-control-plaintext mb-0">Auditoría. Conforme y a revisión no se eligen cuando la diferencia supera la tolerancia.</p>
-                                </div>
+                        <div class="form-group row">
+                            <label class="col-lg-4 control-label text-right pr-2">Resultado del cierre</label>
+                            <div class="col-lg-8">
+                                @php
+                                    $estadoDefault = old('estado', $calculo['supera'] ? 'A' : 'C');
+                                @endphp
+                                <label class="kt-radio d-block mb-1 font-weight-normal">
+                                    <input type="radio" name="estado" value="C" @checked($estadoDefault === 'C') required> Conforme
+                                </label>
+                                <label class="kt-radio d-block mb-1 font-weight-normal">
+                                    <input type="radio" name="estado" value="R" @checked($estadoDefault === 'R')> A revisión
+                                </label>
+                                <label class="kt-radio d-block mb-1 font-weight-normal">
+                                    <input type="radio" name="estado" value="A" @checked($estadoDefault === 'A')> Auditoría
+                                    @if ($calculo['supera'])
+                                        <span class="text-muted small">(sugerido por la diferencia)</span>
+                                    @endif
+                                </label>
                             </div>
-                        @else
-                            <div class="form-group row">
-                                <label class="col-lg-4 control-label text-right pr-2">Resultado del cierre</label>
-                                <div class="col-lg-8">
-                                    <label class="kt-radio d-block mb-1 font-weight-normal">
-                                        <input type="radio" name="estado" value="C" @checked(old('estado', 'C') === 'C') required> Conforme
-                                    </label>
-                                    <label class="kt-radio d-block mb-1 font-weight-normal">
-                                        <input type="radio" name="estado" value="R" @checked(old('estado') === 'R')> A revisión
-                                    </label>
-                                </div>
-                            </div>
-                        @endif
+                        </div>
                         <div class="form-group row">
                             <label for="observacion" class="col-lg-4 control-label text-right pr-2">Observación</label>
                             <div class="col-lg-8">

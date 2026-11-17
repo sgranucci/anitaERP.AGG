@@ -95,7 +95,9 @@ final class FlashCrownService
             ->first();
 
         // Día ya cargado: conservar; solo completar slots si Anita no trajo resulol.
-        if ($existente && ! $forzarRecalcTesoreria && $existente->tieneDiaCargado()) {
+        // Excepción: slot_r solo (GST) con att/soft vacíos → sigue necesitando Anita.
+        if ($existente && ! $forzarRecalcTesoreria && $existente->tieneDiaCargado()
+            && ! $existente->necesitaFallbackAnita()) {
             return $this->completarSlotsVaciosPersistiendo($existente, $fecha);
         }
 
@@ -408,18 +410,31 @@ final class FlashCrownService
                 }
             }
             $movimientos = (int) ($plan['crear'] ?? 0) + (int) ($plan['actualizar'] ?? 0);
+            $tuvoFilasAnita = false;
+            foreach ($plan['salas'] ?? [] as $bloque) {
+                if (! empty($bloque['filas'])) {
+                    $tuvoFilasAnita = true;
+                    break;
+                }
+            }
             if ($movimientos > 0) {
                 $this->anitaImport->aplicar($plan);
-            } else {
+            } elseif ($erroresSala !== []) {
                 $this->marcarIntentoFallbackAnita(
                     $salaId,
                     $fechaYmd,
                     ok: false,
-                    detalle: $erroresSala !== []
-                        ? implode(' | ', $erroresSala)
-                        : 'Anita sin filas resultado/resulol para la fecha'
+                    detalle: implode(' | ', $erroresSala)
+                );
+            } elseif (! $tuvoFilasAnita) {
+                $this->marcarIntentoFallbackAnita(
+                    $salaId,
+                    $fechaYmd,
+                    ok: false,
+                    detalle: 'Anita sin filas resultado/resulol para la fecha'
                 );
             }
+            // Omit-only con filas Anita: no marcar "sin filas" (evita throttle falso).
         } catch (Throwable $e) {
             Log::warning('flash_crown.fallback_anita.error', [
                 'sala_id' => $salaId,
@@ -451,6 +466,8 @@ final class FlashCrownService
 
     /**
      * Evita martillar Informix en cada F5 si Anita aún no tiene el día.
+     * Si el flash sigue incompleto (att/soft en 0), reintenta aunque el último
+     * intento se haya marcado ok (pull parcial / omit previo).
      */
     private function debeReintentarFallbackAnita(?FlashCrown $existente): bool
     {
@@ -462,11 +479,14 @@ final class FlashCrownService
         if ($intento === null || empty($intento['en'])) {
             return true;
         }
-        if (! empty($intento['ok'])) {
+        $incompleto = $existente->necesitaFallbackAnita();
+        if (! empty($intento['ok']) && ! $incompleto) {
             return false;
         }
         try {
-            return Carbon::parse((string) $intento['en'])->lte(now()->subMinutes(30));
+            $esperaMin = (! empty($intento['ok']) && $incompleto) ? 5 : 30;
+
+            return Carbon::parse((string) $intento['en'])->lte(now()->subMinutes($esperaMin));
         } catch (Throwable) {
             return true;
         }

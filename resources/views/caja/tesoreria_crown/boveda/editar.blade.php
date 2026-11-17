@@ -72,6 +72,33 @@
                         'urlConfirmar' => $editable && $puedeConfirmar ? route('confirmar_tesoreria_crown_boveda', $movimiento->id) : null,
                     ])
                 </form>
+                @if (! empty($borradorGuardado) && $movimiento->jornada->estaAbierta())
+                    <div class="border rounded p-3 mt-2 mb-2">
+                        <p class="text-muted small mb-2">Composición guardada: no se puede editar ni eliminar. Confirmá o revertí el borrador para vaciarlo.</p>
+                        @if ($puedeConfirmar)
+                            <form method="POST" action="{{ route('confirmar_tesoreria_crown_boveda', $movimiento->id) }}" class="form-horizontal form--label-right mb-2" autocomplete="off" data-enter-campos="1" data-enter-boton="1">
+                                @csrf
+                                <div class="form-row">
+                                    <div class="col-md-3 mb-2">
+                                        <input type="text" name="firma_usuario" class="form-control" placeholder="Usuario" autocomplete="off" required value="{{ old('firma_usuario') }}">
+                                    </div>
+                                    <div class="col-md-3 mb-2">
+                                        <input type="password" name="firma_password" class="form-control" placeholder="Clave" autocomplete="new-password" required>
+                                    </div>
+                                    <div class="col-md-3 mb-2">
+                                        <button type="submit" class="btn btn-primary btn-sm">Grabar</button>
+                                    </div>
+                                </div>
+                            </form>
+                        @endif
+                        @if (can('crear-tesoreria-crown-boveda', false))
+                            <form method="POST" action="{{ route('revertir_borrador_tesoreria_crown_boveda', $movimiento->id) }}" onsubmit="return confirm('¿Revertir este borrador? Se vacía la composición y queda eliminable.');">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-undo"></i> Revertir borrador</button>
+                            </form>
+                        @endif
+                    </div>
+                @endif
                 @if ($editable && can('crear-tesoreria-crown-boveda', false))
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_boveda', $movimiento->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este borrador?');">
                         @csrf

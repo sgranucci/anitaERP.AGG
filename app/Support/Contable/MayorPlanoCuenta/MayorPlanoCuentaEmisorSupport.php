@@ -45,7 +45,7 @@ final class MayorPlanoCuentaEmisorSupport
      */
     private const TIPOS_CLIENTE = [
         'COB', 'CHT',
-        'FAC', 'FA', 'FAE', 'FAH', 'FCE', 'FOV',
+        'FAC', 'FA', 'FAE', 'FAH', 'FCE', 'FOV', 'FSL', 'FME', 'FBI', 'CME',
         'NCE', 'NCD', 'NCA', 'NCG', 'NDB', 'NDA', 'NDE',
     ];
 

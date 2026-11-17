@@ -9,6 +9,7 @@ use App\Models\Caja\TesoreriaCrownSlotLinea;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAnexo8Calculo;
+use App\Support\Caja\TesoreriaCrownBorradorSupport;
 use App\Support\Caja\TesoreriaCrownEscritorioNav;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
@@ -196,9 +197,13 @@ class TesoreriaCrownSlotController extends Controller
         can('listar-tesoreria-crown-slot');
 
         $slot = $this->slotEnAlcance($id);
+        $borradorGuardado = $slot->esBorrador()
+            && $slot->esRecuento()
+            && TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot);
         $editable = $slot->esBorrador()
             && $slot->esRecuento()
             && $slot->jornada->estaAbierta()
+            && ! $borradorGuardado
             && (can('crear-tesoreria-crown-slot', false) || can('editar-tesoreria-crown-slot', false));
 
         return view('caja.tesoreria_crown.slot.editar', [
@@ -206,6 +211,7 @@ class TesoreriaCrownSlotController extends Controller
             'billetes' => TesoreriaCrownSlotSupport::billetesPesos((int) $slot->sala_id),
             'cantidades' => $slot->lineas->pluck('cantidad', 'valor_id'),
             'editable' => $editable,
+            'borradorGuardado' => $borradorGuardado,
             'escritorio' => TesoreriaCrownEscritorioNav::armar($slot->jornada),
         ]);
     }
@@ -218,6 +224,12 @@ class TesoreriaCrownSlotController extends Controller
         $slot = $this->slotEnAlcance($id);
         if (! $slot->esBorrador() || ! $slot->esRecuento() || ! $slot->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Este recuento ya no se puede modificar.');
+        }
+        if (TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
+            return back()->with(
+                'mensaje-error',
+                'La composición del borrador ya está guardada. Para cambiarla, revertí el borrador.'
+            );
         }
         if ($error = $this->persistirBorrador($slot, $request)) {
             return back()->withInput()->with('mensaje-error', $error);
@@ -235,10 +247,14 @@ class TesoreriaCrownSlotController extends Controller
         if (! $slot->esBorrador() || ! $slot->esRecuento() || ! $slot->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Este recuento ya no se puede confirmar.');
         }
-        if ($error = $this->persistirBorrador($slot, $request)) {
-            return back()->withInput()->with('mensaje-error', $error);
+        if (! TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
+            if ($error = $this->persistirBorrador($slot, $request)) {
+                return back()->withInput()->with('mensaje-error', $error);
+            }
+            $slot->refresh()->load('lineas');
+        } else {
+            $slot->load('lineas');
         }
-        $slot->refresh()->load('lineas');
         if ($slot->lineas->isEmpty()) {
             return back()->withInput()->with('mensaje-error', 'Cargá al menos una cantidad antes de confirmar.');
         }
@@ -278,6 +294,23 @@ class TesoreriaCrownSlotController extends Controller
             ->with('mensaje', 'Recuento confirmado '.TesoreriaCrownNumeradorSupport::visible($slot->numero).'.'.$extra);
     }
 
+    public function revertirBorrador(Request $request, int $id)
+    {
+        TesoreriaCrownAcceso::abortSiNoEsCrown();
+        can('crear-tesoreria-crown-slot');
+
+        $slot = $this->slotEnAlcance($id);
+        if (! $slot->esBorrador() || ! $slot->jornada->estaAbierta()) {
+            return back()->with('mensaje-error', 'Solo se revierte un borrador con la jornada abierta.');
+        }
+        if (! TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
+            return back()->with('mensaje-error', 'Este borrador todavía no tiene composición guardada.');
+        }
+        TesoreriaCrownBorradorSupport::vaciarLineas($slot);
+
+        return back()->with('mensaje', 'Borrador revertido. Quedó vacío: podés cargar de nuevo o eliminarlo.');
+    }
+
     public function eliminar(Request $request, int $id)
     {
         TesoreriaCrownAcceso::abortSiNoEsCrown();
@@ -286,6 +319,12 @@ class TesoreriaCrownSlotController extends Controller
         $slot = $this->slotEnAlcance($id);
         if (! $slot->esBorrador() || ! $slot->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Solo se puede eliminar un borrador con la jornada abierta.');
+        }
+        if (TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
+            return back()->with(
+                'mensaje-error',
+                'Un borrador con composición guardada no se elimina. Revertilo para vaciarlo o confirmalo.'
+            );
         }
         $retorno = $this->urlRetornoSlots($request, $slot);
         DB::transaction(function () use ($slot) {
