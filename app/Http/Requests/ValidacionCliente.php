@@ -7,8 +7,10 @@ use App\Rules\EmailsMultiples;
 use App\Rules\Ventas\RuleCliente;
 use App\Rules\Ventas\RuleClienteDocumentoUnico;
 use App\Models\Ventas\Cliente;
+use App\Rules\Ventas\RuleClienteCodigoUnico;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
+use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
 
 class ValidacionCliente extends FormRequest
@@ -86,6 +88,21 @@ class ValidacionCliente extends FormRequest
             ];
 
             $reglas['secuencia_codigo'] = 'nullable|in:administracion,gastronomia,cliente,empleado';
+
+            if (! ClienteAnitaNumeracionSupport::codigoAutomatico()) {
+                $reglas['codigo'] = [
+                    'required',
+                    'max:20',
+                    new RuleClienteCodigoUnico($excluirClienteId),
+                ];
+            } elseif ($excluirClienteId !== null) {
+                // Edición: el código no se cambia, pero si viene en el POST no puede chocar.
+                $reglas['codigo'] = [
+                    'nullable',
+                    'max:20',
+                    new RuleClienteCodigoUnico($excluirClienteId),
+                ];
+            }
 
             if (EntornoEmpresaSupport::esElBierzo()) {
                 $reglas['emitecertificado'] = 'nullable|in:S,N,Emite Certificado,No Emite Certificado';

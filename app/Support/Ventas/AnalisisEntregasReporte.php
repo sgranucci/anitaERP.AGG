@@ -332,10 +332,8 @@ final class AnalisisEntregasReporte
         $entregada *= $coef;
         $pendiente *= $coef;
 
+        // Precio fasón = lista Fason (penv_precio_fason); el % solo parte cantidad, no inventa precio.
         $precioLista = $material === 'F' ? (float) $row->precio_fason : (float) $row->precio;
-        if ($material === 'F' && abs($precioLista) < 0.0000001) {
-            $precioLista = PedidoInterformingFasonSupport::precioFason((float) $row->precio, (float) $row->porc_fason);
-        }
         $neto = round($precioLista * self::coefDescuento($row), 4);
         $subtotal = round($precioLista * $cantidad * $coef, 2);
         $total = round($neto * $cantidad * $coef, 2);

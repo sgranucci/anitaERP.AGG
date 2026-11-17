@@ -22,9 +22,15 @@
                 'partida' => $pa->partida,
                 'porc_fason' => $pa->porc_fason,
                 'precio_fason' => $pa->precio_fason,
+                'moneda_fason_id' => $pa->moneda_fason_id,
                 'incluyeimpuesto' => $pa->incluyeimpuesto ?? 'N',
                 'estado' => $pa->estado,
                 'descripcion_aux' => $pa->descripcion_aux,
+                'coeficienteconversion' => $pa->articulos->coeficienteconversion ?? '',
+                'umd_abreviatura' => $pa->unidadmedida->abreviatura
+                    ?? $pa->articulos->unidadesdemedidas->abreviatura
+                    ?? '',
+                'umd_alter_abreviatura' => $pa->unidadmedidaAlter->abreviatura ?? '',
             ];
         }
     }
@@ -51,6 +57,9 @@
             'incluyeimpuesto' => 'N',
             'estado' => 'P',
             'descripcion_aux' => '',
+            'coeficienteconversion' => '',
+            'umd_abreviatura' => '',
+            'umd_alter_abreviatura' => '',
         ]];
     }
 @endphp
@@ -239,6 +248,13 @@
     <textarea name="leyenda" id="leyenda" class="col-lg-9 form-control" rows="2" maxlength="160">{{ old('leyenda', $pedido->leyenda ?? '') }}</textarea>
 </div>
 
+<style>
+    #tabla-items-pedido-if { min-width: 1280px; width: max-content; }
+    #tabla-items-pedido-if .descripcionarticulo { min-width: 22rem; }
+    #tabla-items-pedido-if .cantidad,
+    #tabla-items-pedido-if .cantidad_alter { min-width: 6.5rem; }
+    #tabla-items-pedido-if .umd-alter-label { min-width: 2.5rem; justify-content: center; font-size: 0.75rem; }
+</style>
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <span>Ítems</span>
@@ -246,19 +262,18 @@
             <i class="fa fa-plus"></i> Agregar ítem
         </button>
     </div>
-    <div class="card-body table-responsive">
-        <table class="table table-sm table-hover" id="tabla-items-pedido-if">
+    <div class="card-body table-responsive p-2">
+        <table class="table table-sm table-hover mb-0" id="tabla-items-pedido-if">
             <thead style="background-color:#85C1E9;color:#17202A;">
                 <tr>
                     <th>#</th>
                     <th>Artículo</th>
                     <th>Descripción</th>
-                    <th>Art. cliente</th>
                     <th>Cantidad</th>
                     <th>UM</th>
                     <th>Cant. alt.</th>
                     <th>F. entrega</th>
-                    <th>% fason</th>
+                    <th>% / $ fasón</th>
                     <th>Precio</th>
                     <th>Dto</th>
                     <th>Aprob.</th>
@@ -299,6 +314,9 @@
             'incluyeimpuesto' => 'N',
             'estado' => 'P',
             'descripcion_aux' => '',
+            'coeficienteconversion' => '',
+            'umd_abreviatura' => '',
+            'umd_alter_abreviatura' => '',
         ],
     ])
 </template>

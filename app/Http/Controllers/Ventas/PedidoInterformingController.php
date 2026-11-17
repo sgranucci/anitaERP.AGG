@@ -29,6 +29,7 @@ use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Ventas\InterformingFacturacionMaestrosSupport;
 use App\Support\Ventas\PedidoEstadosInterforming;
 use App\Support\Ventas\PedidoInterformingFacturacionSupport;
+use App\Support\Ventas\PedidoInterformingFasonSupport;
 use App\Support\Ventas\PedidoInterformingListadoColumnas;
 use App\Support\Ventas\PedidoInterformingListadoFiltros;
 use App\Support\Ventas\PedidoInterformingListadoPreferenciasUsuario;
@@ -154,6 +155,21 @@ class PedidoInterformingController extends Controller
         $pedido->pedido_articulos = collect();
 
         return view(PedidoInterformingSupport::vista('crear'), $this->datosFormulario($pedido, 'crear'));
+    }
+
+    /**
+     * Precio vigente de lista Fason para un artículo (el % no define el precio).
+     */
+    public function precioFason(int $articulo_id)
+    {
+        PedidoInterformingSupport::abortSiNoInterforming();
+        if (! can('crear-pedidos', false) && ! can('editar-pedidos', false) && ! can('listar-pedidos', false)) {
+            abort(403);
+        }
+
+        $resuelto = PedidoInterformingFasonSupport::resolverPrecioDesdeLista($articulo_id);
+
+        return response()->json($resuelto);
     }
 
     public function guardar(ValidacionPedidoInterforming $request)
@@ -524,7 +540,7 @@ class PedidoInterformingController extends Controller
             'condicionventa_query' => Condicionventa::orderBy('nombre')->get(),
             'moneda_query' => Moneda::orderBy('nombre')->get(),
             'listaprecio_query' => Listaprecio::orderBy('nombre')->get(),
-            'unidadmedida_query' => Unidadmedida::orderBy('nombre')->get(),
+            'unidadmedida_query' => Unidadmedida::listadoParaSelectorSinDuplicados(),
             'motivocierrepedido_query' => $this->motivocierrepedidoRepository->all(),
             'estadosCabecera' => PedidoEstadosInterforming::etiquetasCabecera(),
             'estadosItem' => PedidoEstadosInterforming::etiquetasItem(),

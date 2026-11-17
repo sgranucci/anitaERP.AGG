@@ -23,8 +23,9 @@ return [
         ?: 'clim_cliente as codigo, clim_cliente',
 
     /*
-     * Alta cliente EL BIERZO: numerador t_comp CLI → numerador (num_ult_numero).
+     * Alta cliente EL BIERZO / INTERFORMING: numerador t_comp CLI → numerador (num_ult_numero).
      * Si el código propuesto existe en ERP o climae, se incrementa hasta hallar uno libre.
+     * Flag histórico: CLIENTE_ANITA_NUMERACION_BIERZO (también aplica a Interforming).
      */
     'numeracion' => [
         'habilitada' => filter_var(env('CLIENTE_ANITA_NUMERACION_BIERZO', true), FILTER_VALIDATE_BOOLEAN),

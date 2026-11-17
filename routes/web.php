@@ -3009,6 +3009,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/pedido/workbench/columnas', 'Ventas\PedidoInterformingController@guardarColumnasListado')->name('guardar_columnas_listado_pedido');
     Route::post('ventas/pedido/workbench/etiquetas', 'Ventas\PedidoInterformingController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_pedido');
     Route::post('ventas/pedido', 'Ventas\PedidoInterformingController@guardar')->name('guardar_pedido');
+    Route::get('ventas/pedido/precio-fason/{articulo_id}', 'Ventas\PedidoInterformingController@precioFason')->name('precio_fason_pedido');
     Route::get('ventas/pedido/{id}/contexto-facturacion', 'Ventas\PedidoInterformingController@contextoFacturacion')->name('contexto_facturacion_pedido');
     Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoInterformingController@editar')->name('editar_pedido')->middleware('modo.consulta');
     Route::put('ventas/pedido/{id}', 'Ventas\PedidoInterformingController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');

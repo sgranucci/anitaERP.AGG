@@ -2,21 +2,87 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Stock\Listaprecio;
+use App\Services\Stock\PrecioService;
+use Carbon\Carbon;
+
 /**
- * Cálculo de fason Interforming (Anita asigna_fason / porc_fason).
+ * Fasón Interforming (Anita asigna_fason / porc_fason / penv_precio_fason).
+ *
+ * - `% fason` parte la cantidad (virgen vs fasón); marca partida.
+ * - `precio_fason` sale de la lista de precios «Fason», no de precio × %.
  */
 final class PedidoInterformingFasonSupport
 {
+    private static ?int $listaprecioFasonIdCache = null;
+
+    private static bool $listaprecioFasonResuelto = false;
+
     /**
-     * Precio de fason = precio lista × (% fason / 100).
+     * Lista Anita «Fason» (codigo 2). Null si no está cargada.
      */
-    public static function precioFason(float $precioLista, float $porcFason): float
+    public static function listaprecioFasonId(): ?int
     {
-        if ($porcFason <= 0) {
-            return 0.0;
+        if (self::$listaprecioFasonResuelto) {
+            return self::$listaprecioFasonIdCache;
         }
 
-        return round($precioLista * ($porcFason / 100.0), 6);
+        self::$listaprecioFasonResuelto = true;
+
+        $id = Listaprecio::query()
+            ->where('codigo', 2)
+            ->orderBy('id')
+            ->value('id');
+
+        if (! $id) {
+            $id = Listaprecio::query()
+                ->whereRaw('UPPER(TRIM(nombre)) = ?', ['FASON'])
+                ->orderBy('id')
+                ->value('id');
+        }
+
+        self::$listaprecioFasonIdCache = $id ? (int) $id : null;
+
+        return self::$listaprecioFasonIdCache;
+    }
+
+    /**
+     * Precio vigente en lista Fason (0 si no hay lista o no hay precio).
+     *
+     * @return array{precio: float, moneda_id: int|null, listaprecio_id: int|null}
+     */
+    public static function resolverPrecioDesdeLista(int $articuloId, ?string $fechaYmd = null): array
+    {
+        $vacio = ['precio' => 0.0, 'moneda_id' => null, 'listaprecio_id' => null];
+        if ($articuloId <= 0) {
+            return $vacio;
+        }
+
+        $listaId = self::listaprecioFasonId();
+        if (! $listaId) {
+            return $vacio;
+        }
+
+        $fecha = $fechaYmd
+            ? Carbon::parse($fechaYmd)->startOfDay()
+            : Carbon::now()->startOfDay();
+
+        $precios = PrecioService::asignaPrecioPorLista($articuloId, $listaId, $fecha);
+        if ($precios === []) {
+            return [
+                'precio' => 0.0,
+                'moneda_id' => null,
+                'listaprecio_id' => $listaId,
+            ];
+        }
+
+        $vigente = end($precios);
+
+        return [
+            'precio' => round((float) ($vigente['precio'] ?? 0), 6),
+            'moneda_id' => isset($vigente['moneda_id']) ? (int) $vigente['moneda_id'] : null,
+            'listaprecio_id' => $listaId,
+        ];
     }
 
     /**
@@ -30,16 +96,43 @@ final class PedidoInterformingFasonSupport
     }
 
     /**
+     * Cantidad correspondiente al tramo fasón (el resto es virgen / propio).
+     */
+    public static function cantidadTramoFason(float $cantidad, float $porcFason): float
+    {
+        if ($porcFason <= 0 || $cantidad == 0.0) {
+            return 0.0;
+        }
+
+        return round($cantidad * ($porcFason / 100.0), 6);
+    }
+
+    /**
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
     public static function aplicarAItem(array $item): array
     {
-        $precio = (float) ($item['precio'] ?? 0);
         $porc = (float) ($item['porc_fason'] ?? 0);
         $item['porc_fason'] = $porc;
-        $item['precio_fason'] = self::precioFason($precio, $porc);
         $item['partida'] = self::partidaDesdePorc($porc);
+
+        if ($porc <= 0) {
+            $item['precio_fason'] = 0.0;
+        } else {
+            $enviado = (float) ($item['precio_fason'] ?? 0);
+            if ($enviado > 0.0000001) {
+                $item['precio_fason'] = round($enviado, 6);
+            } else {
+                $articuloId = (int) ($item['articulo_id'] ?? 0);
+                $resuelto = self::resolverPrecioDesdeLista($articuloId);
+                $item['precio_fason'] = $resuelto['precio'];
+                if ($resuelto['moneda_id']) {
+                    $item['moneda_fason_id'] = $resuelto['moneda_id'];
+                }
+            }
+        }
+
         if (! isset($item['porc_fason_ant'])) {
             $item['porc_fason_ant'] = $porc;
         }
