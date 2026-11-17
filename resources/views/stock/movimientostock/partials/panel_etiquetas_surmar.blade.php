@@ -23,6 +23,7 @@
             Escaneá el <strong>ID ERP</strong> o el código Anita
             <code>sku-nint-nap</code> / <code>nint-nap</code>. Solo <strong>DISPONIBLE</strong>.
             Obligatorio por ítem en AP, DES y TRA.
+            En <strong>AP</strong>, además emití etiquetas nuevas (en que separa / cantidad).
         </p>
         <div class="form-row align-items-end">
             <div class="form-group col-12 mb-2">
@@ -65,6 +66,16 @@
             </table>
         </div>
         <div id="ms-etiquetas-consumo-hiddens" class="d-none"></div>
+        <div id="ms-etiquetas-emision-hiddens" class="d-none"></div>
+        <div id="ms-ap-emision-wrap" class="mt-2" style="display:none;">
+            <p class="small mb-1 text-muted">
+                AP: tras piquear, cargá <strong>en que separa</strong> y una etiqueta por unidad (Anita <code>imprime_etiquetas</code>).
+            </p>
+            <button type="button" class="btn btn-outline-info btn-sm mb-1" id="ms_ap_abrir_emision" disabled>
+                <i class="fa fa-tags"></i> Emitir etiquetas del renglón
+            </button>
+            <div class="small" id="ms_ap_emision_resumen"></div>
+        </div>
         <div id="ms-etiquetas-emitidas-wrap" class="mt-2" style="display:none;">
             <p class="small mb-1"><strong>Etiquetas emitidas</strong> por este movimiento. Reimprimir no genera etiquetas nuevas.</p>
             <div class="table-responsive" style="max-height: 180px; overflow:auto;">
@@ -91,10 +102,13 @@
         </div>
     </div>
 </div>
+@include('stock.movimientostock.partials.modal_emision_etiqueta_ap_surmar')
 <input type="hidden" id="ms-resolver-etiqueta-surmar-url" value="{{ route('movimientostock_resolver_etiqueta_surmar') }}">
 <input type="hidden" id="ms-zpl-etiquetas-surmar-url" value="{{ route('movimientostock_zpl_etiquetas_surmar') }}">
+<input type="hidden" id="ms-ap-separa-default" value="{{ \App\Support\Stock\Surmar\SurmarUnidadmedidaSeparaSupport::idDefault() }}">
 <script type="application/json" id="ms-etiquetas-surmar-inicial">@json($etiquetasSurmarInicial)</script>
 <script type="application/json" id="ms-etiquetas-surmar-hijas">@json($etiquetasSurmarHijas ?? [])</script>
+<script type="application/json" id="ms-etiquetas-surmar-emision-old">@json(old('etiquetas_emision_linea', $etiquetasSurmarEmision ?? []))</script>
 
 <style>
     #ms-surmar-workbench.ms-surmar-activo #tabla-items-movimientostock tbody tr.item-pedido {

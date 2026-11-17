@@ -2,6 +2,7 @@
 
 namespace App\Services\Stock\Surmar;
 
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\CertificadoSenasaSurmar;
 use App\Models\Stock\MovimientoStock;
@@ -9,7 +10,9 @@ use App\Models\Stock\Stock_Etiqueta;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Services\Stock\Articulo_MovimientoService;
+use App\Support\Stock\Surmar\SurmarEtiquetaFechaVtoSupport;
 use App\Support\Stock\Surmar\SurmarEtiquetaLookupSupport;
+use App\Support\Stock\Surmar\SurmarUnidadmedidaSeparaSupport;
 use App\Support\Stock\SurmarEtiquetaZplSupport;
 use App\Support\Stock\SurmarSupport;
 use Illuminate\Support\Facades\Auth;
@@ -272,16 +275,29 @@ class MovimientoStockSurmarEtiquetaService
         }
 
         $origenTipo = $abrev === 'DES' ? SurmarSupport::ORIGEN_DES : SurmarSupport::ORIGEN_AP;
-        $this->crearEtiquetasHijas(
-            $lineasProducto,
-            $empresaId,
-            (int) $movimiento->id,
-            $depositoForm,
-            $origenTipo,
-            $loteCab,
-            $fechaEmisionEtiqueta,
-            $stats,
-        );
+        if ($abrev === 'AP') {
+            $this->crearEtiquetasHijasDesdeEmisionAp(
+                $lineasProducto,
+                $empresaId,
+                (int) $movimiento->id,
+                $depositoForm,
+                $loteCab,
+                $fechaEmisionEtiqueta,
+                $data,
+                $stats,
+            );
+        } else {
+            $this->crearEtiquetasHijas(
+                $lineasProducto,
+                $empresaId,
+                (int) $movimiento->id,
+                $depositoForm,
+                $origenTipo,
+                $loteCab,
+                $fechaEmisionEtiqueta,
+                $stats,
+            );
+        }
 
         return $stats;
     }
@@ -495,6 +511,204 @@ class MovimientoStockSurmarEtiquetaService
             ]);
             $stats['etiquetas_hijas']++;
             $stats['hijas_ids'][] = (int) $hija->id;
+        }
+    }
+
+    /**
+     * AP: N etiquetas por renglón con separa / cant_unid / apertura (espejo a-stkmov.c imprime_etiquetas).
+     *
+     * @param  \Illuminate\Support\Collection<int, Articulo_Movimiento>  $lineasProducto
+     * @param  array<string, mixed>  $data
+     * @param  array{consumos:int, etiquetas_hijas:int, salidas_des:int, hijas_ids:list<int>}  $stats
+     */
+    private function crearEtiquetasHijasDesdeEmisionAp(
+        $lineasProducto,
+        int $empresaId,
+        int $movimientoId,
+        int $depositoForm,
+        string $loteCab,
+        string $fecha,
+        array $data,
+        array &$stats,
+    ): void {
+        $emisiones = $this->emisionPorLineaProductoDesdeRequest($data);
+        $this->assertEmisionApCompleta($emisiones, $lineasProducto->count());
+
+        $now = now();
+        $usuarioId = (int) (Auth::id() ?: 0);
+        $fechaEmision = $now->toDateString();
+        $articuloIds = $lineasProducto->pluck('articulo_id')->map(fn ($v) => (int) $v)->unique()->filter()->all();
+        $articulos = $articuloIds === []
+            ? collect()
+            : Articulo::query()->whereIn('id', $articuloIds)->get(['id', 'descripcion', 'vencimientoendia'])->keyBy('id');
+
+        foreach ($lineasProducto->values() as $idx => $linea) {
+            $emi = $emisiones[$idx] ?? null;
+            if (! is_array($emi)) {
+                throw ValidationException::withMessages([
+                    'etiquetas_emision_linea' => 'Surmar AP: falta emisión de etiquetas en el renglón '.($idx + 1).'.',
+                ]);
+            }
+            $separa = (int) ($emi['separa_unidadmedida_id'] ?? 0);
+            if (! SurmarUnidadmedidaSeparaSupport::existe($separa)) {
+                $separa = SurmarUnidadmedidaSeparaSupport::idDefault();
+            }
+            $cantUnid = max(1, min(50, (int) ($emi['cant_unid_separa'] ?? 1)));
+            $unidades = array_values((array) ($emi['unidades'] ?? []));
+            if ($unidades === []) {
+                throw ValidationException::withMessages([
+                    'etiquetas_emision_linea' => 'Surmar AP: el renglón '.($idx + 1).' no tiene unidades emitidas.',
+                ]);
+            }
+            if (count($unidades) !== $cantUnid) {
+                throw ValidationException::withMessages([
+                    'etiquetas_emision_linea' => 'Surmar AP renglón '.($idx + 1).': cantidad que separa ('.$cantUnid.') no coincide con unidades cargadas ('.count($unidades).').',
+                ]);
+            }
+
+            $articulo = $articulos->get((int) $linea->articulo_id);
+            $depositoHija = (int) ($linea->deposito_id ?: $depositoForm);
+            $descSnap = $articulo ? mb_substr((string) $articulo->descripcion, 0, 60) : null;
+
+            foreach ($unidades as $uIdx => $unidad) {
+                if (! is_array($unidad)) {
+                    continue;
+                }
+                $nroApertura = max(1, (int) ($unidad['nro_apertura'] ?? ($uIdx + 1)));
+                $cantPieza = round((float) ($unidad['cant_pieza'] ?? 1), 4);
+                if ($cantPieza <= 0) {
+                    $cantPieza = 1.0;
+                }
+                $pesoBruto = round((float) ($unidad['peso_bruto'] ?? 0), 4);
+                $pesoTara = round((float) ($unidad['peso_tara'] ?? 0), 4);
+                if ($pesoTara < 0) {
+                    $pesoTara = 0.0;
+                }
+                if ($pesoBruto > 0) {
+                    $pesoNeto = round($pesoBruto - $pesoTara, 4);
+                } else {
+                    $pesoNeto = round((float) ($unidad['peso_neto'] ?? 0), 4);
+                    $pesoBruto = round($pesoNeto + $pesoTara, 4);
+                }
+                if ($pesoNeto <= 0) {
+                    throw ValidationException::withMessages([
+                        'etiquetas_emision_linea' => 'Surmar AP renglón '.($idx + 1).' unidad '.$nroApertura.': peso neto inválido.',
+                    ]);
+                }
+                $fechaVto = SurmarEtiquetaFechaVtoSupport::resolver(
+                    isset($unidad['fecha_vto']) ? (string) $unidad['fecha_vto'] : null,
+                    $now,
+                    (int) ($articulo->vencimientoendia ?? 0)
+                );
+
+                $hija = Stock_Etiqueta::create([
+                    'empresa_id' => $empresaId,
+                    'articulo_id' => (int) $linea->articulo_id,
+                    'deposito_id' => $depositoHija > 0 ? $depositoHija : null,
+                    'unidadmedida_id' => null,
+                    'separa_unidadmedida_id' => $separa,
+                    'cant_unid_separa' => $cantUnid,
+                    'estado' => SurmarSupport::ESTADO_DISPONIBLE,
+                    'origen_tipo' => SurmarSupport::ORIGEN_AP,
+                    'origen_id' => $movimientoId,
+                    'origen_linea_id' => $linea->id,
+                    'articulo_movimiento_id' => $linea->id,
+                    'etiqueta_origen_id' => null,
+                    'lote_proveedor' => mb_substr($loteCab, 0, 30),
+                    'fecha_vto' => $fechaVto,
+                    'fecha_emision' => $fechaEmision !== '' ? $fechaEmision : $fecha,
+                    'hora_emision' => $now->format('H:i'),
+                    'cant_pieza' => $cantPieza,
+                    'peso_bruto' => $pesoBruto,
+                    'peso_neto' => $pesoNeto,
+                    'descripcion_snapshot' => $descSnap,
+                    'anita_nro_apertura' => $nroApertura,
+                    'usuario_id' => $usuarioId > 0 ? $usuarioId : null,
+                ]);
+
+                DB::table('stock_etiqueta_movimiento')->insert([
+                    'etiqueta_id' => $hija->id,
+                    'articulo_movimiento_id' => $linea->id,
+                    'rol' => 'ENTRADA',
+                    'deposito_origen_id' => null,
+                    'deposito_destino_id' => $depositoHija > 0 ? $depositoHija : null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                $stats['etiquetas_hijas']++;
+                $stats['hijas_ids'][] = (int) $hija->id;
+            }
+        }
+    }
+
+    /**
+     * Emisión AP por índice de renglón de producto (mismo filtro que consumos).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, array<string, mixed>>
+     */
+    public function emisionPorLineaProductoDesdeRequest(array $data): array
+    {
+        $raw = $data['etiquetas_emision_linea'] ?? null;
+        if (! is_array($raw) || $raw === []) {
+            return [];
+        }
+
+        $articulos = array_values((array) ($data['articulos_id'] ?? []));
+        $cantidades = array_values((array) ($data['cantidades'] ?? []));
+        $n = max(count($articulos), count($cantidades), max(array_keys($raw)) + 1);
+
+        $out = [];
+        $j = 0;
+        for ($i = 0; $i < $n; $i++) {
+            $articuloId = (int) ($articulos[$i] ?? 0);
+            $cant = (float) ($cantidades[$i] ?? 0);
+            if ($articuloId <= 0 && abs($cant) < 1e-9) {
+                continue;
+            }
+            $emi = $raw[$i] ?? null;
+            if (is_array($emi)) {
+                $out[$j] = $emi;
+            }
+            $j++;
+        }
+
+        if ($j === 0) {
+            $mapped = [];
+            foreach ($raw as $idx => $emi) {
+                if (is_array($emi)) {
+                    $mapped[(int) $idx] = $emi;
+                }
+            }
+
+            return $mapped;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $emisiones
+     */
+    private function assertEmisionApCompleta(array $emisiones, int $cantLineas): void
+    {
+        if ($cantLineas <= 0) {
+            throw ValidationException::withMessages([
+                'etiquetas_emision_linea' => 'Surmar AP: el movimiento no tiene líneas de producto para emitir etiquetas.',
+            ]);
+        }
+        $faltan = [];
+        for ($i = 0; $i < $cantLineas; $i++) {
+            $emi = $emisiones[$i] ?? null;
+            $unidades = is_array($emi) ? array_values((array) ($emi['unidades'] ?? [])) : [];
+            if ($unidades === []) {
+                $faltan[] = (string) ($i + 1);
+            }
+        }
+        if ($faltan !== []) {
+            throw ValidationException::withMessages([
+                'etiquetas_emision_linea' => 'Surmar AP: cada ítem debe emitir etiquetas (en que separa / cantidad). Faltan renglón(es): '.implode(', ', $faltan).'.',
+            ]);
         }
     }
 
@@ -718,6 +932,69 @@ class MovimientoStockSurmarEtiquetaService
             ->map(fn (Stock_Etiqueta $eti) => SurmarEtiquetaLookupSupport::payload($eti))
             ->values()
             ->all();
+    }
+
+    /**
+     * Emisión AP precargada desde etiquetas hijas (editar / withInput).
+     *
+     * @return array<int, array{separa_unidadmedida_id:int, cant_unid_separa:int, unidades:list<array<string,mixed>>}>
+     */
+    public function emisionApDesdeHijas(int $movimientoId): array
+    {
+        if ($movimientoId <= 0 || ! SurmarSupport::esEmpresaSurmar(SurmarSupport::EMPRESA_ID)) {
+            return [];
+        }
+
+        $lineas = $this->lineasProductoSurmar($movimientoId);
+        if ($lineas->isEmpty()) {
+            return [];
+        }
+
+        $hijas = Stock_Etiqueta::query()
+            ->where('empresa_id', SurmarSupport::EMPRESA_ID)
+            ->where('origen_id', $movimientoId)
+            ->where('origen_tipo', SurmarSupport::ORIGEN_AP)
+            ->where('estado', '!=', SurmarSupport::ESTADO_ANULADA)
+            ->orderBy('anita_nro_apertura')
+            ->orderBy('id')
+            ->get();
+
+        $porLineaAm = [];
+        foreach ($hijas as $eti) {
+            $amId = (int) ($eti->origen_linea_id ?: $eti->articulo_movimiento_id);
+            if ($amId <= 0) {
+                continue;
+            }
+            $porLineaAm[$amId][] = $eti;
+        }
+
+        $out = [];
+        foreach ($lineas->values() as $idx => $linea) {
+            $lista = $porLineaAm[(int) $linea->id] ?? [];
+            if ($lista === []) {
+                continue;
+            }
+            /** @var Stock_Etiqueta $primera */
+            $primera = $lista[0];
+            $unidades = [];
+            foreach ($lista as $i => $eti) {
+                $unidades[] = [
+                    'nro_apertura' => (int) ($eti->anita_nro_apertura ?: ($i + 1)),
+                    'cant_pieza' => (float) $eti->cant_pieza,
+                    'peso_bruto' => (float) $eti->peso_bruto,
+                    'peso_tara' => max(0, (float) $eti->peso_bruto - (float) $eti->peso_neto),
+                    'peso_neto' => (float) $eti->peso_neto,
+                    'fecha_vto' => optional($eti->fecha_vto)->format('Y-m-d') ?: '',
+                ];
+            }
+            $out[$idx] = [
+                'separa_unidadmedida_id' => (int) ($primera->separa_unidadmedida_id ?: SurmarUnidadmedidaSeparaSupport::idDefault()),
+                'cant_unid_separa' => max(count($unidades), (int) ($primera->cant_unid_separa ?: 1)),
+                'unidades' => $unidades,
+            ];
+        }
+
+        return $out;
     }
 
     /**

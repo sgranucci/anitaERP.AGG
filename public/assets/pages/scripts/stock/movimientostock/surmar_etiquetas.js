@@ -3,8 +3,11 @@
 
     /** @type {Object.<string, Array>} uid → etiquetas */
     var porLinea = {};
+    /** @type {Object.<string, Object>} uid → emisión AP {separa_unidadmedida_id, cant_unid_separa, unidades[]} */
+    var emisionPorLinea = {};
     var uidActivo = null;
     var uidSeq = 0;
+    var apModalUid = null;
 
     function $panel() {
         return $('#ms-panel-etiquetas-surmar');
@@ -164,6 +167,7 @@
         var $h = $('#ms-etiquetas-consumo-hiddens');
         $h.empty();
         if (!debeMostrar()) {
+            syncEmisionHiddens();
             return;
         }
         ensureAllUids();
@@ -175,6 +179,7 @@
                 );
             });
         });
+        syncEmisionHiddens();
     }
 
     function setScanEnabled(on) {
@@ -192,6 +197,7 @@
         $tr.addClass('ms-linea-activa');
         setScanEnabled(true);
         renderPanel();
+        actualizarEmisionUi();
         setMsg('');
         // El foco del renglón (SKU, kilos, F1) no se mueve al lector.
         // Solo al hacer clic en la fila, fuera de un campo, se prepara el escaneo.
@@ -224,6 +230,10 @@
         }
     }
 
+    function esAp() {
+        return abreviaturaTipo() === 'AP';
+    }
+
     function toggleLayout(show) {
         var $wb = $workbench();
         var $colItems = $('#ms-surmar-col-items');
@@ -242,6 +252,7 @@
             filasItems().removeClass('ms-linea-activa');
             uidActivo = null;
         }
+        $('#ms-ap-emision-wrap').toggle(show && esAp());
     }
 
     function togglePanel() {
@@ -253,15 +264,295 @@
         renderHijas();
         if (!show) {
             porLinea = {};
+            emisionPorLinea = {};
             syncHiddens();
             setMsg('');
             setScanEnabled(false);
             actualizarBadges();
+            actualizarEmisionUi();
             return;
         }
         ensureAllUids();
         seleccionarPrimeraSiHaceFalta();
         syncHiddens();
+        actualizarEmisionUi();
+    }
+
+    function emisionDe(uid) {
+        if (!uid) {
+            return null;
+        }
+        return emisionPorLinea[uid] || null;
+    }
+
+    function ensureEmision(uid) {
+        if (!uid) {
+            return null;
+        }
+        if (!emisionPorLinea[uid]) {
+            var defSepara = parseInt($('#ms-ap-separa-default').val(), 10) || 2;
+            emisionPorLinea[uid] = {
+                separa_unidadmedida_id: defSepara,
+                cant_unid_separa: 1,
+                unidades: []
+            };
+        }
+        return emisionPorLinea[uid];
+    }
+
+    function actualizarEmisionUi() {
+        var showAp = debeMostrar() && esAp();
+        $('#ms-ap-emision-wrap').toggle(showAp);
+        var $btn = $('#ms_ap_abrir_emision');
+        $btn.prop('disabled', !showAp || !uidActivo);
+        var emi = uidActivo ? emisionDe(uidActivo) : null;
+        var n = emi && Array.isArray(emi.unidades) ? emi.unidades.length : 0;
+        var cant = emi ? (parseInt(emi.cant_unid_separa, 10) || 0) : 0;
+        var txt = '';
+        if (showAp && uidActivo) {
+            if (n > 0) {
+                txt = 'Emisión: ' + n + (cant ? ' / ' + cant : '') + ' unidad(es)';
+                var $opt = $('#ms_ap_etiq_separa option[value="' + (emi.separa_unidadmedida_id || '') + '"]');
+                var abr = $opt.data('abrev') || $opt.text() || '';
+                if (abr) {
+                    txt += ' — ' + String(abr).trim();
+                }
+            } else {
+                txt = 'Sin emisión cargada para este renglón.';
+            }
+        }
+        $('#ms_ap_emision_resumen').text(txt);
+    }
+
+    function syncEmisionHiddens() {
+        var $h = $('#ms-etiquetas-emision-hiddens');
+        $h.empty();
+        if (!debeMostrar() || !esAp()) {
+            return;
+        }
+        ensureAllUids();
+        filasItems().each(function (idx) {
+            var uid = ensureUid($(this));
+            var emi = emisionDe(uid);
+            if (!emi || !Array.isArray(emi.unidades) || !emi.unidades.length) {
+                return;
+            }
+            var base = 'etiquetas_emision_linea[' + idx + ']';
+            $h.append('<input type="hidden" name="' + base + '[separa_unidadmedida_id]" value="' + (parseInt(emi.separa_unidadmedida_id, 10) || 0) + '">');
+            $h.append('<input type="hidden" name="' + base + '[cant_unid_separa]" value="' + (parseInt(emi.cant_unid_separa, 10) || 1) + '">');
+            emi.unidades.forEach(function (u, ui) {
+                var ub = base + '[unidades][' + ui + ']';
+                $h.append('<input type="hidden" name="' + ub + '[nro_apertura]" value="' + (parseInt(u.nro_apertura, 10) || (ui + 1)) + '">');
+                $h.append('<input type="hidden" name="' + ub + '[cant_pieza]" value="' + (parseFloat(u.cant_pieza) || 1) + '">');
+                $h.append('<input type="hidden" name="' + ub + '[peso_bruto]" value="' + (parseFloat(u.peso_bruto) || 0) + '">');
+                $h.append('<input type="hidden" name="' + ub + '[peso_tara]" value="' + (parseFloat(u.peso_tara) || 0) + '">');
+                $h.append('<input type="hidden" name="' + ub + '[peso_neto]" value="' + (parseFloat(u.peso_neto) || 0) + '">');
+                $h.append('<input type="hidden" name="' + ub + '[fecha_vto]" value="' + $('<div>').text(u.fecha_vto || '').html() + '">');
+            });
+        });
+    }
+
+    function renderApModalUnidades() {
+        var $tb = $('#ms_ap_etiq_tbody_unidades');
+        $tb.empty();
+        var emi = apModalUid ? emisionDe(apModalUid) : null;
+        var unidades = emi && Array.isArray(emi.unidades) ? emi.unidades : [];
+        if (!unidades.length) {
+            $tb.append('<tr class="ms-ap-etiq-empty"><td colspan="6" class="text-center text-muted">Sin unidades cargadas.</td></tr>');
+            return;
+        }
+        unidades.forEach(function (u, i) {
+            $tb.append(
+                '<tr data-idx="' + i + '">' +
+                '<td>' + (u.nro_apertura || (i + 1)) + '</td>' +
+                '<td class="text-right">' + (parseFloat(u.cant_pieza) || 0).toFixed(2) + '</td>' +
+                '<td class="text-right">' + (parseFloat(u.peso_bruto) || 0).toFixed(2) + '</td>' +
+                '<td class="text-right">' + (parseFloat(u.peso_neto) || 0).toFixed(2) + '</td>' +
+                '<td>' + $('<div>').text(u.fecha_vto || '—').html() + '</td>' +
+                '<td class="text-center"><button type="button" class="btn-accion-tabla ms-ap-etiq-quitar-unidad" data-idx="' + i + '" title="Quitar">' +
+                '<i class="fa fa-times-circle text-danger"></i></button></td></tr>'
+            );
+        });
+    }
+
+    function recalcularNetoApModal() {
+        var bruto = parseFloat($('#ms_ap_etiq_bruto').val()) || 0;
+        var tara = parseFloat($('#ms_ap_etiq_tara').val()) || 0;
+        if (bruto > 0) {
+            $('#ms_ap_etiq_neto').val((bruto - tara).toFixed(2));
+        }
+    }
+
+    function setApModalMsg(text, ok) {
+        var $m = $('#ms_ap_etiq_msg');
+        $m.text(text || '');
+        $m.removeClass('text-danger text-success');
+        if (text) {
+            $m.addClass(ok ? 'text-success' : 'text-danger');
+        }
+    }
+
+    function abrirModalEmisionAp() {
+        if (!esAp() || !uidActivo) {
+            setMsg('Seleccioná un renglón AP para emitir', false);
+            return;
+        }
+        apModalUid = uidActivo;
+        var emi = ensureEmision(apModalUid);
+        var $tr = filasItems().filter('[data-ms-uid="' + apModalUid + '"]').first();
+        var sku = String($tr.find('.codigoarticulo').val() || '').trim();
+        var desc = String($tr.find('.descripcionarticulo').val() || '').trim();
+        var nro = $tr.find('.item').val() || '?';
+        $('#ms_ap_etiq_ctx').html('Renglón <strong>#' + $('<div>').text(nro).html() + '</strong>' +
+            (sku ? ' — SKU <code>' + $('<div>').text(sku).html() + '</code>' : '') +
+            (desc ? ' <span class="text-muted">' + $('<div>').text(desc).html() + '</span>' : ''));
+        $('#ms_ap_etiq_separa').val(String(emi.separa_unidadmedida_id || $('#ms-ap-separa-default').val() || ''));
+        $('#ms_ap_etiq_cant_unid').val(parseInt(emi.cant_unid_separa, 10) || 1);
+        var nextNro = (emi.unidades.length || 0) + 1;
+        $('#ms_ap_etiq_nro').val(nextNro);
+        $('#ms_ap_etiq_badge').text(emi.unidades.length + ' / ' + (parseInt(emi.cant_unid_separa, 10) || 1)).show();
+        var cantLinea = parseFloat(String($tr.find('.cantidad-stock, .cantidad, input[name="cantidades[]"]').first().val() || '0').replace(',', '.')) || 0;
+        if (!(parseFloat($('#ms_ap_etiq_neto').val()) > 0) && cantLinea > 0 && emi.unidades.length === 0) {
+            $('#ms_ap_etiq_neto').val(cantLinea.toFixed(2));
+            $('#ms_ap_etiq_bruto').val(cantLinea.toFixed(2));
+        }
+        if (!(parseFloat($('#ms_ap_etiq_piezas').val()) > 0)) {
+            $('#ms_ap_etiq_piezas').val('1');
+        }
+        renderApModalUnidades();
+        setApModalMsg('');
+        $('#modalEmisionEtiquetaApSurmar').modal('show');
+        setTimeout(function () { $('#ms_ap_etiq_separa').trigger('focus'); }, 200);
+    }
+
+    function confirmarUnidadApModal() {
+        if (!apModalUid) {
+            return;
+        }
+        var emi = ensureEmision(apModalUid);
+        var cantUnid = Math.max(1, Math.min(50, parseInt($('#ms_ap_etiq_cant_unid').val(), 10) || 1));
+        var separa = parseInt($('#ms_ap_etiq_separa').val(), 10) || 0;
+        if (separa <= 0) {
+            setApModalMsg('Elegí en que separa', false);
+            $('#ms_ap_etiq_separa').trigger('focus');
+            return;
+        }
+        recalcularNetoApModal();
+        var neto = parseFloat($('#ms_ap_etiq_neto').val()) || 0;
+        var bruto = parseFloat($('#ms_ap_etiq_bruto').val()) || 0;
+        var tara = parseFloat($('#ms_ap_etiq_tara').val()) || 0;
+        var piezas = parseFloat($('#ms_ap_etiq_piezas').val()) || 0;
+        if (neto <= 0 && bruto > 0) {
+            neto = bruto - tara;
+        }
+        if (neto <= 0) {
+            setApModalMsg('Peso neto inválido', false);
+            $('#ms_ap_etiq_neto').trigger('focus');
+            return;
+        }
+        if (bruto <= 0) {
+            bruto = neto + tara;
+        }
+        if (piezas <= 0) {
+            piezas = 1;
+        }
+        if (emi.unidades.length >= cantUnid) {
+            setApModalMsg('Ya cargó las ' + cantUnid + ' unidades. Pulse Listo o suba la cantidad que separa.', false);
+            return;
+        }
+        var nro = emi.unidades.length + 1;
+        emi.separa_unidadmedida_id = separa;
+        emi.cant_unid_separa = cantUnid;
+        emi.unidades.push({
+            nro_apertura: nro,
+            cant_pieza: piezas,
+            peso_bruto: bruto,
+            peso_tara: tara,
+            peso_neto: neto,
+            fecha_vto: String($('#ms_ap_etiq_vto').val() || '')
+        });
+        $('#ms_ap_etiq_nro').val(emi.unidades.length + 1);
+        $('#ms_ap_etiq_badge').text(emi.unidades.length + ' / ' + cantUnid).show();
+        renderApModalUnidades();
+        syncEmisionHiddens();
+        actualizarEmisionUi();
+        setApModalMsg('Unidad ' + nro + ' confirmada', true);
+        if (emi.unidades.length >= cantUnid) {
+            setApModalMsg('Completó las ' + cantUnid + ' unidades. Pulse Listo.', true);
+            return;
+        }
+        $('#ms_ap_etiq_piezas').val('1');
+        $('#ms_ap_etiq_bruto').val('');
+        $('#ms_ap_etiq_neto').val('');
+        $('#ms_ap_etiq_bruto').trigger('focus');
+    }
+
+    function listoEmisionApModal() {
+        if (!apModalUid) {
+            $('#modalEmisionEtiquetaApSurmar').modal('hide');
+            return;
+        }
+        var emi = ensureEmision(apModalUid);
+        var cantUnid = Math.max(1, Math.min(50, parseInt($('#ms_ap_etiq_cant_unid').val(), 10) || 1));
+        var separa = parseInt($('#ms_ap_etiq_separa').val(), 10) || 0;
+        emi.separa_unidadmedida_id = separa || emi.separa_unidadmedida_id;
+        emi.cant_unid_separa = cantUnid;
+        if (!emi.unidades.length) {
+            setApModalMsg('Confirmá al menos una unidad', false);
+            return;
+        }
+        if (emi.unidades.length !== cantUnid) {
+            setApModalMsg('Cantidad que separa (' + cantUnid + ') ≠ unidades (' + emi.unidades.length + '). Ajustá o seguí confirmando.', false);
+            return;
+        }
+        syncEmisionHiddens();
+        actualizarEmisionUi();
+        $('#modalEmisionEtiquetaApSurmar').modal('hide');
+        setMsg('Emisión AP del renglón lista (' + emi.unidades.length + ')', true);
+    }
+
+    function hidratarEmisionOld() {
+        var raw = $('#ms-etiquetas-surmar-emision-old').text();
+        if (!raw) {
+            return;
+        }
+        var data;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) {
+            return;
+        }
+        if (!data || typeof data !== 'object') {
+            return;
+        }
+        ensureAllUids();
+        var $filas = filasItems();
+        Object.keys(data).forEach(function (k) {
+            var idx = parseInt(k, 10);
+            if (isNaN(idx)) {
+                return;
+            }
+            var $tr = $filas.eq(idx);
+            if (!$tr.length || !data[k] || typeof data[k] !== 'object') {
+                return;
+            }
+            var uid = ensureUid($tr);
+            var emi = data[k];
+            emisionPorLinea[uid] = {
+                separa_unidadmedida_id: parseInt(emi.separa_unidadmedida_id, 10) || (parseInt($('#ms-ap-separa-default').val(), 10) || 2),
+                cant_unid_separa: parseInt(emi.cant_unid_separa, 10) || 1,
+                unidades: Array.isArray(emi.unidades) ? emi.unidades.map(function (u, i) {
+                    return {
+                        nro_apertura: parseInt(u.nro_apertura, 10) || (i + 1),
+                        cant_pieza: parseFloat(u.cant_pieza) || 1,
+                        peso_bruto: parseFloat(u.peso_bruto) || 0,
+                        peso_tara: parseFloat(u.peso_tara) || 0,
+                        peso_neto: parseFloat(u.peso_neto) || 0,
+                        fecha_vto: String(u.fecha_vto || '')
+                    };
+                }) : []
+            };
+        });
     }
 
     function agregar() {
@@ -349,6 +640,40 @@
             $('#ms_etiqueta_scan').focus();
             return false;
         }
+        if (esAp()) {
+            var faltanEmi = [];
+            filasItems().each(function (idx) {
+                var $tr = $(this);
+                var artId = parseInt($tr.find('.articulo_id').val(), 10) || 0;
+                var cantRaw = $tr.find('.cantidad-stock, .cantidad, input[name="cantidades[]"]').first().val() || '0';
+                var cant = parseFloat(String(cantRaw).replace(',', '.')) || 0;
+                if (artId <= 0 && Math.abs(cant) < 1e-9) {
+                    return;
+                }
+                var uid = ensureUid($tr);
+                var emi = emisionDe(uid);
+                var nUni = emi && Array.isArray(emi.unidades) ? emi.unidades.length : 0;
+                var cantUnid = emi ? (parseInt(emi.cant_unid_separa, 10) || 0) : 0;
+                if (!emi || nUni <= 0 || nUni !== cantUnid) {
+                    faltanEmi.push(String($tr.find('.item').val() || (idx + 1)));
+                }
+            });
+            if (faltanEmi.length) {
+                var msgE = 'Surmar AP: cada ítem debe emitir etiquetas (en que separa / cantidad). Faltan renglón(es): ' + faltanEmi.join(', ');
+                setMsg(msgE, false);
+                alert(msgE);
+                var $fe = filasItems().filter(function () {
+                    var n = String($(this).find('.item').val() || '');
+                    return faltanEmi.indexOf(n) !== -1;
+                }).first();
+                if ($fe.length) {
+                    seleccionar($fe);
+                    abrirModalEmisionAp();
+                }
+                return false;
+            }
+        }
+        syncEmisionHiddens();
         return true;
     }
 
@@ -522,8 +847,14 @@
         if (uid && porLinea[uid]) {
             delete porLinea[uid];
         }
+        if (uid && emisionPorLinea[uid]) {
+            delete emisionPorLinea[uid];
+        }
         if (uidActivo === uid) {
             uidActivo = null;
+        }
+        if (apModalUid === uid) {
+            apModalUid = null;
         }
     }
 
@@ -533,9 +864,11 @@
         }
 
         hidratarInicial();
+        hidratarEmisionOld();
         hidratarHijas();
         togglePanel();
         syncHiddens();
+        actualizarEmisionUi();
 
         $(document).on('change', '#empresa_id, #tipotransaccion_stock_id', togglePanel);
         $(document).on('ms:tipotransaccion-changed', togglePanel);
@@ -616,6 +949,59 @@
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 return false;
+            }
+        });
+
+        $('#ms_ap_abrir_emision').on('click', function (e) {
+            e.preventDefault();
+            abrirModalEmisionAp();
+        });
+        $('#ms_ap_etiq_confirmar_unidad').on('click', function (e) {
+            e.preventDefault();
+            confirmarUnidadApModal();
+        });
+        $('#ms_ap_etiq_listo').on('click', function (e) {
+            e.preventDefault();
+            listoEmisionApModal();
+        });
+        $('#ms_ap_etiq_bruto, #ms_ap_etiq_tara').on('input change', recalcularNetoApModal);
+        $(document).on('click', '.ms-ap-etiq-quitar-unidad', function (e) {
+            e.preventDefault();
+            if (!apModalUid) {
+                return;
+            }
+            var idx = parseInt($(this).data('idx'), 10);
+            var emi = ensureEmision(apModalUid);
+            if (!emi.unidades[idx]) {
+                return;
+            }
+            emi.unidades.splice(idx, 1);
+            emi.unidades.forEach(function (u, i) { u.nro_apertura = i + 1; });
+            $('#ms_ap_etiq_nro').val(emi.unidades.length + 1);
+            $('#ms_ap_etiq_badge').text(emi.unidades.length + ' / ' + (parseInt(emi.cant_unid_separa, 10) || 1)).show();
+            renderApModalUnidades();
+            syncEmisionHiddens();
+            actualizarEmisionUi();
+        });
+        $('#ms_ap_etiq_cant_unid').on('change', function () {
+            if (!apModalUid) {
+                return;
+            }
+            var emi = ensureEmision(apModalUid);
+            emi.cant_unid_separa = Math.max(1, Math.min(50, parseInt($(this).val(), 10) || 1));
+            $('#ms_ap_etiq_badge').text(emi.unidades.length + ' / ' + emi.cant_unid_separa).show();
+        });
+        $(document).on('keydown', '.ms-ap-etiq-nav', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+            var $fields = $('.ms-ap-etiq-nav:visible:not([readonly])');
+            var i = $fields.index(this);
+            if (i >= 0 && i < $fields.length - 1) {
+                $fields.eq(i + 1).trigger('focus');
+            } else {
+                confirmarUnidadApModal();
             }
         });
     });

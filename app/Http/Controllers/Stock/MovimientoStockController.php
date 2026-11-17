@@ -14,6 +14,7 @@ use App\Services\Stock\MovimientoStockService;
 use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Services\Stock\TransferenciaMercaderiaPdfService;
 use App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport;
+use App\Support\Stock\Surmar\SurmarUnidadmedidaSeparaSupport;
 use App\Support\Stock\SurmarSupport;
 use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Models\Contable\BienUso;
@@ -262,6 +263,9 @@ class MovimientoStockController extends Controller
         $movimientoStockAmbitoCatalogo = MovimientoStockFerliSupport::ambitoCatalogo(
             $depositoOperativoMs > 0 ? $depositoOperativoMs : null
         );
+        $unidadesmedidaSurmar = $modoSurmar
+            ? SurmarUnidadmedidaSeparaSupport::listadoParaSelector()
+            : [];
 
         return view('stock.movimientostock.crear', compact(
             'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 
@@ -269,7 +273,8 @@ class MovimientoStockController extends Controller
             'tipotransaccion_query', 'tipotransacciondefault_id', 'depositodefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'movimientostock',
             'asientoPreview', 'mostrarSolapaAsiento', 'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
-            'color_query', 'talle_query', 'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo') + [
+            'color_query', 'talle_query', 'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo',
+            'unidadesmedidaSurmar') + [
             'modo_surmar' => $modoSurmar,
             'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
             'ruta_guardar_movimientostock' => $modoSurmar ? 'guardar_movimiento_surmar' : 'guardar_movimientostock',
@@ -403,10 +408,12 @@ class MovimientoStockController extends Controller
 
         $etiquetasSurmarPorLinea = [];
         $etiquetasSurmarHijas = [];
+        $etiquetasSurmarEmision = [];
         if (SurmarSupport::esEmpresaSurmar((int) $empresa_id)) {
             $surmarEtiquetas = app(MovimientoStockSurmarEtiquetaService::class);
             $etiquetasSurmarPorLinea = $surmarEtiquetas->consumosPayloadPorLineaProducto((int) $movimientostock->id);
             $etiquetasSurmarHijas = $surmarEtiquetas->hijasEmitidasPayload((int) $movimientostock->id);
+            $etiquetasSurmarEmision = $surmarEtiquetas->emisionApDesdeHijas((int) $movimientostock->id);
         }
 
         $movimientoStockCanalCatalogo = MovimientoStockFerliSupport::codigoCanal(
@@ -415,6 +422,9 @@ class MovimientoStockController extends Controller
         $movimientoStockAmbitoCatalogo = MovimientoStockFerliSupport::ambitoCatalogo(
             $depositoOperativoEditar > 0 ? $depositoOperativoEditar : null
         );
+        $unidadesmedidaSurmar = SurmarSupport::esEmpresaSurmar((int) $empresa_id)
+            ? SurmarUnidadmedidaSeparaSupport::listadoParaSelector()
+            : [];
 
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
@@ -424,7 +434,9 @@ class MovimientoStockController extends Controller
             'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
             'puedeModificarVentana', 'controlVentanaActivo',
             'color_query', 'talle_query', 'etiquetasSurmarPorLinea', 'etiquetasSurmarHijas',
-            'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo') + [
+            'etiquetasSurmarEmision',
+            'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo',
+            'unidadesmedidaSurmar') + [
             'modo_surmar' => $modoSurmar,
             'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
             'ruta_actualizar_movimientostock' => $modoSurmar ? 'actualizar_movimiento_surmar' : 'actualizar_movimientostock',
