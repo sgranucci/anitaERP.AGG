@@ -30,6 +30,10 @@
                        class="btn btn-app bg-secondary" title="Aging de pendientes">
                         <i class="fas fa-hourglass-half"></i> Aging
                     </a>
+                    <a href="{{ route('conciliacion_bancaria_sin_conciliar', ['empresa_id' => $empresa_id, 'cuentacaja_id' => $cuentacaja_id, 'mes' => $mes, 'anio' => $anio, 'consultar' => $cuentacaja_id ? 1 : 0]) }}"
+                       class="btn btn-app bg-info" title="Movimientos de cuentas sin conciliar">
+                        <i class="fas fa-list-alt"></i> Sin conciliar
+                    </a>
                     <a href="{{ route('conciliacion_bancaria_excepciones') }}"
                        class="btn btn-app bg-warning" title="Worklist de excepciones">
                         <i class="fas fa-tasks"></i> Worklist

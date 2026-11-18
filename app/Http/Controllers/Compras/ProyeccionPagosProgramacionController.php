@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Compras;
 
 use App\Exports\Compras\ProyeccionPagosProgramacionExport;
 use App\Http\Controllers\Controller;
+use App\Models\Compras\Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\ProyeccionPagosProgramacionSupport;
 use App\Support\Configuracion\EmpresaFiltroExternoSupport;
@@ -26,17 +27,15 @@ class ProyeccionPagosProgramacionController extends Controller
     {
         can('programar-pagos-proveedor');
 
-        $filtros = $this->filtros($request);
+        $filtros = $this->enriquecerProveedor($this->filtros($request));
         $listado = $this->support->listar($filtros, $this->empresaIds());
-        $total = 0.0;
-        foreach ($listado['filas'] as $fila) {
-            $total += (float) $fila['total_adeudado'];
-        }
+        $resumen = $listado['resumen'] ?? ProyeccionPagosProgramacionSupport::resumenVacio();
 
         return view('compras.proyeccion_pagos_programacion.index', [
             'filas' => $listado['filas'],
             'truncado' => $listado['truncado'],
-            'total' => $total,
+            'total' => (float) ($resumen['total'] ?? 0),
+            'resumen' => $resumen,
             'filtros' => $filtros,
             'filtrosQuery' => $this->paraQuery($filtros),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
@@ -74,7 +73,7 @@ class ProyeccionPagosProgramacionController extends Controller
             : 'Se grabó: '.implode(', ', $partes).'.';
 
         $redirect = redirect()
-            ->route('programar_pagos_proveedor', $this->paraQuery($this->filtros($request)))
+            ->route('programar_pagos_proveedor', $this->paraQuery($this->enriquecerProveedor($this->filtros($request))))
             ->with('mensaje', $mensaje);
         if ($resultado['omitidas'] > 0) {
             $redirect->with(
@@ -92,7 +91,7 @@ class ProyeccionPagosProgramacionController extends Controller
         ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '180');
 
-        $filtros = $this->filtros($request);
+        $filtros = $this->enriquecerProveedor($this->filtros($request));
         $modo = (string) $request->query('informe', ProyeccionPagosProgramacionSupport::INFORME_PROGRAMADOS);
         if (! in_array($modo, [
             ProyeccionPagosProgramacionSupport::INFORME_URGENTES,
@@ -174,7 +173,17 @@ class ProyeccionPagosProgramacionController extends Controller
         }
 
         [$empresaId, $empresaScope] = $this->resolverEmpresa($request);
-        $incluirVencidas = ! $request->boolean('consultar') || $request->boolean('incluir_vencidas');
+        // Solo si el usuario lo pide: de lo contrario el rango Desde/Hasta se respeta tal cual.
+        $incluirVencidas = $request->boolean('incluir_vencidas');
+
+        $proveedorId = (int) $request->input('proveedor_id', 0);
+        if ($proveedorId <= 0) {
+            $codigo = trim((string) $request->input('codigoproveedor', ''));
+            if ($codigo !== '') {
+                $prov = Proveedor::query()->where('codigo', $codigo)->first(['id']);
+                $proveedorId = $prov ? (int) $prov->id : 0;
+            }
+        }
 
         return [
             'vencimiento_desde' => $desde,
@@ -185,6 +194,9 @@ class ProyeccionPagosProgramacionController extends Controller
             'medio' => $medio,
             'texto' => trim((string) $request->input('texto', '')),
             'incluir_vencidas' => $incluirVencidas,
+            'proveedor_id' => $proveedorId,
+            'proveedor_codigo' => trim((string) $request->input('codigoproveedor', '')),
+            'proveedor_nombre' => trim((string) $request->input('nombreproveedor', '')),
             'consultar' => 1,
         ];
     }
@@ -206,6 +218,15 @@ class ProyeccionPagosProgramacionController extends Controller
         if (! empty($filtros['incluir_vencidas'])) {
             $q['incluir_vencidas'] = 1;
         }
+        if ((int) ($filtros['proveedor_id'] ?? 0) > 0) {
+            $q['proveedor_id'] = (int) $filtros['proveedor_id'];
+            if (($filtros['proveedor_codigo'] ?? '') !== '') {
+                $q['codigoproveedor'] = $filtros['proveedor_codigo'];
+            }
+            if (($filtros['proveedor_nombre'] ?? '') !== '') {
+                $q['nombreproveedor'] = $filtros['proveedor_nombre'];
+            }
+        }
         if (($filtros['empresa_scope'] ?? '') === 'todas') {
             $q['empresa_todas'] = 1;
         } elseif ((int) ($filtros['empresa_id'] ?? 0) > 0) {
@@ -213,6 +234,26 @@ class ProyeccionPagosProgramacionController extends Controller
         }
 
         return $q;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function enriquecerProveedor(array $filtros): array
+    {
+        $id = (int) ($filtros['proveedor_id'] ?? 0);
+        if ($id <= 0) {
+            return $filtros;
+        }
+
+        $prov = Proveedor::query()->whereKey($id)->first(['id', 'codigo', 'nombre']);
+        if ($prov) {
+            $filtros['proveedor_codigo'] = (string) $prov->codigo;
+            $filtros['proveedor_nombre'] = (string) $prov->nombre;
+        }
+
+        return $filtros;
     }
 
     /** @return array{0: int, 1: string} */

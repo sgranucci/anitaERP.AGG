@@ -69,12 +69,13 @@ final class ProyeccionPagosProgramacionSupport
     /**
      * @param  list<int>  $empresaIds
      * @param  array<string, mixed>  $filtros
-     * @return array{filas: list<array<string, mixed>>, truncado: bool}
+     * @return array{filas: list<array<string, mixed>>, truncado: bool, resumen: array<string, float|int>}
      */
     public function listar(array $filtros, array $empresaIds, int $limite = self::LIMITE): array
     {
+        $vacio = ['filas' => [], 'truncado' => false, 'resumen' => self::resumenVacio()];
         if (! self::columnasDisponibles()) {
-            return ['filas' => [], 'truncado' => false];
+            return $vacio;
         }
 
         $modelos = $this->consultar($filtros, $empresaIds, max($limite, 1) + 1);
@@ -96,7 +97,81 @@ final class ProyeccionPagosProgramacionSupport
             $filas[] = $fila;
         }
 
-        return ['filas' => $filas, 'truncado' => $truncado];
+        return [
+            'filas' => $filas,
+            'truncado' => $truncado,
+            'resumen' => self::resumenDeFilas($filas),
+        ];
+    }
+
+    /**
+     * @return array<string, float|int>
+     */
+    public static function resumenVacio(): array
+    {
+        return [
+            'filas' => 0,
+            'total' => 0.0,
+            'vencidos_filas' => 0,
+            'vencidos_total' => 0.0,
+            'a_vencer_filas' => 0,
+            'a_vencer_total' => 0.0,
+            'urgentes_filas' => 0,
+            'urgentes_total' => 0.0,
+            'programados_filas' => 0,
+            'programados_total' => 0.0,
+            'sin_programar_filas' => 0,
+            'sin_programar_total' => 0.0,
+            'bloqueadas_filas' => 0,
+            'bloqueadas_total' => 0.0,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return array<string, float|int>
+     */
+    public static function resumenDeFilas(array $filas): array
+    {
+        $r = self::resumenVacio();
+        foreach ($filas as $fila) {
+            $importe = (float) ($fila['total_adeudado'] ?? 0);
+            $r['filas']++;
+            $r['total'] += $importe;
+
+            if (($fila['estado_vto'] ?? '') === 'vencido') {
+                $r['vencidos_filas']++;
+                $r['vencidos_total'] += $importe;
+            } else {
+                $r['a_vencer_filas']++;
+                $r['a_vencer_total'] += $importe;
+            }
+
+            $urgente = ! empty($fila['urgente']);
+            $conFecha = trim((string) ($fila['fecha_pago'] ?? '')) !== '';
+            if ($urgente) {
+                $r['urgentes_filas']++;
+                $r['urgentes_total'] += $importe;
+            }
+            if ($conFecha) {
+                $r['programados_filas']++;
+                $r['programados_total'] += $importe;
+            }
+            if (! $urgente && ! $conFecha) {
+                $r['sin_programar_filas']++;
+                $r['sin_programar_total'] += $importe;
+            }
+            if ((int) ($fila['propuesta_abierta_id'] ?? 0) > 0) {
+                $r['bloqueadas_filas']++;
+                $r['bloqueadas_total'] += $importe;
+            }
+        }
+
+        foreach (['total', 'vencidos_total', 'a_vencer_total', 'urgentes_total', 'programados_total', 'sin_programar_total', 'bloqueadas_total'] as $k) {
+            $r[$k] = round((float) $r[$k], 2);
+        }
+
+        return $r;
     }
 
     /**
@@ -345,22 +420,20 @@ final class ProyeccionPagosProgramacionSupport
 
         $query = $this->queryDeuda($empresaIds, (int) ($filtros['empresa_id'] ?? 0));
         $asignacion = (string) ($filtros['asignacion'] ?? self::ASIGNACION_TODAS);
-        $incluirVencidas = (bool) ($filtros['incluir_vencidas'] ?? true);
+        // Por defecto el rango Desde/Hasta es estricto. Solo si piden "incluir vencidas"
+        // se suman deudas con vencimiento anterior a Desde.
+        $incluirVencidas = (bool) ($filtros['incluir_vencidas'] ?? false);
 
         $query->where(function ($w) use ($desde, $hasta, $asignacion, $incluirVencidas) {
             $w->where(function ($rango) use ($desde, $hasta, $asignacion) {
-                $rango->where(function ($fechas) use ($desde, $hasta) {
-                    $fechas->whereNull('proveedor_cuentacorriente.fechavencimiento')
-                        ->orWhere(function ($entre) use ($desde, $hasta) {
-                            $entre->whereDate('proveedor_cuentacorriente.fechavencimiento', '>=', $desde)
-                                ->whereDate('proveedor_cuentacorriente.fechavencimiento', '<=', $hasta);
-                        });
-                });
+                $rango->whereDate('proveedor_cuentacorriente.fechavencimiento', '>=', $desde)
+                    ->whereDate('proveedor_cuentacorriente.fechavencimiento', '<=', $hasta);
                 $this->aplicarAsignacion($rango, $asignacion);
             });
             if ($incluirVencidas && $asignacion !== self::ASIGNACION_CON) {
                 $w->orWhere(function ($vencidas) use ($desde, $asignacion) {
-                    $vencidas->whereDate('proveedor_cuentacorriente.fechavencimiento', '<', $desde);
+                    $vencidas->whereNotNull('proveedor_cuentacorriente.fechavencimiento')
+                        ->whereDate('proveedor_cuentacorriente.fechavencimiento', '<', $desde);
                     if ($asignacion === self::ASIGNACION_URGENTES) {
                         $vencidas->where('proveedor_cuentacorriente.urgente_pago', true);
                     } elseif ($asignacion !== self::ASIGNACION_TODAS && $asignacion !== self::ASIGNACION_VENCIDOS) {
@@ -381,6 +454,11 @@ final class ProyeccionPagosProgramacionSupport
         $fechaPago = self::normalizarFecha((string) ($filtros['fecha_pago'] ?? ''));
         if ($fechaPago !== null) {
             $query->whereDate('proveedor_cuentacorriente.fecha_pago', $fechaPago);
+        }
+
+        $proveedorId = (int) ($filtros['proveedor_id'] ?? 0);
+        if ($proveedorId > 0) {
+            $query->where('proveedor_cuentacorriente.proveedor_id', $proveedorId);
         }
 
         $texto = trim((string) ($filtros['texto'] ?? ''));
@@ -502,10 +580,16 @@ final class ProyeccionPagosProgramacionSupport
             $dias = (int) floor((strtotime($hoy) - strtotime($vto)) / 86400);
         }
 
+        $estadoVto = 'a_vencer';
+        if ($dias !== null && $dias > 0) {
+            $estadoVto = 'vencido';
+        }
+
         return [
             'id' => (int) $cc->id,
             'empresa' => (string) ($cc->empresas->nombre ?? ''),
             'nombreempresa' => (string) ($cc->empresas->nombre ?? ''),
+            'proveedor_id' => (int) ($cc->proveedor_id ?? $cc->proveedores->id ?? 0),
             'proveedor_codigo' => (string) ($cc->proveedores->codigo ?? ''),
             'proveedor_nombre' => (string) ($cc->proveedores->nombre ?? ''),
             'tipo' => mb_substr($tipo, 0, 4),
@@ -515,8 +599,10 @@ final class ProyeccionPagosProgramacionSupport
             'fecha_vto' => $cc->fechavencimiento?->format('d/m/Y') ?? '',
             'fecha_vto_iso' => $vto ?? '',
             'dias' => $dias,
+            'estado_vto' => $estadoVto,
             'condicion_pago' => (string) ($comp?->condicionpagos->nombre ?? ''),
             'nro_refer' => $medio['nro_refer'],
+            'ordencompra_id' => (int) ($medio['ordencompra_id'] ?? 0),
             'medio_pago' => $medio['medio_pago'],
             'familia' => PropuestaPagoTipoLote::familia($medio['medio_pago']),
             'detalle_pago' => $medio['detalle_pago'],

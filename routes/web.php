@@ -1623,6 +1623,8 @@ Route::get('contable/conciliacion-bancaria-tablero', 'Contable\ConciliacionBanca
 Route::get('contable/listar-conciliacion-bancaria-tablero/{formato}', 'Contable\ConciliacionBancariaTableroController@exportar')->name('listar_conciliacion_bancaria_tablero');
 Route::get('contable/conciliacion-bancaria-aging', 'Contable\ConciliacionBancariaAgingController@index')->name('conciliacion_bancaria_aging');
 Route::get('contable/listar-conciliacion-bancaria-aging/{formato}', 'Contable\ConciliacionBancariaAgingController@exportar')->name('listar_conciliacion_bancaria_aging');
+Route::get('contable/conciliacion-bancaria-sin-conciliar', 'Contable\ConciliacionBancariaSinConciliarController@index')->name('conciliacion_bancaria_sin_conciliar');
+Route::get('contable/listar-conciliacion-bancaria-sin-conciliar/{formato}', 'Contable\ConciliacionBancariaSinConciliarController@exportar')->name('listar_conciliacion_bancaria_sin_conciliar');
 Route::get('contable/conciliacion-bancaria-excepciones', 'Contable\ConciliacionBancariaExcepcionController@index')->name('conciliacion_bancaria_excepciones');
 Route::post('contable/conciliacion-bancaria-excepciones/asignar', 'Contable\ConciliacionBancariaExcepcionController@asignar')->name('conciliacion_bancaria_excepciones_asignar');
 Route::post('contable/conciliacion-bancaria-excepciones/resolver', 'Contable\ConciliacionBancariaExcepcionController@resolver')->name('conciliacion_bancaria_excepciones_resolver');

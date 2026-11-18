@@ -38,6 +38,7 @@ use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReferenciaSupp
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaReglasSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResidualReglaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaSinConciliarReporteSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use Carbon\Carbon;
@@ -69,13 +70,15 @@ class ConciliacionBancariaService
     ): array {
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
-        ConciliacionBancariaPeriodoLockSupport::assertEditable(
-            $empresaId,
-            $cuentacajaId,
-            $mes,
-            $anio,
-            $usuarioId,
-        );
+        if (! ($opciones['omitir_lock'] ?? false)) {
+            ConciliacionBancariaPeriodoLockSupport::assertEditable(
+                $empresaId,
+                $cuentacajaId,
+                $mes,
+                $anio,
+                $usuarioId,
+            );
+        }
 
         $cuentacaja = Cuentacaja::query()
             ->with(['cuentacontables', 'empresas', 'bancos'])
@@ -1406,6 +1409,48 @@ class ConciliacionBancariaService
      *
      * @return array{filas: list<array<string,mixed>>, resumen: array<string, mixed>}
      */
+    /**
+     * Reporte pantalla/export: movimientos sin conciliar estilo Anita (grilla + Excel/PDF/CSV).
+     *
+     * @return array{
+     *   filas: list<array<string, mixed>>,
+     *   totales: array{n: int, debitos: float, creditos: float},
+     *   meta: array<string, mixed>,
+     *   resultado: array<string, mixed>
+     * }
+     */
+    public function movimientosSinConciliar(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        ?int $usuarioId = null,
+        bool $forzarRecalculo = false,
+    ): array {
+        $resultado = null;
+        if (! $forzarRecalculo) {
+            // Sin tope de edad: el reporte también sirve períodos ya cerrados/aprobados.
+            $resultado = ConciliacionBancariaResultadoCache::leer($empresaId, $cuentacajaId, $mes, $anio, 0);
+        }
+        $resultado ??= $this->ejecutar(
+            $empresaId,
+            $cuentacajaId,
+            $mes,
+            $anio,
+            $usuarioId,
+            false,
+            [
+                'persistir_pendientes' => false,
+                'omitir_lock' => true,
+            ],
+        );
+
+        $reporte = ConciliacionBancariaSinConciliarReporteSupport::armar($resultado);
+        $reporte['resultado'] = $resultado;
+
+        return $reporte;
+    }
+
     public function agingPendientes(
         int $empresaId,
         int $cuentacajaId,
