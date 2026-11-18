@@ -318,7 +318,7 @@ final class ConciliacionBancariaSinConciliarReporteSupport
         foreach ($filas as $f) {
             $tip = strtoupper((string) ($f['tip'] ?? ''));
             $nro = preg_replace('/\D/', '', (string) ($f['numero'] ?? '')) ?? '';
-            if ($nro !== '' && in_array($tip, ['CHP', 'CHD', 'CHQ', 'CHE', 'ANULA'], true) && empty($f['cheque_id'])) {
+            if ($nro !== '' && in_array($tip, ConciliacionBancariaChequeErpEnrichSupport::TIPS_CHEQUE, true) && empty($f['cheque_id'])) {
                 $nrosCheque[$nro] = true;
             }
             if ($nro !== '' && in_array($tip, ['OPP', 'OPA'], true) && empty($f['pagoproveedor_id'])) {

@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\Schema;
  */
 final class ConciliacionBancariaChequeErpEnrichSupport
 {
+    /** Tips cuyo “Numero” es nro de cheque propio (incl. anulación ACP). */
+    public const TIPS_CHEQUE = ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP', 'ANULA'];
+
     /**
      * @param  list<array<string, mixed>>  $filas  Filas con numero_cheque o numero
      * @return list<array<string, mixed>>
@@ -69,7 +72,7 @@ final class ConciliacionBancariaChequeErpEnrichSupport
         $nros = [];
         foreach ($filas as $f) {
             $tip = strtoupper(trim((string) ($f['tip'] ?? '')));
-            if (! in_array($tip, ['CHP', 'CHD', 'CHQ', 'CHE', 'ANULA'], true)) {
+            if (! in_array($tip, self::TIPS_CHEQUE, true)) {
                 continue;
             }
             if (! self::necesitaEnrichReporte($f)) {
@@ -91,7 +94,7 @@ final class ConciliacionBancariaChequeErpEnrichSupport
 
         foreach ($filas as &$f) {
             $tip = strtoupper(trim((string) ($f['tip'] ?? '')));
-            if (! in_array($tip, ['CHP', 'CHD', 'CHQ', 'CHE', 'ANULA'], true)) {
+            if (! in_array($tip, self::TIPS_CHEQUE, true)) {
                 continue;
             }
             $n = self::nroNorm((string) ($f['numero'] ?? ''));
@@ -118,6 +121,19 @@ final class ConciliacionBancariaChequeErpEnrichSupport
                     // keep ---
                 }
             }
+            $sinImporte = abs((float) ($f['debito'] ?? 0)) < 0.005
+                && abs((float) ($f['credito'] ?? 0)) < 0.005;
+            if ($sinImporte && abs((float) ($src['importe'] ?? 0)) > 0.005) {
+                $imp = round(abs((float) $src['importe']), 2);
+                // Misma regla que desdeCheque: solo ANULA va a débitos.
+                if (strcasecmp($tip, 'ANULA') === 0) {
+                    $f['debito'] = $imp;
+                    $f['credito'] = 0.0;
+                } else {
+                    $f['debito'] = 0.0;
+                    $f['credito'] = $imp;
+                }
+            }
         }
         unset($f);
 
@@ -132,7 +148,8 @@ final class ConciliacionBancariaChequeErpEnrichSupport
         return trim((string) ($f['entregado_a'] ?? '')) === ''
             || trim((string) ($f['nro_op'] ?? '')) === ''
             || trim((string) ($f['proveedor_codigo'] ?? '')) === ''
-            || empty($f['fecha_entrega']);
+            || empty($f['fecha_entrega'])
+            || abs((float) ($f['importe'] ?? 0)) < 0.005;
     }
 
     /**
@@ -140,11 +157,15 @@ final class ConciliacionBancariaChequeErpEnrichSupport
      */
     private static function necesitaEnrichReporte(array $f): bool
     {
+        $sinImporte = abs((float) ($f['debito'] ?? 0)) < 0.005
+            && abs((float) ($f['credito'] ?? 0)) < 0.005;
+
         return trim((string) ($f['detalle'] ?? '')) === ''
             || trim((string) ($f['n_orig'] ?? '')) === ''
             || empty($f['cheque_id'])
             || empty($f['pagoproveedor_id'])
-            || ($f['f_entr'] ?? '---') === '---';
+            || ($f['f_entr'] ?? '---') === '---'
+            || $sinImporte;
     }
 
     /**
@@ -172,7 +193,8 @@ final class ConciliacionBancariaChequeErpEnrichSupport
      *   nro_op: string,
      *   fecha_entrega: ?string,
      *   cheque_id: int,
-     *   pagoproveedor_id: int
+     *   pagoproveedor_id: int,
+     *   importe: float
      * }>
      */
     private static function mapaDesdeCheque(array $nros, int $empresaId, int $cuentacajaId): array
@@ -199,6 +221,7 @@ final class ConciliacionBancariaChequeErpEnrichSupport
             'proveedor_id',
             'pagoproveedor_id',
             'fecha_entrega',
+            'monto',
         ]) as $ch) {
             $key = self::nroNorm((string) $ch->numerocheque);
             if ($key === '') {
@@ -227,6 +250,7 @@ final class ConciliacionBancariaChequeErpEnrichSupport
                 'fecha_entrega' => $fechaEntrega,
                 'cheque_id' => (int) $ch->id,
                 'pagoproveedor_id' => (int) ($ch->pagoproveedor_id ?? 0),
+                'importe' => abs((float) ($ch->monto ?? 0)),
             ];
             if (! isset($map[$key]) || self::score($cand) > self::score($map[$key])) {
                 $map[$key] = $cand;
@@ -244,7 +268,8 @@ final class ConciliacionBancariaChequeErpEnrichSupport
         return (trim((string) ($row['entregado_a'] ?? '')) !== '' ? 4 : 0)
             + (trim((string) ($row['nro_op'] ?? '')) !== '' ? 2 : 0)
             + (trim((string) ($row['proveedor_codigo'] ?? '')) !== '' ? 1 : 0)
-            + (! empty($row['fecha_entrega']) ? 1 : 0);
+            + (! empty($row['fecha_entrega']) ? 1 : 0)
+            + (abs((float) ($row['importe'] ?? 0)) > 0.005 ? 2 : 0);
     }
 
     /**
@@ -255,7 +280,8 @@ final class ConciliacionBancariaChequeErpEnrichSupport
      *   nro_op: string,
      *   fecha_entrega: ?string,
      *   cheque_id: int,
-     *   pagoproveedor_id: int
+     *   pagoproveedor_id: int,
+     *   importe: float
      * }  $src
      * @return array<string, mixed>
      */
@@ -272,6 +298,9 @@ final class ConciliacionBancariaChequeErpEnrichSupport
         }
         if (empty($fila['fecha_entrega']) && $src['fecha_entrega'] !== null) {
             $fila['fecha_entrega'] = $src['fecha_entrega'];
+        }
+        if (abs((float) ($fila['importe'] ?? 0)) < 0.005 && abs((float) ($src['importe'] ?? 0)) > 0.005) {
+            $fila['importe'] = round(abs((float) $src['importe']), 2);
         }
 
         $origen = is_array($fila['origen_json'] ?? null) ? $fila['origen_json'] : [];

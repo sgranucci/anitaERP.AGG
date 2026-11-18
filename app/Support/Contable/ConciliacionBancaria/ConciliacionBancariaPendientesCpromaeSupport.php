@@ -120,13 +120,17 @@ final class ConciliacionBancariaPendientesCpromaeSupport
             if (isset($seed['tip']) && $seed['tip'] !== '') {
                 $base['tip'] = (string) $seed['tip'];
             }
+            // Semilla con importe 0 no debe pisar un monto ERP/cpromae válido.
             $impSeed = isset($seed['importe']) ? round((float) $seed['importe'], 2) : null;
-            if ($impSeed !== null && (abs((float) $base['importe']) < 0.005 || abs($impSeed - (float) $base['importe']) > 0.02)) {
-                $base['importe'] = abs($impSeed);
-                $base['origen_json'] = array_merge(
-                    is_array($base['origen_json'] ?? null) ? $base['origen_json'] : [],
-                    ['importe_desde_excel' => true],
-                );
+            if ($impSeed !== null && abs($impSeed) > 0.005) {
+                $impBase = abs((float) ($base['importe'] ?? 0));
+                if ($impBase < 0.005 || abs(abs($impSeed) - $impBase) > 0.02) {
+                    $base['importe'] = abs($impSeed);
+                    $base['origen_json'] = array_merge(
+                        is_array($base['origen_json'] ?? null) ? $base['origen_json'] : [],
+                        ['importe_desde_excel' => true],
+                    );
+                }
             }
             if (! empty($seed['detalle'])) {
                 $base['entregado_a'] = $base['entregado_a'] !== ''

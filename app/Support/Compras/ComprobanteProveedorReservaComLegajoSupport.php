@@ -5,10 +5,12 @@ namespace App\Support\Compras;
 use App\Support\ReglaNegocio\ReglaNegocioConsultaSupport;
 
 /**
- * Evita que una factura del legajo consuma COM que deben quedar para otras facturas pendientes.
+ * Controles de asignación COM↔factura en el legajo.
  *
- * Caso típico: 2 COM del mismo importe y 2 FC; si CxP asigna ambas a la primera,
- * la segunda queda sin COM disponible.
+ * Permite grabar una factura con su COM aunque otras del legajo queden pendientes
+ * sin recepción (factura enviada antes de entregar mercadería). Sí frena: exceso
+ * de COM cuando una sola cubre el importe, COM ya reservada en otra precarga,
+ * COM duplicada entre facturas y exceso sobre provisión.
  */
 final class ComprobanteProveedorReservaComLegajoSupport
 {
@@ -77,48 +79,6 @@ final class ComprobanteProveedorReservaComLegajoSupport
         }
 
         return null;
-    }
-
-    /**
-     * Tras asignar las COM elegidas, deben quedar suficientes COM libres para el resto
-     * de facturas pendientes que exigen recepción.
-     *
-     * @param  list<int>  $comIdsDisponiblesAntes  COM aún no facturadas (incluye las elegidas)
-     * @param  list<int>  $comIdsSeleccionados
-     */
-    public static function mensajeInsuficienteParaOtrasPendientes(
-        int $facturasPendientesQueExigenCom,
-        bool $documentoActualEstaEntrePendientes,
-        array $comIdsDisponiblesAntes,
-        array $comIdsSeleccionados,
-    ): ?string {
-        if ($facturasPendientesQueExigenCom <= 0) {
-            return null;
-        }
-
-        $otrosPendientes = $documentoActualEstaEntrePendientes
-            ? max(0, $facturasPendientesQueExigenCom - 1)
-            : $facturasPendientesQueExigenCom;
-
-        if ($otrosPendientes <= 0) {
-            return null;
-        }
-
-        $disponibles = array_values(array_unique(array_map('intval', $comIdsDisponiblesAntes)));
-        $seleccionados = array_values(array_unique(array_map('intval', $comIdsSeleccionados)));
-        $quedan = count(array_diff($disponibles, $seleccionados));
-
-        if ($quedan >= $otrosPendientes) {
-            return null;
-        }
-
-        return sprintf(
-            'Está asignando %d COM y dejaría solo %d libre(s), pero hay %d factura(s) pendiente(s) en el legajo que también requieren COM. '
-            .'Asigne solo las COM necesarias para esta factura.',
-            count($seleccionados),
-            $quedan,
-            $otrosPendientes
-        );
     }
 
     /**

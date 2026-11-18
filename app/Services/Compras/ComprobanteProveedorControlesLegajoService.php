@@ -854,30 +854,11 @@ class ComprobanteProveedorControlesLegajoService
             ),
         ]));
 
-        $disponibles = $this->recepcionesSupport
-            ->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId, false)
-            ->pluck('id')
-            ->map(static fn ($id) => (int) $id)
-            ->all();
-
+        // Otras FC del legajo pueden quedar pendientes sin COM (factura antes que mercadería).
         $pendientes = array_values(array_filter(
             OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($ordencompra),
             static fn (array $doc) => OrdencompraLegajoDocumentoTipoSupport::exigeCom((string) ($doc['tipo'] ?? 'FC'))
         ));
-        $pendientesCount = count($pendientes);
-        $actualEntrePendientes = $excluirComprobanteId === null || $excluirComprobanteId <= 0;
-        if ($precargaIdActual && $precargaIdActual > 0) {
-            $actualEntrePendientes = collect($pendientes)->contains(
-                static fn (array $doc) => (int) ($doc['precarga_id'] ?? 0) === (int) $precargaIdActual
-            );
-        }
-
-        $mensajes[] = ComprobanteProveedorReservaComLegajoSupport::mensajeInsuficienteParaOtrasPendientes(
-            $pendientesCount,
-            $actualEntrePendientes,
-            $disponibles,
-            $recepcionIds,
-        );
 
         if (Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
             $reservas = [];

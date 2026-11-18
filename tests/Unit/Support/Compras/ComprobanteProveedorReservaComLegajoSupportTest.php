@@ -53,31 +53,6 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
         $this->assertNull($mensaje);
     }
 
-    public function test_bloquea_si_no_quedan_com_para_otras_facturas_pendientes(): void
-    {
-        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeInsuficienteParaOtrasPendientes(
-            2,
-            true,
-            [64730, 64731],
-            [64730, 64731],
-        );
-
-        $this->assertNotNull($mensaje);
-        $this->assertStringContainsString('factura(s) pendiente(s)', $mensaje);
-    }
-
-    public function test_permite_una_com_dejando_otra_para_pendiente(): void
-    {
-        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeInsuficienteParaOtrasPendientes(
-            2,
-            true,
-            [64730, 64731],
-            [64731],
-        );
-
-        $this->assertNull($mensaje);
-    }
-
     public function test_bloquea_com_reservada_en_otra_precarga_pendiente(): void
     {
         $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeConflictoReservaBandeja(
