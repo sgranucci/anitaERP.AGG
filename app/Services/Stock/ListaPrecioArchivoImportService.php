@@ -7,14 +7,20 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Precio;
 use App\Support\Stock\ListaPrecioArchivoParserSupport;
 use App\Support\Stock\PrecioSoloFacturableSupport;
+use App\Support\Stock\StkpreEscrituraSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class ListaPrecioArchivoImportService
 {
+    public function __construct(
+        private readonly StkpreEscrituraSupport $stkpreEscritura,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -56,6 +62,8 @@ class ListaPrecioArchivoImportService
         $duplicadas = 0;
         $skusGrabados = [];
         $claves = [];
+        /** @var array<string, float> $preciosPorSku */
+        $preciosPorSku = [];
 
         DB::transaction(function () use (
             $parseado,
@@ -68,7 +76,8 @@ class ListaPrecioArchivoImportService
             &$omitidas,
             &$duplicadas,
             &$skusGrabados,
-            &$claves
+            &$claves,
+            &$preciosPorSku
         ) {
             foreach ($parseado['items'] as $item) {
                 $sku = $item['sku'];
@@ -113,6 +122,9 @@ class ListaPrecioArchivoImportService
                     }
                 }
 
+                // Último valor del archivo gana (igual que en ERP ante duplicados).
+                $preciosPorSku[$sku] = (float) $item['precio'];
+
                 if ($duplicado) {
                     $duplicadas++;
                 } else {
@@ -121,6 +133,13 @@ class ListaPrecioArchivoImportService
                 }
             }
         });
+
+        $anita = $this->replicarEnAnita(
+            $preciosPorSku,
+            (string) $lista->codigo,
+            $monedaId,
+            $fecha->format('Y-m-d')
+        );
 
         return [
             'filas_leidas' => count($parseado['items']),
@@ -136,7 +155,54 @@ class ListaPrecioArchivoImportService
             'listaprecio_nombre' => trim(($lista->codigo ? $lista->codigo.' — ' : '').$lista->nombre),
             'fuente' => $parseado['fuente'],
             'titulo' => $parseado['titulo'],
+            'anita_ok' => $anita['ok'],
+            'anita_errores' => $anita['errores'],
         ];
+    }
+
+    /**
+     * @param  array<string, float>  $preciosPorSku
+     * @return array{ok: int, errores: list<string>}
+     */
+    private function replicarEnAnita(
+        array $preciosPorSku,
+        string $codigoLista,
+        int $monedaId,
+        string $fechaVigenciaYmd
+    ): array {
+        if ($preciosPorSku === [] || trim($codigoLista) === '') {
+            return ['ok' => 0, 'errores' => []];
+        }
+
+        $usuario = trim((string) (Auth::user()->nombre ?? Auth::user()->usuario ?? 'www'));
+        $items = [];
+        foreach ($preciosPorSku as $sku => $precio) {
+            $items[] = [
+                'sku' => (string) $sku,
+                'precio' => (float) $precio,
+                'precio_anterior' => null,
+            ];
+        }
+
+        try {
+            return $this->stkpreEscritura->upsertLote(
+                $items,
+                $codigoLista,
+                $monedaId,
+                $fechaVigenciaYmd,
+                $usuario !== '' ? $usuario : 'www'
+            );
+        } catch (\Throwable $e) {
+            Log::warning('ListaPrecioArchivoImport: fallo réplica Anita', [
+                'lista' => $codigoLista,
+                'exception' => $e,
+            ]);
+
+            return [
+                'ok' => 0,
+                'errores' => ['Réplica Anita: '.$e->getMessage()],
+            ];
+        }
     }
 
     private function parseFechaVigencia(string $fechavigencia): Carbon

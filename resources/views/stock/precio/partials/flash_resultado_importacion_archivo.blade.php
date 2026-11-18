@@ -29,6 +29,18 @@
             @if (! empty($r['fechavigencia']))
                 <li>Vigencia: {{ $r['fechavigencia'] }}</li>
             @endif
+            @if (array_key_exists('anita_ok', $r))
+                <li>Anita (stkpre): {{ (int) $r['anita_ok'] }} precio(s) replicados</li>
+            @endif
+            @if (! empty($r['anita_errores']) && is_array($r['anita_errores']))
+                <li class="text-danger">
+                    Anita con error ({{ count($r['anita_errores']) }}):
+                    {{ implode(' | ', array_slice($r['anita_errores'], 0, 5)) }}
+                    @if (count($r['anita_errores']) > 5)
+                        …
+                    @endif
+                </li>
+            @endif
         </ul>
         @if ($skusMuestra !== [])
             <p class="mb-1 small"><strong>SKUs grabados</strong> (muestra):</p>
