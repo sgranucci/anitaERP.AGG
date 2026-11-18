@@ -71,4 +71,43 @@ class SurmarEtiquetaBarcodeSupportTest extends TestCase
         $this->assertSame('vacio', SurmarEtiquetaBarcodeSupport::parsear('')['modo']);
         $this->assertSame('vacio', SurmarEtiquetaBarcodeSupport::parsear('   ')['modo']);
     }
+
+    public function test_codigo_impresion_anita(): void
+    {
+        config(['recepcion_anita_surmar.etiqueta_barcode_formato' => 'anita']);
+        $codigo = SurmarEtiquetaBarcodeSupport::codigoParaImpresion([
+            'id' => 16688,
+            'codigo_articulo' => '000Y108',
+            'anita_nro_interno' => 38141,
+            'nro_apertura' => 1,
+            'anita_tipo' => 'COM',
+            'anita_orden' => 1,
+        ]);
+        $this->assertSame('Y108-38141-1-COM-1', $codigo);
+    }
+
+    public function test_codigo_impresion_anita_sin_nint_cae_a_id(): void
+    {
+        config(['recepcion_anita_surmar.etiqueta_barcode_formato' => 'anita']);
+        $codigo = SurmarEtiquetaBarcodeSupport::codigoParaImpresion([
+            'id' => 16688,
+            'codigo_articulo' => 'Y108',
+            'anita_nro_interno' => null,
+        ]);
+        $this->assertSame('16688', $codigo);
+    }
+
+    public function test_codigo_impresion_formato_id(): void
+    {
+        config(['recepcion_anita_surmar.etiqueta_barcode_formato' => 'id']);
+        $codigo = SurmarEtiquetaBarcodeSupport::codigoParaImpresion([
+            'id' => 16688,
+            'codigo_articulo' => 'Y108',
+            'anita_nro_interno' => 38141,
+            'nro_apertura' => 1,
+            'anita_tipo' => 'COM',
+            'anita_orden' => 1,
+        ]);
+        $this->assertSame('16688', $codigo);
+    }
 }

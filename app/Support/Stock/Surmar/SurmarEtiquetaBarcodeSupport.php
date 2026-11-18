@@ -3,14 +3,85 @@
 namespace App\Support\Stock\Surmar;
 
 /**
- * Parseo de lectura de etiqueta Surmar (ID ERP, QR v2 o barcode Anita).
+ * Parseo de lectura de etiqueta Surmar (ID ERP, QR v2 o barcode Anita)
+ * y armado del Code39 a imprimir (formato configurable).
  *
  * - Solo dígitos / Code39 `*id*` / AIM `]A0id` → id ERP (ZPL Surmar).
  * - QR JSON v2 (`{"v":2,"etiqueta_id":…}`) → id ERP.
- * - Anita (a-stkmov.c Ing_articulo): sku-nint-nap-tipo-orden (sep. '-' o "'").
+ * - Anita (a-stkmov.c Ing_articulo / eti_prod.fc): sku-nint-nap-tipo-orden (sep. '-' o "'").
  */
 final class SurmarEtiquetaBarcodeSupport
 {
+    public const FORMATO_ID = 'id';
+
+    public const FORMATO_ANITA = 'anita';
+
+    /**
+     * Formato activo del Code39 en ZPL/PDF.
+     * Config: recepcion_anita_surmar.etiqueta_barcode_formato (SURMAR_ETIQUETA_BARCODE_FORMATO).
+     */
+    public static function formatoImpresion(): string
+    {
+        $fmt = strtolower(trim((string) config('recepcion_anita_surmar.etiqueta_barcode_formato', self::FORMATO_ANITA)));
+
+        return $fmt === self::FORMATO_ID ? self::FORMATO_ID : self::FORMATO_ANITA;
+    }
+
+    /**
+     * Valor del Code39 a imprimir (ZPL ^FD / preview).
+     * Anita: sku-nint-nap-tipo-orden (espejo eti_prod.fc). Sin nro_interno → id.
+     *
+     * @param  array{
+     *   id?:int,
+     *   codigo_articulo?:string,
+     *   anita_nro_interno?:int|null,
+     *   nro_apertura?:int|null,
+     *   anita_nro_apertura?:int|null,
+     *   anita_tipo?:string|null,
+     *   origen_tipo?:string|null,
+     *   anita_orden?:int|null
+     * }  $d
+     */
+    public static function codigoParaImpresion(array $d): string
+    {
+        $id = (int) ($d['id'] ?? 0);
+        if (self::formatoImpresion() !== self::FORMATO_ANITA) {
+            return $id > 0 ? (string) $id : '';
+        }
+
+        $nint = (int) ($d['anita_nro_interno'] ?? 0);
+        if ($nint <= 0) {
+            return $id > 0 ? (string) $id : '';
+        }
+
+        $sku = ltrim(trim((string) ($d['codigo_articulo'] ?? '')), '0');
+        if ($sku === '') {
+            $sku = trim((string) ($d['codigo_articulo'] ?? ''));
+        }
+        if ($sku === '') {
+            return $id > 0 ? (string) $id : '';
+        }
+
+        $nap = (int) ($d['nro_apertura'] ?? $d['anita_nro_apertura'] ?? 1);
+        if ($nap < 1) {
+            $nap = 1;
+        }
+
+        $tipo = strtoupper(trim((string) ($d['anita_tipo'] ?? $d['origen_tipo'] ?? 'COM')));
+        if ($tipo === '') {
+            $tipo = 'COM';
+        }
+        $tipo = substr(str_pad($tipo, 3, ' ', STR_PAD_RIGHT), 0, 3);
+
+        $orden = (int) ($d['anita_orden'] ?? 1);
+        if ($orden < 1) {
+            $orden = 1;
+        }
+
+        // Misma forma que eti_prod.fc: sprintf("%s-%ld-%d-%3.3s-%d", …)
+        return sprintf('%s-%d-%d-%s-%d', $sku, $nint, $nap, rtrim($tipo), $orden);
+    }
+
     /**
      * @return array{
      *   modo: 'id'|'anita'|'nint_nap'|'vacio',

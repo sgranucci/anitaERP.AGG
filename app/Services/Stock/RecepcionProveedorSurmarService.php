@@ -1163,6 +1163,11 @@ class RecepcionProveedorSurmarService
             'lote' => (string) $etiqueta->lote_proveedor,
             'fecha' => optional($etiqueta->fecha_emision)->format('d/m/Y'),
             'fecha_vto' => optional($etiqueta->fecha_vto)->format('d/m/Y'),
+            'anita_nro_interno' => $etiqueta->anita_nro_interno ? (int) $etiqueta->anita_nro_interno : null,
+            'anita_nro_apertura' => $etiqueta->anita_nro_apertura ? (int) $etiqueta->anita_nro_apertura : null,
+            'anita_tipo' => $etiqueta->anita_tipo ? (string) $etiqueta->anita_tipo : null,
+            'anita_orden' => $etiqueta->anita_orden ? (int) $etiqueta->anita_orden : null,
+            'origen_tipo' => $etiqueta->origen_tipo ? (string) $etiqueta->origen_tipo : null,
         ];
     }
 }

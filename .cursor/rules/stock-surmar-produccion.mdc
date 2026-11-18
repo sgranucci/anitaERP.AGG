@@ -40,8 +40,9 @@ Patrón preferido: **menú y permisos nuevos** (no swap de rutas como Interformi
 
 ## Etiquetas (`stock_etiqueta`)
 
-- Identificador operativo = **`id`** físico (barcode/QR).
-- Campos Anita (`anita_tipo`, `anita_nro_interno`, `anita_nro_apertura`, `anita_orden`, …) solo para **import / referencia**.
+- Identificador operativo ERP = **`id`** físico (QR v2 siempre; Code39 según `SURMAR_ETIQUETA_BARCODE_FORMATO`).
+- Code39 transición: default **`anita`** (`sku-nint-nap-tipo-orden`) para leer en `a-stkmov.c`; volver a **`id`** cuando el circuito sea 100% ERP.
+- Campos Anita (`anita_tipo`, `anita_nro_interno`, `anita_nro_apertura`, `anita_orden`, …): import / referencia **y** armado del Code39 Anita.
 - Emisión en recepción (COM) y en producción (DES/AP); TRA mueve depósito de la etiqueta.
 - Consumo en DES/AP/TRA vía `stock_etiqueta_consumo` (Anita `apcom` / `tapcom`).
 - Historial etiqueta↔movimiento: `stock_etiqueta_movimiento`.
@@ -65,7 +66,7 @@ Workbench: `stock/recepcion-proveedor-surmar/{id}/cargar` + `RecepcionProveedorS
 2. **DES**: al cargar ítem producido, modal de etiquetas consumidas (`APCOM_carga_tracking`); graba consumo y baja stock de esas aperturas.
 3. **TRA**: lee etiqueta existente (`recepaper` / `stkvaper`); puede reimprimir; graba apertura en destino.
 4. **AP**: alta + impresión etiqueta; genera lote interno tipo `YYYYMMDD-seq`.
-5. **Barcode Anita**: `articulo-nro_interno-nro_apertura-tipo-orden` → en ERP nuevo: **`id`** (+ QR JSON v2 con `etiqueta_id`) — solo movimientos, no COM.
+5. **Barcode**: Code39 configurable (`SURMAR_ETIQUETA_BARCODE_FORMATO`): **`anita`** = `sku-nint-nap-tipo-orden` (espejo `eti_prod.fc` / `a-stkmov.c`; default en transición) | **`id`** = id físico `stock_etiqueta` (formato ERP definitivo). QR JSON v2 con `etiqueta_id` siempre. Sin `anita_nro_interno` cae a `id`. Volver a `id` cuando el circuito Surmar sea 100% ERP.
 6. **Amparos (F9)** y lista etiquetas (F7/F8): contemplar en movimiento Surmar si el negocio lo pide.
 7. **`lotesmov`**: historial lote por comprobante; en ERP se cubre con etiqueta + consumos + movimientos.
 

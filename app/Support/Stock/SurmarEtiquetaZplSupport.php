@@ -2,10 +2,13 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Stock\Surmar\SurmarEtiquetaBarcodeSupport;
+
 /**
  * ZPL etiqueta Surmar (espejo Anita eti_prod.fc «Etiquetas proveedor»).
  * Línea UMD: «{abrev separa}: {cant_unid} - Nro.: {nro_apertura}»
  * Lote: «Lote Nro.: {lote}/{nro_apertura}»
+ * Code39: formato configurable (anita | id) vía SurmarEtiquetaBarcodeSupport.
  */
 final class SurmarEtiquetaZplSupport
 {
@@ -23,7 +26,12 @@ final class SurmarEtiquetaZplSupport
      *   nro_apertura?:int,
      *   lote?:string,
      *   fecha?:string|null,
-     *   fecha_vto?:string|null
+     *   fecha_vto?:string|null,
+     *   anita_nro_interno?:int|null,
+     *   anita_nro_apertura?:int|null,
+     *   anita_tipo?:string|null,
+     *   anita_orden?:int|null,
+     *   origen_tipo?:string|null
      * }  $d
      */
     public static function generar(array $d): string
@@ -43,13 +51,20 @@ final class SurmarEtiquetaZplSupport
         if ($cantUnid < 1) {
             $cantUnid = 1;
         }
-        $nroApertura = (int) ($d['nro_apertura'] ?? 1);
+        $nroApertura = (int) ($d['nro_apertura'] ?? $d['anita_nro_apertura'] ?? 1);
         if ($nroApertura < 1) {
             $nroApertura = 1;
         }
         $lote = self::zplSafe((string) ($d['lote'] ?? ''));
         $fecha = (string) ($d['fecha'] ?? '');
         $fvto = (string) ($d['fecha_vto'] ?? '');
+        $barcode = SurmarEtiquetaBarcodeSupport::codigoParaImpresion(array_merge($d, [
+            'codigo_articulo' => $codigo,
+            'nro_apertura' => $nroApertura,
+        ]));
+        if ($barcode === '' && $id > 0) {
+            $barcode = (string) $id;
+        }
 
         [$lin1, $lin2] = self::partirDescripcion($desc, 17);
 
@@ -104,8 +119,8 @@ final class SurmarEtiquetaZplSupport
         $loteTxt = $lote !== '' ? $lote.'/'.$nroApertura : (string) $nroApertura;
         $lines[] = '^FO5,820';
         $lines[] = '^ARN,60,60^FDLote Nro.: '.$loteTxt.'^FS';
-        // ERP: barcode = id físico (lectura operativa). Anita eti_prod.fc usa sku-nint-nap-tipo-orden.
-        $lines[] = '^FO100,950^BY2,2.2,10^B3N,N,80,Y,N^FD'.$id.'^FS';
+        // Code39: anita (sku-nint-nap-tipo-orden) o id — SURMAR_ETIQUETA_BARCODE_FORMATO
+        $lines[] = '^FO100,950^BY2,2.2,10^B3N,N,80,Y,N^FD'.$barcode.'^FS';
 
         $qr = self::qrJson(
             $d,
@@ -140,7 +155,7 @@ final class SurmarEtiquetaZplSupport
     public static function datosPreview(array $d): array
     {
         $cantUnid = max(1, (int) ($d['cant_unid_separa'] ?? 1));
-        $nroApertura = max(1, (int) ($d['nro_apertura'] ?? 1));
+        $nroApertura = max(1, (int) ($d['nro_apertura'] ?? $d['anita_nro_apertura'] ?? 1));
         $lote = (string) ($d['lote'] ?? '');
         $umd = mb_substr((string) ($d['umd_separa'] ?? 'UN'), 0, 3);
         $codigo = self::trimCerosIzq((string) ($d['codigo_articulo'] ?? ''));
@@ -153,6 +168,13 @@ final class SurmarEtiquetaZplSupport
         $fvto = (string) ($d['fecha_vto'] ?? '');
         $loteTxt = $lote !== '' ? $lote.'/'.$nroApertura : (string) $nroApertura;
         $id = (int) ($d['id'] ?? 0);
+        $barcode = SurmarEtiquetaBarcodeSupport::codigoParaImpresion(array_merge($d, [
+            'codigo_articulo' => $codigo,
+            'nro_apertura' => $nroApertura,
+        ]));
+        if ($barcode === '' && $id > 0) {
+            $barcode = (string) $id;
+        }
         $qrJson = self::qrJson(
             $d,
             $codigo,
@@ -184,9 +206,10 @@ final class SurmarEtiquetaZplSupport
             'lote' => $loteTxt,
             'fecha' => $fecha,
             'fecha_vto' => $fvto,
-            'barcode_valor' => (string) $id,
+            'barcode_valor' => $barcode,
+            'barcode_formato' => SurmarEtiquetaBarcodeSupport::formatoImpresion(),
             'qr_json' => $qrJson,
-            'barcode_png_base64' => $id > 0 ? self::code39PngBase64((string) $id) : '',
+            'barcode_png_base64' => $barcode !== '' ? self::code39PngBase64($barcode) : '',
             'qr_png_base64' => self::qrPngBase64($qrJson),
         ];
     }

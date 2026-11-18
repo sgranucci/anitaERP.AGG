@@ -77,6 +77,11 @@ class MovimientoStockSurmarEtiquetaService
             'lote' => (string) ($eti->lote_proveedor ?? ''),
             'fecha' => optional($eti->fecha_emision)->format('d/m/Y'),
             'fecha_vto' => optional($eti->fecha_vto)->format('d/m/Y'),
+            'anita_nro_interno' => $eti->anita_nro_interno ? (int) $eti->anita_nro_interno : null,
+            'anita_nro_apertura' => $eti->anita_nro_apertura ? (int) $eti->anita_nro_apertura : null,
+            'anita_tipo' => $eti->anita_tipo ? (string) $eti->anita_tipo : null,
+            'anita_orden' => $eti->anita_orden ? (int) $eti->anita_orden : null,
+            'origen_tipo' => $eti->origen_tipo ? (string) $eti->origen_tipo : null,
         ]);
     }
 

@@ -30,6 +30,16 @@ return [
      */
     'etiqueta_destino_default' => env('RECEPCION_SURMAR_ETIQUETA_DESTINO', 'impresora'),
 
+    /**
+     * Code39 en ZPL de etiqueta Surmar (recepción y movimientos):
+     * - anita = sku-nint-nap-tipo-orden (espejo eti_prod.fc / a-stkmov.c)
+     * - id    = id físico stock_etiqueta (formato ERP definitivo)
+     * Transición: default anita mientras Surmar lea en Anita; volver a id
+     * con SURMAR_ETIQUETA_BARCODE_FORMATO=id cuando el circuito sea 100% ERP.
+     * Si formato=anita pero falta anita_nro_interno, cae a id.
+     */
+    'etiqueta_barcode_formato' => strtolower(trim((string) env('SURMAR_ETIQUETA_BARCODE_FORMATO', 'anita'))),
+
     'tablas' => [
         'cabecera' => 'recepmae',
         'linea' => 'recepmov',
