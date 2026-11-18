@@ -3,9 +3,11 @@
 namespace App\Support\Stock\Surmar;
 
 /**
- * Parseo de lectura de etiqueta Surmar (ID ERP o barcode Anita).
+ * Parseo de lectura de etiqueta Surmar (ID ERP, QR v2 o barcode Anita).
  *
- * Anita (a-stkmov.c Ing_articulo): sku-nint-nap-tipo-orden (sep. '-' o "'").
+ * - Solo dígitos / Code39 `*id*` → id ERP (ZPL Surmar).
+ * - QR JSON v2 (`{"v":2,"etiqueta_id":…}`) → id ERP.
+ * - Anita (a-stkmov.c Ing_articulo): sku-nint-nap-tipo-orden (sep. '-' o "'").
  */
 final class SurmarEtiquetaBarcodeSupport
 {
@@ -22,7 +24,7 @@ final class SurmarEtiquetaBarcodeSupport
      */
     public static function parsear(string $raw): array
     {
-        $raw = trim($raw);
+        $raw = self::normalizarEntrada($raw);
         $vacio = [
             'modo' => 'vacio',
             'etiqueta_id' => null,
@@ -36,7 +38,13 @@ final class SurmarEtiquetaBarcodeSupport
             return $vacio;
         }
 
-        // Solo dígitos → ID ERP
+        // QR v2 (y variantes con prefijo Zebra MA,/QA,): {"v":2,"etiqueta_id":16688,…}
+        $desdeQr = self::parsearQrJson($raw, $vacio);
+        if ($desdeQr !== null) {
+            return $desdeQr;
+        }
+
+        // Solo dígitos → ID ERP (tras quitar * de Code39)
         if (preg_match('/^\d+$/', $raw)) {
             $id = (int) $raw;
 
@@ -89,5 +97,61 @@ final class SurmarEtiquetaBarcodeSupport
         }
 
         return $vacio;
+    }
+
+    /**
+     * Trim, BOM, comillas y delimitadores Code39 (*…*).
+     */
+    private static function normalizarEntrada(string $raw): string
+    {
+        $raw = trim($raw);
+        $raw = preg_replace('/^\xEF\xBB\xBF/', '', $raw) ?? $raw;
+        $raw = trim($raw, " \t\n\r\0\x0B\"'");
+
+        // Code39: start/stop asterisks (*16688* o *16688)
+        if (preg_match('/^\*(\d+)\*$/', $raw, $m) || preg_match('/^\*(\d+)$/', $raw, $m)) {
+            return $m[1];
+        }
+
+        return trim($raw);
+    }
+
+    /**
+     * @param  array{
+     *   modo: 'id'|'anita'|'nint_nap'|'vacio',
+     *   etiqueta_id: ?int,
+     *   sku: ?string,
+     *   nro_interno: ?int,
+     *   nro_apertura: ?int,
+     *   tipo: ?string,
+     *   orden: ?int
+     * }  $vacio
+     * @return array<string, mixed>|null
+     */
+    private static function parsearQrJson(string $raw, array $vacio): ?array
+    {
+        $json = $raw;
+        // Prefijo opcional de campo ZPL QR (MA,/QA,/HM, …) si el lector lo incluye
+        if (preg_match('/^[A-Za-z]{1,2},(\{.*\})\s*$/s', $raw, $m)) {
+            $json = $m[1];
+        }
+        if ($json === '' || $json[0] !== '{') {
+            return null;
+        }
+
+        $data = json_decode($json, true);
+        if (! is_array($data)) {
+            return null;
+        }
+
+        $id = (int) ($data['etiqueta_id'] ?? $data['id'] ?? 0);
+        if ($id <= 0) {
+            return null;
+        }
+
+        return array_merge($vacio, [
+            'modo' => 'id',
+            'etiqueta_id' => $id,
+        ]);
     }
 }
