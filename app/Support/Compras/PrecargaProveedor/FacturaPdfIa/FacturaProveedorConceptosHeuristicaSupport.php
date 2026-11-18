@@ -251,7 +251,9 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['patron' => '/\brg\s*(?:5329|3337)\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0],
             ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
             ['patron' => '/\bperc\.?\s*iva\b/u', 'tipo' => 'percepcion_iva', 'alicuota' => null],
+            // «Per.IIBB» / «Perc. IIBB» / pie corto «IIBB 2,00 552,50» (sin la palabra percepción).
             ['patron' => '/\bperc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|i\.?\s*i\.?\s*b\.?\s*b\.?|iibb|ingresos\s+brutos)/u', 'tipo' => 'percepcion_iibb', 'alicuota' => null],
+            ['patron' => '/(?<![a-z])(?:ii\.?\s*bb\.?|iibb)\b/u', 'tipo' => 'percepcion_iibb', 'alicuota' => null],
             ['patron' => '/\bpercep(?:ci[oó]n)?\s+(?:ganancias|gan\.)/u', 'tipo' => 'percepcion_ganancias', 'alicuota' => null],
             ['patron' => '/\bimpuestos?\s+internos/u', 'tipo' => 'interno', 'alicuota' => null],
             ['patron' => '/\bimp\.?\s*internos/u', 'tipo' => 'interno', 'alicuota' => null],
@@ -281,8 +283,16 @@ final class FacturaProveedorConceptosHeuristicaSupport
      */
     private function inferirAlicuotaEnTexto(string $texto): ?float
     {
-        if (preg_match('/\b(21|10[,.]5|27|5|2[,.]5|0)(?:[.,]0+)?\s*%/u', mb_strtolower($texto), $m)) {
+        $t = mb_strtolower($texto);
+        if (preg_match('/\b(21|10[,.]5|27|5|2[,.]5|0)(?:[.,]0+)?\s*%/u', $t, $m)) {
             return (float) str_replace(',', '.', $m[1]);
+        }
+        // Pie «IIBB 2,00 … 552,50» / «IIBB 3%»: la tasa va pegada al rótulo.
+        if (preg_match('/(?:ii\.?\s*bb\.?|iibb)\s+(\d+[.,]\d{1,2}|\d+)\s*%?/u', $t, $m)) {
+            $tasa = (float) str_replace(',', '.', $m[1]);
+            if ($tasa > 0 && $tasa < 20) {
+                return $tasa;
+            }
         }
 
         return null;
@@ -404,7 +414,8 @@ final class FacturaProveedorConceptosHeuristicaSupport
             ['regex' => '/(?<!no )gravado\s+(?:u\$s|usd|\$)?\s*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'neto', 'alicuota' => null, 'desc' => 'Gravado'],
             ['regex' => '/operaciones\s+exentas\s*[:\s]*([\d.,]+)/iu', 'tipo' => 'exento', 'alicuota' => 0.0, 'desc' => 'Operaciones exentas'],
             ['regex' => '/rg\s*(?:5329|3337)[^0-9\n]{0,80}?((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => 3.0, 'desc' => 'Percepción IVA'],
-            ['regex' => '/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb)[^%\n]{0,80}?\$?\s*((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iibb', 'alicuota' => null, 'desc' => 'PERCEP II.BB.'],
+            // Alícuota opcional sin % («IIBB 2,00 … 552,50»): no capturar la tasa como importe.
+            ['regex' => '/(?:perc(?:ep(?:ci[oó]n)?)?\.?\s*)?(?:ii\.?\s*bb\.?|iibb)(?:\s+\d+[.,]\d{1,2}\s*%?)?[^0-9\n]{0,40}?((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iibb', 'alicuota' => null, 'desc' => 'PERCEP II.BB.'],
             ['regex' => '/percep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)[^0-9\n]{0,40}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
             ['regex' => '/perc\.?\s*iva[^0-9\n]{0,40}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2})/iu', 'tipo' => 'percepcion_iva', 'alicuota' => null, 'desc' => 'Percepción IVA'],
             ['regex' => '/impuestos?\s+internos[^0-9\n]{0,20}((?:\d{1,3}(?:[.,]\d{3})+|\d+)[.,]\d{2}|\$?\s*\d[\d.,]+)/iu', 'tipo' => 'interno', 'alicuota' => null, 'desc' => 'IMPUESTOS INTERNOS'],

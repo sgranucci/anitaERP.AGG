@@ -168,6 +168,7 @@ Respondé ÚNICAMENTE JSON válido con esta forma:
 }
 
 tipos de linea (conceptos) permitidos: neto, iva, exento, no_gravado, percepcion_iva, percepcion_iibb, percepcion_ganancias, interno, otro_tributo, retencion_iva, retencion_iibb.
+percepcion_iibb: también si el pie solo dice "IIBB 2,00" / "II.BB." con un importe (sin la palabra "percepción"). No confundir con el nro de IIBB del membrete ("ING BRUTOS 901-…").
 Si el pie dice "IVA CONT.", "IVA CONTADO" o "IVA CTDO", el tipo es "iva": descartá CONT/CONTADO/CTDO (es condición de pago, no otro impuesto). "SUBTOTAL" es neto gravado.
 Si solo hay TOTAL final sin desglose neto/IVA (o Imp. Exento = Total), una sola línea tipo "exento" con importe = total (subtotal = total). No inventes IVA.
 En articulos: si no hay código interno, usá el código del proveedor en sku y codigo_proveedor. Si no hay detalle de ítems, devolvé articulos: [].
