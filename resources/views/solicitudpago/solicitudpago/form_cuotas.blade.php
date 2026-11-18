@@ -30,17 +30,12 @@
 </div>
 @endif
 <div id="bloque-cuotas" style="{{ $mostrarCuotas ? '' : 'display:none' }}">
-    <p class="text-muted mb-2">Cuotas del plan / recurrente. Pod&eacute;s cargar manualmente o importar Excel (columnas: nro, vencimiento, monto — acepta alias).</p>
-    @if (isset($data))
-        {{-- Fuera del form-general: un <form> anidado rompe el HTML y el required del archivo bloqueaba el grabar --}}
-        <div class="form-inline mb-3" id="sp-importar-cuotas-wrap">
-            <input type="file" id="archivo_cuotas_import" class="form-control-file mr-2" accept=".xlsx,.xls,.csv">
-            <button type="button" id="btn-importar-cuotas-sp" class="btn btn-outline-secondary btn-sm"
-                    data-url="{{ route('importar_cuotas_solicitudpago', $data->id) }}">
-                <i class="fa fa-upload"></i> Importar Excel
-            </button>
-        </div>
-    @endif
+    <p class="text-muted mb-2">Cuotas del plan / recurrente. Pod&eacute;s cargar manualmente o importar Excel/CSV (columnas: nro, vencimiento, monto — con vista previa y mapeo).</p>
+    <div class="form-inline mb-3" id="sp-importar-cuotas-wrap">
+        <button type="button" id="btn-abrir-importar-cuotas-sp" class="btn btn-outline-secondary btn-sm">
+            <i class="fa fa-upload"></i> Importar Excel / CSV
+        </button>
+    </div>
     <div class="table-responsive">
         <table class="table table-sm table-bordered" id="solicitudpago-cuota-table">
             <thead class="thead-light">

@@ -21,6 +21,7 @@ use App\Services\Solicitudpago\SolicitudpagoArchivosFusionService;
 use App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService;
 use App\Services\Solicitudpago\SolicitudpagoCargaMasivaCsvService;
 use App\Services\Solicitudpago\SolicitudpagoComprobantePdfService;
+use App\Services\Solicitudpago\SolicitudpagoCuotasImportService;
 use App\Services\Solicitudpago\SolicitudpagoPaqueteMailPdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
@@ -35,6 +36,8 @@ use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
+use App\Support\Solicitudpago\SolicitudpagoCuotasImportColumnasSupport;
+use App\Support\Solicitudpago\SolicitudpagoCuotasImportPreferenciasUsuario;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoListadoColumnas;
 use App\Support\Solicitudpago\SolicitudpagoListadoFiltros;
@@ -61,6 +64,7 @@ class SolicitudpagoController extends Controller
         private SolicitudpagoComprobantePdfService $comprobantePdfService,
         private SolicitudpagoPaqueteMailPdfService $paqueteMailPdfService,
         private SolicitudpagoCargaMasivaCsvService $cargaMasivaCsvService,
+        private SolicitudpagoCuotasImportService $cuotasImportService,
         private IngresoEgresoAnularRevertirService $ingresoEgresoAnularRevertirService,
     ) {
     }
@@ -1043,16 +1047,73 @@ class SolicitudpagoController extends Controller
         return response($resultado['contenido'], 200, $headers);
     }
 
+    public function plantillaImportarCuotas()
+    {
+        if (! can('crear-solicitud-pago', false) && ! can('actualizar-solicitud-pago', false)) {
+            abort(403);
+        }
+
+        $csv = "\xEF\xBB\xBF".implode(';', [
+            'nro_cuota',
+            'fecha_vencimiento',
+            'monto',
+        ])."\r\n";
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="plantilla_cuotas_solicitudpago.csv"',
+        ]);
+    }
+
+    /**
+     * Preview de carga masiva de cuotas: parsea Excel/CSV con mapeo/separador
+     * y devuelve filas JSON para llenar la grilla (alta o edición).
+     * No persiste hasta Guardar la SP.
+     */
+    public function previewImportarCuotas(Request $request)
+    {
+        if (! can('crear-solicitud-pago', false) && ! can('actualizar-solicitud-pago', false)) {
+            return response()->json(['ok' => false, 'message' => 'Sin permiso'], 403);
+        }
+
+        $request->validate([
+            'archivo' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+            'modo_columnas' => 'nullable|in:titulo,numero',
+            'csv_separador' => 'nullable|string|max:5',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
+            'mapping' => 'nullable|array',
+        ]);
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '120');
+
+        SolicitudpagoCuotasImportPreferenciasUsuario::persistirDesdeRequest($request);
+
+        return response()->json($this->cuotasImportService->preview(
+            $request->file('archivo'),
+            is_array($request->input('mapping')) ? $request->input('mapping') : [],
+            $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null,
+            $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+            $request->input('modo_columnas'),
+            $request->input('csv_separador')
+        ));
+    }
+
+    /**
+     * Legacy: importa y graba al instante (sigue disponible).
+     * Preferir el modal con vista previa + aplicar a la grilla.
+     */
     public function importarCuotas(Request $request, $id)
     {
         can('actualizar-solicitud-pago');
         $this->asegurarAccesoSolicitud((int) $id);
         $request->validate([
-            'archivo_cuotas' => 'required|file|mimes:xlsx,xls,csv|max:10240',
+            'archivo_cuotas' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
         ]);
 
         try {
-            $filas = \App\Support\Solicitudpago\SolicitudpagoCuotasImportColumnasSupport::leerFilas(
+            $filas = SolicitudpagoCuotasImportColumnasSupport::leerFilas(
                 $request->file('archivo_cuotas')
             );
             if ($filas === []) {
@@ -1207,6 +1268,8 @@ class SolicitudpagoController extends Controller
             'retencionganancia_query' => Retencionganancia::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
             'retencioniva_query' => Retencioniva::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
             'retencionsuss_query' => Retencionsuss::query()->orderBy('codigo')->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
+            'prefsImportCuotas' => SolicitudpagoCuotasImportPreferenciasUsuario::leer(),
+            'prefsMappingCuotas' => SolicitudpagoCuotasImportPreferenciasUsuario::mapping(),
         ];
     }
 

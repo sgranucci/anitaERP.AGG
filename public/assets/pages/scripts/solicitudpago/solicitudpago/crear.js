@@ -14,7 +14,7 @@ $(function () {
 
     $('#agrega_renglon_sp_cuota').on('click', agregaRenglonCuota);
     $(document).on('click', '.eliminar_sp_cuota', borraRenglonCuota);
-    $('#btn-importar-cuotas-sp').on('click', importarCuotasSolicitudpagoExcel);
+    // Import Excel/CSV de cuotas: modal en importar_cuotas.js
 
     $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
     $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
@@ -391,30 +391,6 @@ function renumerarCuotas() {
     $('#tbody-solicitudpago-cuota-table .nro-cuota').each(function () {
         $(this).val(n++);
     });
-}
-
-function importarCuotasSolicitudpagoExcel(event) {
-    if (event && event.preventDefault) {
-        event.preventDefault();
-    }
-    var $btn = $('#btn-importar-cuotas-sp');
-    var url = $btn.data('url');
-    var fileInput = document.getElementById('archivo_cuotas_import');
-    if (!url || !fileInput || !fileInput.files || !fileInput.files.length) {
-        alert('Seleccione un archivo Excel de cuotas.');
-        return;
-    }
-    var $form = $('<form>', { method: 'POST', action: url, enctype: 'multipart/form-data' });
-    $form.append($('<input>', { type: 'hidden', name: '_token', value: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').first().val() }));
-    // Mover el file al form temporal (clone no copia FileList)
-    var $file = $(fileInput);
-    var $clone = $file.clone();
-    $file.attr('name', 'archivo_cuotas');
-    $form.append($file);
-    $('body').append($form);
-    $form.trigger('submit');
-    // Restaurar input en pantalla
-    $('#sp-importar-cuotas-wrap').prepend($clone.attr('id', 'archivo_cuotas_import').removeAttr('name'));
 }
 
 function agregaRenglonArchivo(event) {

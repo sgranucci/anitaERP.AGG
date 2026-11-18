@@ -5796,6 +5796,8 @@ Route::post('solicitudpago/solicitudpago', 'Solicitudpago\SolicitudpagoControlle
 Route::post('solicitudpago/solicitudpago/carga-masiva/preview', 'Solicitudpago\SolicitudpagoController@previewCargaMasiva')->name('preview_carga_masiva_solicitudpago');
 Route::post('solicitudpago/solicitudpago/carga-masiva/confirmar', 'Solicitudpago\SolicitudpagoController@confirmarCargaMasiva')->name('confirmar_carga_masiva_solicitudpago');
 Route::post('solicitudpago/solicitudpago/calcular-retenciones', 'Solicitudpago\SolicitudpagoController@calcularRetenciones')->name('calcular_retenciones_solicitudpago');
+Route::get('solicitudpago/solicitudpago/importar-cuotas/plantilla', 'Solicitudpago\SolicitudpagoController@plantillaImportarCuotas')->name('plantilla_importar_cuotas_solicitudpago');
+Route::post('solicitudpago/solicitudpago/importar-cuotas/preview', 'Solicitudpago\SolicitudpagoController@previewImportarCuotas')->name('preview_importar_cuotas_solicitudpago');
 Route::get('solicitudpago/solicitudpago/codigos-retencion-proveedor', 'Solicitudpago\SolicitudpagoController@codigosRetencionProveedor')->name('codigos_retencion_proveedor_solicitudpago');
 Route::get('solicitudpago/solicitudpago/visualizar/{id}/{hash}', 'Solicitudpago\SolicitudpagoController@visualizar')->name('visualizar_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/descargar-paquete/{hash}', 'Solicitudpago\SolicitudpagoController@descargarPaqueteMail')->name('descargar_paquete_mail_solicitudpago');

@@ -215,12 +215,13 @@ return [
             'titulo' => '9. Plan de cuotas (madre)',
             'captura_id' => 'sp_cuotas',
             'parrafos' => [
-                'En la solapa Cuotas de una madre puede agregar filas (nº, vencimiento, monto) o importar un Excel (columnas flexibles: nro, vencimiento, monto y alias).',
+                'En la solapa Cuotas de una madre puede agregar filas (nº, vencimiento, monto) o importar Excel/CSV con vista previa (mismo esquema que novedades de sueldos: modo por título o por número de columna, separador CSV, mapeo y preferencias por usuario).',
+                'Disponible también en el alta (no hace falta grabar la SP antes). Al confirmar se cargan las filas verdes en la grilla; después guarde la solicitud.',
                 'Cada cuota puede quedar vinculada a una SP hija cuando el proceso de generación la crea. Mientras esté Pendiente, aún no existe hija.',
                 'Conserve la coherencia: la suma de cuotas debería explicar el monto del plan según la política de su empresa.',
             ],
             'items' => [
-                'Importar Excel: elija archivo y pulse Importar; revise la grilla antes de guardar la SP.',
+                'Importar Excel/CSV: abra el modal, analice el archivo, corrija el mapeo si hace falta y pulse Aplicar a la grilla.',
                 'Agregar cuota: agrega una fila vacía al final.',
                 'Eliminar fila: quita esa cuota del plan (al guardar).',
             ],
