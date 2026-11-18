@@ -93,6 +93,11 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             $filas[] = $fila;
         }
 
+        $filas = ConciliacionBancariaChequeErpEnrichSupport::enriquecerFilasReporte(
+            $filas,
+            (int) ($resultado['empresa_id'] ?? 0),
+            self::cuentacajaIdDesdeResultado($resultado),
+        );
         $filas = self::enriquecerLinks($filas, $resultado);
 
         usort($filas, static function (array $a, array $b): int {
@@ -283,6 +288,22 @@ final class ConciliacionBancariaSinConciliarReporteSupport
     }
 
     /**
+     * @param  array<string, mixed>  $resultado
+     */
+    private static function cuentacajaIdDesdeResultado(array $resultado): int
+    {
+        $cc = $resultado['cuentacaja'] ?? null;
+        if (is_object($cc)) {
+            return (int) ($cc->id ?? 0);
+        }
+        if (is_array($cc)) {
+            return (int) ($cc['id'] ?? 0);
+        }
+
+        return (int) ($resultado['cuentacaja_id'] ?? 0);
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $filas
      * @param  array<string, mixed>  $resultado
      * @return list<array<string, mixed>>
@@ -290,13 +311,7 @@ final class ConciliacionBancariaSinConciliarReporteSupport
     private static function enriquecerLinks(array $filas, array $resultado): array
     {
         $empresaId = (int) ($resultado['empresa_id'] ?? 0);
-        $cuentacajaId = 0;
-        $cc = $resultado['cuentacaja'] ?? null;
-        if (is_object($cc)) {
-            $cuentacajaId = (int) ($cc->id ?? 0);
-        } elseif (is_array($cc)) {
-            $cuentacajaId = (int) ($cc['id'] ?? 0);
-        }
+        $cuentacajaId = self::cuentacajaIdDesdeResultado($resultado);
 
         $nrosCheque = [];
         $nrosOp = [];

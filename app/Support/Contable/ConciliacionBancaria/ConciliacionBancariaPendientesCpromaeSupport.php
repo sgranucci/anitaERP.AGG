@@ -133,10 +133,22 @@ final class ConciliacionBancariaPendientesCpromaeSupport
                     ? $base['entregado_a']
                     : (string) $seed['detalle'];
             }
+            if (trim((string) ($base['nro_op'] ?? '')) === '' && ! empty($seed['nro_op'])) {
+                $base['nro_op'] = (string) $seed['nro_op'];
+            }
+            if (trim((string) ($base['proveedor_codigo'] ?? '')) === '' && ! empty($seed['proveedor_codigo'])) {
+                $base['proveedor_codigo'] = (string) $seed['proveedor_codigo'];
+            }
             $byNumero[$nro] = $base;
         }
 
         $pendientes = array_values($byNumero);
+        $ccId = $this->resolverCuentacajaId($codigoCuentacaja, $empresaId);
+        $pendientes = ConciliacionBancariaChequeErpEnrichSupport::enriquecerPendientes(
+            $pendientes,
+            $empresaId,
+            $ccId,
+        );
         usort($pendientes, static function (array $a, array $b): int {
             return [$a['fecha_emision'] ?? '', $a['numero_cheque']]
                 <=> [$b['fecha_emision'] ?? '', $b['numero_cheque']];
@@ -215,19 +227,8 @@ final class ConciliacionBancariaPendientesCpromaeSupport
             return [];
         }
 
-        $codigoNorm = ltrim($codigoCuentacaja, '0');
-        if ($codigoNorm === '') {
-            $codigoNorm = '0';
-        }
-        $ccId = Cuentacaja::query()
-            ->where('empresa_id', $empresaId)
-            ->where(function ($q) use ($codigoCuentacaja, $codigoNorm) {
-                $q->where('codigo', $codigoCuentacaja)
-                    ->orWhere('codigo', $codigoNorm)
-                    ->orWhere('codigo', str_pad($codigoNorm, 8, '0', STR_PAD_LEFT));
-            })
-            ->value('id');
-        if ($ccId === null) {
+        $ccId = $this->resolverCuentacajaId($codigoCuentacaja, $empresaId);
+        if ($ccId <= 0) {
             return [];
         }
 
@@ -341,5 +342,23 @@ final class ConciliacionBancariaPendientesCpromaeSupport
         } catch (\Throwable) {
             return 0;
         }
+    }
+
+    private function resolverCuentacajaId(string $codigoCuentacaja, int $empresaId): int
+    {
+        $codigoNorm = ltrim($codigoCuentacaja, '0');
+        if ($codigoNorm === '') {
+            $codigoNorm = '0';
+        }
+        $id = Cuentacaja::query()
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) use ($codigoCuentacaja, $codigoNorm) {
+                $q->where('codigo', $codigoCuentacaja)
+                    ->orWhere('codigo', $codigoNorm)
+                    ->orWhere('codigo', str_pad($codigoNorm, 8, '0', STR_PAD_LEFT));
+            })
+            ->value('id');
+
+        return (int) ($id ?? 0);
     }
 }

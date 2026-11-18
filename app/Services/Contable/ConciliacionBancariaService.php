@@ -2121,11 +2121,23 @@ class ConciliacionBancariaService
             if ($semilla !== [] && $periodoSnap > 0 && $periodoSnap < $periodoCorte) {
                 $desde = Carbon::create((int) $snap['anio'], (int) $snap['mes'], 1)->endOfMonth();
                 foreach ($this->chequesEmitidosErp($empresaId, $cuentacajaId, $desde, $fechaCorte) as $nro => $seed) {
-                    if (isset($semilla[$nro])) {
+                    if (! isset($semilla[$nro])) {
+                        $semilla[$nro] = $seed;
+                        $altas++;
                         continue;
                     }
-                    $semilla[$nro] = $seed;
-                    $altas++;
+                    // Completar huecos de semilla previa (p. ej. Excel sin proveedor).
+                    foreach (['detalle', 'nro_op', 'proveedor_codigo', 'fecha_emision', 'fecha_cheque'] as $campo) {
+                        $actual = trim((string) ($semilla[$nro][$campo] ?? ''));
+                        $nuevo = trim((string) ($seed[$campo] ?? ''));
+                        if ($actual === '' && $nuevo !== '') {
+                            $semilla[$nro][$campo] = $seed[$campo];
+                        }
+                    }
+                    if (abs((float) ($semilla[$nro]['importe'] ?? 0)) < 0.005
+                        && abs((float) ($seed['importe'] ?? 0)) > 0.005) {
+                        $semilla[$nro]['importe'] = $seed['importe'];
+                    }
                 }
             }
         }
@@ -2237,12 +2249,25 @@ class ConciliacionBancariaService
             if ($n === '' || $n === '0') {
                 continue;
             }
-            $out[$n] = [
+            $seed = [
                 'tip' => (string) ($row->tip ?: 'CHP'),
                 'importe' => abs((float) $row->importe),
                 'fecha_emision' => optional($row->fecha_emision)?->toDateString(),
                 'fecha_cheque' => optional($row->fecha_cheque)?->toDateString(),
             ];
+            $detalle = trim((string) ($row->entregado_a ?? ''));
+            if ($detalle !== '') {
+                $seed['detalle'] = $detalle;
+            }
+            $nroOp = trim((string) ($row->nro_op ?? ''));
+            if ($nroOp !== '') {
+                $seed['nro_op'] = $nroOp;
+            }
+            $prov = trim((string) ($row->proveedor_codigo ?? ''));
+            if ($prov !== '') {
+                $seed['proveedor_codigo'] = $prov;
+            }
+            $out[$n] = $seed;
         }
 
         return [
@@ -2260,6 +2285,7 @@ class ConciliacionBancariaService
     private function chequesEmitidosErp(int $empresaId, int $cuentacajaId, Carbon $desde, Carbon $hasta): array
     {
         $rows = Cheque::query()
+            ->with(['proveedores:id,codigo,nombre', 'pagoproveedores:id,numerotransaccion'])
             ->where('empresa_id', $empresaId)
             ->where('cuentacaja_id', $cuentacajaId)
             ->where('origen', 'E')
@@ -2268,7 +2294,7 @@ class ConciliacionBancariaService
             })
             ->whereDate('fechaemision', '>', $desde->toDateString())
             ->whereDate('fechaemision', '<=', $hasta->toDateString())
-            ->get(['numerocheque', 'monto', 'fechaemision', 'fechapago', 'anombrede']);
+            ->get(['id', 'numerocheque', 'monto', 'fechaemision', 'fechapago', 'anombrede', 'proveedor_id', 'pagoproveedor_id']);
 
         $out = [];
         foreach ($rows as $row) {
@@ -2278,12 +2304,20 @@ class ConciliacionBancariaService
             }
             $emision = $row->fechaemision;
             $pago = $row->fechapago;
+            $nombreProv = trim((string) ($row->proveedores->nombre ?? ''));
+            $anombre = trim((string) ($row->anombrede ?? ''));
+            $nroOp = '';
+            if ($row->pagoproveedores) {
+                $nroOp = ltrim((string) preg_replace('/\D/', '', (string) $row->pagoproveedores->numerotransaccion), '0');
+            }
             $out[$n] = [
                 'tip' => 'CHP',
                 'importe' => abs((float) $row->monto),
                 'fecha_emision' => $emision instanceof \DateTimeInterface ? $emision->format('Y-m-d') : ($emision ? substr((string) $emision, 0, 10) : null),
                 'fecha_cheque' => $pago instanceof \DateTimeInterface ? $pago->format('Y-m-d') : ($pago ? substr((string) $pago, 0, 10) : null),
-                'detalle' => (string) ($row->anombrede ?? ''),
+                'detalle' => $nombreProv !== '' ? $nombreProv : $anombre,
+                'proveedor_codigo' => ltrim((string) ($row->proveedores->codigo ?? ''), '0'),
+                'nro_op' => $nroOp,
             ];
         }
 
