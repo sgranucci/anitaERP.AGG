@@ -124,6 +124,10 @@ final class IngresoEgresoAnitaTesmovSupport
             return;
         }
 
+        // Idempotente: borra pago/auxpag/tesmov (y CHP/TED/TEH) antes de insertar.
+        // Sin esto, un alta que escribió Anita y luego hizo rollback del ERP deja
+        // huérfanos; el reintento con el mismo nro duplica tesmov (Caja ≠ tesmov ×2).
+        self::eliminarDesdeMovimiento($movimiento);
         self::grabarInterno($movimiento, 1.0, null, null, null);
     }
 
@@ -279,6 +283,22 @@ final class IngresoEgresoAnitaTesmovSupport
         $refAnulacion = null;
         if (isset(self::TIPOS_ANULACION[$tipoOrig]) && $nroOrig > 0) {
             $refAnulacion = ['tipo' => self::TIPOS_ANULACION[$tipoOrig], 'nro' => $nroOrig];
+        }
+
+        // Misma idempotencia que el alta: un reintento no debe duplicar AOP.
+        if ($refAnulacion !== null) {
+            $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita(
+                (int) ($movimientoAnulacion->empresa_id ?: $movimientoOriginal->empresa_id)
+            );
+            if ($empresaAnita <= 0) {
+                $empresaAnita = (int) ($movimientoAnulacion->empresa_id ?: $movimientoOriginal->empresa_id);
+            }
+            self::eliminarTesoreriaPorClave(
+                (string) $refAnulacion['tipo'],
+                (int) $refAnulacion['nro'],
+                $empresaAnita,
+                'caja IE replace AOP antes de anular '.$movimientoAnulacion->id
+            );
         }
 
         self::grabarInterno($movimientoAnulacion, -1.0, $leyenda, $movimientoOriginal, $refAnulacion);

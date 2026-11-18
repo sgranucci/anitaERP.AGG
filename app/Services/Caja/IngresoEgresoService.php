@@ -204,7 +204,18 @@ class IngresoEgresoService
 				} catch (\Exception $e) {
 					DB::rollback();
 
-					// Borra el asiento creado
+					// Anita ya se escribió dentro de agrega(): el rollback ERP no la revierte.
+					if (isset($caja_movimiento) && is_object($caja_movimiento)) {
+						try {
+							IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($caja_movimiento);
+						} catch (\Throwable $anitaEx) {
+							Log::warning('caja.ie.anita.rollback_delete_fail', [
+								'caja_movimiento_id' => (int) ($caja_movimiento->id ?? 0),
+								'numerotransaccion' => (string) ($caja_movimiento->numerotransaccion ?? ''),
+								'error' => $anitaEx->getMessage(),
+							]);
+						}
+					}
 
 					IngresoEgresoGrabacionTimingSupport::finalizar([
 						'ok' => false,
