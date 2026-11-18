@@ -35,7 +35,9 @@ use App\Support\Caja\IngresoEgresoImputacionDiariaSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaExcelSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
+use App\Support\Caja\IngresoEgresoOperacionVariaSupport;
 use App\Support\Caja\IngresoEgresoListadoColumnas;
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Caja\IngresoEgresoListadoEnvioSupport;
 use App\Support\Caja\IngresoEgresoPagoProveedorSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
@@ -888,23 +890,48 @@ class IngresoEgresoController extends Controller
         $monedaAsientoIds = $request->input('monedaasiento_ids', []);
         $cotizacionesAsiento = $request->input('cotizacionasientos', []);
 
+        $debes = is_array($debesAsiento) ? $debesAsiento : [];
+        $haberes = is_array($haberesAsiento) ? $haberesAsiento : [];
+        $monedasAsiento = is_array($monedaAsientoIds) ? $monedaAsientoIds : [];
+        $cotizAsiento = is_array($cotizacionesAsiento) ? $cotizacionesAsiento : [];
+        $contextoOpv = [
+            'tipotransaccion_caja_id' => (int) $request->input('tipotransaccion_caja_id', 0),
+            'tipo_abreviatura' => (string) $request->input('tipo_abreviatura', ''),
+            'tipo_operacion' => (string) $request->input('tipo_operacion', ''),
+        ];
+        if (IngresoEgresoOperacionVariaSupport::esOpvDesdeData($contextoOpv)) {
+            $totalesAsiento = AsientoBalanceSupport::totalesEnMonedaPrimeraLinea(
+                $debes,
+                $haberes,
+                $monedasAsiento,
+                $cotizAsiento,
+            );
+            $totalPagoRespuesta = max(
+                round((float) ($totalesAsiento['total_debe'] ?? 0), 2),
+                round((float) ($totalesAsiento['total_haber'] ?? 0), 2),
+            );
+        } else {
+            $totalPagoRespuesta = IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaRef);
+        }
+
         try {
             $this->comprobanteIvaService->validarTotalesContraCaja(
                 $comprobantes,
                 $lineasCaja,
                 $monedaRef,
                 $conceptoGastoId,
-                is_array($debesAsiento) ? $debesAsiento : [],
-                is_array($haberesAsiento) ? $haberesAsiento : [],
-                is_array($monedaAsientoIds) ? $monedaAsientoIds : [],
-                is_array($cotizacionesAsiento) ? $cotizacionesAsiento : [],
+                $debes,
+                $haberes,
+                $monedasAsiento,
+                $cotizAsiento,
+                $contextoOpv,
             );
 
             return response()->json([
                 'mensaje' => 'ok',
                 'valido' => true,
                 'total_comprobantes' => IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantes, $monedaRef),
-                'total_pago' => IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaRef),
+                'total_pago' => $totalPagoRespuesta,
             ]);
         } catch (\Throwable $e) {
             return response()->json([
@@ -912,7 +939,7 @@ class IngresoEgresoController extends Controller
                 'valido' => false,
                 'error' => $e->getMessage(),
                 'total_comprobantes' => IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantes, $monedaRef),
-                'total_pago' => IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaRef),
+                'total_pago' => $totalPagoRespuesta,
             ]);
         }
     }

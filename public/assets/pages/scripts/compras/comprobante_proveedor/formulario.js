@@ -990,7 +990,8 @@ $(function () {
                 var $campo = $(this);
                 $campo.find('.cuentacontable_id').val(String(id));
                 $campo.find('.codigocuentacontable').val(String((datos && datos.codigo) || ''));
-                $campo.find('.nombrecuentacontable').val(String((datos && datos.nombre) || ''));
+                var nombreSync = String((datos && datos.nombre) || '');
+                $campo.find('.nombrecuentacontable').val(nombreSync).attr('title', nombreSync);
                 if (typeof actualizarLinkEditarCuentaContable === 'function') {
                     actualizarLinkEditarCuentaContable($campo, id);
                 }
@@ -1042,7 +1043,8 @@ $(function () {
         }
         $campo.find('.cuentacontable_id').val(String(id));
         $campo.find('.codigocuentacontable').val(String((datos && datos.codigo) || ''));
-        $campo.find('.nombrecuentacontable').val(String((datos && datos.nombre) || ''));
+        var nombreEditor = String((datos && datos.nombre) || '');
+        $campo.find('.nombrecuentacontable').val(nombreEditor).attr('title', nombreEditor);
         if (typeof actualizarLinkEditarCuentaContable === 'function') {
             actualizarLinkEditarCuentaContable($campo, id);
         }
@@ -1441,7 +1443,8 @@ $(function () {
             var $campo = $(this);
             $campo.find('.cuentacontable_id').val(id > 0 ? String(id) : '');
             $campo.find('.codigocuentacontable').val(id > 0 ? String((datos && datos.codigo) || '') : '');
-            $campo.find('.nombrecuentacontable').val(id > 0 ? String((datos && datos.nombre) || '') : '');
+            var nombreGasto = id > 0 ? String((datos && datos.nombre) || '') : '';
+            $campo.find('.nombrecuentacontable').val(nombreGasto).attr('title', nombreGasto);
             if (typeof actualizarLinkEditarCuentaContable === 'function') {
                 actualizarLinkEditarCuentaContable($campo, id);
             }

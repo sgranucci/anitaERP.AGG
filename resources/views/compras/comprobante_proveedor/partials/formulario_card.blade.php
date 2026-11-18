@@ -48,6 +48,21 @@
     }
     $syncAnita = (string) (isset($data) ? ($data->anita_sync_estado ?? '') : '');
 @endphp
+{{-- Preview asiento: columna Cuenta ancha para leer el nombre completo (pedido Eli). --}}
+<style>
+    .cp-asiento-preview-target #tabla-asiento-comprobante-proveedor th.cp-asiento-col-cuenta,
+    .cp-asiento-preview-target #tabla-asiento-comprobante-proveedor td.cp-asiento-col-cuenta {
+        min-width: 22rem;
+        width: 38%;
+    }
+    .cp-asiento-preview-target .cp-asiento-cuenta-editable {
+        min-width: 20rem;
+    }
+    .cp-asiento-preview-target .cp-asiento-cuenta-editable .nombrecuentacontable {
+        min-width: 14rem;
+        flex: 1 1 auto;
+    }
+</style>
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')

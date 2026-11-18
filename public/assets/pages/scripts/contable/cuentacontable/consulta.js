@@ -167,7 +167,7 @@ function aplicarCuentaContableEnContexto($ctx, data) {
             $codigoCtx = $ctx.find('.codigoasiento').first();
         }
         $codigoCtx.val(data.codigo);
-        $ctx.find('.nombrecuentacontable').first().val(data.nombre);
+        $ctx.find('.nombrecuentacontable').first().val(data.nombre).attr('title', data.nombre || '');
         $ctx.find('.cuentacontable_id_previa').val(data.id);
         $ctx.find('.codigo_previo').val(data.codigo);
         $ctx.find('.codigo_previo_cuentacontable').val(data.codigo);
@@ -187,7 +187,7 @@ function limpiarCuentaContableEnContexto($ctx) {
     if ($ctx && $ctx.length) {
         $ctx.find('.cuentacontable_id').first().val('');
         $ctx.find('.codigocuentacontable').first().val('');
-        $ctx.find('.nombrecuentacontable').first().val('');
+        $ctx.find('.nombrecuentacontable').first().val('').attr('title', '');
         $ctx.find('.cuentacontable_id_previa').val('');
         $ctx.find('.codigo_previo').val('');
         actualizarLinkEditarCuentaContable($ctx, 0);

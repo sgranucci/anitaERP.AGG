@@ -1143,6 +1143,11 @@ class IngresoEgresoService
 			$this->listaRequest($request, 'haberasientos'),
 			$this->listaRequest($request, 'monedaasiento_ids'),
 			$this->listaRequest($request, 'cotizacionasientos'),
+			[
+				'tipotransaccion_caja_id' => (int) $request->input('tipotransaccion_caja_id', 0),
+				'tipo_abreviatura' => (string) $request->input('tipo_abreviatura', ''),
+				'tipo_operacion' => (string) $request->input('tipo_operacion', ''),
+			],
 		);
 	}
 

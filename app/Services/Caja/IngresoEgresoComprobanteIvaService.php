@@ -22,6 +22,8 @@ use App\Support\Caja\IngresoEgresoComprobanteIvaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
+use App\Support\Caja\IngresoEgresoOperacionVariaSupport;
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
@@ -79,6 +81,9 @@ class IngresoEgresoComprobanteIvaService
      * @param  list<mixed>  $monedaAsientoIds
      * @param  list<mixed>  $cotizacionesAsiento
      */
+    /**
+     * @param  array<string, mixed>  $contextoOpv  hints tipo_abreviatura / tipo_operacion / tipotransaccion_caja_id
+     */
     public function validarTotalesContraCaja(
         array $comprobantesJson,
         array $lineasCaja,
@@ -88,6 +93,7 @@ class IngresoEgresoComprobanteIvaService
         array $haberesAsiento = [],
         array $monedaAsientoIds = [],
         array $cotizacionesAsiento = [],
+        array $contextoOpv = [],
     ): void {
         if (IngresoEgresoLiquidacionTarjetaSupport::hay($comprobantesJson)) {
             IngresoEgresoConfiguracionSupport::assertPuedeGrabarCobranzaTarjeta($comprobantesJson);
@@ -100,13 +106,32 @@ class IngresoEgresoComprobanteIvaService
             return;
         }
 
+        $esOpv = IngresoEgresoOperacionVariaSupport::esOpvDesdeData($contextoOpv);
+        $totalReferenciaOverride = null;
+        if ($esOpv) {
+            // OPV no mueve caja: el cuadre IVA es contra el asiento contable.
+            $totalesAsiento = AsientoBalanceSupport::totalesEnMonedaPrimeraLinea(
+                $debesAsiento,
+                $haberesAsiento,
+                $monedaAsientoIds,
+                $cotizacionesAsiento,
+            );
+            $totalReferenciaOverride = max(
+                round((float) ($totalesAsiento['total_debe'] ?? 0), 2),
+                round((float) ($totalesAsiento['total_haber'] ?? 0), 2),
+            );
+        }
+
         IngresoEgresoComprobanteIvaValidacionSupport::validarTotales(
             $comprobantesJson,
             $lineasCaja,
             $monedaReferenciaId,
+            $totalReferenciaOverride,
         );
 
-        $totalPago = IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId);
+        $totalPago = $totalReferenciaOverride !== null
+            ? $totalReferenciaOverride
+            : IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId);
 
         IngresoEgresoComprobanteIvaValidacionSupport::validarDiferenciaConConceptoGasto(
             IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantesJson, $monedaReferenciaId),

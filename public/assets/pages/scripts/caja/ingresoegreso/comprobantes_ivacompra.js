@@ -2869,6 +2869,14 @@
                 cotizacionAsientos.push($(this).find('.cotizacionasiento').val() || '');
             });
 
+            var $optTipo = $('#tipotransaccion_caja_id option:selected');
+            var tipoAbrev = String($optTipo.data('abreviatura') || $optTipo.attr('data-abreviatura') || '').toUpperCase();
+            var tipoOp = String($optTipo.data('operacion') || $optTipo.attr('data-operacion') || '').toUpperCase();
+            if (typeof window.esOperacionVariaIngresoEgreso === 'function' && window.esOperacionVariaIngresoEgreso()) {
+                tipoAbrev = tipoAbrev || 'OPV';
+                tipoOp = tipoOp || 'V';
+            }
+
             $.post(url, {
                 _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(),
                 comprobantes_ivacompra_json: JSON.stringify(comprobantesIva),
@@ -2880,6 +2888,9 @@
                 haberasientos: haberAsientos,
                 monedaasiento_ids: monedaAsientoIds,
                 cotizacionasientos: cotizacionAsientos,
+                tipotransaccion_caja_id: $('#tipotransaccion_caja_id').val() || '',
+                tipo_abreviatura: tipoAbrev,
+                tipo_operacion: tipoOp,
             }).done(function (data) {
                 if (data.mensaje !== 'ok' || !data.valido) {
                     alert(data.error || 'La suma de comprobantes IVA no coincide con el total del pago.');

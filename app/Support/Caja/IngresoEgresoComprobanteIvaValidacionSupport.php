@@ -21,28 +21,40 @@ final class IngresoEgresoComprobanteIvaValidacionSupport
     /**
      * @param  list<array<string, mixed>>  $comprobantes
      * @param  list<object|array<string, mixed>>  $lineasCaja  objetos con cuentacaja_ids/montos/moneda_ids/cotizaciones
+     * @param  float|null  $totalReferenciaOverride  OPV: total del asiento (no hay pago de caja)
      */
-    public static function validarTotales(array $comprobantes, array $lineasCaja, int $monedaReferenciaId = 1): void
-    {
+    public static function validarTotales(
+        array $comprobantes,
+        array $lineasCaja,
+        int $monedaReferenciaId = 1,
+        ?float $totalReferenciaOverride = null,
+    ): void {
         if ($comprobantes === []) {
             return;
         }
 
         $totalComprobantes = self::totalComprobantes($comprobantes, $monedaReferenciaId);
-        $totalPago = self::totalPagoCaja($lineasCaja, $monedaReferenciaId);
+        $totalPago = $totalReferenciaOverride !== null
+            ? round($totalReferenciaOverride, 2)
+            : self::totalPagoCaja($lineasCaja, $monedaReferenciaId);
 
         if ($totalComprobantes <= 0) {
             throw new \RuntimeException('Los comprobantes IVA deben tener total mayor a cero.');
         }
 
         if ($totalPago <= 0) {
-            throw new \RuntimeException('El movimiento de caja debe tener montos para cuadrar con los comprobantes IVA.');
+            throw new \RuntimeException(
+                $totalReferenciaOverride !== null
+                    ? 'La operación varia (OPV) debe tener asiento contable con importe para cuadrar con los comprobantes IVA.'
+                    : 'El movimiento de caja debe tener montos para cuadrar con los comprobantes IVA.'
+            );
         }
 
         if ($totalComprobantes - $totalPago > self::TOLERANCIA) {
+            $etiqueta = $totalReferenciaOverride !== null ? 'asiento' : 'pago';
             throw new \RuntimeException(
                 'La suma de comprobantes IVA ('.self::formato($totalComprobantes)
-                .') supera el total del pago ('.self::formato($totalPago).').'
+                .') supera el total del '.$etiqueta.' ('.self::formato($totalPago).').'
             );
         }
     }

@@ -126,11 +126,11 @@
     <table class="table table-bordered table-sm" id="tabla-asiento-comprobante-proveedor">
         <thead style="background-color:#85C1E9;color:#17202A;">
             <tr>
-                <th>Cuenta</th>
-                <th>Centro costo</th>
-                <th class="text-right">Debe</th>
-                <th class="text-right">Haber</th>
-                <th>Observación</th>
+                <th class="cp-asiento-col-cuenta">Cuenta</th>
+                <th style="min-width:8rem;">Centro costo</th>
+                <th class="text-right" style="min-width:6.5rem;">Debe</th>
+                <th class="text-right" style="min-width:6.5rem;">Haber</th>
+                <th style="min-width:8rem;">Observación</th>
                 @if(! empty($preview['es_preview']))
                 <th style="width:3.5rem;"></th>
                 @endif
@@ -195,7 +195,7 @@
                 @if($conceptoLineaId > 0) data-concepto-ivacompra-id="{{ $conceptoLineaId }}" @endif
                 @if($cuentaLineaId > 0) data-cuenta-id="{{ $cuentaLineaId }}" @endif
                 @if($esDebeGasto) data-debe-gasto="1" data-debe-gasto-idx="{{ $debeGastoIdx }}" @endif>
-                <td>
+                <td class="cp-asiento-col-cuenta">
                     @if($editableCuenta)
                     <div class="tm-cuentacontable-campo cp-asiento-cuenta-editable d-flex flex-nowrap align-items-center" style="gap:4px;"
                          data-concepto-ivacompra-id="{{ $conceptoLineaId }}"
@@ -204,16 +204,18 @@
                         <button type="button" title="Elegir cuenta del neto" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
                             <i class="fa fa-search text-primary"></i>
                         </button>
-                        <input type="text" class="codigocuentacontable form-control form-control-sm" style="width:5rem;flex-shrink:0;"
+                        <input type="text" class="codigocuentacontable form-control form-control-sm" style="width:5.5rem;flex-shrink:0;"
                                value="{{ $linea['cuenta_codigo'] !== '—' ? ($linea['cuenta_codigo'] ?? '') : '' }}"
                                placeholder="Cód." autocomplete="off">
-                        <input type="text" class="nombrecuentacontable form-control form-control-sm text-truncate" readonly
-                               value="{{ $linea['cuenta_nombre'] ?? '' }}" placeholder="Cuenta del neto" style="min-width:0;flex:1 1 auto;">
+                        <input type="text" class="nombrecuentacontable form-control form-control-sm" readonly
+                               value="{{ $linea['cuenta_nombre'] ?? '' }}"
+                               title="{{ $linea['cuenta_nombre'] ?? '' }}"
+                               placeholder="Cuenta del neto">
                     </div>
                     @else
                     <span class="font-weight-bold">{{ $linea['cuenta_codigo'] ?? '—' }}</span>
                     @if(! empty($linea['cuenta_nombre']))
-                    <span class="d-block small text-muted">{{ $linea['cuenta_nombre'] }}</span>
+                    <span class="d-block small text-muted" title="{{ $linea['cuenta_nombre'] }}">{{ $linea['cuenta_nombre'] }}</span>
                     @endif
                     @endif
                 </td>

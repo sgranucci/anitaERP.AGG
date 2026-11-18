@@ -1763,6 +1763,7 @@ var brutoSpIe = 0;
 		var op = String($opt.data('operacion') || $opt.attr('data-operacion') || '').toUpperCase();
 		return abr === ABREV_OPV_IE || op === 'V';
 	}
+	window.esOperacionVariaIngresoEgreso = esOperacionVariaIngresoEgreso;
 
 	function limpiarCuentasCajaOpvIe()
 	{
