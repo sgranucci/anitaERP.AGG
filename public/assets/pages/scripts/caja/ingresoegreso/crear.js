@@ -80,6 +80,10 @@ var brutoSpIe = 0;
         });
 		$("#botonform3").click(function(e){
 			e.preventDefault();
+			if (esOperacionVariaIngresoEgreso()) {
+				alert('La operación varia (OPV) no admite comprobantes. Armá solo el asiento contable.');
+				return;
+			}
 			ocultarSolapasIe();
 			$(".form3").show();
 			marcarSolapaIeActiva($(this));
@@ -283,6 +287,16 @@ var brutoSpIe = 0;
 
 		function continuarGrabacionTrasValidaciones()
 		{
+			if (esOperacionVariaIngresoEgreso()) {
+				if (typeof window.limpiarComprobantesIvaIngresoEgreso === 'function') {
+					window.limpiarComprobantesIvaIngresoEgreso();
+				} else {
+					$('#comprobantes_ivacompra_json').val('[]');
+				}
+				continuarGrabacionIngresoEgreso(totalDebe, totalHaber, parseTotalAsientoCampo($("#totaldebeasiento").val()));
+				return;
+			}
+
 			if (typeof window.obtenerComprobantesIvaIngresoEgreso === 'function') {
 				$('#comprobantes_ivacompra_json').val(JSON.stringify(window.obtenerComprobantesIvaIngresoEgreso()));
 			}
@@ -1986,11 +2000,21 @@ var brutoSpIe = 0;
 		if (esOperacionVariaIngresoEgreso()) {
 			$('#aviso-opv-ie').show();
 			$('#ie-card-cuentas-caja').hide();
+			$('#botonform3').closest('.nav-item').hide();
 			limpiarCuentasCajaOpvIe();
+			if (typeof window.limpiarComprobantesIvaIngresoEgreso === 'function') {
+				window.limpiarComprobantesIvaIngresoEgreso();
+			} else {
+				$('#comprobantes_ivacompra_json').val('[]');
+			}
+			if ($('.form3').is(':visible')) {
+				$('#botonform5').trigger('click');
+			}
 			flModificaAsiento = false;
 		} else {
 			$('#aviso-opv-ie').hide();
 			$('#ie-card-cuentas-caja').show();
+			$('#botonform3').closest('.nav-item').show();
 		}
 		asegurarRenglonesCuentaPorTipo();
 	}

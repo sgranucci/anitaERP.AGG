@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoCotizacionMonedaSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
+use App\Support\Caja\IngresoEgresoOperacionVariaSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
@@ -82,6 +83,12 @@ class ValidacionIngresoEgreso extends FormRequest
                 IngresoEgresoCanjeChequeSupport::assertTieneReemplazos($this->all());
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('cheque_anulado_ids', $e->getMessage());
+            }
+
+            try {
+                IngresoEgresoOperacionVariaSupport::assertSinComprobantesIva($this->all());
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('comprobantes_ivacompra_json', $e->getMessage());
             }
 
             try {

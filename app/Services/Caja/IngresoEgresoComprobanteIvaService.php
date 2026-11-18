@@ -23,7 +23,6 @@ use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoGastoBancoSupport;
 use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
 use App\Support\Caja\IngresoEgresoOperacionVariaSupport;
-use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
@@ -106,19 +105,9 @@ class IngresoEgresoComprobanteIvaService
             return;
         }
 
-        $esOpv = IngresoEgresoOperacionVariaSupport::esOpvDesdeData($contextoOpv);
-        $totalReferenciaOverride = null;
-        if ($esOpv) {
-            // OPV no mueve caja: el cuadre IVA es contra el asiento contable.
-            $totalesAsiento = AsientoBalanceSupport::totalesEnMonedaPrimeraLinea(
-                $debesAsiento,
-                $haberesAsiento,
-                $monedaAsientoIds,
-                $cotizacionesAsiento,
-            );
-            $totalReferenciaOverride = max(
-                round((float) ($totalesAsiento['total_debe'] ?? 0), 2),
-                round((float) ($totalesAsiento['total_haber'] ?? 0), 2),
+        if (IngresoEgresoOperacionVariaSupport::esOpvDesdeData($contextoOpv)) {
+            throw new \InvalidArgumentException(
+                'La operación varia (OPV) no admite comprobantes. Quitá los comprobantes y dejá solo el asiento contable.'
             );
         }
 
@@ -126,12 +115,10 @@ class IngresoEgresoComprobanteIvaService
             $comprobantesJson,
             $lineasCaja,
             $monedaReferenciaId,
-            $totalReferenciaOverride,
+            null,
         );
 
-        $totalPago = $totalReferenciaOverride !== null
-            ? $totalReferenciaOverride
-            : IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId);
+        $totalPago = IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId);
 
         IngresoEgresoComprobanteIvaValidacionSupport::validarDiferenciaConConceptoGasto(
             IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantesJson, $monedaReferenciaId),

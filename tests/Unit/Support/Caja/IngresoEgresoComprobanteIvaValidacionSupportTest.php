@@ -10,13 +10,13 @@ use RuntimeException;
 
 class IngresoEgresoComprobanteIvaValidacionSupportTest extends TestCase
 {
-    public function test_opv_usa_asiento_como_referencia_sin_montos_caja(): void
+    public function test_override_de_referencia_permite_cuadrar_sin_montos_caja(): void
     {
         $comprobantes = [
             ['total' => 100, 'moneda_id' => 1, 'cotizacion' => 1],
         ];
 
-        // Sin montos de caja: con override de asiento no debe fallar.
+        // Override genérico (p. ej. total de asiento): sin montos de caja no debe fallar.
         IngresoEgresoComprobanteIvaValidacionSupport::validarTotales(
             $comprobantes,
             [],
@@ -40,10 +40,10 @@ class IngresoEgresoComprobanteIvaValidacionSupportTest extends TestCase
         );
     }
 
-    public function test_opv_sin_asiento_mensaje_especifico(): void
+    public function test_override_en_cero_mensaje_especifico(): void
     {
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('La operación varia (OPV) debe tener asiento contable');
+        $this->expectExceptionMessage('debe tener asiento contable');
 
         IngresoEgresoComprobanteIvaValidacionSupport::validarTotales(
             [['total' => 100, 'moneda_id' => 1, 'cotizacion' => 1]],

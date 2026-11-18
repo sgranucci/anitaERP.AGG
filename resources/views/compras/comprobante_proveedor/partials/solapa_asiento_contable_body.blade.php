@@ -117,7 +117,8 @@
 </div>
 @endif
 
-<div class="table-responsive"
+{{-- Clase además del id: el preview vive en 2 paneles y jQuery find('#id') solo ve el primero. --}}
+<div class="table-responsive cp-asiento-tabla-wrap"
      id="cp-asiento-tabla-wrap"
      data-permite-reparto-gasto="{{ $permiteRepartoGasto ? '1' : '0' }}"
      data-neto-imputable-gasto="{{ $netoImputableGasto }}"
@@ -318,14 +319,14 @@
 @if(! empty($preview['es_preview']))
 <div class="mt-2 mb-1 d-flex flex-wrap align-items-center" style="gap:8px;">
     @if($permiteRepartoGasto)
-    <button type="button" class="btn btn-outline-primary btn-sm" id="cp-debe-gasto-agregar">
+    <button type="button" class="btn btn-outline-primary btn-sm cp-debe-gasto-agregar" id="cp-debe-gasto-agregar">
         <i class="fa fa-plus"></i> Agregar cuenta de gasto
     </button>
     <label class="small mb-0 align-middle font-weight-normal" title="Destildado: no reparte el neto entre las cuentas. La suma no puede superarlo.">
         <input type="checkbox" class="cp-debe-gasto-recalcular-prorrateo align-middle mr-1">
         Recalcular prorrateo
     </label>
-    <span class="small text-muted" id="cp-debe-gasto-aviso-suma"></span>
+    <span class="small text-muted cp-debe-gasto-aviso-suma" id="cp-debe-gasto-aviso-suma"></span>
     @endif
     <span class="small text-muted ml-auto">
         <i class="fa fa-pie-chart text-primary"></i>

@@ -43,6 +43,7 @@ use App\Support\Caja\IngresoEgresoEdicionCandadoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
+use App\Support\Caja\IngresoEgresoOperacionVariaSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Solicitudpago\Solicitudpago;
@@ -961,6 +962,18 @@ class IngresoEgresoService
 
 	private function sincronizarComprobantesIva($request, int $cajaMovimientoId, int $empresaId): void
 	{
+		$contextoOpv = [
+			'tipotransaccion_caja_id' => (int) $request->input('tipotransaccion_caja_id', 0),
+			'tipo_abreviatura' => (string) $request->input('tipo_abreviatura', ''),
+			'tipo_operacion' => (string) $request->input('tipo_operacion', ''),
+		];
+		if (IngresoEgresoOperacionVariaSupport::esOpvDesdeData($contextoOpv)) {
+			// OPV no admite comprobantes: limpia cualquier asociación previa.
+			$this->comprobanteIvaService->sincronizarDesdeJson($cajaMovimientoId, $empresaId, []);
+
+			return;
+		}
+
 		$json = $request->input('comprobantes_ivacompra_json');
 		if ($json === null || $json === '') {
 			return;
@@ -1113,6 +1126,14 @@ class IngresoEgresoService
 
 	private function validarComprobantesIvaContraCaja($request): void
 	{
+		$contextoOpv = [
+			'tipotransaccion_caja_id' => (int) $request->input('tipotransaccion_caja_id', 0),
+			'tipo_abreviatura' => (string) $request->input('tipo_abreviatura', ''),
+			'tipo_operacion' => (string) $request->input('tipo_operacion', ''),
+			'comprobantes_ivacompra_json' => $request->input('comprobantes_ivacompra_json'),
+		];
+		IngresoEgresoOperacionVariaSupport::assertSinComprobantesIva($contextoOpv);
+
 		$comprobantes = $this->decodificarComprobantesIvaJson($request->input('comprobantes_ivacompra_json'));
 		if ($comprobantes === []) {
 			return;
@@ -1143,11 +1164,7 @@ class IngresoEgresoService
 			$this->listaRequest($request, 'haberasientos'),
 			$this->listaRequest($request, 'monedaasiento_ids'),
 			$this->listaRequest($request, 'cotizacionasientos'),
-			[
-				'tipotransaccion_caja_id' => (int) $request->input('tipotransaccion_caja_id', 0),
-				'tipo_abreviatura' => (string) $request->input('tipo_abreviatura', ''),
-				'tipo_operacion' => (string) $request->input('tipo_operacion', ''),
-			],
+			$contextoOpv,
 		);
 	}
 

@@ -91,7 +91,8 @@
             </div>
             <div id="aviso-opv-ie" class="alert alert-info py-2" style="display:none;">
                 <strong>Operación varia (OPV):</strong> solo genera el asiento contable.
-                No mueve cuentas de caja ni tesorería Anita. Armá el Debe/Haber en la solapa del asiento.
+                No mueve cuentas de caja ni tesorería Anita, y no admite comprobantes.
+                Armá el Debe/Haber en la solapa del asiento.
             </div>
             @php
                 $proveedorModelIe = $data->proveedores ?? null;

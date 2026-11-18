@@ -2361,10 +2361,18 @@
         init();
 
         $('#ie-btn-nuevo-comprobante-iva').on('click', function () {
+            if (typeof window.esOperacionVariaIngresoEgreso === 'function' && window.esOperacionVariaIngresoEgreso()) {
+                alert('La operación varia (OPV) no admite comprobantes.');
+                return;
+            }
             abrirModal(null);
         });
 
         $('#ie-btn-pdf-ia-comprobante').on('click', function () {
+            if (typeof window.esOperacionVariaIngresoEgreso === 'function' && window.esOperacionVariaIngresoEgreso()) {
+                alert('La operación varia (OPV) no admite comprobantes.');
+                return;
+            }
             ocultarOverlayPdfIa();
             $('#ie-cp-pdf-archivo').val('');
             $('#ie-cp-pdf-error, #ie-cp-pdf-advertencias').addClass('d-none').empty();
@@ -2820,6 +2828,12 @@
             return comprobantesIva;
         };
 
+        window.limpiarComprobantesIvaIngresoEgreso = function () {
+            comprobantesIva = [];
+            renderGrilla();
+            syncHidden();
+        };
+
         window.aplicarLiquidacionTarjetaEnGrilla = function (payload) {
             var reemplazo = -1;
             comprobantesIva.forEach(function (c, i) {
@@ -2869,13 +2883,17 @@
                 cotizacionAsientos.push($(this).find('.cotizacionasiento').val() || '');
             });
 
+            if (typeof window.esOperacionVariaIngresoEgreso === 'function' && window.esOperacionVariaIngresoEgreso()) {
+                alert('La operación varia (OPV) no admite comprobantes. Quitá los comprobantes y dejá solo el asiento contable.');
+                if (typeof callback === 'function') {
+                    callback(false);
+                }
+                return;
+            }
+
             var $optTipo = $('#tipotransaccion_caja_id option:selected');
             var tipoAbrev = String($optTipo.data('abreviatura') || $optTipo.attr('data-abreviatura') || '').toUpperCase();
             var tipoOp = String($optTipo.data('operacion') || $optTipo.attr('data-operacion') || '').toUpperCase();
-            if (typeof window.esOperacionVariaIngresoEgreso === 'function' && window.esOperacionVariaIngresoEgreso()) {
-                tipoAbrev = tipoAbrev || 'OPV';
-                tipoOp = tipoOp || 'V';
-            }
 
             $.post(url, {
                 _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(),

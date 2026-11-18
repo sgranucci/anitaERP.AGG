@@ -44,4 +44,31 @@ class IngresoEgresoOperacionVariaSupportTest extends TestCase
             'tipotransaccion_caja_id' => 0,
         ]));
     }
+
+    public function test_assert_sin_comprobantes_iva_rechaza_lista(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('no admite comprobantes');
+
+        IngresoEgresoOperacionVariaSupport::assertSinComprobantesIva([
+            'tipo_abreviatura' => 'OPV',
+            'comprobantes_ivacompra_json' => json_encode([
+                ['total' => 100],
+            ]),
+        ]);
+    }
+
+    public function test_assert_sin_comprobantes_iva_permite_vacio(): void
+    {
+        IngresoEgresoOperacionVariaSupport::assertSinComprobantesIva([
+            'tipo_abreviatura' => 'OPV',
+            'comprobantes_ivacompra_json' => '[]',
+        ]);
+        IngresoEgresoOperacionVariaSupport::assertSinComprobantesIva([
+            'tipo_abreviatura' => 'EGR',
+            'comprobantes_ivacompra_json' => json_encode([['total' => 10]]),
+        ]);
+
+        $this->assertTrue(true);
+    }
 }

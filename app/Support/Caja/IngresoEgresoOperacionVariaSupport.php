@@ -10,9 +10,9 @@ use App\Support\Numerico\NumeroDecimalLocalSupport;
 use InvalidArgumentException;
 
 /**
- * OPV — Operación varia: solo asiento contable, sin cuentas de caja ni tesmov Anita.
+ * OPV — Operación varia: solo asiento contable, sin cuentas de caja, sin comprobantes IVA ni tesmov Anita.
  *
- * Equivalente a a-tesmov.c OPV: genera el comprobante/asiento sin mover tesorería.
+ * Equivalente a a-tesmov.c OPV: genera el asiento sin mover tesorería.
  */
 final class IngresoEgresoOperacionVariaSupport
 {
@@ -84,6 +84,32 @@ final class IngresoEgresoOperacionVariaSupport
     }
 
     /**
+     * OPV no admite comprobantes IVA / liquidación tarjeta.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function assertSinComprobantesIva(array $data): void
+    {
+        if (! self::esOpvDesdeData($data)) {
+            return;
+        }
+
+        $raw = $data['comprobantes_ivacompra_json'] ?? null;
+        if ($raw === null || $raw === '' || $raw === []) {
+            return;
+        }
+
+        $lista = is_string($raw) ? (json_decode($raw, true) ?: []) : (is_array($raw) ? $raw : []);
+        if ($lista !== []) {
+            throw new InvalidArgumentException(
+                'La operación varia (OPV) no admite comprobantes. Quitá los comprobantes de la solapa y dejá solo el asiento contable.'
+            );
+        }
+    }
+
+    /**
      * Exige asiento con importe y balanceado. No valida cuadre contra caja.
      *
      * @param  array<string, mixed>  $data
@@ -97,6 +123,7 @@ final class IngresoEgresoOperacionVariaSupport
         }
 
         self::assertSinCuentasCaja($data);
+        self::assertSinComprobantesIva($data);
 
         $totales = AsientoBalanceSupport::totalesEnMonedaPrimeraLinea(
             (array) ($data['debeasientos'] ?? $data['debes'] ?? []),

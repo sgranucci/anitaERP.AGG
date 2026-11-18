@@ -38,6 +38,14 @@ $(function () {
     var debeGastoActivo = false;
     /** Líneas pendientes de mostrar (Agregar/Quitar antes del refresh AJAX). */
     var debeGastoPendiente = null;
+    /**
+     * Pedido de «Agregar/Quitar cuenta» que debe llegar al POST aunque sincronizar
+     * limpie debeGastoPendiente (p. ej. find('#wrap') fallaba con ids duplicados).
+     * @type {Array|null}
+     */
+    var debeGastoPedidoAgregar = null;
+    /** Evita loop si el preview no trae las filas de «Agregar cuenta». */
+    var debeGastoReintentoPendiente = false;
     /** true mientras se edita un importe de reparto (evita preview que tumba la grilla). */
     var editandoDebeGastoImporte = false;
 
@@ -735,7 +743,22 @@ $(function () {
     }
 
     function $wrapAsientoTabla() {
-        return $rootPreviewAsiento().find('#cp-asiento-tabla-wrap').first();
+        // Clase: hay 2 wraps con el mismo id (Conceptos + Asiento); #id solo matchea el primero.
+        var $root = $rootPreviewAsiento();
+        var $wrap = $root.find('.cp-asiento-tabla-wrap').first();
+        if ($wrap.length) {
+            return $wrap;
+        }
+        return $root.find('#cp-asiento-tabla-wrap').first();
+    }
+
+    function $wrapsAsientoTabla() {
+        var $porClase = targetsPreviewAsiento().find('.cp-asiento-tabla-wrap');
+        if ($porClase.length) {
+            return $porClase;
+        }
+        // Fallback legacy si el HTML aún no trae la clase.
+        return targetsPreviewAsiento().find('[id="cp-asiento-tabla-wrap"]');
     }
 
     function $filasDebeGasto() {
@@ -1377,24 +1400,27 @@ $(function () {
      */
     function lineasDebeGastoParaEnviar() {
         var vivas = leerDebeGastoDesdeTabla();
-        if (debeGastoPendiente && debeGastoPendiente.length > vivas.length) {
-            for (var i = 0; i < debeGastoPendiente.length; i++) {
+        var pedido = debeGastoPendiente && debeGastoPendiente.length
+            ? debeGastoPendiente
+            : (debeGastoPedidoAgregar && debeGastoPedidoAgregar.length ? debeGastoPedidoAgregar : null);
+        if (pedido && pedido.length > vivas.length) {
+            for (var i = 0; i < pedido.length; i++) {
                 var v = vivas[i];
                 if (!v) {
                     continue;
                 }
-                if ((parseInt(debeGastoPendiente[i].cuenta_id, 10) || 0) <= 0 && v.cuenta_id > 0) {
-                    debeGastoPendiente[i].cuenta_id = v.cuenta_id;
-                    debeGastoPendiente[i].codigo = v.codigo;
-                    debeGastoPendiente[i].nombre = v.nombre;
+                if ((parseInt(pedido[i].cuenta_id, 10) || 0) <= 0 && v.cuenta_id > 0) {
+                    pedido[i].cuenta_id = v.cuenta_id;
+                    pedido[i].codigo = v.codigo;
+                    pedido[i].nombre = v.nombre;
                 }
             }
-            return debeGastoPendiente;
+            return pedido;
         }
         if (vivas.length) {
             return vivas;
         }
-        return debeGastoPendiente || [];
+        return pedido || [];
     }
 
     function recordarCuentaDebeGasto(idx, datos) {
@@ -1513,7 +1539,7 @@ $(function () {
      * @return {'si'|'no'|'ausente'}
      */
     function estadoRepartoGastoPantalla() {
-        var $wraps = targetsPreviewAsiento().find('#cp-asiento-tabla-wrap');
+        var $wraps = $wrapsAsientoTabla();
         if (!$wraps.length) {
             return 'ausente';
         }
@@ -1527,6 +1553,14 @@ $(function () {
     }
 
     function descartarRepartoGastoManual(olvidarCuentas) {
+        // No tumbar un «Agregar cuenta» en vuelo (el POST siguiente debe llevar el pedido).
+        if (debeGastoPedidoAgregar && debeGastoPedidoAgregar.length) {
+            debeGastoActivo = true;
+            if (!debeGastoPendiente || !debeGastoPendiente.length) {
+                debeGastoPendiente = debeGastoPedidoAgregar;
+            }
+            return;
+        }
         debeGastoActivo = false;
         debeGastoPendiente = null;
         if (olvidarCuentas) {
@@ -1540,7 +1574,7 @@ $(function () {
         if (estadoRepartoGastoPantalla() !== 'si') {
             return;
         }
-        if (!debeGastoActivo && !debeGastoPendiente) {
+        if (!debeGastoActivo && !debeGastoPendiente && !debeGastoPedidoAgregar) {
             return;
         }
         var lineas = lineasDebeGastoParaEnviar();
@@ -1598,7 +1632,7 @@ $(function () {
         // origen debe_gasto. Un neto_manual solo NO debe mandar debe_gasto.
         // Siempre reescribir el hidden desde los dos paneles: el pendiente de «Agregar»
         // no debe tapar la cuenta cargada después en el preview de Conceptos.
-        if (debeGastoPendiente || tieneRepartoPersistido || vivas.length) {
+        if (debeGastoPendiente || debeGastoPedidoAgregar || tieneRepartoPersistido || vivas.length) {
             debeGastoActivo = true;
             escribirDebeGastoHidden(lineasDebeGastoParaEnviar());
             actualizarAvisoSumaDebeGasto();
@@ -1632,6 +1666,9 @@ $(function () {
         if (!lineas.length && debeGastoPendiente) {
             lineas = debeGastoPendiente;
         }
+        if (!lineas.length && debeGastoPedidoAgregar) {
+            lineas = debeGastoPedidoAgregar;
+        }
         var suma = 0;
         lineas.forEach(function (l) { suma += l.importe; });
         suma = Math.round(suma * 100) / 100;
@@ -1645,7 +1682,7 @@ $(function () {
     }
 
     function actualizarAvisoSumaDebeGasto() {
-        var $avisos = targetsPreviewAsiento().find('#cp-debe-gasto-aviso-suma');
+        var $avisos = targetsPreviewAsiento().find('.cp-debe-gasto-aviso-suma, #cp-debe-gasto-aviso-suma');
         var $wrap = $wrapAsientoTabla();
         if (!$avisos.length || !$wrap.length) {
             actualizarTotalesAsientoEnVivo();
@@ -1709,7 +1746,7 @@ $(function () {
             });
             sumaDebe = Math.round(sumaDebe * 100) / 100;
 
-            var $wrap = $panel.find('#cp-asiento-tabla-wrap').first();
+            var $wrap = $panel.find('.cp-asiento-tabla-wrap, #cp-asiento-tabla-wrap').first();
             var totalComp = parseFloat($wrap.attr('data-total-comprobante') || '0') || 0;
             var sumaHaber = 0;
             $tabla.find('tbody tr').each(function () {
@@ -1850,10 +1887,16 @@ $(function () {
     }
 
     function agregarCuentaDebeGasto() {
-        var $wrap = $wrapAsientoTabla();
-        if (estadoRepartoGastoPantalla() !== 'si') {
+        var estado = estadoRepartoGastoPantalla();
+        if (estado !== 'si') {
+            alert(
+                estado === 'ausente'
+                    ? 'Espere a que cargue el preview del asiento e intente de nuevo.'
+                    : 'No se puede agregar cuenta de gasto en este comprobante (el neto viene de COM, OC, anticipo o contrato).'
+            );
             return;
         }
+        var $wrap = $wrapAsientoTabla();
         var neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
         var lineas = leerSemillaDebeGasto();
         if (!lineas.length) {
@@ -1874,7 +1917,11 @@ $(function () {
         recordarCuentasDebeGastoDesdeLineas(lineas);
         debeGastoActivo = true;
         debeGastoPendiente = lineas;
+        debeGastoPedidoAgregar = lineas.slice();
+        debeGastoReintentoPendiente = true;
+        pendienteFocoCuentaAsientoVacia = true;
         escribirDebeGastoHidden(lineas);
+        actualizarAvisoSumaDebeGasto();
         recargarPreviewAsiento();
     }
 
@@ -1901,6 +1948,8 @@ $(function () {
         recordarCuentasDebeGastoDesdeLineas(lineas);
         debeGastoActivo = true;
         debeGastoPendiente = lineas;
+        debeGastoPedidoAgregar = lineas.slice();
+        debeGastoReintentoPendiente = true;
         escribirDebeGastoHidden(lineas);
         recargarPreviewAsiento();
     }
@@ -2393,6 +2442,8 @@ $(function () {
         recordarCuentasDebeGastoDesdeLineas(nuevas);
         debeGastoActivo = true;
         debeGastoPendiente = nuevas;
+        debeGastoPedidoAgregar = nuevas.slice();
+        debeGastoReintentoPendiente = true;
         escribirDebeGastoHidden(nuevas);
         $('#cp-prorratear-cuenta-modal').modal('hide');
         mostrarSolapa('#cp-solapa-asiento-contable');
@@ -2608,10 +2659,33 @@ $(function () {
     function trasRenderPreviewAsiento() {
         aplicarCuentasDebeGastoManualesEnEditores();
         aplicarEstadoRecalcularProrrateoEnPantalla();
+        var pendienteAntes = debeGastoPendiente && debeGastoPendiente.length
+            ? debeGastoPendiente
+            : (debeGastoPedidoAgregar && debeGastoPedidoAgregar.length ? debeGastoPedidoAgregar : null);
+        var cantPendiente = pendienteAntes ? pendienteAntes.length : 0;
         debeGastoPendiente = null;
         sincronizarDebeGastoHiddenDesdeTabla();
+        var cantVivas = leerDebeGastoDesdeTabla().length;
+        // «Agregar cuenta» mandó N líneas pero el HTML volvió con menos: reenviar una vez.
+        if (cantPendiente > cantVivas && pendienteAntes && pendienteAntes.length && debeGastoReintentoPendiente) {
+            debeGastoReintentoPendiente = false;
+            debeGastoActivo = true;
+            debeGastoPendiente = pendienteAntes;
+            debeGastoPedidoAgregar = pendienteAntes.slice();
+            escribirDebeGastoHidden(pendienteAntes);
+            actualizarAvisoSumaDebeGasto();
+            setTimeout(function () {
+                recargarPreviewAsiento();
+            }, 30);
+            return;
+        }
+        debeGastoReintentoPendiente = false;
+        if (cantVivas >= cantPendiente || cantPendiente === 0) {
+            debeGastoPedidoAgregar = null;
+        }
         aplicarCentrosCostoEnPreview();
         formatearInputMontoEn($('#cp-asiento-preview-body'));
+        formatearInputMontoEn($('#cp-asiento-preview-conceptos'));
         if (typeof window.activa_eventos_consultacuentacontable === 'function') {
             window.activa_eventos_consultacuentacontable();
         }
@@ -3350,8 +3424,9 @@ $(function () {
         aplicarEstadoRecalcularProrrateoEnPantalla();
     });
 
-    $(document).on('click', '#cp-debe-gasto-agregar', function (e) {
+    $(document).on('click', '.cp-debe-gasto-agregar, #cp-debe-gasto-agregar', function (e) {
         e.preventDefault();
+        e.stopPropagation();
         agregarCuentaDebeGasto();
     });
 
