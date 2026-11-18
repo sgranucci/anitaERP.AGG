@@ -14,7 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Arqueo de cambio de turno (relevamiento JL):
- * Inicial + Ingresos − Egresos = Actual, con doble firma de tesorería.
+ * Inicial + Ingresos − Egresos = Actual (= posición de bóveda al corte).
+ *
+ * Inicial = último arqueo conforme de ESTA jornada, o posición al cierre del día anterior.
+ * La APER del día entra como ingreso del período (no reemplaza el stock).
  */
 final class TesoreriaCrownBovedaArqueoSupport
 {
@@ -46,9 +49,12 @@ final class TesoreriaCrownBovedaArqueoSupport
         ?Carbon $corteAt = null
     ): array {
         $corteAt = ($corteAt ?? now())->copy();
+        // Solo conforme de esta jornada: el período es jornada-scoped y el Actual debe
+        // igualar la posición de bóveda (saldoCantidades) al corte.
         $anterior = TesoreriaCrownBovedaArqueo::query()
             ->with('lineas')
             ->where('deposito_id', $deposito->id)
+            ->where('jornada_id', $jornada->id)
             ->where('estado', TesoreriaCrownBovedaArqueo::CONFORME)
             ->where('corte_at', '<', $corteAt)
             ->orderByDesc('corte_at')
@@ -62,32 +68,40 @@ final class TesoreriaCrownBovedaArqueoSupport
             }
             $desdeAt = Carbon::parse($anterior->corte_at);
         } else {
-            $inicial = self::cantidadesAperturaJornada((int) $jornada->id, (int) $deposito->id);
-            if ($inicial === []) {
-                $diaAnterior = $jornada->fecha->copy()->subDay()->format('Y-m-d');
-                $inicial = TesoreriaCrownBovedaSupport::saldoCantidades((int) $deposito->id, $diaAnterior);
-            }
+            $diaAnterior = $jornada->fecha->copy()->subDay()->format('Y-m-d');
+            $inicial = TesoreriaCrownBovedaSupport::saldoCantidades((int) $deposito->id, $diaAnterior);
             $desdeAt = $jornada->fecha->copy()->startOfDay();
         }
 
-        $periodo = self::movimientosPeriodo((int) $deposito->id, $desdeAt, $corteAt, $anterior === null);
+        // Movimientos de ESTA jornada (incluye APER como ingreso). No mezclar otros días.
+        $periodo = self::movimientosPeriodo(
+            (int) $deposito->id,
+            $desdeAt,
+            $corteAt,
+            false,
+            (int) $jornada->id
+        );
         $ingresos = [];
         $egresos = [];
         foreach ($periodo as $fila) {
             $valorId = (int) $fila->valor_id;
-            $cantidad = abs((float) $fila->cantidad);
-            if ($cantidad < 0.0001) {
-                continue;
-            }
             $efecto = TesoreriaCrownBovedaSupport::efectoConSubtipo(
                 (string) $fila->signo,
                 $fila->mueve_billetaje ?? null,
                 $fila->subtipo_signo ?? null
             );
-            if ($efecto > 0) {
-                $ingresos[$valorId] = ($ingresos[$valorId] ?? 0.0) + $cantidad;
-            } elseif ($efecto < 0) {
-                $egresos[$valorId] = ($egresos[$valorId] ?? 0.0) + $cantidad;
+            if ($efecto === 0) {
+                continue;
+            }
+            // Misma regla que saldoCantidades: cantidad × efecto (respeta signos en cantidad).
+            $delta = (float) $fila->cantidad * $efecto;
+            if (abs($delta) < 0.0001) {
+                continue;
+            }
+            if ($delta > 0) {
+                $ingresos[$valorId] = ($ingresos[$valorId] ?? 0.0) + $delta;
+            } else {
+                $egresos[$valorId] = ($egresos[$valorId] ?? 0.0) + abs($delta);
             }
         }
 
@@ -196,6 +210,7 @@ final class TesoreriaCrownBovedaArqueoSupport
     /**
      * Movimientos confirmados entre dos cortes (excluido el desde, incluido el hasta).
      * Si $excluirApertura, no cuenta el APER (ya está en el Inicial).
+     * Si $jornadaId, solo esa jornada (evita HAB/REN de otros días con confirmado_at reciente).
      *
      * @return \Illuminate\Support\Collection<int, object>
      */
@@ -203,25 +218,20 @@ final class TesoreriaCrownBovedaArqueoSupport
         int $depositoId,
         Carbon $desdeExclusive,
         Carbon $hastaInclusive,
-        bool $excluirApertura = false
+        bool $excluirApertura = false,
+        ?int $jornadaId = null
     ) {
-        // Excluir reversas y originales ya revertidos: el arqueo usa abs(cantidad) + signo
-        // del tipo; si se incluyen ambos, el movimiento revertido se cuenta dos veces.
         $q = DB::table('tesoreria_crown_boveda_linea as l')
             ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
             ->leftJoin('tesoreria_crown_boveda_subtipo as st', 'st.id', '=', 'b.subtipo_id')
-            ->where('b.deposito_id', $depositoId)
-            ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
-            ->whereNull('b.revierte_id')
-            ->whereNotExists(function ($sub) {
-                $sub->select(DB::raw(1))
-                    ->from('tesoreria_crown_boveda as r')
-                    ->whereColumn('r.revierte_id', 'b.id')
-                    ->where('r.estado', TesoreriaCrownBoveda::CONFIRMADO);
-            })
-            ->where('b.confirmado_at', '>', $desdeExclusive)
+            ->where('b.deposito_id', $depositoId);
+        TesoreriaCrownBovedaSupport::aplicarSoloConfirmadosSinReversa($q, 'b');
+        $q->where('b.confirmado_at', '>', $desdeExclusive)
             ->where('b.confirmado_at', '<=', $hastaInclusive);
+        if ($jornadaId !== null && $jornadaId > 0) {
+            $q->where('b.jornada_id', $jornadaId);
+        }
         if ($excluirApertura) {
             $q->where('t.abreviatura', '<>', 'APER');
         }

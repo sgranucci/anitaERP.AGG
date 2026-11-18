@@ -53,8 +53,11 @@ final class ComprobanteProveedorAsientoCuadreSupport
      * @param  list<array<string, mixed>>  $lineasHaberExtra
      * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
      */
-    public static function moverImportesNegativosAHaber(array $lineasDebe, array $lineasHaberExtra = []): array
-    {
+    public static function moverImportesNegativosAHaber(
+        array $lineasDebe,
+        array $lineasHaberExtra = [],
+        bool $conservarDebeGastoEnCero = false,
+    ): array {
         $debe = [];
         foreach ($lineasDebe as $linea) {
             $importe = round((float) ($linea['importe'] ?? 0), 2);
@@ -65,6 +68,11 @@ final class ComprobanteProveedorAsientoCuadreSupport
                 continue;
             }
             if (abs($importe) < 0.0001) {
+                // Preview: el renglón que agrega «+ Agregar cuenta de gasto» nace en 0 para cargarlo a mano.
+                if ($conservarDebeGastoEnCero && (string) ($linea['origen'] ?? '') === 'debe_gasto') {
+                    $debe[] = $linea;
+                }
+
                 continue;
             }
             $debe[] = $linea;

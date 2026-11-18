@@ -13,6 +13,8 @@ use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownValor;
 use App\Models\Seguridad\Usuario;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use Carbon\Carbon;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -204,20 +206,53 @@ final class TesoreriaCrownBovedaSupport
     }
 
     /**
+     * Timestamp de confirmación anclado a la fecha de la jornada.
+     * Evita que HAB/REN históricos asentados "hoy" entren en arqueos de otros días
+     * cuando el filtro usa confirmado_at.
+     */
+    public static function confirmadoAtParaJornada(?TesoreriaCrownJornada $jornada): Carbon
+    {
+        if ($jornada === null || $jornada->fecha === null) {
+            return now();
+        }
+        $fecha = $jornada->fecha->copy()->startOfDay();
+        if ($fecha->isSameDay(now())) {
+            return now();
+        }
+
+        return $fecha->setTimeFrom(now());
+    }
+
+    /**
+     * Confirmados vigentes: sin reversas ni originales ya revertidos.
+     */
+    public static function aplicarSoloConfirmadosSinReversa(Builder $query, string $aliasBoveda = 'b'): void
+    {
+        $query->where($aliasBoveda.'.estado', TesoreriaCrownBoveda::CONFIRMADO)
+            ->whereNull($aliasBoveda.'.revierte_id')
+            ->whereNotExists(function ($sub) use ($aliasBoveda) {
+                $sub->select(DB::raw(1))
+                    ->from('tesoreria_crown_boveda as r')
+                    ->whereColumn('r.revierte_id', $aliasBoveda.'.id')
+                    ->where('r.estado', TesoreriaCrownBoveda::CONFIRMADO);
+            });
+    }
+
+    /**
      * Saldo en cantidad por valor, de los movimientos confirmados hasta esa fecha de jornada.
      *
      * @return array<int, float>
      */
     public static function saldoCantidades(int $depositoId, string $hastaYmd): array
     {
-        $filas = DB::table('tesoreria_crown_boveda_linea as l')
+        $q = DB::table('tesoreria_crown_boveda_linea as l')
             ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
             ->leftJoin('tesoreria_crown_boveda_subtipo as st', 'st.id', '=', 'b.subtipo_id')
             ->join('tesoreria_crown_jornada as j', 'j.id', '=', 'b.jornada_id')
-            ->where('b.deposito_id', $depositoId)
-            ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
-            ->whereDate('j.fecha', '<=', $hastaYmd)
+            ->where('b.deposito_id', $depositoId);
+        self::aplicarSoloConfirmadosSinReversa($q, 'b');
+        $filas = $q->whereDate('j.fecha', '<=', $hastaYmd)
             ->get(['l.valor_id', 'l.cantidad', 't.signo', 'st.mueve_billetaje', 'st.signo as subtipo_signo']);
 
         $saldos = [];
@@ -245,15 +280,15 @@ final class TesoreriaCrownBovedaSupport
      */
     public static function composicionBillete(int $depositoId, string $hastaYmd, int $valorId): array
     {
-        $filas = DB::table('tesoreria_crown_boveda_linea as l')
+        $q = DB::table('tesoreria_crown_boveda_linea as l')
             ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
             ->leftJoin('tesoreria_crown_boveda_subtipo as st', 'st.id', '=', 'b.subtipo_id')
             ->join('tesoreria_crown_jornada as j', 'j.id', '=', 'b.jornada_id')
             ->where('b.deposito_id', $depositoId)
-            ->where('l.valor_id', $valorId)
-            ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
-            ->whereDate('j.fecha', '<=', $hastaYmd)
+            ->where('l.valor_id', $valorId);
+        self::aplicarSoloConfirmadosSinReversa($q, 'b');
+        $filas = $q->whereDate('j.fecha', '<=', $hastaYmd)
             ->orderBy('j.fecha')
             ->orderBy('b.numero')
             ->orderBy('b.id')
@@ -504,7 +539,7 @@ final class TesoreriaCrownBovedaSupport
                 return;
             }
 
-            $comprobante->loadMissing('cajero', 'asignacion.cajero');
+            $comprobante->loadMissing('cajero', 'asignacion.cajero', 'jornada');
             $cajero = trim((string) ($comprobante->cajeroOperativo()->nombre ?? ''));
             $etiqueta = $comprobante->tipo === TesoreriaCrownComprobanteSupport::HABILITACION
                 ? 'Habilitación'
@@ -516,6 +551,7 @@ final class TesoreriaCrownBovedaSupport
             $usuarioId = $comprobante->recibe_usuario_id
                 ?: $comprobante->entrega_usuario_id
                 ?: (auth()->id() ?: null);
+            $confirmadoAt = self::confirmadoAtParaJornada($comprobante->jornada);
 
             if ($movimiento === null) {
                 $movimiento = TesoreriaCrownBoveda::query()->create([
@@ -529,14 +565,14 @@ final class TesoreriaCrownBovedaSupport
                     'comentario' => mb_substr($comentario, 0, 80),
                     'comprobante_id' => $comprobante->id,
                     'usuario_id' => $usuarioId,
-                    'confirmado_at' => now(),
+                    'confirmado_at' => $confirmadoAt,
                 ]);
             } else {
                 $movimiento->comentario = mb_substr($comentario, 0, 80);
                 $movimiento->usuario_id = $usuarioId ?: $movimiento->usuario_id;
                 $movimiento->estado = TesoreriaCrownBoveda::CONFIRMADO;
                 if ($movimiento->confirmado_at === null) {
-                    $movimiento->confirmado_at = now();
+                    $movimiento->confirmado_at = $confirmadoAt;
                 }
                 $movimiento->save();
                 EloquentAuditDeleteSupport::each(

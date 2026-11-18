@@ -170,8 +170,30 @@
                         @csrf
                         <input type="hidden" name="sala_id" value="{{ $sala->id }}">
                         <label for="fecha" class="mr-2">Fecha</label>
-                        <input type="date" name="fecha" id="fecha" class="form-control mr-2" required value="{{ old('fecha', now()->toDateString()) }}" max="{{ now()->toDateString() }}">
+                        @php
+                            $puedeSalto = ! empty($puedeSaltoJornada);
+                            $minAbrir = $proximaFechaJornada ?? null;
+                            $defaultAbrir = old('fecha', ($minAbrir && $minAbrir <= now()->toDateString()) ? $minAbrir : now()->toDateString());
+                        @endphp
+                        <input type="date" name="fecha" id="fecha" class="form-control mr-2" required
+                               value="{{ $defaultAbrir }}"
+                               @if ($minAbrir) min="{{ $minAbrir }}" @endif
+                               @if (! $puedeSalto && $minAbrir)
+                                   max="{{ $minAbrir }}"
+                               @else
+                                   max="{{ now()->toDateString() }}"
+                               @endif>
                         <button type="submit" class="btn btn-success">Abrir jornada</button>
+                        @if (! empty($ultimaFechaJornada))
+                            <span class="text-muted small ml-2">
+                                Última: {{ \Carbon\Carbon::parse($ultimaFechaJornada)->format('d/m/Y') }}
+                                @if ($puedeSalto)
+                                    · con permiso de salto podés avanzar más de un día
+                                @else
+                                    · solo el día siguiente (sin salto)
+                                @endif
+                            </span>
+                        @endif
                     </form>
                 @else
                     <p class="text-muted">No hay jornada en esta sala.</p>

@@ -948,7 +948,8 @@ class ComprobanteProveedorAsientoService
         // IVA/percepciones en negativo: Debe < 0 → Haber en la cuenta del concepto.
         [$lineasDebe, $lineasHaberExtra] = ComprobanteProveedorAsientoCuadreSupport::moverImportesNegativosAHaber(
             $lineasDebe,
-            $lineasHaberExtra
+            $lineasHaberExtra,
+            $permitirCuentasPendientes && $hayRepartoDebeGasto
         );
 
         if ($lineasDebe === []) {

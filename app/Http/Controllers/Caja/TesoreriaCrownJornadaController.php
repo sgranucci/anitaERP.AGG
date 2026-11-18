@@ -23,6 +23,7 @@ use App\Support\Caja\TesoreriaCrownComprobanteSupport;
 use App\Support\Caja\TesoreriaCrownDiaCajeroSupport;
 use App\Support\Caja\TesoreriaCrownFirmaSupport;
 use App\Support\Caja\TesoreriaCrownJornadaCierreBloqueoSupport;
+use App\Support\Caja\TesoreriaCrownJornadaConsultaSupport;
 use App\Services\Caja\TesoreriaCrownAvisoGenerador;
 use App\Models\Seguridad\Usuario;
 use App\Support\Caja\TesoreriaCrownCajeroListadoColumnas;
@@ -70,15 +71,20 @@ class TesoreriaCrownJornadaController extends Controller
         }
         $jornadas = $this->consulta($armado['filtros'])->paginate(15)->appends($armado['filtrosQuery']);
 
+        $salaIdFiltro = (int) ($armado['filtros']['sala_id'] ?? 0);
+
         return view('caja.tesoreria_crown.jornada.index', array_merge($armado, [
             'salas' => $salas,
             'sala' => $sala,
             'jornadas' => $jornadas,
             'tieneCriterios' => TesoreriaCrownJornadaListadoFiltros::tieneCriteriosAplicados($armado['filtros']),
             'abierta' => TesoreriaCrownJornada::query()
-                ->where('sala_id', (int) ($armado['filtros']['sala_id'] ?? 0))
+                ->where('sala_id', $salaIdFiltro)
                 ->where('estado', TesoreriaCrownJornada::ABIERTA)
                 ->first(),
+            'proximaFechaJornada' => TesoreriaCrownJornadaConsultaSupport::proximaFechaDisponible($salaIdFiltro),
+            'ultimaFechaJornada' => TesoreriaCrownJornadaConsultaSupport::ultimaFechaSala($salaIdFiltro),
+            'puedeSaltoJornada' => can('abrir-tesoreria-crown-jornada-salto', false),
         ]));
     }
 
@@ -884,6 +890,9 @@ class TesoreriaCrownJornadaController extends Controller
                 ->where('sala_id', $sala->id)
                 ->where('estado', TesoreriaCrownJornada::ABIERTA)
                 ->first(),
+            'proximaFechaJornada' => TesoreriaCrownJornadaConsultaSupport::proximaFechaDisponible((int) $sala->id),
+            'ultimaFechaJornada' => TesoreriaCrownJornadaConsultaSupport::ultimaFechaSala((int) $sala->id),
+            'puedeSaltoJornada' => can('abrir-tesoreria-crown-jornada-salto', false),
             'boveda' => null,
             'navAsignaciones' => $navAsignaciones,
             'navMesas' => $navMesas,
@@ -962,6 +971,16 @@ class TesoreriaCrownJornadaController extends Controller
             ->exists();
         if ($existe) {
             return back()->with('mensaje-error', 'Esa fecha ya tiene jornada en esta sala.');
+        }
+
+        $puedeSalto = can('abrir-tesoreria-crown-jornada-salto', false);
+        $errorFecha = TesoreriaCrownJornadaConsultaSupport::validarFechaApertura(
+            (int) $sala->id,
+            $datos['fecha'],
+            $puedeSalto
+        );
+        if ($errorFecha !== null) {
+            return back()->with('mensaje-error', $errorFecha)->withInput();
         }
 
         $jornada = TesoreriaCrownJornada::query()->create([

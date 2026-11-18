@@ -72,7 +72,7 @@ final class TesoreriaCrownSlotBovedaSupport
                 ),
                 'hora' => $slot->hora ?: now()->format('H:i:s'),
                 'usuario_id' => $usuario->id,
-                'confirmado_at' => now(),
+                'confirmado_at' => TesoreriaCrownBovedaSupport::confirmadoAtParaJornada($slot->jornada),
             ]);
             foreach ($slot->lineas as $linea) {
                 if ((float) $linea->cantidad < 0.0001) {

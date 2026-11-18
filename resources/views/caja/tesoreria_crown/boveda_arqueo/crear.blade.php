@@ -64,8 +64,9 @@
                         arqueo {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible((int) $calculo['anterior']->numero) }}
                         ({{ $calculo['desde_at']->format('d/m/Y H:i') }})
                     @else
-                        apertura / inicio de jornada ({{ $calculo['desde_at']->format('d/m/Y H:i') }})
+                        posición al cierre del día anterior ({{ $calculo['desde_at']->format('d/m/Y H:i') }})
                     @endif
+                    · Movimientos de esta jornada (la APER suma como ingreso) · Actual = posición de bóveda
                 </p>
                 @if ($calculo['lineas'] === [])
                     <div class="alert alert-warning">No hay valores para armar el arqueo.</div>

@@ -624,7 +624,8 @@ class TesoreriaCrownBovedaController extends Controller
                     throw new \RuntimeException('Este movimiento ya fue revertido.');
                 }
 
-                $ahora = now();
+                $original->loadMissing('jornada');
+                $confirmadoAt = TesoreriaCrownBovedaSupport::confirmadoAtParaJornada($original->jornada);
                 $nuevo = TesoreriaCrownBoveda::query()->create([
                     'sala_id' => $original->sala_id,
                     'empresa_id' => $original->empresa_id,
@@ -635,12 +636,12 @@ class TesoreriaCrownBovedaController extends Controller
                     'estado' => TesoreriaCrownBoveda::CONFIRMADO,
                     'comentario' => 'Reversa de '.TesoreriaCrownNumeradorSupport::visible((int) $original->numero),
                     'motivo' => $motivo,
-                    'hora' => $ahora->format('H:i'),
+                    'hora' => $confirmadoAt->format('H:i'),
                     'legajo' => $original->legajo,
                     'cliente_id' => $original->cliente_id,
                     'revierte_id' => $original->id,
                     'usuario_id' => $usuario->id,
-                    'confirmado_at' => $ahora,
+                    'confirmado_at' => $confirmadoAt,
                 ]);
                 foreach ($lineas as $linea) {
                     TesoreriaCrownBovedaLinea::query()->create([
@@ -1138,11 +1139,11 @@ class TesoreriaCrownBovedaController extends Controller
             return 'Usuario o clave de tesorería incorrectos.';
         }
         RateLimiter::clear($limite);
+        $movimiento->loadMissing('jornada');
         $movimiento->estado = TesoreriaCrownBoveda::CONFIRMADO;
         $movimiento->usuario_id = $usuario->id;
-        $movimiento->confirmado_at = now();
+        $movimiento->confirmado_at = TesoreriaCrownBovedaSupport::confirmadoAtParaJornada($movimiento->jornada);
         $movimiento->save();
-        $movimiento->loadMissing('jornada');
         if ($movimiento->jornada) {
             TesoreriaCrownAnexo8Calculo::invalidarCache($movimiento->jornada);
         }
