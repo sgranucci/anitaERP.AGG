@@ -1,25 +1,28 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Tras PR1 color/talle quedó el unique viejo uk_artsalddep_articulo_deposito
  * junto al nuevo uk_artsalddep_art_dep_col_tal. El rebuild agrupa por
  * articulo+deposito+color+talle y choca con el índice de 2 columnas.
+ *
+ * En PostgreSQL dropUnique sobre un nombre inexistente aborta la transacción
+ * (CI postgres-lab lo logueaba aunque el try/catch marcara DONE).
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        try {
-            Schema::table('articulo_saldo_deposito', function (Blueprint $table) {
-                $table->dropUnique('uk_artsalddep_articulo_deposito');
-            });
-        } catch (\Throwable $e) {
-            // Ya no existe o nombre distinto.
+        if (! \Illuminate\Support\Facades\Schema::hasTable('articulo_saldo_deposito')) {
+            return;
         }
+
+        MigrationDialectSupport::dropIndiceOUnique(
+            'articulo_saldo_deposito',
+            'uk_artsalddep_articulo_deposito'
+        );
     }
 
     public function down(): void

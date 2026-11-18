@@ -114,19 +114,21 @@ jobs:
       - name: Migrate + smoke + seed
         run: |
           set -euo pipefail
+          # setup-php suele dejar max_execution_time=600; un migrate colgado
+          # moría a los ~10 min de CPU con stack confuso (Arr/Dispatcher).
           echo "==> migrate --force (EMPRESA=${EMPRESA})"
-          php artisan migrate --force
+          php -d max_execution_time=0 artisan migrate --force
 
           echo "==> smoke base"
-          php scripts/postgres-lab-smoke.php
+          php -d max_execution_time=0 scripts/postgres-lab-smoke.php
 
           if [[ "${POSTGRES_LAB_CON_SEED}" == "1" ]]; then
             echo "==> seed mínimo"
-            php scripts/postgres-lab-seed-minimo.php
+            php -d max_execution_time=0 scripts/postgres-lab-seed-minimo.php
             echo "==> smoke con seed"
-            SMOKE_EXPECT_SEED=1 php scripts/postgres-lab-smoke.php
+            SMOKE_EXPECT_SEED=1 php -d max_execution_time=0 scripts/postgres-lab-smoke.php
             echo "==> smoke HTTP login"
-            SMOKE_EXPECT_SEED=1 php scripts/postgres-lab-smoke-http.php
+            SMOKE_EXPECT_SEED=1 php -d max_execution_time=0 scripts/postgres-lab-smoke-http.php
           fi
 
           echo "CI lab PostgreSQL: OK"
