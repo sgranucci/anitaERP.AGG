@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Caja\TesoreriaCrownAnitaSyncService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Console\Command;
 
 class SincronizarTesoreriaCrownDesdeAnita extends Command
@@ -14,6 +15,12 @@ class SincronizarTesoreriaCrownDesdeAnita extends Command
 
     public function handle(TesoreriaCrownAnitaSyncService $sync): int
     {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            $this->error('Solo corre en entorno CROWN (EMPRESA=CROWN).');
+
+            return self::FAILURE;
+        }
+
         try {
             $plan = $sync->armarPlan();
         } catch (\Throwable $e) {

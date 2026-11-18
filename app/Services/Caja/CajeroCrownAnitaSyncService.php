@@ -9,9 +9,12 @@ use App\Models\Caja\CajeroCrownExterno;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\MozoGastronomia;
 use App\Support\Caja\CajeroCrownSistemaExternoSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\GastronomiaSalaSupport;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 
 /**
  * Importa cajeros Crown desde Anita (cajero + cajeroexterno) y enlaza mozos de la sala configurada.
@@ -34,6 +37,8 @@ class CajeroCrownAnitaSyncService
      */
     public function sincronizarDesdeAnita(): array
     {
+        $this->assertEntornoCrown();
+
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
@@ -369,5 +374,15 @@ class CajeroCrownAnitaSyncService
         }
 
         return $guardados;
+    }
+
+    private function assertEntornoCrown(): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            throw new RuntimeException('cajero-crown:sincronizar-anita solo corre en entorno CROWN.');
+        }
+        if (! Schema::hasTable('cajero_crown')) {
+            throw new RuntimeException('Tabla cajero_crown inexistente; no se puede sincronizar.');
+        }
     }
 }

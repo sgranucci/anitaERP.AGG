@@ -17,6 +17,7 @@ use App\Support\Ventas\FacturacionJuegoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -40,6 +41,8 @@ class FacturacionJuegoService
      */
     public function preview(string $fechaDesde, string $fechaHasta, ?int $salaId = null): array
     {
+        $this->assertEntornoCrown();
+
         $flashes = $this->flashesEnRango($fechaDesde, $fechaHasta, $salaId);
         $filas = [];
 
@@ -105,6 +108,8 @@ class FacturacionJuegoService
      */
     public function ejecutar(string $fechaDesde, string $fechaHasta, ?int $salaId = null): array
     {
+        $this->assertEntornoCrown();
+
         $generados = [];
         $omitidos = [];
         $errores = [];
@@ -543,5 +548,15 @@ class FacturacionJuegoService
         }
 
         return $id;
+    }
+
+    private function assertEntornoCrown(): void
+    {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            throw new RuntimeException('Facturación juego solo corre en entorno CROWN.');
+        }
+        if (! Schema::hasTable('flash_crown')) {
+            throw new RuntimeException('Tabla flash_crown inexistente.');
+        }
     }
 }

@@ -13,10 +13,12 @@ use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\FacturacionJuegoSala;
 use App\Models\Ventas\Puntoventa;
 use App\Services\Ventas\FacturacionJuegoService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Ventas\FacturacionJuegoConciliacionSupport;
 use App\Support\Ventas\FacturacionJuegoConfigSupport;
 use App\Support\Ventas\FacturacionJuegoSemillaAnitaSupport;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -38,7 +40,7 @@ class FacturacionJuegoController extends Controller
 
     public function index(Request $request): View
     {
-        can('usar-facturacion-juego');
+        $this->asegurar('usar-facturacion-juego');
 
         $fechaDesde = $this->fecha($request->input('fecha_desde'), Carbon::now()->startOfMonth()->toDateString());
         $fechaHasta = $this->fecha($request->input('fecha_hasta'), Carbon::now()->toDateString());
@@ -70,7 +72,7 @@ class FacturacionJuegoController extends Controller
 
     public function conciliacion(Request $request): View
     {
-        can('usar-facturacion-juego');
+        $this->asegurar('usar-facturacion-juego');
 
         $fechaDesde = $this->fecha($request->input('fecha_desde'), Carbon::now()->startOfMonth()->toDateString());
         $fechaHasta = $this->fecha($request->input('fecha_hasta'), Carbon::now()->toDateString());
@@ -122,7 +124,7 @@ class FacturacionJuegoController extends Controller
 
     public function exportarConciliacion(Request $request, ?string $formato = null): BinaryFileResponse|StreamedResponse|RedirectResponse
     {
-        can('usar-facturacion-juego');
+        $this->asegurar('usar-facturacion-juego');
         ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '180');
 
@@ -175,7 +177,7 @@ class FacturacionJuegoController extends Controller
 
     public function ejecutar(Request $request): RedirectResponse
     {
-        can('ejecutar-facturacion-juego');
+        $this->asegurar('ejecutar-facturacion-juego');
 
         $fechaDesde = $this->fecha($request->input('fecha_desde'), '');
         $fechaHasta = $this->fecha($request->input('fecha_hasta'), '');
@@ -213,7 +215,7 @@ class FacturacionJuegoController extends Controller
 
     public function configuracion(): View
     {
-        can('configurar-facturacion-juego');
+        $this->asegurar('configurar-facturacion-juego');
 
         $parametro = FacturacionJuegoConfigSupport::parametro();
         $salasCfg = FacturacionJuegoSala::query()
@@ -255,7 +257,7 @@ class FacturacionJuegoController extends Controller
 
     public function guardarConfiguracion(Request $request): RedirectResponse
     {
-        can('configurar-facturacion-juego');
+        $this->asegurar('configurar-facturacion-juego');
 
         $parametro = FacturacionJuegoConfigSupport::parametro();
         $sucDelRio = $this->sucursalDesdePuntoventaId((int) $request->input('puntoventa_del_rio_id', 0));
@@ -314,7 +316,7 @@ class FacturacionJuegoController extends Controller
 
     public function sembrarDesdeAnita(): RedirectResponse
     {
-        can('configurar-facturacion-juego');
+        $this->asegurar('configurar-facturacion-juego');
 
         try {
             $stats = $this->semillaAnita->sembrar();
@@ -338,7 +340,7 @@ class FacturacionJuegoController extends Controller
 
     public function apiPreview(Request $request): JsonResponse
     {
-        can('usar-facturacion-juego');
+        $this->asegurar('usar-facturacion-juego');
 
         $fechaDesde = $this->fecha($request->input('fecha_desde'), '');
         $fechaHasta = $this->fecha($request->input('fecha_hasta'), '');
@@ -355,6 +357,14 @@ class FacturacionJuegoController extends Controller
             'pendientes_config' => collect($preview)->where('listo', false)->count(),
             'total_monto' => collect($preview)->sum('monto'),
         ]);
+    }
+
+    private function asegurar(string $permiso): void
+    {
+        if (! EntornoEmpresaSupport::esCrown() || ! Schema::hasTable('flash_crown')) {
+            abort(404);
+        }
+        can($permiso);
     }
 
     private function fecha(mixed $valor, string $default): string

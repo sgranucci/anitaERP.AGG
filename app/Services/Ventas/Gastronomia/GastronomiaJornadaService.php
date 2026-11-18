@@ -24,6 +24,7 @@ use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Throwable;
 
@@ -514,7 +515,9 @@ final class GastronomiaJornadaService
     public function resumenCuentasAbiertasCrown(int $empresaId, ?int $salaId = null): array
     {
         $vacio = ['total' => 0, 'con_items' => 0, 'vacias' => 0, 'con_mesa' => 0, 'sin_mesa' => 0];
-        if ($empresaId <= 0) {
+        if ($empresaId <= 0
+            || ! EntornoEmpresaSupport::esCrown()
+            || ! Schema::hasTable('gastro_crown_cuenta')) {
             return $vacio;
         }
 

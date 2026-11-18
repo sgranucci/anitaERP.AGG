@@ -4,8 +4,10 @@ namespace App\Console\Commands;
 
 use App\Services\Caja\CajeroCrownAnitaSyncService;
 use App\Support\Caja\CajeroCrownSistemaExternoSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\GastronomiaSalaSupport;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Schema;
 
 class SincronizarCajeroCrownDesdeAnita extends Command
 {
@@ -16,6 +18,17 @@ class SincronizarCajeroCrownDesdeAnita extends Command
 
     public function handle(CajeroCrownAnitaSyncService $sync): int
     {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            $this->error('Solo corre en entorno CROWN (EMPRESA=CROWN).');
+
+            return self::FAILURE;
+        }
+        if (! Schema::hasTable('cajero_crown')) {
+            $this->error('Tabla cajero_crown inexistente.');
+
+            return self::FAILURE;
+        }
+
         if ($this->option('dry-run')) {
             return $this->dryRun($sync);
         }

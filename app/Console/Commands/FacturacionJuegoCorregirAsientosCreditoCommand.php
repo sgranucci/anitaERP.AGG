@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionJuegoCorregirAsientosOctubreSupport;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Corrige CME/CSL/CRE de facturación juego con Debe/Haber invertido y
@@ -24,6 +26,17 @@ class FacturacionJuegoCorregirAsientosCreditoCommand extends Command
 
     public function handle(FacturacionJuegoCorregirAsientosOctubreSupport $support): int
     {
+        if (! EntornoEmpresaSupport::esCrown()) {
+            $this->error('Solo corre en entorno CROWN (EMPRESA=CROWN).');
+
+            return self::FAILURE;
+        }
+        if (! Schema::hasTable('flash_crown')) {
+            $this->error('Tabla flash_crown inexistente.');
+
+            return self::FAILURE;
+        }
+
         $desde = trim((string) $this->option('desde'));
         $hasta = trim((string) $this->option('hasta'));
         $salaOpt = $this->option('sala');
