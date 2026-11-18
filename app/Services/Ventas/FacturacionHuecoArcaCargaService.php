@@ -9,10 +9,12 @@ use App\Models\Configuracion\Impuesto;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\FacturacionHuecoArca;
+use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
+use App\Support\Ventas\FacturanteAsientoMedioSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -23,8 +25,10 @@ use Throwable;
 
 /**
  * Busca números que ARCA autorizó y el ERP no tiene, y los graba en el ERP
- * (cabecera, IVA, cuenta corriente y asiento). No mueve stock ni escribe Anita.
+ * (cabecera, IVA y asiento). No mueve stock ni escribe Anita.
  * Sin ítems del comprobante original, arma un renglón genérico con el neto y el IVA de ARCA.
+ * Si el PV es de un local con un solo medio (Mercado Libre → 608) o tiene mapa Facturante,
+ * el Debe del asiento va a esa cuenta y no abre cuenta corriente.
  */
 final class FacturacionHuecoArcaCargaService
 {
@@ -605,6 +609,23 @@ final class FacturacionHuecoArcaCargaService
         $leyenda = mb_substr($leyenda, 0, 240);
 
         $n = count($lineas);
+        $totalAbs = round(abs((float) ($arca['imp_total'] ?? 0)), 2);
+        $mediosAsiento = $this->mediosParaAsiento($pv, $totalAbs);
+        $opcionesEmision = [
+            'omitir_movimiento_stock' => true,
+            'omitir_solicitud_arca_cae' => true,
+            'omitir_sincronizacion_anita' => true,
+            'omitir_stkmov_anita' => true,
+            'omitir_numera_anita_fin' => true,
+            'fechajornada' => $fecha,
+        ];
+        // Contado de local/marketplace: Debe en el medio (L-MERCADOLIBRE, etc.), no en deudores,
+        // y sin abrir cuenta corriente del consumidor final.
+        if ($mediosAsiento !== []) {
+            $opcionesEmision['asiento_medios_pago'] = $mediosAsiento;
+            $opcionesEmision['omitir_cuenta_corriente'] = true;
+        }
+
         $payload = [
             '_sin_guardar_preferencia' => true,
             'tipotransaccion_id' => (int) $tipo->id,
@@ -626,14 +647,7 @@ final class FacturacionHuecoArcaCargaService
             'omitir_percepciones' => true,
             'numerocomprobante_forzado' => $numero,
             'letra_forzada' => $this->letraDesdeCodigoAfip($codigoAfip),
-            'opciones_emision' => [
-                'omitir_movimiento_stock' => true,
-                'omitir_solicitud_arca_cae' => true,
-                'omitir_sincronizacion_anita' => true,
-                'omitir_stkmov_anita' => true,
-                'omitir_numera_anita_fin' => true,
-                'fechajornada' => $fecha,
-            ],
+            'opciones_emision' => $opcionesEmision,
         ];
         if ($receptor !== null) {
             $payload['venta_receptor'] = $receptor;
@@ -649,6 +663,41 @@ final class FacturacionHuecoArcaCargaService
             'payload' => $payload,
             'cliente' => (string) ($receptor['nombre'] ?? $cliente->nombre),
         ];
+    }
+
+    /**
+     * Contrapartida del asiento recuperado: medio único del local (ej. 608 Mercado Libre).
+     * Si el local tiene varios medios (mostrador), no inventamos uno. Fallback: mapa Facturante por PV.
+     *
+     * @return list<array{cuentacaja_id:int,monto:float,cotizacion:float}>
+     */
+    private function mediosParaAsiento(Puntoventa $pv, float $totalAbs): array
+    {
+        $totalAbs = round(abs($totalAbs), 2);
+        if ($totalAbs < 0.009) {
+            return [];
+        }
+
+        $local = LocalVenta::query()
+            ->where('puntoventa_id', (int) $pv->id)
+            ->where('activo', true)
+            ->orderBy('id')
+            ->first();
+        if ($local !== null) {
+            $cuentas = $local->cuentacajas()
+                ->whereNotNull('cuentacaja.cuentacontable_id')
+                ->where('cuentacaja.cuentacontable_id', '>', 0)
+                ->get(['cuentacaja.id', 'cuentacaja.cuentacontable_id']);
+            if ($cuentas->count() === 1) {
+                return [[
+                    'cuentacaja_id' => (int) $cuentas->first()->id,
+                    'monto' => $totalAbs,
+                    'cotizacion' => 1.0,
+                ]];
+            }
+        }
+
+        return FacturanteAsientoMedioSupport::lineasDesdePrefijo((int) $pv->codigo, $totalAbs);
     }
 
     /**
@@ -903,6 +952,7 @@ final class FacturacionHuecoArcaCargaService
         }
 
         $destinos = $this->mails();
+        $copias = $this->mailsCc();
         if ($destinos === []) {
             Log::warning('facturacion.hueco_arca.sin_mails', ['cantidad' => count($avisar)]);
 
@@ -910,7 +960,12 @@ final class FacturacionHuecoArcaCargaService
         }
 
         try {
-            Mail::to($destinos)->send(new FacturacionHuecoArcaMail($informe));
+            $mailable = new FacturacionHuecoArcaMail($informe);
+            $pendiente = Mail::to($destinos);
+            if ($copias !== []) {
+                $pendiente->cc($copias);
+            }
+            $pendiente->send($mailable);
         } catch (Throwable $e) {
             if (! str_contains($e->getMessage(), 'tempnam')) {
                 Log::error('facturacion.hueco_arca.mail', ['error' => $e->getMessage()]);
@@ -918,7 +973,7 @@ final class FacturacionHuecoArcaCargaService
                 return 'falló el mail: '.$e->getMessage();
             }
             try {
-                $this->avisarHtmlPlano($destinos, $informe);
+                $this->avisarHtmlPlano($destinos, $informe, $copias);
             } catch (Throwable $e2) {
                 Log::error('facturacion.hueco_arca.mail', ['error' => $e2->getMessage()]);
 
@@ -942,14 +997,20 @@ final class FacturacionHuecoArcaCargaService
             })
             ->update(['avisado_at' => now()]);
 
-        return 'enviado a '.implode(', ', $destinos);
+        $detalle = 'enviado a '.implode(', ', $destinos);
+        if ($copias !== []) {
+            $detalle .= ' (cc '.implode(', ', $copias).')';
+        }
+
+        return $detalle;
     }
 
     /**
      * @param  list<string>  $destinos
+     * @param  list<string>  $copias
      * @param  array{cargados: list<array<string, mixed>>, errores: list<array<string, mixed>>, omitidos: list<array<string, mixed>>}  $informe
      */
-    private function avisarHtmlPlano(array $destinos, array $informe): void
+    private function avisarHtmlPlano(array $destinos, array $informe, array $copias = []): void
     {
         $cargados = count($informe['cargados'] ?? []);
         $errores = count($informe['errores'] ?? []);
@@ -963,6 +1024,8 @@ final class FacturacionHuecoArcaCargaService
         }
 
         $html = '<p>El proceso diario encontró comprobantes autorizados en ARCA que no estaban en el ERP.</p>';
+        $html .= '<p>Si esa misma venta se reemitió con otro número, hay que emitir la <strong>nota de crédito</strong> '
+            .'contra el comprobante recuperado (en ARCA y en el ERP) para anularlo.</p>';
         foreach (['cargados' => 'Cargados', 'omitidos' => 'Sin carga automática', 'errores' => 'No se pudieron cargar'] as $clave => $titulo) {
             $filas = $informe[$clave] ?? [];
             if ($filas === []) {
@@ -980,8 +1043,11 @@ final class FacturacionHuecoArcaCargaService
             $html .= '</ul>';
         }
 
-        Mail::html($html, function ($message) use ($destinos, $asunto): void {
+        Mail::html($html, function ($message) use ($destinos, $copias, $asunto): void {
             $message->to($destinos)->subject($asunto);
+            if ($copias !== []) {
+                $message->cc($copias);
+            }
         });
     }
 
@@ -990,11 +1056,35 @@ final class FacturacionHuecoArcaCargaService
      */
     private function mails(): array
     {
-        $raw = (string) config('arca.huecos_facturacion.mails', '');
+        return $this->parseMails((string) config('arca.huecos_facturacion.mails', ''));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function mailsCc(): array
+    {
+        $cc = $this->parseMails((string) config('arca.huecos_facturacion.mails_cc', ''));
+        $to = $this->mails();
+        if ($to === []) {
+            return $cc;
+        }
+
+        return array_values(array_filter(
+            $cc,
+            static fn (string $mail): bool => ! in_array($mail, $to, true)
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function parseMails(string $raw): array
+    {
         $partes = preg_split('/[,\s;]+/', $raw) ?: [];
         $out = [];
         foreach ($partes as $parte) {
-            $mail = trim((string) $parte);
+            $mail = strtolower(trim((string) $parte));
             if ($mail !== '' && filter_var($mail, FILTER_VALIDATE_EMAIL)) {
                 $out[] = $mail;
             }

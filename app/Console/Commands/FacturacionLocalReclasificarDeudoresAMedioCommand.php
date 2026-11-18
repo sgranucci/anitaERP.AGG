@@ -23,6 +23,7 @@ class FacturacionLocalReclasificarDeudoresAMedioCommand extends Command
             $this->info('Ventas: '.$resumen['ventas']);
             $this->info('Líneas: '.$resumen['lineas']);
             $this->info('Monto neto pierna Deudores: '.number_format($resumen['monto'], 2, '.', ''));
+            $this->info('CC a borrar (sin cobranza): '.(int) ($resumen['cc_a_borrar'] ?? 0));
             $this->newLine();
             $this->info('Por cuenta destino:');
             foreach ($resumen['por_destino'] as $fila) {
@@ -75,6 +76,7 @@ class FacturacionLocalReclasificarDeudoresAMedioCommand extends Command
         $this->info('Asientos: '.$resultado['asientos']);
         $this->info('Monto: '.number_format($resultado['monto'], 2, '.', ''));
         $this->info('Omitidas: '.$resultado['omitidas']);
+        $this->info('CC borradas: '.(int) ($resultado['cc_borradas'] ?? 0));
 
         return self::SUCCESS;
     }

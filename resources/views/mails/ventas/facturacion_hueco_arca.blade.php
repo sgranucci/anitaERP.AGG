@@ -14,12 +14,17 @@
 <p style="margin:0 0 16px 0;">
     El proceso diario encontró números de comprobante que ARCA ya había autorizado y el ERP no tenía
     (el caso típico es un rollback después del CAE). Los que se pudieron armar quedaron grabados
-    en la cuenta corriente, con el CAE original, para poder imprimirlos.
+    con el CAE original, imputados al medio del punto de venta cuando el local tiene un solo medio
+    (por ejemplo L-MERCADOLIBRE), para poder imprimirlos y cuadrar con ARCA.
 </p>
 <p style="margin:0 0 16px 0;">
     El renglón es un resumen por alícuota de IVA, no los artículos originales.
     <strong>No movió stock y no se replicó en Anita.</strong>
-    Si esa misma operación ya se volvió a emitir con otro número, hay que revisar si corresponde una nota de débito.
+</p>
+<p style="margin:0 0 16px 0; background:#FFF3CD; padding:10px; border:1px solid #FFECB5;">
+    <strong>Acción requerida:</strong> si esa misma venta se reemitió con otro número (o el CAE quedó huérfano
+    porque falló el cobro), hay que emitir la <strong>nota de crédito</strong> contra el comprobante recuperado
+    en ARCA y en el ERP, para anularlo. No es una nota de débito.
 </p>
 
 @if ($cargados !== [])

@@ -267,6 +267,7 @@ return [
         'punta' => max(1, (int) env('ARCA_HUECOS_FACTURACION_PUNTA', 15)),
         'max_por_corrida' => max(1, (int) env('ARCA_HUECOS_FACTURACION_MAX', 40)),
         'mails' => env('ARCA_HUECOS_FACTURACION_MAILS', ''),
+        'mails_cc' => env('ARCA_HUECOS_FACTURACION_MAILS_CC', ''),
     ],
 
     'monitor_conectividad' => [
