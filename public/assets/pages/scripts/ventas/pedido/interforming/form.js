@@ -570,12 +570,9 @@
             }
 
             if (typeof precio === 'number' && !isNaN(precio)) {
-                var precioRedondeado = (typeof redondearDecimales === 'function')
-                    ? redondearDecimales(precio, 2)
-                    : precio;
-                $tr.find('.precio').val(precioRedondeado);
+                $tr.find('.precio').val(formatearPrecioValor(precio) || '0');
             } else {
-                $tr.find('.precio').val(precio);
+                $tr.find('.precio').val(formatearPrecioValor(precio) || precio);
             }
 
             $tr.find('.listaprecio_id').val(listaprecioId);
@@ -607,6 +604,39 @@
         var s = n.toFixed(6);
         s = s.replace(/\.?0+$/, '');
         return s;
+    }
+
+    /** Precio / % fasón / $ fasón: máx. 3 decimales (pedido Fabian vs Anita). */
+    function formatearPrecioValor(valor) {
+        var n = parseFloat(valor);
+        if (isNaN(n)) {
+            return '';
+        }
+        if (typeof redondearDecimales === 'function') {
+            n = redondearDecimales(n, 3);
+        } else {
+            n = Math.round(n * 1e3) / 1e3;
+        }
+        if (Math.abs(n - Math.round(n)) < 1e-9) {
+            return String(Math.round(n));
+        }
+        var s = n.toFixed(3);
+        s = s.replace(/\.?0+$/, '');
+        return s;
+    }
+
+    function formatearPrecioEnInput($input) {
+        if (!$input || !$input.length) {
+            return;
+        }
+        var raw = String($input.val() || '').trim();
+        if (raw === '') {
+            return;
+        }
+        var fmt = formatearPrecioValor(raw);
+        if (fmt !== '') {
+            $input.val(fmt);
+        }
     }
 
     function formatearCantidadEnInput($input) {
@@ -751,7 +781,7 @@
                 if (isNaN(precio)) {
                     precio = 0;
                 }
-                $precioFason.val(formatearCantidadValor(precio) || '0');
+                $precioFason.val(formatearPrecioValor(precio) || '0');
                 if (data && data.moneda_id) {
                     $monedaFason.val(data.moneda_id);
                 }
@@ -919,6 +949,7 @@
 
         $(document).on('change', 'input[name*="[porc_fason]"]', function () {
             var $tr = $(this).closest('tr');
+            formatearPrecioEnInput($(this));
             var porc = parseFloat($tr.find('input[name*="[porc_fason]"]').val() || '0') || 0;
             $tr.find('input[name*="[partida]"]').val(porc > 0 ? 1 : 0);
             refrescarPrecioFasonFila($tr);
@@ -931,6 +962,14 @@
         $(document).on('blur', '#tbody-items-pedido-if .cantidad, #tbody-items-pedido-if .cantidad_alter', function () {
             formatearCantidadEnInput($(this));
         });
+
+        $(document).on(
+            'blur',
+            '#tbody-items-pedido-if .precio, #tbody-items-pedido-if .porc_fason, #tbody-items-pedido-if .precio_fason',
+            function () {
+                formatearPrecioEnInput($(this));
+            }
+        );
 
         $(document).on('change', '#tbody-items-pedido-if .unidadmedida_id', function () {
             var $tr = $(this).closest('tr');

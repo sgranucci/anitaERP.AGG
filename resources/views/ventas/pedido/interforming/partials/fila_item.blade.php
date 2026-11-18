@@ -12,6 +12,22 @@
     if ($cantAlterShow !== '' && $cantAlterShow !== null && is_numeric($cantAlterShow)) {
         $cantAlterShow = rtrim(rtrim(number_format((float) $cantAlterShow, 6, '.', ''), '0'), '.');
     }
+    $fmtPrecio3 = static function ($valor) {
+        if ($valor === '' || $valor === null || ! is_numeric($valor)) {
+            return $valor ?? '';
+        }
+
+        return rtrim(rtrim(number_format((float) $valor, 3, '.', ''), '0'), '.');
+    };
+    $porcFasonShow = $fmtPrecio3($item['porc_fason'] ?? 0);
+    if ($porcFasonShow === '') {
+        $porcFasonShow = '0';
+    }
+    $precioFasonShow = $fmtPrecio3($item['precio_fason'] ?? 0);
+    if ($precioFasonShow === '') {
+        $precioFasonShow = '0';
+    }
+    $precioShow = $fmtPrecio3($item['precio'] ?? '');
 @endphp
 <tr class="fila-item-pedido-if">
     <td class="align-middle">
@@ -75,20 +91,26 @@
         <input type="date" name="items[{{ $idx }}][fechaentrega]" class="form-control form-control-sm"
                value="{{ $item['fechaentrega'] ?? '' }}">
     </td>
-    <td class="align-middle" style="min-width:6.5rem;">
-        <input type="number" step="0.01" name="items[{{ $idx }}][porc_fason]" class="form-control form-control-sm text-right"
-               value="{{ $item['porc_fason'] ?? 0 }}" title="% de la cantidad a fasón (no modifica el precio)">
-        <input type="number" step="0.000001" name="items[{{ $idx }}][precio_fason]"
+    <td class="align-middle" style="min-width:7rem;">
+        <div class="input-group input-group-sm">
+            <input type="number" step="0.001" inputmode="decimal" name="items[{{ $idx }}][porc_fason]"
+                   class="form-control form-control-sm text-right porc_fason"
+                   value="{{ $porcFasonShow }}" title="% de la cantidad a fas&oacute;n (no modifica el precio)">
+            <div class="input-group-append">
+                <span class="input-group-text">%</span>
+            </div>
+        </div>
+        <input type="number" step="0.001" inputmode="decimal" name="items[{{ $idx }}][precio_fason]"
                class="form-control form-control-sm text-right precio_fason mt-1"
-               value="{{ $item['precio_fason'] ?? 0 }}" readonly
+               value="{{ $precioFasonShow }}" readonly
                title="Precio de lista Fason (si no hay precio en la lista queda 0)">
         <input type="hidden" name="items[{{ $idx }}][partida]" value="{{ $item['partida'] ?? 0 }}">
         <input type="hidden" name="items[{{ $idx }}][moneda_fason_id]" class="moneda_fason_id"
                value="{{ $item['moneda_fason_id'] ?? '' }}">
     </td>
     <td class="align-middle" style="min-width:7rem;">
-        <input type="number" step="0.000001" name="items[{{ $idx }}][precio]"
-               class="form-control form-control-sm precio text-right" value="{{ $item['precio'] ?? '' }}">
+        <input type="number" step="0.001" inputmode="decimal" name="items[{{ $idx }}][precio]"
+               class="form-control form-control-sm precio text-right" value="{{ $precioShow }}">
         <input type="hidden" name="items[{{ $idx }}][moneda_id]" class="moneda_id" value="{{ $item['moneda_id'] ?? '' }}">
         <input type="hidden" name="items[{{ $idx }}][listaprecio_id]" class="listaprecio_id"
                value="{{ $item['listaprecio_id'] ?? '' }}">

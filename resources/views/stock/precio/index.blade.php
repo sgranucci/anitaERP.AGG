@@ -13,7 +13,7 @@
 <script src="{{ asset('assets/pages/scripts/stock/precio/emitir-lista.js') }}" type="text/javascript"></script>
 <style>
     .precio-index-toolbar {
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
         gap: 0.25rem;
         max-width: 100%;
     }
@@ -167,9 +167,14 @@
                             </a>
                         @endif
                         @if (can('crear-precios', false))
-                            <a href="{{ route('crear_importacion_precio') }}" class="btn btn-outline-secondary btn-sm" title="Importar Excel">
-                                <i class="fa fa-upload"></i>
+                            <a href="{{ route('crear_importacion_precio') }}" class="btn btn-outline-light btn-sm" title="Importar Excel">
+                                <i class="fa fa-upload"></i> Excel
                             </a>
+                            @if (\App\Support\Configuracion\EntornoEmpresaSupport::esInterforming())
+                                <a href="{{ route('precio_importar_lista_archivo') }}" class="btn btn-warning btn-sm" title="Importar lista PDF/DOCX (formato est&aacute;ndar Interforming)">
+                                    <i class="fa fa-file-pdf"></i> Importar PDF/DOCX
+                                </a>
+                            @endif
                         @endif
                         <button type="button" class="btn btn-outline-light btn-sm" id="btn-emitir-lista-vigente" title="Emitir la lista vigente en Excel, PDF o CSV">
                             <i class="fa fa-file-export"></i> Emitir

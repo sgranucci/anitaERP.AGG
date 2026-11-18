@@ -786,6 +786,15 @@ Route::post('stock/precio/actualizar-por-categoria/preview', 'Stock\PrecioContro
 Route::post('stock/precio/actualizar-por-categoria', 'Stock\PrecioController@aplicarActualizacionCategoria')->name('precio_actualizar_categoria_aplicar');
 Route::get('stock/precio/consulta-por-articulo', 'Stock\PrecioController@consultaPreciosArticulo')->name('consulta_precios_articulo');
 
+// INTERFORMING: importador lista estándar PDF/DOCX — el controller aborta 404 fuera de ese entorno
+Route::get('stock/precio/importar-lista-archivo', 'Stock\ListaPrecioArchivoImportController@crear')->name('precio_importar_lista_archivo');
+Route::post('stock/precio/importar-lista-archivo/preview', 'Stock\ListaPrecioArchivoImportController@preview')->name('precio_importar_lista_archivo_preview');
+Route::post('stock/precio/importar-lista-archivo', 'Stock\ListaPrecioArchivoImportController@importar')->name('precio_importar_lista_archivo_ejecutar');
+// Alias legacy Bagnara → formato estándar
+Route::get('stock/precio/importar-lista-bagnara', static function () {
+    return redirect()->route('precio_importar_lista_archivo', [], 301);
+});
+
 /*
  * Tienda nube
  */

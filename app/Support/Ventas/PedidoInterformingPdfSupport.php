@@ -183,11 +183,19 @@ final class PedidoInterformingPdfSupport
             if ($descuentoLinea > 100) {
                 $descuentoLinea = 100;
             }
-            $precioNeto = $descuentoLinea > 0.00001
-                ? round($precioLista * (1 - ($descuentoLinea / 100.0)), 6)
-                : $precioLista;
-            $importeLinea = round($cantidad * $precioNeto, 2);
-            $totalSinDto += round($cantidad * $precioLista, 2);
+            $porcFason = (float) ($item->porc_fason ?? 0);
+            $precioFason = (float) ($item->precio_fason ?? 0);
+            // Anita: Total = virgen×precio + fasón×precio_fason (el % solo parte cantidad).
+            $mix = PedidoInterformingFasonSupport::importeLineaMix(
+                $cantidad,
+                $precioLista,
+                $porcFason,
+                $precioFason,
+                $descuentoLinea
+            );
+            $importeLinea = $mix['importe'];
+            $totalSinDto += $mix['importe_sin_dto'];
+            $precioNeto = $mix['precio_neto_efectivo'];
 
             $umd = self::abreviaturaUmd($item->unidadmedida);
             if ($umd === '') {
@@ -203,16 +211,12 @@ final class PedidoInterformingPdfSupport
                 $totalesPorUmd[$umdAlt] = ($totalesPorUmd[$umdAlt] ?? 0.0) + $cantAlt;
             }
 
-            $porcFason = (float) ($item->porc_fason ?? 0);
-            $precioFason = (float) ($item->precio_fason ?? 0);
             $fasonNota = null;
             if ($porcFason > 0.0001) {
-                $cantEnvCli = round($cantidad * ($porcFason / 100.0), 2);
-                $cantIf = round($cantidad - $cantEnvCli, 2);
                 $fasonNota = [
                     'precio_fason' => $precioFason,
-                    'env_cli' => $cantEnvCli,
-                    'interforming' => $cantIf,
+                    'env_cli' => $mix['cant_fason'],
+                    'interforming' => $mix['cant_virgen'],
                 ];
             }
 
@@ -243,8 +247,9 @@ final class PedidoInterformingPdfSupport
                 'sku' => $sku !== '' ? $sku : ('ITEM-'.$item->id),
                 'descripcion' => $descripcion,
                 'cantidad' => $cantidad,
+                // Precio efectivo del mix virgen/fasón para que IVA/totales cierren con Anita.
                 'precio' => $precioNeto,
-                'preciosindescuento' => $precioLista,
+                'preciosindescuento' => $mix['precio_lista_efectivo'],
                 'descuento' => $descuentoLinea,
                 'descuentointegrado' => $item->descuentointegrado ?? 0,
                 'descuentofinal' => (float) ($pedido->descuento ?? 0),

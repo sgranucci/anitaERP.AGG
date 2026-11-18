@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface
 use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Ventas\PedidoEstadosInterforming;
+use App\Support\Ventas\PedidoInterformingFasonSupport;
 use App\Support\Ventas\PedidoInterformingSupport;
 use Auth;
 use Carbon\Carbon;
@@ -278,11 +279,7 @@ class PedidoInterformingArbolIntegracionService
 
         if ($pedido->pedido_articulos && $pedido->pedido_articulos->count() > 0) {
             foreach ($pedido->pedido_articulos as $item) {
-                $total += $this->importeLinea(
-                    (float) ($item->cantidad ?? 0),
-                    (float) ($item->precio ?? 0),
-                    (float) ($item->descuento ?? 0)
-                );
+                $total += $this->importeLineaItem($item);
             }
         } elseif ($pedido->pedido_combinaciones && $pedido->pedido_combinaciones->count() > 0) {
             foreach ($pedido->pedido_combinaciones as $item) {
@@ -300,6 +297,19 @@ class PedidoInterformingArbolIntegracionService
         }
 
         return round($total, 2);
+    }
+
+    private function importeLineaItem(object $item): float
+    {
+        $mix = PedidoInterformingFasonSupport::importeLineaMix(
+            (float) ($item->cantidad ?? 0),
+            (float) ($item->precio ?? 0),
+            (float) ($item->porc_fason ?? 0),
+            (float) ($item->precio_fason ?? 0),
+            (float) ($item->descuento ?? 0)
+        );
+
+        return $mix['importe'];
     }
 
     private function importeLinea(float $cant, float $precio, float $dto): float

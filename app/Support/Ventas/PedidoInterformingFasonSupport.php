@@ -108,6 +108,92 @@ final class PedidoInterformingFasonSupport
     }
 
     /**
+     * Partición Anita (a-pedido / Env.Cli. vs Interforming): % sobre cantidad, 2 decimales.
+     *
+     * @return array{cant_fason: float, cant_virgen: float}
+     */
+    public static function particionCantidad(float $cantidad, float $porcFason): array
+    {
+        if ($porcFason <= 0.0001 || abs($cantidad) < 0.0000001) {
+            return [
+                'cant_fason' => 0.0,
+                'cant_virgen' => round($cantidad, 2),
+            ];
+        }
+
+        $cantFason = round($cantidad * ($porcFason / 100.0), 2);
+        $cantVirgen = round($cantidad - $cantFason, 2);
+
+        return [
+            'cant_fason' => $cantFason,
+            'cant_virgen' => $cantVirgen,
+        ];
+    }
+
+    /**
+     * Importe de línea Anita: virgen × precio + fasón × precio_fason (dto % sobre cada precio).
+     * El % solo parte cantidad; no inventa precio.
+     *
+     * @return array{
+     *   cant_fason: float,
+     *   cant_virgen: float,
+     *   importe: float,
+     *   importe_sin_dto: float,
+     *   precio_neto_efectivo: float,
+     *   precio_lista_efectivo: float
+     * }
+     */
+    public static function importeLineaMix(
+        float $cantidad,
+        float $precio,
+        float $porcFason,
+        float $precioFason,
+        float $descuentoPct = 0.0
+    ): array {
+        if ($descuentoPct < 0) {
+            $descuentoPct = 0.0;
+        }
+        if ($descuentoPct > 100) {
+            $descuentoPct = 100.0;
+        }
+
+        $partes = self::particionCantidad($cantidad, $porcFason);
+        $cantFason = $partes['cant_fason'];
+        $cantVirgen = $partes['cant_virgen'];
+
+        $coef = $descuentoPct > 0.00001
+            ? (1.0 - ($descuentoPct / 100.0))
+            : 1.0;
+        $precioNeto = round($precio * $coef, 6);
+        $precioFasonNeto = round($precioFason * $coef, 6);
+
+        if ($cantFason > 0.00001 && $precioFason > 0.0000001) {
+            $importeSinDto = round(
+                ($cantVirgen * $precio) + ($cantFason * $precioFason),
+                2
+            );
+            $importe = round(
+                ($cantVirgen * $precioNeto) + ($cantFason * $precioFasonNeto),
+                2
+            );
+        } else {
+            $importeSinDto = round($cantidad * $precio, 2);
+            $importe = round($cantidad * $precioNeto, 2);
+        }
+
+        $den = abs($cantidad) > 0.0000001 ? $cantidad : 1.0;
+
+        return [
+            'cant_fason' => $cantFason,
+            'cant_virgen' => $cantVirgen,
+            'importe' => $importe,
+            'importe_sin_dto' => $importeSinDto,
+            'precio_neto_efectivo' => round($importe / $den, 6),
+            'precio_lista_efectivo' => round($importeSinDto / $den, 6),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
