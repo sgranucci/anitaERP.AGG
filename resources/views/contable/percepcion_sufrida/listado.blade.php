@@ -1,10 +1,12 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Contable\PercepcionSufrida\PercepcionSufridaArchivoSupport;
+    use App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport;
 
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion(collect($filasParaLogo ?? []));
     $diferencias = $diferencias ?? [];
     $tot = $totales ?? [];
+    $cruzadoPorJurisdiccion = $tot['cruzado_por_jurisdiccion'] ?? [];
     $totalFilas = count($diferencias);
     $tituloReporte = $titulo ?? 'Diferencias';
     $esIibb = ! empty($esIibb);
@@ -64,8 +66,11 @@
                 <td colspan="8" style="border:none;padding:4px 2px;">
                     Mayor {{ number_format((float) ($tot['mayor'] ?? 0), 2, ',', '.') }}
                     @if ($esIibb)
-                        — 901 {{ number_format((float) ($tot['cruzado_901'] ?? 0), 2, ',', '.') }}
-                        — 902 {{ number_format((float) ($tot['cruzado_902'] ?? 0), 2, ',', '.') }}
+                        @forelse ($cruzadoPorJurisdiccion as $jurTot => $importeTot)
+                            — {{ PercepcionSufridaLineaSupport::etiquetaJurisdiccion((int) $jurTot) }} {{ number_format((float) $importeTot, 2, ',', '.') }}
+                        @empty
+                            — Cruzado 0,00
+                        @endforelse
                     @else
                         — Cruzado {{ number_format((float) ($tot['cruzado'] ?? 0), 2, ',', '.') }}
                     @endif

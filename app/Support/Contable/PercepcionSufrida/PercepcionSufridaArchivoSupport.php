@@ -32,7 +32,7 @@ final class PercepcionSufridaArchivoSupport
         $out = '';
         foreach ($cruzados as $linea) {
             $jur = (int) ($linea['jurisdiccion'] ?? 0);
-            if (! in_array($jur, [901, 902], true)) {
+            if (! PercepcionSufridaLineaSupport::esJurisdiccionSifere($jur)) {
                 continue;
             }
             if ($jurisdiccion !== null && $jur !== $jurisdiccion) {
@@ -75,7 +75,7 @@ final class PercepcionSufridaArchivoSupport
         $out = '';
         foreach ($lineas as $linea) {
             $jur = (int) ($linea['jurisdiccion'] ?? 0);
-            if ($jur < 901 || $jur > 924) {
+            if (! PercepcionSufridaLineaSupport::esJurisdiccionSifere($jur)) {
                 continue;
             }
             if ($jurisdiccion !== null && $jur !== $jurisdiccion) {

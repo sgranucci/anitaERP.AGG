@@ -1,8 +1,10 @@
 @php
     use App\Support\Contable\PercepcionSufrida\PercepcionSufridaArchivoSupport;
+    use App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport;
 
     $diferencias = $diferencias ?? [];
     $tot = $totales ?? [];
+    $cruzadoPorJurisdiccion = $tot['cruzado_por_jurisdiccion'] ?? [];
     $esIibb = ! empty($esIibb);
     $monto = static function ($valor): string {
         return number_format((float) $valor, 2, '.', '');
@@ -27,12 +29,15 @@
         <td colspan="8">Total mayor: {{ $monto($tot['mayor'] ?? 0) }}</td>
     </tr>
     @if ($esIibb)
-        <tr>
-            <td colspan="8">Cruzado 901 (CABA): {{ $monto($tot['cruzado_901'] ?? 0) }}</td>
-        </tr>
-        <tr>
-            <td colspan="8">Cruzado 902 (Buenos Aires): {{ $monto($tot['cruzado_902'] ?? 0) }}</td>
-        </tr>
+        @forelse ($cruzadoPorJurisdiccion as $jurTot => $importeTot)
+            <tr>
+                <td colspan="8">Cruzado {{ PercepcionSufridaLineaSupport::etiquetaJurisdiccion((int) $jurTot) }}: {{ $monto($importeTot) }}</td>
+            </tr>
+        @empty
+            <tr>
+                <td colspan="8">Cruzado por jurisdicción: {{ $monto(0) }}</td>
+            </tr>
+        @endforelse
     @else
         <tr>
             <td colspan="8">Total cruzado: {{ $monto($tot['cruzado'] ?? 0) }}</td>

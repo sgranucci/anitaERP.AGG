@@ -9,7 +9,9 @@ use App\Exports\Contable\PercepcionSufridaReporteExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\PercepcionSufrida\PercepcionSufridaProcesoService;
+use App\Support\Contable\PercepcionSufrida\PercepcionSufridaArchivoSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaCorteSupport;
+use App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaListadoFiltros;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
@@ -63,7 +65,7 @@ class PercepcionSufridaController extends Controller
         ini_set('max_execution_time', '0');
 
         $jurisdiccion = (int) $request->query('jurisdiccion');
-        if (! in_array($jurisdiccion, [901, 902], true)) {
+        if (! PercepcionSufridaLineaSupport::esJurisdiccionSifere($jurisdiccion)) {
             return redirect()->route('sifere');
         }
 
@@ -82,9 +84,8 @@ class PercepcionSufridaController extends Controller
         $nombreEmpresa = (string) ($empresa->nombre ?? '');
         $periodo = PercepcionSufridaListadoFiltros::formatearPeriodoTexto($filtros);
         $esRetenciones = ($filtros['exporta'] ?? '') === PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES;
-        $titulo = $jurisdiccion === 901
-            ? ($esRetenciones ? 'SiFeRe retenciones 901 — CABA' : 'SiFeRe 901 — CABA')
-            : ($esRetenciones ? 'SiFeRe retenciones 902 — Buenos Aires' : 'SiFeRe 902 — Buenos Aires');
+        $etiqueta = PercepcionSufridaLineaSupport::etiquetaJurisdiccion($jurisdiccion);
+        $titulo = ($esRetenciones ? 'SiFeRe retenciones ' : 'SiFeRe ').$etiqueta;
         $subtitulo = trim($nombreEmpresa.($periodo !== '' ? ' — '.$periodo : ''));
         $prefijo = $esRetenciones ? 'sifere_retenciones_' : 'sifere_';
 
@@ -187,9 +188,13 @@ class PercepcionSufridaController extends Controller
         $resultado = $this->proceso->generar($tipo, $filtros);
         $jurisdiccion = (int) $request->query('jurisdiccion');
         $esRetenciones = ($filtros['exporta'] ?? '') === PercepcionSufridaListadoFiltros::EXPORTA_RETENCIONES;
-        if ($tipo === PercepcionSufridaCorteSupport::TIPO_IIBB && in_array($jurisdiccion, [901, 902], true)) {
+        if ($tipo === PercepcionSufridaCorteSupport::TIPO_IIBB
+            && PercepcionSufridaLineaSupport::esJurisdiccionSifere($jurisdiccion)) {
             $nombre = ($esRetenciones ? 'rsif-' : 'psif-').$jurisdiccion.'.txt';
-            $contenido = (string) ($resultado['archivo_'.$jurisdiccion] ?? '');
+            $cruzados = $resultado['cruzados'] ?? [];
+            $contenido = $esRetenciones
+                ? PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados, $jurisdiccion)
+                : PercepcionSufridaArchivoSupport::sifere($cruzados, $jurisdiccion);
         } else {
             $nombre = (string) ($resultado['nombre_archivo'] ?? 'archivo.txt');
             $contenido = (string) ($resultado['archivo'] ?? '');
@@ -367,7 +372,7 @@ class PercepcionSufridaController extends Controller
         return [
             'titulo' => 'SiFeRe — percepciones de IIBB sufridas',
             'titulo_listado' => 'Diferencias — percepciones de IIBB sufridas',
-            'ayuda' => 'Cruza el mayor de la cuenta de percepción de ingresos brutos sufrida contra los reportes 901 (CABA) y 902 (Buenos Aires). Los archivos de importación salen separados por jurisdicción.',
+            'ayuda' => 'Cruza el mayor de la cuenta de percepción de ingresos brutos sufrida contra los conceptos del comprobante (jurisdicciones SIFERE 901 a 924: CABA, Buenos Aires, Neuquén, Río Negro, etc.). Los archivos de importación salen separados por jurisdicción.',
             'archivo_boton' => 'Descargar psif.txt',
             'archivo_listado' => 'diferencias_sifere',
             'ruta_index' => 'sifere',

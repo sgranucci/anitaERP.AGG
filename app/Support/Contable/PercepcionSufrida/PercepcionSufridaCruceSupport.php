@@ -100,9 +100,8 @@ final class PercepcionSufridaCruceSupport
             $diferencias,
         )), 2);
 
-        $cruzado901 = 0.0;
-        $cruzado902 = 0.0;
         $cruzado = 0.0;
+        $cruzadoPorJurisdiccion = [];
         foreach ($cruzados as $linea) {
             $importe = self::pesos($linea);
             $cruzado += $importe;
@@ -110,18 +109,17 @@ final class PercepcionSufridaCruceSupport
                 continue;
             }
             $jur = (int) ($linea['jurisdiccion'] ?? 0);
-            if ($jur === 901) {
-                $cruzado901 += $importe;
-            } elseif ($jur === 902) {
-                $cruzado902 += $importe;
+            if (! PercepcionSufridaLineaSupport::esJurisdiccionSifere($jur)) {
+                continue;
             }
+            $cruzadoPorJurisdiccion[$jur] = round(($cruzadoPorJurisdiccion[$jur] ?? 0.0) + $importe, 2);
         }
+        ksort($cruzadoPorJurisdiccion);
 
         $cruzado = round($cruzado, 2);
-        $cruzado901 = round($cruzado901, 2);
-        $cruzado902 = round($cruzado902, 2);
+        $sumaJurisdicciones = round(array_sum($cruzadoPorJurisdiccion), 2);
         $desvioCierre = $porJurisdiccion
-            ? round($totalMayor - $cruzado901 - $cruzado902 - $totalDif, 2)
+            ? round($totalMayor - $sumaJurisdicciones - $totalDif, 2)
             : round($totalMayor - $cruzado - $totalDif, 2);
 
         return [
@@ -130,8 +128,9 @@ final class PercepcionSufridaCruceSupport
             'totales' => [
                 'mayor' => $totalMayor,
                 'cruzado' => $cruzado,
-                'cruzado_901' => $cruzado901,
-                'cruzado_902' => $cruzado902,
+                'cruzado_por_jurisdiccion' => $cruzadoPorJurisdiccion,
+                'cruzado_901' => round((float) ($cruzadoPorJurisdiccion[901] ?? 0), 2),
+                'cruzado_902' => round((float) ($cruzadoPorJurisdiccion[902] ?? 0), 2),
                 'diferencias' => $totalDif,
                 'desvio_cierre' => $desvioCierre,
                 'lineas_mayor' => count($mayor),
@@ -168,7 +167,7 @@ final class PercepcionSufridaCruceSupport
     private static function informableSinConcepto(array $mayor): bool
     {
         return (string) ($mayor['cuit'] ?? '') !== ''
-            && in_array((int) ($mayor['jurisdiccion'] ?? 0), [901, 902], true);
+            && PercepcionSufridaLineaSupport::esJurisdiccionSifere((int) ($mayor['jurisdiccion'] ?? 0));
     }
 
     /**

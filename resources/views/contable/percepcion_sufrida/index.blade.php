@@ -97,19 +97,22 @@
                     </button>
                     @if ($consultado && can($permiso_exportar, false))
                         @if (($es_iibb ?? '0') === '1')
-                            @php $prefijoArchivo = ($es_retenciones ?? '0') === '1' ? 'rsif' : 'psif'; @endphp
-                            <a href="{{ route($ruta_exportar, array_merge($filtrosQuery, ['jurisdiccion' => 901])) }}" class="btn btn-success js-percepcion-descarga">
-                                <i class="fa fa-download"></i> Descargar {{ $prefijoArchivo }}-901
-                            </a>
-                            <a href="{{ route($ruta_exportar, array_merge($filtrosQuery, ['jurisdiccion' => 902])) }}" class="btn btn-success js-percepcion-descarga">
-                                <i class="fa fa-download"></i> Descargar {{ $prefijoArchivo }}-902
-                            </a>
-                            <a href="{{ route('exportar_sifere_reporte', array_merge($filtrosQuery, ['jurisdiccion' => 901])) }}" class="btn btn-outline-success js-percepcion-descarga">
-                                <i class="fa fa-file-excel-o"></i> Excel 901
-                            </a>
-                            <a href="{{ route('exportar_sifere_reporte', array_merge($filtrosQuery, ['jurisdiccion' => 902])) }}" class="btn btn-outline-success js-percepcion-descarga">
-                                <i class="fa fa-file-excel-o"></i> Excel 902
-                            </a>
+                            @php
+                                $prefijoArchivo = ($es_retenciones ?? '0') === '1' ? 'rsif' : 'psif';
+                                $resultadoArchivo = is_array($resultado ?? null) ? $resultado : [];
+                                $jurisdiccionesArchivo = $resultadoArchivo['jurisdicciones']
+                                    ?? array_keys($resultadoArchivo['totales']['cruzado_por_jurisdiccion'] ?? []);
+                            @endphp
+                            @foreach ($jurisdiccionesArchivo as $jurDescarga)
+                                <a href="{{ route($ruta_exportar, array_merge($filtrosQuery, ['jurisdiccion' => (int) $jurDescarga])) }}" class="btn btn-success js-percepcion-descarga">
+                                    <i class="fa fa-download"></i> Descargar {{ $prefijoArchivo }}-{{ (int) $jurDescarga }}
+                                </a>
+                            @endforeach
+                            @foreach ($jurisdiccionesArchivo as $jurDescarga)
+                                <a href="{{ route('exportar_sifere_reporte', array_merge($filtrosQuery, ['jurisdiccion' => (int) $jurDescarga])) }}" class="btn btn-outline-success js-percepcion-descarga">
+                                    <i class="fa fa-file-excel-o"></i> Excel {{ (int) $jurDescarga }}
+                                </a>
+                            @endforeach
                         @else
                             <a href="{{ route($ruta_exportar, $filtrosQuery) }}" class="btn btn-success js-percepcion-descarga">
                                 <i class="fa fa-download"></i> {{ $archivo_boton }}
@@ -142,8 +145,14 @@
                 $hayDiferencias = count($diferencias) > 0;
                 $desvioSaldo = round((float) ($tot['desvio_saldo'] ?? 0), 2);
                 $desvioCierre = round((float) ($tot['desvio_cierre'] ?? 0), 2);
-            @endphp
-            @php
+                $cruzadoPorJurisdiccion = $tot['cruzado_por_jurisdiccion'] ?? [];
+                if ($cruzadoPorJurisdiccion === [] && (($es_iibb ?? '0') === '1')) {
+                    foreach ([901 => ($tot['cruzado_901'] ?? 0), 902 => ($tot['cruzado_902'] ?? 0)] as $jurFallback => $importeFallback) {
+                        if (abs((float) $importeFallback) >= 0.009) {
+                            $cruzadoPorJurisdiccion[(int) $jurFallback] = round((float) $importeFallback, 2);
+                        }
+                    }
+                }
                 $esRetenciones = ($es_retenciones ?? '0') === '1';
                 $filasRetencion = $esRetenciones ? ($resultado['cruzados'] ?? []) : [];
             @endphp
@@ -155,7 +164,7 @@
                     @endif
                     @if (abs($desvioCierre) > 0.05)
                         @if (($es_iibb ?? '0') === '1')
-                            La suma de 901, 902 y las diferencias no explica el mayor ({{ number_format($desvioCierre, 2, ',', '.') }}).
+                            La suma de las jurisdicciones cruzadas y las diferencias no explica el mayor ({{ number_format($desvioCierre, 2, ',', '.') }}).
                         @else
                             La suma del cruzado y las diferencias no explica el mayor ({{ number_format($desvioCierre, 2, ',', '.') }}).
                         @endif
@@ -175,16 +184,19 @@
                                     <td class="text-right">{{ number_format((float) ($tot['cruzado'] ?? 0), 2, ',', '.') }}</td>
                                     <td class="text-muted small">{{ (int) ($tot['lineas_cruzadas'] ?? 0) }} líneas (ERP {{ (int) ($tot['lineas_erp'] ?? 0) }} / Anita {{ (int) ($tot['lineas_anita'] ?? 0) }})</td>
                                 </tr>
-                                <tr>
-                                    <th>901 (CABA)</th>
-                                    <td class="text-right">{{ number_format((float) ($tot['cruzado_901'] ?? 0), 2, ',', '.') }}</td>
-                                    <td class="text-muted small">Importe a liquidar</td>
-                                </tr>
-                                <tr>
-                                    <th>902 (Buenos Aires)</th>
-                                    <td class="text-right">{{ number_format((float) ($tot['cruzado_902'] ?? 0), 2, ',', '.') }}</td>
-                                    <td class="text-muted small">Importe a liquidar</td>
-                                </tr>
+                                @forelse ($cruzadoPorJurisdiccion as $jurTot => $importeTot)
+                                    <tr>
+                                        <th>{{ \App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport::etiquetaJurisdiccion((int) $jurTot) }}</th>
+                                        <td class="text-right">{{ number_format((float) $importeTot, 2, ',', '.') }}</td>
+                                        <td class="text-muted small">Importe a liquidar</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <th>Jurisdicciones</th>
+                                        <td class="text-right">0,00</td>
+                                        <td class="text-muted small">Sin líneas</td>
+                                    </tr>
+                                @endforelse
                             @else
                                 <tr>
                                     <th style="width:28%;">Total mayor</th>
@@ -192,16 +204,19 @@
                                     <td class="text-muted small">{{ (int) ($tot['lineas_mayor'] ?? 0) }} líneas</td>
                                 </tr>
                                 @if (($es_iibb ?? '0') === '1')
-                                    <tr>
-                                        <th>Cruzado 901 (CABA)</th>
-                                        <td class="text-right">{{ number_format((float) ($tot['cruzado_901'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-muted small">Importe a liquidar</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Cruzado 902 (Buenos Aires)</th>
-                                        <td class="text-right">{{ number_format((float) ($tot['cruzado_902'] ?? 0), 2, ',', '.') }}</td>
-                                        <td class="text-muted small">Importe a liquidar</td>
-                                    </tr>
+                                    @forelse ($cruzadoPorJurisdiccion as $jurTot => $importeTot)
+                                        <tr>
+                                            <th>Cruzado {{ \App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport::etiquetaJurisdiccion((int) $jurTot) }}</th>
+                                            <td class="text-right">{{ number_format((float) $importeTot, 2, ',', '.') }}</td>
+                                            <td class="text-muted small">Importe a liquidar</td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <th>Cruzado por jurisdicción</th>
+                                            <td class="text-right">0,00</td>
+                                            <td class="text-muted small">Sin líneas en archivo</td>
+                                        </tr>
+                                    @endforelse
                                 @else
                                     <tr>
                                         <th>Total cruzado</th>
@@ -225,7 +240,7 @@
                                     <td class="text-muted small">Tiene que dar cero</td>
                                 </tr>
                                 <tr>
-                                    <th>{{ ($es_iibb ?? '0') === '1' ? 'Mayor − 901 − 902 − diferencias' : 'Mayor − cruzado − diferencias' }}</th>
+                                    <th>{{ ($es_iibb ?? '0') === '1' ? 'Mayor − jurisdicciones − diferencias' : 'Mayor − cruzado − diferencias' }}</th>
                                     <td class="text-right">{{ number_format((float) ($tot['desvio_cierre'] ?? 0), 2, ',', '.') }}</td>
                                     <td class="text-muted small">Tiene que dar cero</td>
                                 </tr>

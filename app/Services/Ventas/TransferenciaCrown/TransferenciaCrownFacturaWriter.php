@@ -18,6 +18,7 @@ use App\Models\Ventas\Venta_Emision;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\AsientoAnitaMetadatosSupport;
+use App\Support\Contable\AsientoSubdiarioDuplicadoTransferenciaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\TransferenciaCrown\CrownFacturaAsientoFechaSupport;
 use App\Support\Ventas\TransferenciaCrown\TransferenciaCrownComprobante;
@@ -391,6 +392,18 @@ final class TransferenciaCrownFacturaWriter
         // Numeración solo en ERP (no reserva ni escribe en Anita).
         $numeroAsiento = $this->reservarNumeroErp($empresaId);
         $tipoAnita = strtoupper((string) ($fila['tipo_anita'] ?? $fila['tipo'] ?? ''));
+        $letraAnita = strtoupper((string) $fila['letra']);
+        $sucursalAnita = (int) $fila['sucursal'];
+        $nroAnita = (int) $fila['numero'];
+        // Si Anita ya había importado el mismo FAC/NCD por subdiario, sacar ese asiento
+        // para no dejar el mayor al doble (caso hotel Viedma/LGR sep/2026).
+        AsientoSubdiarioDuplicadoTransferenciaSupport::eliminarSubdiarioDelDocumento(
+            $empresaId,
+            $tipoAnita,
+            $letraAnita,
+            $sucursalAnita,
+            $nroAnita,
+        );
         $asiento = Asiento::query()->create([
             'empresa_id' => $empresaId,
             'tipoasiento_id' => $this->tipoAsientoVentas(),
@@ -404,9 +417,9 @@ final class TransferenciaCrownFacturaWriter
             'anita_origen' => AsientoAnitaMetadatosSupport::ORIGEN_TRANSFERENCIA,
             'anita_sistema' => 'V',
             'anita_tipo' => $tipoAnita,
-            'anita_letra' => strtoupper((string) $fila['letra']),
-            'anita_sucursal' => (int) $fila['sucursal'],
-            'anita_nro' => (int) $fila['numero'],
+            'anita_letra' => $letraAnita,
+            'anita_sucursal' => $sucursalAnita,
+            'anita_nro' => $nroAnita,
             'anita_nro_asiento' => null,
         ]);
 

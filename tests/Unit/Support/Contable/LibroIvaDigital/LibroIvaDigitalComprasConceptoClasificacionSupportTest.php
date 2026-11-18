@@ -62,27 +62,16 @@ class LibroIvaDigitalComprasConceptoClasificacionSupportTest extends TestCase
         $this->assertEqualsWithDelta(21.0, $clas['tasa'], 0.001);
     }
 
-    public function test_impuesto_debitos_creditos_va_a_otros_tributos(): void
-    {
-        $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar(
-            $this->concepto('10', 'IMPUESTO A LOS DEB Y CRED', 'I', '1'),
-        );
-
-        $this->assertSame('otros', $clas['destino']);
-        $this->assertTrue(
-            LibroIvaDigitalComprasConceptoClasificacionSupport::esImpuestoDebitosCreditos(
-                'IMPUESTO A LOS DEB Y CRED',
-            ),
-        );
-    }
-
     public function test_iva_sin_alicuota_no_va_a_lid_cero_con_impuesto(): void
     {
+        // Tipo I sin tasa y columna que sigue resolviendo a I → otros (no LID 0003).
+        // Columna 9 (IVA importaciones) queda con tipo vacío y destino ''.
         $clas = LibroIvaDigitalComprasConceptoClasificacionSupport::clasificar(
-            $this->concepto('104', 'IVA IMPORTACIONES', 'I', '9'),
+            $this->concepto('101', 'IVA SIN ALICUOTA', 'I', '8'),
         );
 
         $this->assertSame('otros', $clas['destino']);
+        $this->assertSame(0.0, $clas['tasa']);
     }
 
     public function test_impuesto_debitos_creditos_va_a_otros_tributos(): void

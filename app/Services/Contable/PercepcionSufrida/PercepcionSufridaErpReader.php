@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Contable\PercepcionSufrida;
 
-use App\Models\Configuracion\Provincia;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorEstados;
-use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaCorteSupport;
 use App\Support\Contable\PercepcionSufrida\PercepcionSufridaLineaSupport;
 use Illuminate\Support\Facades\DB;
@@ -188,7 +186,7 @@ final class PercepcionSufridaErpReader
             $jurisdiccion = 0;
             if ($tipoProceso === PercepcionSufridaCorteSupport::TIPO_IIBB) {
                 $jurisdiccion = self::jurisdiccionIibb($fila);
-                if (! in_array($jurisdiccion, [901, 902], true)) {
+                if (! PercepcionSufridaLineaSupport::esJurisdiccionSifere($jurisdiccion)) {
                     continue;
                 }
             }
@@ -313,19 +311,7 @@ final class PercepcionSufridaErpReader
 
     private static function jurisdiccionIibb(object $fila): int
     {
-        $provincia = new Provincia();
-        $provincia->nombre = (string) ($fila->provincia_nombre ?? '');
-        $provincia->codigo = (string) ($fila->provincia_codigo ?? '');
-        $provincia->jurisdiccion = (string) ($fila->jurisdiccion ?? '');
-        $provincia->codigoexterno = (string) ($fila->codigoexterno ?? '');
-        if (IngresosBrutosProvinciaAnitaSupport::esCaba($provincia)) {
-            return 901;
-        }
-        if (IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia)) {
-            return 902;
-        }
-
-        return PercepcionSufridaLineaSupport::jurisdiccionDesdeTexto((string) ($fila->concepto ?? ''));
+        return PercepcionSufridaLineaSupport::jurisdiccionDesdeProvincia($fila);
     }
 
     /**

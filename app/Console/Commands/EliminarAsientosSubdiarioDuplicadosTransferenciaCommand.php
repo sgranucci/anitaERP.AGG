@@ -6,7 +6,7 @@ namespace App\Console\Commands;
 
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
-use App\Support\Contable\AsientoAnitaMetadatosSupport;
+use App\Support\Contable\AsientoSubdiarioDuplicadoTransferenciaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -54,83 +54,14 @@ class EliminarAsientosSubdiarioDuplicadosTransferenciaCommand extends Command
             explode(',', (string) $this->option('sucursales')),
         ), static fn (int $s) => $s > 0));
 
-        $proceso = Asiento::query()
-            ->where('empresa_id', $empresaId)
-            ->whereBetween('fecha', [$desde, $hasta])
-            ->where(function ($q) {
-                $q->where(function ($q2) {
-                    $q2->whereNotNull('venta_id')->where('venta_id', '>', 0);
-                })->orWhere('anita_origen', AsientoAnitaMetadatosSupport::ORIGEN_TRANSFERENCIA);
-            })
-            ->whereNotNull('anita_tipo')
-            ->where('anita_sucursal', '>', 0)
-            ->where('anita_nro', '>', 0)
-            ->when($sucursales !== [], fn ($q) => $q->whereIn('anita_sucursal', $sucursales))
-            ->get([
-                'id', 'numeroasiento', 'fecha', 'anita_origen', 'anita_tipo', 'anita_letra',
-                'anita_sucursal', 'anita_nro', 'venta_id', 'observacion',
-            ]);
+        $aBorrar = AsientoSubdiarioDuplicadoTransferenciaSupport::detectar(
+            $empresaId,
+            $desde,
+            $hasta,
+            $sucursales,
+        );
 
-        $cubiertos = [];
-        foreach ($proceso as $asiento) {
-            $clave = AsientoAnitaMetadatosSupport::claveDocumento(
-                $asiento->anita_tipo,
-                $asiento->anita_letra,
-                $asiento->anita_sucursal,
-                $asiento->anita_nro,
-            );
-            if ($clave === null || isset($cubiertos[$clave])) {
-                continue;
-            }
-            $cubiertos[$clave] = $asiento;
-        }
-
-        if ($cubiertos === []) {
-            $this->warn('No hay asientos de transferencia/venta con documento en el rango.');
-
-            return self::SUCCESS;
-        }
-
-        $candidatos = Asiento::query()
-            ->where('empresa_id', $empresaId)
-            ->whereBetween('fecha', [$desde, $hasta])
-            ->whereIn('anita_origen', [
-                AsientoAnitaMetadatosSupport::ORIGEN_SUBDIARIO,
-                AsientoAnitaMetadatosSupport::ORIGEN_SUBHIST,
-            ])
-            ->whereNotNull('anita_tipo')
-            ->where('anita_sucursal', '>', 0)
-            ->where('anita_nro', '>', 0)
-            ->when($sucursales !== [], fn ($q) => $q->whereIn('anita_sucursal', $sucursales))
-            ->orderBy('fecha')
-            ->orderBy('anita_sucursal')
-            ->orderBy('anita_nro')
-            ->orderBy('id')
-            ->get([
-                'id', 'numeroasiento', 'fecha', 'anita_origen', 'anita_tipo', 'anita_letra',
-                'anita_sucursal', 'anita_nro', 'observacion', 'created_at',
-            ]);
-
-        $aBorrar = [];
-        foreach ($candidatos as $asiento) {
-            $clave = AsientoAnitaMetadatosSupport::claveDocumento(
-                $asiento->anita_tipo,
-                $asiento->anita_letra,
-                $asiento->anita_sucursal,
-                $asiento->anita_nro,
-            );
-            if ($clave === null || ! isset($cubiertos[$clave])) {
-                continue;
-            }
-            $proc = $cubiertos[$clave];
-            $aBorrar[] = [
-                'asiento' => $asiento,
-                'proceso' => $proc,
-                'clave' => $clave,
-            ];
-        }
-
-        $ids = array_map(static fn (array $f) => (int) $f['asiento']->id, $aBorrar);
+        $ids = array_map(static fn (array $f) => (int) $f['asiento_id'], $aBorrar);
         $movs = $ids === [] ? 0 : (int) Asiento_Movimiento::query()->whereIn('asiento_id', $ids)->count();
 
         $this->line(sprintf(
@@ -144,9 +75,9 @@ class EliminarAsientosSubdiarioDuplicadosTransferenciaCommand extends Command
         $this->table(
             ['Concepto', 'Valor'],
             [
-                ['Documentos transferencia/venta', (string) count($cubiertos)],
                 ['Asientos subdiario/subhist a borrar', (string) count($aBorrar)],
                 ['Movimientos a borrar', (string) $movs],
+                ['Importe Debe (Anita)', number_format(array_sum(array_column($aBorrar, 'importe')), 2, ',', '.')],
             ],
         );
 
@@ -158,22 +89,21 @@ class EliminarAsientosSubdiarioDuplicadosTransferenciaCommand extends Command
 
         $filas = [];
         foreach (array_slice($aBorrar, 0, 40) as $item) {
-            $a = $item['asiento'];
-            $p = $item['proceso'];
             $filas[] = [
-                (string) $a->id,
-                (string) $a->numeroasiento,
-                (string) $a->fecha,
-                (string) $a->anita_origen,
-                $item['clave'],
-                (string) $p->id,
-                (string) $p->numeroasiento,
-                (string) ($p->venta_id ?? ''),
+                (string) $item['asiento_id'],
+                (string) $item['numeroasiento'],
+                (string) $item['fecha'],
+                (string) $item['anita_origen'],
+                (string) $item['clave'],
+                (string) $item['proceso_id'],
+                (string) $item['proceso_numeroasiento'],
+                (string) ($item['venta_id'] ?? ''),
+                number_format((float) $item['importe'], 2, ',', '.'),
             ];
         }
         $this->line('Muestra (máx. 40):');
         $this->table(
-            ['Id subd', 'Nro subd', 'Fecha', 'Origen', 'Documento', 'Id transf', 'Nro transf', 'venta_id'],
+            ['Id subd', 'Nro subd', 'Fecha', 'Origen', 'Documento', 'Id transf', 'Nro transf', 'venta_id', 'Importe'],
             $filas,
         );
         if (count($aBorrar) > 40) {

@@ -307,6 +307,15 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/ventas-deuda-ficha-auditor-schedule.log'))
             ->when(fn () => (bool) config('ventas.deuda_ficha_auditor.habilitada', true));
 
+        // Crown: asientos Anita subdiario que duplican transferencia/venta ERP.
+        $schedule->command('contable:auditar-asientos-subdiario-duplicados-transferencia')
+            ->dailyAt((string) config('contable.asiento_subdiario_duplicado_auditor.hora', '08:05'))
+            ->runInBackground()
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/contable-asiento-subdiario-dup-auditor-schedule.log'))
+            ->when(fn () => EntornoEmpresaSupport::esCrown()
+                && (bool) config('contable.asiento_subdiario_duplicado_auditor.habilitada', true));
+
         // Batch Compras → avisos:despachar-programados (ordencompra_alertas_abiertas,
         // entrega_dia_sin_recepcion, ordencompra_contrato_vencimiento,
         // suscripcion_comprobante_faltante, comprobante_proveedor_borrador_pendiente).

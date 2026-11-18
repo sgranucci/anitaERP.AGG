@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace App\Support\Contable\PercepcionSufrida;
 
+use App\Models\Configuracion\Provincia;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
+use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 
 final class PercepcionSufridaLineaSupport
 {
+    /** Rango AFIP / SIFERE Web (misma ventana que retenciones sufridas). */
+    public const JURISDICCION_MIN = 901;
+
+    public const JURISDICCION_MAX = 924;
+
     /**
      * @param  array<string, mixed>  $datos
      * @return array<string, mixed>
@@ -50,13 +57,77 @@ final class PercepcionSufridaLineaSupport
         return $linea;
     }
 
+    public static function esJurisdiccionSifere(int $jurisdiccion): bool
+    {
+        return $jurisdiccion >= self::JURISDICCION_MIN && $jurisdiccion <= self::JURISDICCION_MAX;
+    }
+
+    public static function etiquetaJurisdiccion(int $jurisdiccion): string
+    {
+        return match ($jurisdiccion) {
+            901 => '901 (CABA)',
+            902 => '902 (Buenos Aires)',
+            915 => '915 (Neuquén)',
+            916 => '916 (Río Negro)',
+            919 => '919 (San Luis)',
+            924 => '924 (Tucumán)',
+            default => (string) $jurisdiccion,
+        };
+    }
+
+    /**
+     * Código AFIP de la provincia del concepto. Prioriza provincia.jurisdiccion;
+     * si falta, reconoce CABA / Bs.As. / RN / NQN por nombre o código.
+     */
+    public static function jurisdiccionDesdeProvincia(object $fila): int
+    {
+        $jur = (int) ($fila->jurisdiccion ?? 0);
+        if (self::esJurisdiccionSifere($jur)) {
+            return $jur;
+        }
+
+        $provincia = new Provincia();
+        $provincia->nombre = (string) ($fila->provincia_nombre ?? $fila->nombre ?? '');
+        $provincia->codigo = (string) ($fila->provincia_codigo ?? $fila->codigo ?? '');
+        $provincia->jurisdiccion = (string) ($fila->jurisdiccion ?? '');
+        $provincia->codigoexterno = (string) ($fila->codigoexterno ?? '');
+
+        if (IngresosBrutosProvinciaAnitaSupport::esCaba($provincia)) {
+            return 901;
+        }
+        if (IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia)) {
+            return 902;
+        }
+        if (IngresosBrutosProvinciaAnitaSupport::esRioNegro($provincia)) {
+            return 916;
+        }
+
+        $nombre = self::normalizar((string) $provincia->nombre);
+        if (str_contains($nombre, 'neuquen') || str_contains($nombre, 'nqn')) {
+            return 915;
+        }
+        if (str_contains($nombre, 'san luis')) {
+            return 919;
+        }
+        if (str_contains($nombre, 'tucuman')) {
+            return 924;
+        }
+
+        return self::jurisdiccionDesdeTexto(
+            (string) ($fila->concepto ?? $fila->descripcion ?? $provincia->nombre)
+        );
+    }
+
     public static function jurisdiccionDesdeTexto(string $texto): int
     {
         $t = self::normalizar($texto);
         if ($t === '') {
             return 0;
         }
-        if (str_contains($t, 'capital') || str_contains($t, 'caba') || str_contains($t, '901')) {
+        if (preg_match('/\b(9(?:0[1-9]|1[0-9]|2[0-4]))\b/', $t, $m) === 1) {
+            return (int) $m[1];
+        }
+        if (str_contains($t, 'capital') || str_contains($t, 'caba')) {
             return 901;
         }
         if (
@@ -64,9 +135,20 @@ final class PercepcionSufridaLineaSupport
             || str_contains($t, 'bs as')
             || str_contains($t, 'buenos aires')
             || str_contains($t, 'arba')
-            || str_contains($t, '902')
         ) {
             return 902;
+        }
+        if (str_contains($t, 'neuquen') || str_contains($t, 'nqn')) {
+            return 915;
+        }
+        if (str_contains($t, 'rio negro') || str_contains($t, 'r negro')) {
+            return 916;
+        }
+        if (str_contains($t, 'san luis')) {
+            return 919;
+        }
+        if (str_contains($t, 'tucuman')) {
+            return 924;
         }
 
         return 0;

@@ -95,8 +95,9 @@ final class PercepcionSufridaProcesoService
             'diferencias' => $cruce['diferencias'],
             'cruzados' => $cruce['cruzados'],
             'archivo' => $archivo,
-            'archivo_901' => $esIibb ? PercepcionSufridaArchivoSupport::sifere($cruce['cruzados'], 901) : '',
-            'archivo_902' => $esIibb ? PercepcionSufridaArchivoSupport::sifere($cruce['cruzados'], 902) : '',
+            'jurisdicciones' => $esIibb
+                ? array_keys($totales['cruzado_por_jurisdiccion'] ?? [])
+                : [],
             'nombre_archivo' => $esIibb ? 'psif.txt' : 'perciva.csv',
             'exporta' => PercepcionSufridaListadoFiltros::EXPORTA_PERCEPCIONES,
             'es_retenciones' => false,
@@ -125,18 +126,15 @@ final class PercepcionSufridaProcesoService
         });
 
         $total = 0.0;
-        $total901 = 0.0;
-        $total902 = 0.0;
+        $cruzadoPorJurisdiccion = [];
         $lineasErp = 0;
         $lineasAnita = 0;
         foreach ($cruzados as $linea) {
             $importe = round((float) ($linea['importe'] ?? 0), 2);
             $total += $importe;
             $jur = (int) ($linea['jurisdiccion'] ?? 0);
-            if ($jur === 901) {
-                $total901 += $importe;
-            } elseif ($jur === 902) {
-                $total902 += $importe;
+            if (PercepcionSufridaLineaSupport::esJurisdiccionSifere($jur)) {
+                $cruzadoPorJurisdiccion[$jur] = round(($cruzadoPorJurisdiccion[$jur] ?? 0.0) + $importe, 2);
             }
             if (($linea['origen'] ?? '') === 'erp') {
                 $lineasErp++;
@@ -144,6 +142,7 @@ final class PercepcionSufridaProcesoService
                 $lineasAnita++;
             }
         }
+        ksort($cruzadoPorJurisdiccion);
 
         return [
             'tipo' => PercepcionSufridaCorteSupport::TIPO_IIBB,
@@ -155,8 +154,9 @@ final class PercepcionSufridaProcesoService
             'totales' => [
                 'mayor' => round($total, 2),
                 'cruzado' => round($total, 2),
-                'cruzado_901' => round($total901, 2),
-                'cruzado_902' => round($total902, 2),
+                'cruzado_por_jurisdiccion' => $cruzadoPorJurisdiccion,
+                'cruzado_901' => round((float) ($cruzadoPorJurisdiccion[901] ?? 0), 2),
+                'cruzado_902' => round((float) ($cruzadoPorJurisdiccion[902] ?? 0), 2),
                 'diferencias' => 0.0,
                 'lineas_mayor' => count($cruzados),
                 'lineas_cruzadas' => count($cruzados),
@@ -170,8 +170,7 @@ final class PercepcionSufridaProcesoService
             'diferencias' => [],
             'cruzados' => $cruzados,
             'archivo' => PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados),
-            'archivo_901' => PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados, 901),
-            'archivo_902' => PercepcionSufridaArchivoSupport::sifereRetenciones($cruzados, 902),
+            'jurisdicciones' => array_keys($cruzadoPorJurisdiccion),
             'nombre_archivo' => 'rsif.txt',
         ];
     }
@@ -307,7 +306,7 @@ final class PercepcionSufridaProcesoService
             }
             $linea['califica_reporte'] = $linea['cuit'] !== ''
                 && ($esIibb
-                    ? in_array((int) $linea['jurisdiccion'], [901, 902], true)
+                    ? PercepcionSufridaLineaSupport::esJurisdiccionSifere((int) $linea['jurisdiccion'])
                     : true);
             $mismoComprobante = $linea['clave_comprobante'] === $concepto['clave_comprobante'];
             $cuitsCompatibles = $linea['cuit'] === '' || $concepto['cuit'] === '' || $linea['cuit'] === $concepto['cuit'];
@@ -370,7 +369,7 @@ final class PercepcionSufridaProcesoService
             if ($linea['cuit'] === '') {
                 continue;
             }
-            if ($esIibb && in_array((int) $linea['jurisdiccion'], [901, 902], true)) {
+            if ($esIibb && PercepcionSufridaLineaSupport::esJurisdiccionSifere((int) $linea['jurisdiccion'])) {
                 $out[] = $linea;
                 continue;
             }

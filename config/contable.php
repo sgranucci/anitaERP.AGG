@@ -143,4 +143,28 @@ return [
             explode(',', (string) env('SIFERE_TIPOS_RETENCION_ANITA', 'RIC,R01,R02')),
         ))),
     ],
+
+    /*
+    | Crown: alerta diaria si quedaron asientos Anita (subdiario/subhist) que duplican
+    | facturas ya asentadas por transferencia / venta ERP.
+    | Comando: contable:auditar-asientos-subdiario-duplicados-transferencia
+    | Schedule solo con EntornoEmpresaSupport::esCrown().
+    | Email vacío cae a COMPRAS_DEUDA_FICHA_AUDITOR_EMAIL.
+    */
+    'asiento_subdiario_duplicado_auditor' => [
+        'habilitada' => filter_var(
+            env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_HABILITADA', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'hora' => env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_HORA', '08:05'),
+        'email' => env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_EMAIL', ''),
+        'empresa_id' => max(1, (int) env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_EMPRESA', 1)),
+        'ventana_dias' => max(1, (int) env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_VENTANA_DIAS', 60)),
+        'limite_filas_mail' => max(10, (int) env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_LIMITE_MAIL', 40)),
+        // false = solo mail cuando hay alerta
+        'mail_siempre' => filter_var(
+            env('CONTABLE_ASIENTO_SUBDIARIO_DUP_AUDITOR_MAIL_SIEMPRE', false),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+    ],
 ];

@@ -58,9 +58,15 @@ class PercepcionSufridaListadoExport implements FromView, WithColumnFormatting, 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(collect($this->filasParaLogo));
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $offset = $this->hayFilaLogos ? 1 : 0;
-        $filasTotales = $this->esIibb ? 4 : 3;
+        $filasJurisdiccion = 1;
+        if ($this->esIibb) {
+            $porJur = $this->totales['cruzado_por_jurisdiccion'] ?? [];
+            $filasJurisdiccion = max(1, count($porJur));
+        }
+        // título + generado + subtítulo + mayor + (por jur | cruzado) + diferencias
+        $filasMeta = 3 + 1 + $filasJurisdiccion + 1;
         $this->filaTituloExcel = $offset + 1;
-        $this->filaCabecerasExcel = $offset + 4 + $filasTotales;
+        $this->filaCabecerasExcel = $offset + $filasMeta + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.contable.percepcion_sufridaindex', [
