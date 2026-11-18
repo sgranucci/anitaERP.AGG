@@ -120,16 +120,21 @@ class FlashReporteAggController extends Controller
     {
         can('administrar-flash-reporte-agg');
 
+        $rutaRetorno = $this->rutaRetornoProbar($request);
+        $tituloOk = $rutaRetorno === 'flash_caja' ? 'Reenvío Flash Report AGG' : 'Prueba de envío';
+
         $suscripcion = FlashReporteSuscripcion::query()->whereKey((int) $id)->first();
         if ($suscripcion === null) {
-            return redirect()->route('flash_reporte_agg')
+            return redirect()->route($rutaRetorno)
                 ->with('mensaje', 'No existe ese envío.')
+                ->with('titulo_mensaje', $tituloOk)
                 ->with('tipo_mensaje', 'danger');
         }
 
         $dryRun = $request->boolean('dry_run');
+        $paraEnvio = $this->suscripcionConPeriodoOverride($suscripcion, $request);
         try {
-            $resultado = $this->distribucionService->enviar($suscripcion, $dryRun);
+            $resultado = $this->distribucionService->enviar($paraEnvio, $dryRun);
         } catch (Throwable $e) {
             $this->suscripcionSupport->registrarResultado(
                 $suscripcion,
@@ -137,9 +142,9 @@ class FlashReporteAggController extends Controller
                 $e->getMessage()
             );
 
-            return redirect()->route('flash_reporte_agg')
+            return redirect()->route($rutaRetorno)
                 ->with('mensaje', $e->getMessage())
-                ->with('titulo_mensaje', 'Prueba de envío')
+                ->with('titulo_mensaje', $tituloOk)
                 ->with('tipo_mensaje', 'danger');
         }
 
@@ -154,10 +159,53 @@ class FlashReporteAggController extends Controller
         $tipo = $resultado['estado'] === FlashReporteSuscripcion::ESTADO_OK ? 'success' : 'warning';
 
         return redirect()
-            ->route('flash_reporte_agg')
+            ->route($rutaRetorno)
             ->with('mensaje', $resultado['mensaje'])
-            ->with('titulo_mensaje', $dryRun ? 'Simulación' : 'Prueba de envío')
+            ->with('titulo_mensaje', $dryRun ? 'Simulación' : $tituloOk)
             ->with('tipo_mensaje', $tipo);
+    }
+
+    /**
+     * Desde la grilla de Flash diario se reenvía y se vuelve ahí; desde Report AGG queda en esa pantalla.
+     */
+    private function rutaRetornoProbar(Request $request): string
+    {
+        return $request->input('retorno') === 'flash_caja' ? 'flash_caja' : 'flash_reporte_agg';
+    }
+
+    /**
+     * Override puntual de período para reenvío/prueba (no persiste en la suscripción).
+     */
+    private function suscripcionConPeriodoOverride(
+        FlashReporteSuscripcion $suscripcion,
+        Request $request,
+    ): FlashReporteSuscripcion {
+        $periodo = trim((string) $request->input('periodo_relativo', ''));
+        $validos = [
+            FlashReporteSuscripcion::PERIODO_MES_ACTUAL,
+            FlashReporteSuscripcion::PERIODO_MES_ANTERIOR,
+            FlashReporteSuscripcion::PERIODO_FIJO,
+        ];
+        if ($periodo === '' || ! in_array($periodo, $validos, true)) {
+            return $suscripcion;
+        }
+
+        $copia = $suscripcion->replicate();
+        $copia->id = $suscripcion->id;
+        $copia->exists = true;
+        $copia->periodo_relativo = $periodo;
+
+        if ($periodo === FlashReporteSuscripcion::PERIODO_FIJO) {
+            $mesFijo = trim((string) $request->input('mes_fijo', ''));
+            if (preg_match('/^\d{4}-\d{2}$/', $mesFijo) === 1) {
+                $copia->mes_fijo = $mesFijo;
+            } else {
+                // Sin mes válido, no forzar fijo: usa la config guardada.
+                return $suscripcion;
+            }
+        }
+
+        return $copia;
     }
 
     /**

@@ -72,7 +72,9 @@ final class GastronomiaCrownAnitaBridgeSupport
             return $codigo;
         }
 
-        return self::salaCodigoJornadaAbierta();
+        // Sin emisión gastronomía: no inferir la sala de una jornada POS abierta.
+        // Si no, admin/PV manual consulta cncadmin (CIP) en vez del IFX default (acncadmin).
+        return null;
     }
 
     /**

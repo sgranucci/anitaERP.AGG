@@ -110,4 +110,99 @@ class IngresoEgresoListadoMontoSupportTest extends TestCase
         $this->assertSame(0.0, $res['ingreso']);
         $this->assertCount(1, $res['lineas']);
     }
+
+    public function test_opv_sin_caja_muestra_un_lado_del_asiento_en_pesos(): void
+    {
+        $mov = (object) [
+            'abreviaturatipotransaccion_caja' => 'OPV',
+            'fecha' => '2026-10-31',
+            'caja_movimiento_cuentacajas' => [],
+            'cheques' => [],
+            'asientos' => (object) [
+                'asiento_movimientos' => [
+                    (object) [
+                        'monto' => -540380.69,
+                        'moneda_id' => 1,
+                        'cotizacion' => 1560,
+                        'cuentacontables' => (object) [
+                            'codigo' => '130112000',
+                            'nombre' => 'TARJETAS DE CREDITO A COBRAR',
+                        ],
+                    ],
+                    (object) [
+                        'monto' => 540380.69,
+                        'moneda_id' => 1,
+                        'cotizacion' => 1560,
+                        'cuentacontables' => (object) [
+                            'codigo' => '719119000',
+                            'nombre' => 'CUENTA PUENTE',
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $res = IngresoEgresoListadoMontoSupport::resumen($mov);
+
+        $this->assertEqualsWithDelta(540380.69, $res['monto'], 0.001);
+        $this->assertSame(0.0, $res['ingreso']);
+        $this->assertSame(0.0, $res['egreso']);
+        $texto = implode(' | ', $res['lineas']);
+        $this->assertStringContainsString('130112000', $texto);
+        $this->assertStringContainsString('719119000', $texto);
+    }
+
+    public function test_opv_en_moneda_extranjera_usa_la_cotizacion_del_asiento(): void
+    {
+        $mov = (object) [
+            'abreviaturatipotransaccion_caja' => 'OPV',
+            'fecha' => '2026-10-31',
+            'caja_movimiento_cuentacajas' => [],
+            'cheques' => [],
+            'asientos' => (object) [
+                'asiento_movimientos' => [
+                    (object) [
+                        'monto' => -100.0,
+                        'moneda_id' => 2,
+                        'cotizacion' => 1500,
+                        'cuentacontables' => (object) ['codigo' => '1', 'nombre' => 'A'],
+                    ],
+                    (object) [
+                        'monto' => 100.0,
+                        'moneda_id' => 2,
+                        'cotizacion' => 1500,
+                        'cuentacontables' => (object) ['codigo' => '2', 'nombre' => 'B'],
+                    ],
+                ],
+            ],
+        ];
+
+        $res = IngresoEgresoListadoMontoSupport::resumen($mov);
+
+        $this->assertEqualsWithDelta(150000.0, $res['monto'], 0.001);
+    }
+
+    public function test_sin_caja_que_no_es_opv_sigue_en_cero(): void
+    {
+        $mov = (object) [
+            'abreviaturatipotransaccion_caja' => 'OPP',
+            'fecha' => '2026-10-31',
+            'caja_movimiento_cuentacajas' => [],
+            'cheques' => [],
+            'asientos' => (object) [
+                'asiento_movimientos' => [
+                    (object) [
+                        'monto' => 1000.0,
+                        'moneda_id' => 1,
+                        'cotizacion' => 1,
+                        'cuentacontables' => (object) ['codigo' => '1', 'nombre' => 'A'],
+                    ],
+                ],
+            ],
+        ];
+
+        $res = IngresoEgresoListadoMontoSupport::resumen($mov);
+
+        $this->assertSame(0.0, $res['monto']);
+    }
 }

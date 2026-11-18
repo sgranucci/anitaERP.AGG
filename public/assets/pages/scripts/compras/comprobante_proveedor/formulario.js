@@ -2207,45 +2207,119 @@ $(function () {
         return diferido.promise();
     }
 
+    function lineasDebeGastoMismaCuenta(cuentaId) {
+        cuentaId = parseInt(cuentaId, 10) || 0;
+        if (cuentaId <= 0) {
+            return [];
+        }
+        return leerDebeGastoDesdeTabla().filter(function (l) {
+            return (parseInt(l.cuenta_id, 10) || 0) === cuentaId;
+        });
+    }
+
+    function importeTotalDebeGastoCuenta(cuentaId) {
+        var suma = 0;
+        lineasDebeGastoMismaCuenta(cuentaId).forEach(function (l) {
+            suma += Math.abs(parseFloat(l.importe) || 0);
+        });
+        return Math.round(suma * 100) / 100;
+    }
+
+    function armarFilasInicialesProrrateo(existentes) {
+        if (existentes.length >= 2) {
+            $('#cp-prorratear-auto').prop('checked', false);
+            existentes.forEach(function (t) {
+                agregarFilaProrrateo(t.centrocosto_id, t.importe);
+            });
+            sincronizarReadonlyImportesProrrateo();
+            return;
+        }
+        var ccInicial = existentes.length === 1 ? (existentes[0].centrocosto_id || 0) : 0;
+        var nDefault = Math.min(5, Math.max(2, cpProrratearCtx.centrosDisponibles.length || 5));
+        $('#cp-prorratear-n').val(String(nDefault));
+        for (var i = 0; i < nDefault; i++) {
+            agregarFilaProrrateo(i === 0 ? ccInicial : 0, '');
+        }
+        sincronizarReadonlyImportesProrrateo();
+    }
+
     function abrirModalProrratearCuenta(opts) {
         opts = opts || {};
+        var modo = String(opts.modo || 'concepto');
         var conceptoId = parseInt(opts.conceptoId || '0', 10) || 0;
         var cuentaId = parseInt(opts.cuentaId || '0', 10) || 0;
-        if (conceptoId <= 0 || cuentaId <= 0 || contabilizado) {
+        if (cuentaId <= 0 || contabilizado) {
             return;
         }
-        var total = importeTotalConcepto(conceptoId);
-        if (Math.abs(total) < 0.0001) {
-            // Fallback: suma de líneas del asiento con ese concepto.
-            var sumaAsiento = 0;
-            targetsPreviewAsiento().find('tr[data-concepto-ivacompra-id="' + conceptoId + '"]').each(function () {
-                var $tds = $(this).children('td');
-                sumaAsiento += Math.abs(parseMonto(String($tds.eq(2).text() || '').trim()));
-            });
-            total = Math.round(sumaAsiento * 100) / 100;
-        }
-        if (Math.abs(total) < 0.0001) {
-            alert('No hay importe para prorratear en este concepto.');
+        if (modo !== 'debe_gasto' && conceptoId <= 0) {
             return;
         }
 
-        var meta = conceptosMeta[conceptoId] || {};
-        var $primera = filasConceptoPorId(conceptoId).first();
-        var codigoConcepto = String(($primera.find('.codigo_concepto_ivacompra').val() || meta.codigo || '')).trim();
-        var nombreConcepto = String(($primera.find('.nombre_concepto_ivacompra').val() || meta.nombre || '')).trim();
+        var total = 0;
+        var etiquetaSecundaria = '';
+        var existentes = [];
+
+        if (modo === 'debe_gasto') {
+            total = importeTotalDebeGastoCuenta(cuentaId);
+            if (Math.abs(total) < 0.0001) {
+                alert('No hay importe para prorratear en esta cuenta de gasto.');
+                return;
+            }
+            etiquetaSecundaria = $.trim('Cuenta de gasto'
+                + (opts.observacion ? ' · ' + opts.observacion : ''));
+            lineasDebeGastoMismaCuenta(cuentaId).forEach(function (l) {
+                var cc = parseInt(l.centrocosto_id, 10) || 0;
+                var monto = Math.round(Math.abs(parseFloat(l.importe) || 0) * 100) / 100;
+                if (cc > 0 || monto > 0) {
+                    existentes.push({ centrocosto_id: cc, importe: monto });
+                }
+            });
+        } else {
+            total = importeTotalConcepto(conceptoId);
+            if (Math.abs(total) < 0.0001) {
+                // Fallback: suma de líneas del asiento con ese concepto.
+                var sumaAsiento = 0;
+                targetsPreviewAsiento().find('tr[data-concepto-ivacompra-id="' + conceptoId + '"]').each(function () {
+                    var $tds = $(this).children('td');
+                    sumaAsiento += Math.abs(parseMonto(String($tds.eq(2).text() || '').trim()));
+                });
+                total = Math.round(sumaAsiento * 100) / 100;
+            }
+            if (Math.abs(total) < 0.0001) {
+                alert('No hay importe para prorratear en este concepto.');
+                return;
+            }
+
+            var meta = conceptosMeta[conceptoId] || {};
+            var $primera = filasConceptoPorId(conceptoId).first();
+            var codigoConcepto = String(($primera.find('.codigo_concepto_ivacompra').val() || meta.codigo || '')).trim();
+            var nombreConcepto = String(($primera.find('.nombre_concepto_ivacompra').val() || meta.nombre || '')).trim();
+            etiquetaSecundaria = $.trim((codigoConcepto ? codigoConcepto + ' ' : '') + nombreConcepto
+                + (opts.observacion ? ' · ' + opts.observacion : ''));
+
+            filasConceptoPorId(conceptoId).each(function () {
+                var cc = parseInt($(this).find('.cp-concepto-centrocosto').val() || '0', 10) || 0;
+                var monto = Math.round(Math.abs(parseMonto($(this).find('.monto').val() || '0')) * 100) / 100;
+                if (cc > 0 || monto > 0) {
+                    existentes.push({ centrocosto_id: cc, importe: monto });
+                }
+            });
+        }
 
         cpProrratearCtx = {
+            modo: modo,
             conceptoId: conceptoId,
             cuentaId: cuentaId,
             importeTotal: total,
             centrosDisponibles: [],
             etiquetaCuenta: $.trim((opts.cuentaCodigo || '') + (opts.cuentaNombre ? ' — ' + opts.cuentaNombre : '')),
-            etiquetaConcepto: $.trim((codigoConcepto ? codigoConcepto + ' ' : '') + nombreConcepto
-                + (opts.observacion ? ' · ' + opts.observacion : ''))
+            etiquetaConcepto: etiquetaSecundaria,
+            cuentaCodigo: String(opts.cuentaCodigo || ''),
+            cuentaNombre: String(opts.cuentaNombre || '')
         };
 
         $('#cp-prorratear-cuenta-label').text(cpProrratearCtx.etiquetaCuenta || ('Cuenta #' + cuentaId));
-        $('#cp-prorratear-concepto-label').text(cpProrratearCtx.etiquetaConcepto || ('Concepto #' + conceptoId));
+        $('#cp-prorratear-concepto-label').text(cpProrratearCtx.etiquetaConcepto || '');
         $('#cp-prorratear-importe-label').text(formatearMontoProrrateo(total));
         $('#cp-prorratear-tbody').empty();
         $('#cp-prorratear-aviso').removeClass('text-danger text-success').addClass('text-muted').text('');
@@ -2258,34 +2332,71 @@ $(function () {
             if (!cpProrratearCtx.centrosDisponibles.length) {
                 $('#cp-prorratear-sin-cc').removeClass('d-none');
             }
-
-            var existentes = [];
-            filasConceptoPorId(conceptoId).each(function () {
-                var cc = parseInt($(this).find('.cp-concepto-centrocosto').val() || '0', 10) || 0;
-                var monto = Math.round(Math.abs(parseMonto($(this).find('.monto').val() || '0')) * 100) / 100;
-                if (cc > 0 || monto > 0) {
-                    existentes.push({ centrocosto_id: cc, importe: monto });
-                }
-            });
-
-            if (existentes.length >= 2) {
-                $('#cp-prorratear-auto').prop('checked', false);
-                existentes.forEach(function (t) {
-                    agregarFilaProrrateo(t.centrocosto_id, t.importe);
-                });
-                sincronizarReadonlyImportesProrrateo();
-            } else {
-                var ccInicial = existentes.length === 1 ? (existentes[0].centrocosto_id || 0) : 0;
-                var nDefault = Math.min(5, Math.max(2, cpProrratearCtx.centrosDisponibles.length || 5));
-                $('#cp-prorratear-n').val(String(nDefault));
-                for (var i = 0; i < nDefault; i++) {
-                    agregarFilaProrrateo(i === 0 ? ccInicial : 0, '');
-                }
-                sincronizarReadonlyImportesProrrateo();
-            }
-
+            armarFilasInicialesProrrateo(existentes);
             $('#cp-prorratear-cuenta-modal').modal('show');
         });
+    }
+
+    function aplicarProrrateoDebeGastoAlAsiento(trozos) {
+        if (estadoRepartoGastoPantalla() !== 'si') {
+            alert('El reparto de gasto no está disponible en este comprobante.');
+            return;
+        }
+        var cuentaId = parseInt(cpProrratearCtx.cuentaId || '0', 10) || 0;
+        if (cuentaId <= 0) {
+            return;
+        }
+        var codigo = String(cpProrratearCtx.cuentaCodigo || '');
+        var nombre = String(cpProrratearCtx.cuentaNombre || '');
+        var lineasActuales = leerDebeGastoDesdeTabla();
+        if (!lineasActuales.length && debeGastoPendiente && debeGastoPendiente.length) {
+            lineasActuales = debeGastoPendiente.slice();
+        }
+        var otras = [];
+        var plantilla = null;
+        lineasActuales.forEach(function (l) {
+            if ((parseInt(l.cuenta_id, 10) || 0) === cuentaId) {
+                if (!plantilla) {
+                    plantilla = l;
+                }
+                return;
+            }
+            otras.push(l);
+        });
+        if (!plantilla) {
+            plantilla = {
+                cuenta_id: cuentaId,
+                codigo: codigo,
+                nombre: nombre,
+                importe: 0,
+                centrocosto_id: 0
+            };
+        }
+        if (!codigo) {
+            codigo = String(plantilla.codigo || '');
+        }
+        if (!nombre) {
+            nombre = String(plantilla.nombre || '');
+        }
+
+        var nuevas = otras.slice();
+        trozos.forEach(function (t) {
+            nuevas.push({
+                cuenta_id: cuentaId,
+                codigo: codigo,
+                nombre: nombre,
+                importe: Math.round(Math.abs(parseFloat(t.importe) || 0) * 100) / 100,
+                centrocosto_id: parseInt(t.centrocosto_id, 10) || 0
+            });
+        });
+
+        recordarCuentasDebeGastoDesdeLineas(nuevas);
+        debeGastoActivo = true;
+        debeGastoPendiente = nuevas;
+        escribirDebeGastoHidden(nuevas);
+        $('#cp-prorratear-cuenta-modal').modal('hide');
+        mostrarSolapa('#cp-solapa-asiento-contable');
+        window.refrescarPreviewAsiento(true);
     }
 
     function aplicarProrrateoCuentaAlAsiento() {
@@ -2297,6 +2408,11 @@ $(function () {
         if (!trozos.length || trozos._duplicado) {
             return;
         }
+        if (String(cpProrratearCtx.modo || '') === 'debe_gasto') {
+            aplicarProrrateoDebeGastoAlAsiento(trozos);
+            return;
+        }
+
         var conceptoId = cpProrratearCtx.conceptoId;
         var $existentes = filasConceptoPorId(conceptoId);
         if (!$existentes.length) {
@@ -2341,6 +2457,7 @@ $(function () {
         e.preventDefault();
         var $btn = $(this);
         abrirModalProrratearCuenta({
+            modo: String($btn.attr('data-modo') || 'concepto'),
             conceptoId: parseInt($btn.attr('data-concepto-ivacompra-id') || '0', 10) || 0,
             cuentaId: parseInt($btn.attr('data-cuenta-id') || '0', 10) || 0,
             cuentaCodigo: String($btn.attr('data-cuenta-codigo') || ''),

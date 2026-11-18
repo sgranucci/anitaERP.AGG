@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Ventas\FacturacionLocal;
 
 use App\Models\Contable\Asiento_Movimiento;
+use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\FacturanteAsientoMedioSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,8 @@ use RuntimeException;
  * Pasa a la cuenta del medio (L-MERCADOLIBRE / L-PAGO NUBE / …) la pierna que quedó
  * en DEUDORES POR VENTAS (113100001) en asientos de venta desde el 29/09/2026.
  * Un solo asiento por factura: no crea cobranza contable.
+ * También borra la cuenta corriente abierta de esas ventas si no tienen cobranza
+ * (típico de huecos ARCA recuperados como si fueran CC).
  */
 final class FacturacionLocalReclasificarDeudoresAMedioService
 {
@@ -29,9 +33,9 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
      * @var array<int, string>
      */
     private const PV_A_CUENTACAJA = [
-        21 => '608',
-        23 => '609',
-        26 => '612',
+        21 => '608', // Mercado Libre / POS local único medio
+        23 => '609', // Pago Nube
+        26 => '608', // Mercado Libre Full (local único medio 608; no 612 Nube Boa)
         27 => '608',
     ];
 
@@ -44,7 +48,8 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
      *   monto: float,
      *   por_destino: list<array{cuenta:string,nombre:string,lineas:int,monto:float}>,
      *   omitidas: list<array{asiento_id:int,venta_id:int,pv:string,motivo:string}>,
-     *   muestras: list<array{asiento_id:int,venta_id:int,pv:string,monto:float,destino:string}>
+     *   muestras: list<array{asiento_id:int,venta_id:int,pv:string,monto:float,destino:string}>,
+     *   cc_a_borrar: int
      * }
      */
     public function previsualizar(): array
@@ -114,11 +119,12 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
             'por_destino' => array_values($porDestino),
             'omitidas' => $omitidas,
             'muestras' => $muestras,
+            'cc_a_borrar' => $this->contarCcSinCobranza(array_keys($ventaIds)),
         ];
     }
 
     /**
-     * @return array{lineas:int,asientos:int,monto:float,omitidas:int}
+     * @return array{lineas:int,asientos:int,monto:float,omitidas:int,cc_borradas:int}
      */
     public function aplicar(): array
     {
@@ -127,11 +133,22 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
         $lineas = $this->lineasDeudores();
         $destinoIds = $this->mapaDestinoCuentacontableId();
         $asientoIds = [];
+        $ventaIds = [];
         $monto = 0.0;
         $actualizadas = 0;
         $omitidas = 0;
+        $ccBorradas = 0;
 
-        DB::transaction(function () use ($lineas, &$destinoIds, &$asientoIds, &$monto, &$actualizadas, &$omitidas) {
+        DB::transaction(function () use (
+            $lineas,
+            &$destinoIds,
+            &$asientoIds,
+            &$ventaIds,
+            &$monto,
+            &$actualizadas,
+            &$omitidas,
+            &$ccBorradas
+        ) {
             foreach ($lineas as $fila) {
                 $destinoId = $this->resolverDestinoId($fila, $destinoIds);
                 if ($destinoId === null) {
@@ -162,9 +179,12 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
                 }
 
                 $asientoIds[(int) $fila->asiento_id] = true;
+                $ventaIds[(int) $fila->venta_id] = true;
                 $monto += (float) $fila->monto;
                 $actualizadas++;
             }
+
+            $ccBorradas = $this->borrarCcSinCobranza(array_keys($ventaIds));
         });
 
         return [
@@ -172,8 +192,53 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
             'asientos' => count($asientoIds),
             'monto' => round($monto, 2),
             'omitidas' => $omitidas,
+            'cc_borradas' => $ccBorradas,
             'previa' => $previa,
         ];
+    }
+
+    /**
+     * @param  list<int>  $ventaIds
+     */
+    private function contarCcSinCobranza(array $ventaIds): int
+    {
+        if ($ventaIds === []) {
+            return 0;
+        }
+
+        return (int) Cliente_Cuentacorriente::query()
+            ->whereIn('venta_id', $ventaIds)
+            ->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('cobranza')
+                    ->whereColumn('cobranza.venta_id', 'cliente_cuentacorriente.venta_id');
+            })
+            ->count();
+    }
+
+    /**
+     * @param  list<int>  $ventaIds
+     */
+    private function borrarCcSinCobranza(array $ventaIds): int
+    {
+        if ($ventaIds === []) {
+            return 0;
+        }
+
+        $query = Cliente_Cuentacorriente::query()
+            ->whereIn('venta_id', $ventaIds)
+            ->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('cobranza')
+                    ->whereColumn('cobranza.venta_id', 'cliente_cuentacorriente.venta_id');
+            });
+
+        $antes = (int) (clone $query)->count();
+        if ($antes > 0) {
+            EloquentAuditDeleteSupport::each($query);
+        }
+
+        return $antes;
     }
 
     private function assertFerli(): void
@@ -215,7 +280,40 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
         $porPv = [];
         $porId = [];
 
+        // Preferir el medio único del local_venta del PV (POS); si no, mapa Facturante.
+        $locales = DB::table('local_venta as lv')
+            ->join('puntoventa as pv', 'pv.id', '=', 'lv.puntoventa_id')
+            ->where('lv.activo', true)
+            ->get(['lv.id', 'pv.codigo']);
+        foreach ($locales as $local) {
+            $cuentas = DB::table('local_venta_cuentacaja as lvc')
+                ->join('cuentacaja as cj', 'cj.id', '=', 'lvc.cuentacaja_id')
+                ->where('lvc.local_venta_id', (int) $local->id)
+                ->whereNotNull('cj.cuentacontable_id')
+                ->where('cj.cuentacontable_id', '>', 0)
+                ->distinct()
+                ->pluck('cj.cuentacontable_id')
+                ->map(static fn ($id) => (int) $id)
+                ->unique()
+                ->values();
+            if ($cuentas->count() !== 1) {
+                continue;
+            }
+            $ctaId = (int) $cuentas->first();
+            $cta = DB::table('cuentacontable')->where('id', $ctaId)->first(['id', 'codigo', 'nombre']);
+            if (! $cta) {
+                continue;
+            }
+            $pvPad = str_pad((string) ((int) $local->codigo), 5, '0', STR_PAD_LEFT);
+            $porPv[$pvPad] = $ctaId;
+            $porId[$ctaId] = $cta;
+        }
+
         foreach (self::PV_A_CUENTACAJA as $prefijo => $codigoCaja) {
+            $pvPad = str_pad((string) $prefijo, 5, '0', STR_PAD_LEFT);
+            if (isset($porPv[$pvPad])) {
+                continue;
+            }
             $cuentaCaja = FacturanteAsientoMedioSupport::encontrarCuentacaja($codigoCaja);
             if (! $cuentaCaja || (int) ($cuentaCaja->cuentacontable_id ?? 0) <= 0) {
                 throw new RuntimeException('Falta cuentacaja '.$codigoCaja.' o su cuenta contable.');
@@ -225,7 +323,6 @@ final class FacturacionLocalReclasificarDeudoresAMedioService
             if (! $cta) {
                 throw new RuntimeException('No existe cuentacontable id '.$ctaId.' para caja '.$codigoCaja.'.');
             }
-            $pvPad = str_pad((string) $prefijo, 5, '0', STR_PAD_LEFT);
             $porPv[$pvPad] = $ctaId;
             $porId[$ctaId] = $cta;
         }

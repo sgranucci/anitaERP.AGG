@@ -6552,19 +6552,25 @@ class FacturacionService
 
 		$lineas = [];
 		foreach (DB::table('venta_emision')->where('venta_id', $ventaId)->orderBy('numeroitem')->get() as $item) {
-			$lineas[] = [
+			$detalle = str_replace(["'", '\\'], ' ', (string) $item->detalle);
+			$linea = [
 				'cantidad' => (float) $item->cantidad,
 				'precio' => (float) $item->precio,
 				'descuento' => (float) $item->descuento,
 				'impuesto_id' => (int) $item->impuesto_id,
 				'incluyeimpuesto' => (string) ($item->incluyeimpuesto ?: 'N'),
-				'detalle' => str_replace(["'", '\\'], ' ', (string) $item->detalle),
-				'descripcion' => str_replace(["'", '\\'], ' ', (string) $item->detalle),
-				'articulo_id' => (int) ($item->articulo_id ?? 0),
-				'concepto_venta_id' => (int) ($item->concepto_venta_id ?? 0),
-				'deposito_id' => (int) ($item->deposito_id ?? 0),
+				'detalle' => $detalle,
+				'descripcion' => $detalle,
 				'omitir_stkmov_anita' => true,
 			];
+			$articuloId = (int) ($item->articulo_id ?? 0);
+			if ($articuloId > 0) {
+				$sku = (string) (DB::table('articulo')->where('id', $articuloId)->value('sku') ?? '');
+				$linea['articulo_id'] = $articuloId;
+				$linea['sku'] = $sku !== '' ? $sku : 'texto';
+				$linea['categoria'] = '';
+			}
+			$lineas[] = $linea;
 		}
 
 		$vencimiento = (string) (DB::table('cliente_cuentacorriente')
@@ -6633,60 +6639,101 @@ class FacturacionService
 		$signo = $signoTipo === 'R' ? -1. : 1.;
 		$modoPv = (string) ($puntoventa->modofacturacion ?? 'M');
 		$codigoTipo = (string) (is_object($tipo) ? ($tipo->codigo ?? $tipoPrefijo) : $tipoPrefijo);
+		// Admin Crown: IFX default del .env (acncadmin). No heredar CIP/cncadmin de jornada gastro.
+		$ifxServer = trim((string) config('anita.ifx_server', 'acncadmin'));
+		if ($ifxServer === '') {
+			$ifxServer = 'acncadmin';
+		}
 
-		$anita = $this->grabaAnita(
-			$sucursal,
-			$letra,
-			0,
-			0,
-			$payloadVenta,
-			$dataCAE,
-			$conceptostotales,
-			$cuentacorriente,
-			$lineas,
-			$signo,
-			$codigoTipo,
-			0,
-			false,
-			0,
-			0,
-			'',
-			null,
-			null,
-			false,
-			false,
-			true,
-			true,
-			$modoPv
-		);
+		$grabar = function () use (
+			$sucursal, $letra, $payloadVenta, $dataCAE, $conceptostotales, $cuentacorriente, $lineas,
+			$signo, $codigoTipo, $modoPv, $ifxServer
+		) {
+			return $this->grabaAnita(
+				$sucursal,
+				$letra,
+				0,
+				0,
+				$payloadVenta,
+				$dataCAE,
+				$conceptostotales,
+				$cuentacorriente,
+				$lineas,
+				$signo,
+				$codigoTipo,
+				0,
+				false,
+				0,
+				0,
+				'',
+				null,
+				$ifxServer,
+				false,
+				false,
+				true,
+				true,
+				$modoPv
+			);
+		};
+
+		$anita = $grabar();
 		if (is_array($anita) && isset($anita['error'])) {
 			$msg = (string) ($anita['mensaje'] ?? $anita['error']);
 			if ($this->esErrorDuplicadoComprobanteEnAnita($msg)) {
+				// Huérfana parcial (p. ej. venta sin climov): limpiar en acncadmin y regrabar.
+				$prevIfx = $this->anitaIfxServerComprobante;
+				$this->anitaIfxServerComprobante = $ifxServer;
+				try {
+					$this->borraAnita($tipoPrefijo, $letra, $sucursal, $numero, $empresaCodigo, true, $modoPv);
+				} finally {
+					$this->anitaIfxServerComprobante = $prevIfx;
+				}
+				$anita = $grabar();
+				if (is_array($anita) && isset($anita['error'])) {
+					$msg2 = (string) ($anita['mensaje'] ?? $anita['error']);
+					if ($this->esErrorDuplicadoComprobanteEnAnita($msg2)) {
+						return [
+							'ok' => true,
+							'codigo' => $codigo,
+							'monto' => $monto,
+							'cobrado' => $cobrado,
+							'ya_en_anita' => true,
+							'error' => null,
+						];
+					}
+
+					return [
+						'ok' => false,
+						'codigo' => $codigo,
+						'monto' => $monto,
+						'cobrado' => $cobrado,
+						'error' => $msg2,
+					];
+				}
+			} else {
+				$prevIfx = $this->anitaIfxServerComprobante;
+				$this->anitaIfxServerComprobante = $ifxServer;
+				try {
+					$this->borraAnita($tipoPrefijo, $letra, $sucursal, $numero, $empresaCodigo, true, $modoPv);
+				} finally {
+					$this->anitaIfxServerComprobante = $prevIfx;
+				}
+
 				return [
-					'ok' => true,
+					'ok' => false,
 					'codigo' => $codigo,
 					'monto' => $monto,
 					'cobrado' => $cobrado,
-					'ya_en_anita' => true,
-					'error' => null,
+					'error' => $msg,
 				];
 			}
-			$this->borraAnita($tipoPrefijo, $letra, $sucursal, $numero, $empresaCodigo, true, $modoPv);
-
-			return [
-				'ok' => false,
-				'codigo' => $codigo,
-				'monto' => $monto,
-				'cobrado' => $cobrado,
-				'error' => $msg,
-			];
 		}
 
 		if ($cobrado > 0.009) {
 			$estado = $cobrado >= $monto - 0.02 ? 'C' : 'I';
 			$clienteAnita = str_pad(ltrim((string) $cliente->codigo, '0'), 6, '0', STR_PAD_LEFT);
 			$api = new ApiAnita();
-			$api->apiCallEscritura([
+			$payloadClimov = [
 				'acc' => 'update',
 				'tabla' => 'climov',
 				'sistema' => 'ventas',
@@ -6695,7 +6742,10 @@ class FacturacionService
 					.' AND cliv_sucursal = '.(int) $sucursal
 					.' AND cliv_nro = '.$numero
 					." AND cliv_cliente = '".$clienteAnita."' ",
-			], 'climov cobrado '.$tipoPrefijo.' '.$numero);
+				'ifx_server' => $ifxServer,
+				'path_sistema' => (string) config('anita.bdd_path', '/usr2/casino'),
+			];
+			$api->apiCallEscritura($payloadClimov, 'climov cobrado '.$tipoPrefijo.' '.$numero);
 		}
 
 		return ['ok' => true, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => $cobrado, 'error' => null];

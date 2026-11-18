@@ -278,17 +278,20 @@ class GastronomiaCrownCierreXService
             throw new InvalidArgumentException('El cajero de '.$mozo->nombre.' ya está cerrado en tesorería.');
         }
 
-        $hayHabilitacion = TesoreriaCrownComprobante::query()
-            ->where('jornada_id', $jornadaTesoreria->id)
-            ->where('cajero_crown_id', $cajero->id)
-            ->where('tipo', TesoreriaCrownComprobanteSupport::HABILITACION)
-            ->where('estado', TesoreriaCrownComprobanteSupport::CONFORME)
-            ->whereNull('revierte_id')
-            ->exists();
-        if (! $hayHabilitacion) {
-            throw new InvalidArgumentException(
-                'El cajero de '.$mozo->nombre.' necesita una habilitación conforme antes de rendir.'
-            );
+        $permiteSinHab = (bool) ($cajero->permite_rendir_sin_habilitacion);
+        if (! $permiteSinHab) {
+            $hayHabilitacion = TesoreriaCrownComprobante::query()
+                ->where('jornada_id', $jornadaTesoreria->id)
+                ->where('cajero_crown_id', $cajero->id)
+                ->where('tipo', TesoreriaCrownComprobanteSupport::HABILITACION)
+                ->where('estado', TesoreriaCrownComprobanteSupport::CONFORME)
+                ->whereNull('revierte_id')
+                ->exists();
+            if (! $hayHabilitacion) {
+                throw new InvalidArgumentException(
+                    'El cajero de '.$mozo->nombre.' necesita una habilitación conforme antes de rendir.'
+                );
+            }
         }
 
         $yaHayRendicion = TesoreriaCrownComprobante::query()
