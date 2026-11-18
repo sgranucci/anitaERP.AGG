@@ -271,6 +271,9 @@ $(document).on('shown.bs.modal', '#facturarOrdenTrabajoModal', function() {
 
     modal.find('#fechafactura').val(hoy.toISOString().substring(0,10));
     modal.find('#nombrecliente').val(nombrecliente);
+    if (typeof window.prefijarLugarEntregaFacturaOt === 'function') {
+        window.prefijarLugarEntregaFacturaOt('', '');
+    }
     if (typeof window.prefijarClienteFacturaOt === 'function') {
         window.prefijarClienteFacturaOt(cliente_id);
     }
@@ -442,6 +445,13 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
     if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
         return false;
     }
+    if (typeof window.validarLugarEntregaFacturaOt === 'function' && !window.validarLugarEntregaFacturaOt()) {
+        return false;
+    }
+
+    var lugarEntregaOt = (typeof window.datosLugarEntregaFacturaOt === 'function')
+        ? window.datosLugarEntregaFacturaOt()
+        : { cliente_entrega_id: '', lugarentrega: '' };
 
     $.post(carpetaBase+"/ventas/facturarItemOt",
             {
@@ -463,6 +473,8 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                 leyendaexportacion: leyendaexportacion,
                 con_envios: $('#con_envios').is(':checked') ? 1 : 0,
                 cliente_id: window.clienteIdFacturaOt(),
+                cliente_entrega_id: lugarEntregaOt.cliente_entrega_id || '',
+                lugarentrega: lugarEntregaOt.lugarentrega || '',
                 _token: token
             },
             function(data, status){
@@ -475,6 +487,10 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                         $("#facturarOrdenTrabajoModal").modal('hide');
                         $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
                         completarTareas(ordentrabajo_id);
+                        var urlImpresionAnita = (data && data.impresion_url) ? String(data.impresion_url).trim() : '';
+                        if (urlImpresionAnita) {
+                            window.location = urlImpresionAnita;
+                        }
                     }
                 } else {
                     var urlImpresion = '';

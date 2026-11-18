@@ -1860,7 +1860,11 @@ class FacturacionService
 		if (! is_array($retorno) || $retorno === []) {
 			return $retorno;
 		}
-		if (! array_is_list($retorno) && ! empty($retorno['error'])) {
+		// CAE OK en ERP pero réplica Anita fallida: igual hay que imprimir factura/remito.
+		$permiteConErrorAnita = ! array_is_list($retorno)
+			&& (($retorno['anita_ok'] ?? null) === false)
+			&& (int) ($retorno['venta_id'] ?? 0) > 0;
+		if (! array_is_list($retorno) && ! empty($retorno['error']) && ! $permiteConErrorAnita) {
 			return $retorno;
 		}
 
@@ -1869,7 +1873,11 @@ class FacturacionService
 		$remitoId = 0;
 		$pedidoId = 0;
 		foreach ($items as $item) {
-			if (! is_array($item) || ! empty($item['error'])) {
+			if (! is_array($item)) {
+				continue;
+			}
+			$itemConErrorAnita = (($item['anita_ok'] ?? null) === false) && (int) ($item['venta_id'] ?? 0) > 0;
+			if (! empty($item['error']) && ! $itemConErrorAnita) {
 				continue;
 			}
 			$itemVentaId = (int) ($item['venta_id'] ?? 0);
@@ -1895,7 +1903,11 @@ class FacturacionService
 		}
 
 		foreach ($items as $i => $item) {
-			if (! is_array($item) || ! empty($item['error']) || ! empty($item['ocultar_mensaje'])) {
+			if (! is_array($item) || ! empty($item['ocultar_mensaje'])) {
+				continue;
+			}
+			$itemConErrorAnita = (($item['anita_ok'] ?? null) === false) && (int) ($item['venta_id'] ?? 0) > 0;
+			if (! empty($item['error']) && ! $itemConErrorAnita) {
 				continue;
 			}
 			$items[$i]['impresion_url'] = $url;
@@ -4437,7 +4449,7 @@ class FacturacionService
 						else	
 							$pedido = $pedido_query[0];
 
-						$errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido);
+						$errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido, true, $data);
 						if ($errorEntrega) {
 							return $errorEntrega;
 						}
@@ -5188,14 +5200,14 @@ class FacturacionService
 								'msg' => $msgAnita,
 							]);
 
-							return [
+							return $this->anexarUrlImpresionSesion([
 								'error' => 'Factura '.$numero.' grabada en ERP (CAE OK), pero falló la réplica Anita: '.$msgAnita
 									.'. No reintente facturar el mismo ítem: use re-réplica Anita.',
 								'factura' => $numero,
 								'venta_id' => (int) $vta->id,
 								'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
 								'anita_ok' => false,
-							];
+							], $dataFactura);
 						}
 
 						$vtaCae = $vta->fresh();
@@ -5260,14 +5272,14 @@ class FacturacionService
 							'msg' => $e->getMessage(),
 						]);
 
-						return [
+						return $this->anexarUrlImpresionSesion([
 							'error' => 'Factura '.$numero.' grabada en ERP (CAE OK), pero falló la réplica Anita: '.$e->getMessage()
 								.'. No reintente facturar el mismo ítem: use re-réplica Anita.',
 							'factura' => $numero,
 							'venta_id' => (int) $vta->id,
 							'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
 							'anita_ok' => false,
-						];
+						], $dataFactura);
 					}
 				}
 
@@ -5302,21 +5314,16 @@ class FacturacionService
 		return $this->pedidoQuery->leePedidoporId($id);
 	}
 
-	protected function aplicarLugarEntregaFacturaOt($cliente, $pedido)
+	protected function aplicarLugarEntregaFacturaOt($cliente, $pedido, bool $persistirEntrega = true, array $data = [])
 	{
-		if ($cliente->id != $pedido->cliente_id) {
-			$cliente_entrega = $this->cliente_entregaRepository->leeClienteEntrega($cliente->id);
-
-			if ($cliente_entrega) {
-				$pedido->lugarentrega = $cliente_entrega[0]->nombre;
-			}
-
+		$mismoCliente = (int) $cliente->id === (int) $pedido->cliente_id;
+		if (! $mismoCliente) {
+			$pedido->cliente_entrega_id = null;
+			$pedido->lugarentrega = null;
 			$this->descuentoPie = $cliente->descuento;
-
-			return null;
 		}
 
-		return $this->resolverLugarEntregaPedido($cliente, $pedido, [], true);
+		return $this->resolverLugarEntregaPedido($cliente, $pedido, $data, $persistirEntrega && $mismoCliente);
 	}
 
 	protected function sincronizarLugarEntregaFacturaOt($pedido): void
@@ -6994,6 +7001,14 @@ class FacturacionService
 		$omiteClimovAnita = $sinCuentaCorrienteAnita || $receptorEventual;
 		$venCtaCte = $omiteClimovAnita ? 'N' : 'S';
 
+		// Comilla simple en nombre/domicilio (ej. D'AQUINO) corta el INSERT Informix (-201).
+		$nombreAnita = PedidoAnitaEsquemaSupport::sqlTexto($nombre);
+		$domicilioAnita = PedidoAnitaEsquemaSupport::sqlTexto($domicilio);
+		$nombreLocalidadAnita = PedidoAnitaEsquemaSupport::sqlTexto($nombreLocalidad);
+		$nombreProvinciaAnita = PedidoAnitaEsquemaSupport::sqlTexto($nombreProvincia);
+		$codigopostalAnita = PedidoAnitaEsquemaSupport::sqlTexto((string) $codigopostal);
+		$numerodocumentoAnita = PedidoAnitaEsquemaSupport::sqlTexto((string) $numerodocumento);
+
 		if (EntornoEmpresaSupport::esElBierzo())
 			$data = array( 	'tabla' => 'venta', 
 						'acc' => 'insert',
@@ -7043,12 +7058,12 @@ class FacturacionService
 							'".$cobrador."',
 							'".$condicionventa."',
 							'".'0'."',
-							'".$nombre."',
-							'".$domicilio."',
-							'".$nombreLocalidad."',
-							'".$nombreProvincia."',
-							'".$codigopostal."',
-							'".$numerodocumento."',
+							'".$nombreAnita."',
+							'".$domicilioAnita."',
+							'".$nombreLocalidadAnita."',
+							'".$nombreProvinciaAnita."',
+							'".$codigopostalAnita."',
+							'".$numerodocumentoAnita."',
 							'".$venCondIvaCli."',
 							'".$venCtaCte."',
 							'".$this->nombreUsuarioAnitaParaGraba($venta)."',
@@ -7120,12 +7135,12 @@ class FacturacionService
 							'".$cobrador."',
 							'".$condicionventa."',
 							'".'0'."',
-							'".$nombre."',
-							'".$domicilio."',
-							'".$nombreLocalidad."',
-							'".$nombreProvincia."',
-							'".$codigopostal."',
-							'".$numerodocumento."',
+							'".$nombreAnita."',
+							'".$domicilioAnita."',
+							'".$nombreLocalidadAnita."',
+							'".$nombreProvinciaAnita."',
+							'".$codigopostalAnita."',
+							'".$numerodocumentoAnita."',
 							'".$venCondIvaCli."',
 							'".$venCtaCte."',
 							'".$this->nombreUsuarioAnitaParaGraba($venta)."',

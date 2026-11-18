@@ -1535,6 +1535,12 @@
 
 		modal.find('#fechafactura').val(hoy.toISOString().substring(0,10));
 		modal.find('#nombrecliente').val(nombrecliente);
+		if (typeof window.prefijarLugarEntregaFacturaOt === 'function') {
+			window.prefijarLugarEntregaFacturaOt(
+				$('#cliente_entrega_id').val() || '',
+				String($('#lugarentrega').val() || '').trim()
+			);
+		}
 		if (typeof window.prefijarClienteFacturaOt === 'function') {
 			window.prefijarClienteFacturaOt(cliente_id);
 		}
@@ -1678,6 +1684,13 @@
 		if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
 			return false;
 		}
+		if (typeof window.validarLugarEntregaFacturaOt === 'function' && !window.validarLugarEntregaFacturaOt()) {
+			return false;
+		}
+
+		var lugarEntregaFerli = (typeof window.datosLugarEntregaFacturaOt === 'function')
+			? window.datosLugarEntregaFacturaOt()
+			: { cliente_entrega_id: '', lugarentrega: '' };
 
 		// Overlay antes de cerrar el modal (evita quedar tapado / JS cacheado viejo)
 		mostrarOverlayFacturarPedidoFerli('Generando factura…');
@@ -1702,6 +1715,8 @@
 					leyendaexportacion: leyendaexportacion,
 					con_envios: $('#con_envios').is(':checked') ? 1 : 0,
 					cliente_id: window.clienteIdFacturaOt(),
+					cliente_entrega_id: lugarEntregaFerli.cliente_entrega_id || '',
+					lugarentrega: lugarEntregaFerli.lugarentrega || '',
 					_token: token
 				})
 				.done(function(data, status){
@@ -1715,6 +1730,11 @@
 						if (data && data.anita_ok === false && data.factura) {
 							$("#facturarOrdenTrabajoModal").modal('hide');
 							marcaItemFacturado();
+							var urlImpresionAnita = (data && data.impresion_url) ? String(data.impresion_url).trim() : '';
+							if (urlImpresionAnita) {
+								window.location = urlImpresionAnita;
+								return;
+							}
 						}
 					} else {
 						var urlImpresion = (data && data.impresion_url) ? String(data.impresion_url).trim() : '';

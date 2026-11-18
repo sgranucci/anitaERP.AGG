@@ -46,23 +46,18 @@ class FacturacionServiceFerli extends FacturacionService
         return app(PedidoQueryFerli::class)->leePedidoporId($id);
     }
 
-    protected function aplicarLugarEntregaFacturaOt($cliente, $pedido, bool $persistirEntrega = true)
+    protected function aplicarLugarEntregaFacturaOt($cliente, $pedido, bool $persistirEntrega = true, array $data = [])
     {
         $mismoCliente = (int) $cliente->id === (int) $pedido->cliente_id;
         if (! $mismoCliente) {
-            $cliente_entrega = $this->cliente_entregaRepository->leeClienteEntrega($cliente->id);
-
-            if ($cliente_entrega) {
-                $pedido->lugarentrega = $cliente_entrega[0]->nombre;
-                $pedido->cliente_entrega_id = $cliente_entrega[0]->id ?? null;
-            } else {
-                $pedido->cliente_entrega_id = null;
-            }
+            // El lugar del pedido es de otra razón social; no sirve para esta factura.
+            $pedido->cliente_entrega_id = null;
+            $pedido->lugarentrega = null;
         }
 
         // Si la factura va a otra razón social, el lugar queda solo en el comprobante.
         // El preview no persiste: solo necesita la provincia en memoria para IIBB.
-        return $this->resolverLugarEntregaPedido($cliente, $pedido, [], $persistirEntrega && $mismoCliente);
+        return $this->resolverLugarEntregaPedido($cliente, $pedido, $data, $persistirEntrega && $mismoCliente);
     }
 
     protected function sincronizarLugarEntregaFacturaOt($pedido): void
@@ -343,7 +338,7 @@ class FacturacionServiceFerli extends FacturacionService
             $this->cuentacontable_id = $cliente->cuentacontable_id;
             $this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
-            $errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido, $persistirEntrega);
+            $errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido, $persistirEntrega, $data);
             if ($errorEntrega) {
                 return $errorEntrega;
             }

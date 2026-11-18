@@ -69,6 +69,10 @@
         pintar(data);
         aplicaDescuentoSiCambia(data);
         habilitarGenerar(true);
+        // Si cambió la razón social, no conservar el lugar del pedido anterior.
+        if (clienteOrigenId > 0 && (parseInt(data.id, 10) || 0) !== clienteOrigenId) {
+            window.limpiarLugarEntregaFacturaOt();
+        }
         $(document).trigger('clienteFacturaOtElegido', [data]);
         return true;
     }
@@ -151,10 +155,157 @@
         return true;
     };
 
+    function etiquetaLugarEntregaOt(entrega) {
+        if (!entrega) {
+            return '';
+        }
+        if (entrega.etiqueta) {
+            return String(entrega.etiqueta);
+        }
+        var nombre = String(entrega.nombre || '').trim();
+        if (nombre) {
+            return nombre;
+        }
+        var domicilio = String(entrega.domicilio || '').trim();
+        if (domicilio) {
+            return domicilio;
+        }
+        return String(entrega.localidad || '').trim();
+    }
+
+    function entregasNombradasOt(entregas) {
+        return (entregas || []).filter(function (entrega) {
+            return String(entrega.nombre || '').trim() !== '' || entrega.nombre_usable === true;
+        });
+    }
+
+    window.prefijarLugarEntregaFacturaOt = function (clienteEntregaId, lugarentrega) {
+        $('#factura_ot_cliente_entrega_id_previa').val(clienteEntregaId || '');
+        $('#factura_ot_lugarentrega').val(lugarentrega || '');
+    };
+
+    window.datosLugarEntregaFacturaOt = function () {
+        return {
+            cliente_entrega_id: String($('#factura_ot_cliente_entrega_id').val() || '').trim(),
+            lugarentrega: String($('#factura_ot_lugarentrega').val() || '').trim()
+        };
+    };
+
+    window.hidratarLugarEntregaFacturaOt = function (clienteId) {
+        var $sel = $('#factura_ot_cliente_entrega_id');
+        var $txt = $('#factura_ot_lugarentrega');
+        var $aviso = $('#aviso-lugarentrega-factura-ot');
+        var $label = $('#label-factura-ot-lugarentrega');
+        var idActual = $sel.val() || $('#factura_ot_cliente_entrega_id_previa').val() || '';
+        var textoActual = String($txt.val() || '').trim();
+
+        $aviso.text('');
+        $label.removeClass('requerido');
+
+        if (!$sel.length || !clienteId) {
+            if ($sel.length) {
+                $sel.hide().empty();
+            }
+            if ($txt.length) {
+                $txt.prop('readonly', false).val(textoActual);
+            }
+            return;
+        }
+
+        $.get(carpetaBase + '/ventas/leercliente_entrega/' + clienteId, function (data) {
+            var entr = $.map(data, function (value) { return [value]; });
+            var nombradas = entregasNombradasOt(entr);
+
+            $sel.empty().append($('<option></option>').val('').text('-- Seleccionar --'));
+            $.each(entr, function (_, entrega) {
+                $sel.append($('<option></option>').val(entrega.id).text(etiquetaLugarEntregaOt(entrega)));
+            });
+
+            if (entr.length) {
+                $sel.show();
+                if (idActual && $sel.find('option[value="' + idActual + '"]').length) {
+                    $sel.val(idActual);
+                } else if (entr.length === 1) {
+                    $sel.val(entr[0].id);
+                }
+                if ($sel.val()) {
+                    var elegida = null;
+                    $.each(entr, function (_, entrega) {
+                        if (String(entrega.id) === String($sel.val())) {
+                            elegida = entrega;
+                        }
+                    });
+                    $txt.val(etiquetaLugarEntregaOt(elegida) || textoActual);
+                    $('#factura_ot_cliente_entrega_id_previa').val($sel.val());
+                } else {
+                    $txt.val(textoActual);
+                }
+                $txt.prop('readonly', nombradas.length > 0);
+                if (nombradas.length) {
+                    $label.addClass('requerido');
+                    if (!$sel.val() && !String($txt.val() || '').trim()) {
+                        $aviso.text('Este cliente tiene lugares de entrega. Elija uno para facturar.');
+                    }
+                } else {
+                    $aviso.text('El lugar del ABM no tiene nombre. Puede completarlo aquí o cargarlo en el cliente.');
+                }
+            } else {
+                $sel.hide().val('');
+                $txt.prop('readonly', false).val(textoActual);
+                $aviso.text('El cliente no tiene lugares de entrega en el ABM. Puede cargarlo aquí; conviene cargarlo también en el cliente.');
+            }
+        });
+    };
+
+    window.validarLugarEntregaFacturaOt = function () {
+        if (!$('#factura_ot_lugarentrega').length) {
+            return true;
+        }
+        var datos = window.datosLugarEntregaFacturaOt();
+        var obligatorio = $('#label-factura-ot-lugarentrega').hasClass('requerido');
+        if (obligatorio && !datos.cliente_entrega_id && !datos.lugarentrega) {
+            aviso('Debe seleccionar un lugar de entrega del cliente');
+            $('#factura_ot_lugarentrega').trigger('focus');
+            return false;
+        }
+        return true;
+    };
+
+    window.limpiarLugarEntregaFacturaOt = function () {
+        $('#factura_ot_cliente_entrega_id').empty().hide().val('');
+        $('#factura_ot_cliente_entrega_id_previa').val('');
+        $('#factura_ot_lugarentrega').val('').prop('readonly', false);
+        $('#aviso-lugarentrega-factura-ot').text('');
+        $('#label-factura-ot-lugarentrega').removeClass('requerido');
+    };
+
     $(function () {
         if (!$('#factura_ot_codigocliente').length) {
             return;
         }
+
+        $(document).on('change', '#factura_ot_cliente_entrega_id', function () {
+            var id = String($(this).val() || '');
+            var etiqueta = '';
+            if (id) {
+                etiqueta = String($(this).find('option:selected').text() || '').trim();
+                if (etiqueta === '-- Seleccionar --') {
+                    etiqueta = '';
+                }
+            }
+            $('#factura_ot_lugarentrega').val(etiqueta);
+            $('#factura_ot_cliente_entrega_id_previa').val(id);
+            if (id || etiqueta) {
+                $('#aviso-lugarentrega-factura-ot').text('');
+            }
+        });
+
+        $(document).on('clienteFacturaOtElegido', function (_event, data) {
+            var clienteId = data && data.id ? data.id : window.clienteIdFacturaOt();
+            if (typeof window.hidratarLugarEntregaFacturaOt === 'function') {
+                window.hidratarLugarEntregaFacturaOt(clienteId);
+            }
+        });
 
         $('#factura-ot-consultacliente').on('click', function (event) {
             event.preventDefault();

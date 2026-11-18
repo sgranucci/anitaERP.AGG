@@ -6,6 +6,8 @@
     var filasFacturaPicking = [];
     var nombrecliente = '';
     var clienteFacturaId = 0;
+    var clienteEntregaId = '';
+    var lugarEntregaPedido = '';
     var descuentoCliente = 0;
     var descuentoLineaCliente = '';
     var offFactura = 0;
@@ -234,11 +236,16 @@
         if (previewPickingXhr && previewPickingXhr.readyState !== 4) {
             previewPickingXhr.abort();
         }
+        var lugarEntrega = (typeof window.datosLugarEntregaFacturaOt === 'function')
+            ? window.datosLugarEntregaFacturaOt()
+            : { cliente_entrega_id: clienteEntregaId || '', lugarentrega: lugarEntregaPedido || '' };
         previewPickingXhr = $.post(carpetaBase + '/stock/picking-pedido/preview-totales', {
             origen: 'picking',
             pedido_combinacion_id: pedido_combinacion_ids,
             ordentrabajo_id: ordentrabajo_ids,
             cliente_id: clienteIdPreviewPicking(),
+            cliente_entrega_id: lugarEntrega.cliente_entrega_id || '',
+            lugarentrega: lugarEntrega.lugarentrega || '',
             fechafactura: $('#fechafactura').val(),
             descuentopie: $('#descuentopie').val(),
             descuentoimportepie: $('#descuentoimportepie').val(),
@@ -313,6 +320,8 @@
                     filasFacturaPicking = data.filas || [];
                     nombrecliente = data.nombrecliente || '';
                     clienteFacturaId = parseInt(data.cliente_id, 10) || 0;
+                    clienteEntregaId = data.cliente_entrega_id || '';
+                    lugarEntregaPedido = data.lugarentrega || '';
                     descuentoCliente = (data.descuentopie != null && data.descuentopie !== '') ? data.descuentopie : 0;
                     descuentoLineaCliente = (data.descuentolinea != null && data.descuentolinea !== '') ? data.descuentolinea : '';
                     offFactura = pedido_combinacion_ids.length;
@@ -330,6 +339,9 @@
             modal.find('#fechafactura').val(hoy.toISOString().substring(0, 10));
             modal.find('#nombrecliente').val(nombrecliente);
             modal.find('.modal-title').text('Factura PICKING — ' + nombrecliente);
+            if (typeof window.prefijarLugarEntregaFacturaOt === 'function') {
+                window.prefijarLugarEntregaFacturaOt(clienteEntregaId, lugarEntregaPedido);
+            }
             if (typeof window.prefijarClienteFacturaOt === 'function') {
                 window.prefijarClienteFacturaOt(clienteFacturaId);
             }
@@ -385,10 +397,16 @@
             if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
                 return false;
             }
+            if (typeof window.validarLugarEntregaFacturaOt === 'function' && !window.validarLugarEntregaFacturaOt()) {
+                return false;
+            }
 
             var clienteFacturaElegido = (typeof window.clienteIdFacturaOt === 'function')
                 ? window.clienteIdFacturaOt()
                 : String(clienteFacturaId || '');
+            var lugarEntrega = (typeof window.datosLugarEntregaFacturaOt === 'function')
+                ? window.datosLugarEntregaFacturaOt()
+                : { cliente_entrega_id: '', lugarentrega: '' };
 
             $('#facturarOrdenTrabajoModal').modal('hide');
             mostrarOverlay('Emitiendo factura…');
@@ -412,6 +430,8 @@
                 leyendaexportacion: leyendaexportacion,
                 transporte_id: transporte_id,
                 cliente_id: clienteFacturaElegido,
+                cliente_entrega_id: lugarEntrega.cliente_entrega_id || '',
+                lugarentrega: lugarEntrega.lugarentrega || '',
                 retorno_index: pathRetornoPicking(),
                 con_envios: $('#con_envios').is(':checked') ? 1 : 0,
                 _token: token
@@ -465,7 +485,7 @@
             programarPreviewTotalesPicking();
         });
 
-        $(document).on('input change', '#facturarOrdenTrabajoModal #descuentopie, #facturarOrdenTrabajoModal #descuentolinea, #facturarOrdenTrabajoModal #descuentoimportepie, #facturarOrdenTrabajoModal #fechafactura', function () {
+        $(document).on('input change', '#facturarOrdenTrabajoModal #descuentopie, #facturarOrdenTrabajoModal #descuentolinea, #facturarOrdenTrabajoModal #descuentoimportepie, #facturarOrdenTrabajoModal #fechafactura, #facturarOrdenTrabajoModal #factura_ot_lugarentrega, #facturarOrdenTrabajoModal #factura_ot_cliente_entrega_id', function () {
             programarPreviewTotalesPicking();
         });
 

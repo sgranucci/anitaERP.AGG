@@ -388,12 +388,20 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                         $("#facturarOrdenTrabajoModal").modal('hide');
                         $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
                         completarTareas(ordentrabajo_id);
+                        var urlImpresionAnita = (data && data.impresion_url) ? String(data.impresion_url).trim() : '';
+                        if (urlImpresionAnita) {
+                            window.location = urlImpresionAnita;
+                        }
                     }
                 } else {
                     alert("Factura Número: " + data.factura + "\nEstado: " + status);
                     $("#facturarOrdenTrabajoModal").modal('hide');
                     $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
                     completarTareas(ordentrabajo_id);
+                    var urlImpresionOk = (data && data.impresion_url) ? String(data.impresion_url).trim() : '';
+                    if (urlImpresionOk) {
+                        window.location = urlImpresionOk;
+                    }
                 }
             });
 });

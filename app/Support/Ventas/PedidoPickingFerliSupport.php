@@ -3489,6 +3489,7 @@ final class PedidoPickingFerliSupport
         }
 
         $cliente = $lineas->first()->pedidos->clientes ?? null;
+        $pedido = $lineas->first()->pedidos ?? null;
         $descuentos = self::descuentosModalFactura(
             $cliente?->descuento ?? 0,
             $lineas->map(fn ($linea) => $linea->pedidos->descuento ?? 0)->all(),
@@ -3502,6 +3503,8 @@ final class PedidoPickingFerliSupport
             'total_pares' => $totalPares,
             'nombrecliente' => $cliente?->nombre ?? '',
             'cliente_id' => (int) ($lineas->first()->pedidos->cliente_id ?? 0),
+            'cliente_entrega_id' => (int) ($pedido->cliente_entrega_id ?? 0) ?: null,
+            'lugarentrega' => trim((string) ($pedido->lugarentrega ?? '')),
             'descuentopie' => $descuentos['descuentopie'],
             'descuentolinea' => $descuentos['descuentolinea'],
         ];

@@ -601,13 +601,28 @@ class ArticuloFerliController extends Controller
         }
     }
 
-    // Lista etiqueta QR
+    // Lista etiqueta (línea/artículo, SKU, combinación y módulos de la línea)
 
     public function download(Request $request, $sku, $codigo)
     {
+        $articulo = Articulo::with(['lineas.modulos' => function ($q) {
+            $q->orderBy('codigo');
+        }])->where('sku', $sku)->first();
 
-        $articulo = Articulo::where('sku', $sku)->first();
+        if (! $articulo) {
+            return redirect()->back()->with('errores', ['No se encontró el artículo para imprimir la etiqueta.']);
+        }
+
         $combinacion = Combinacion::where('articulo_id', $articulo->id)->get();
+
+        // Módulos de la línea del artículo (reemplazan el QR en la etiqueta)
+        $lineasModulos = [];
+        foreach ($articulo->lineas?->modulos ?? [] as $modulo) {
+            $textoModulo = trim((string) ($modulo->nombre ?: $modulo->codigo));
+            if ($textoModulo !== '') {
+                $lineasModulos[] = str_replace('"', "'", substr($textoModulo, 0, 24));
+            }
+        }
 
         // Arma nombre de archivo
         $nombreEtiqueta = 'tmp/eti-'.Str::random(10).'.txt';
@@ -615,30 +630,39 @@ class ArticuloFerliController extends Controller
         $etiqueta = '';
         foreach ($combinacion as $comb) {
             if (($codigo != 'TODO' ? $comb->codigo == $codigo : true)) {
-                $qr = 'https://ferlimayoristas.com.ar/index.php?route=product/product&product_id='.'1'.'0000'.$articulo->sku.'0000'.$comb->codigo;
-                // $qr = 'https://ferlimayoristas.com.ar/index.php?route=product/allproduct&search='.$articulo->descripcion;
-
                 $cod = substr($articulo->sku, 0, -2);
                 $skuSufijo = substr($articulo->sku, -2);
                 $nombre1 = substr($comb->nombre, 0, 15);
                 $nombre2 = substr($comb->nombre, 15, 15);
                 $codSku = $cod.'-'.$skuSufijo;
                 $combNombre = $comb->codigo.'-'.$nombre1;
+                $descripcion = str_replace('"', "'", (string) $articulo->descripcion);
+                $combNombreEpl = str_replace('"', "'", $combNombre);
+                $nombre2Epl = str_replace('"', "'", (string) $nombre2);
 
+                // Tipografía: descripción y combinación 1 punto más grandes (fuente 3)
                 $etiqueta .= "\nN\n";
                 $etiqueta .= "q800\n";
                 $etiqueta .= "S4\n";
                 $etiqueta .= "D12\n";
-                $etiqueta .= 'A750,5,1,2,2,1,N,"'.$articulo->descripcion."\"\n";
+                $etiqueta .= 'A750,5,1,3,2,1,N,"'.$descripcion."\"\n";
                 $etiqueta .= 'A680,5,1,1,2,2,N,"'.$codSku."\"\n";
-                $etiqueta .= 'A630,5,1,2,1,1,N,"'.$combNombre."\"\n";
-                $etiqueta .= 'A600,5,1,2,1,1,N,"'.$nombre2."\"\n";
-                $etiqueta .= 'b450,50,Q,s3eM,"'.$qr."\"\n";
-                $etiqueta .= 'A330,5,1,2,2,1,N,"'.$articulo->descripcion."\"\n";
+                $etiqueta .= 'A630,5,1,3,1,1,N,"'.$combNombreEpl."\"\n";
+                $etiqueta .= 'A600,5,1,3,1,1,N,"'.$nombre2Epl."\"\n";
+                $yModulo = 520;
+                foreach (array_slice($lineasModulos, 0, 4) as $textoModulo) {
+                    $etiqueta .= 'A'.$yModulo.',5,1,2,1,1,N,"'.$textoModulo."\"\n";
+                    $yModulo -= 30;
+                }
+                $etiqueta .= 'A330,5,1,3,2,1,N,"'.$descripcion."\"\n";
                 $etiqueta .= 'A260,5,1,1,2,2,N,"'.$codSku."\"\n";
-                $etiqueta .= 'A210,5,1,2,1,1,N,"'.$combNombre."\"\n";
-                $etiqueta .= 'A180,5,1,2,1,1,N,"'.$nombre2."\"\n";
-                $etiqueta .= 'b30,50,Q,s3eM,"'.$qr."\"\n";
+                $etiqueta .= 'A210,5,1,3,1,1,N,"'.$combNombreEpl."\"\n";
+                $etiqueta .= 'A180,5,1,3,1,1,N,"'.$nombre2Epl."\"\n";
+                $yModulo = 100;
+                foreach (array_slice($lineasModulos, 0, 4) as $textoModulo) {
+                    $etiqueta .= 'A'.$yModulo.',5,1,2,1,1,N,"'.$textoModulo."\"\n";
+                    $yModulo -= 30;
+                }
                 $etiqueta .= "P1\n";
             }
         }

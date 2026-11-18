@@ -46,6 +46,17 @@
                                 <small class="form-text text-muted">Confirme el cliente del pedido o elija otra raz&oacute;n social. Esta sesi&oacute;n se factura a ese cliente.</small>
                             </div>
                         </div>
+                        <div class="form-group row" id="div-lugarentrega-factura-ot">
+                            <label for="factura_ot_lugarentrega" id="label-factura-ot-lugarentrega" class="col-lg-4 col-form-label text-right pr-2">Lugar de entrega</label>
+                            <div class="col-lg-8">
+                                <input type="hidden" id="factura_ot_cliente_entrega_id_previa" value="">
+                                <select id="factura_ot_cliente_entrega_id" class="form-control mb-1" style="display: none;">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                                <input type="text" id="factura_ot_lugarentrega" class="form-control" placeholder="Lugar de entrega" autocomplete="off">
+                                <small id="aviso-lugarentrega-factura-ot" class="form-text text-muted"></small>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-sm-6">
                         <div class="form-group row">
