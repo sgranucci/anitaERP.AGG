@@ -1,14 +1,18 @@
 <?php
 
-use App\Support\ConsultaInteligente\ConsultaInteligenteNlDiccionarioSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Menú Configuración por módulo → Dirección (alertas + diccionario NL)
  * y seeds iniciales del diccionario NL editable.
+ *
+ * CI postgres-lab (#281–#285): el walk de ancestros sin guarda de ciclo
+ * colgaba ~34 min hasta max_execution_time 600. No usar generaKey()/auth()
+ * en migrate (CLI sin usuario).
  */
 return new class extends Migration
 {
@@ -21,6 +25,9 @@ return new class extends Migration
     private const URL_DICCIONARIO = 'direccion/consulta-inteligente/diccionario';
 
     private const PERMISO_CONFIG = 'configurar-consulta-inteligente';
+
+    /** Tope de profundidad del árbol de menú (evita bucle si hay ciclo). */
+    private const MAX_PROFUNDIDAD_MENU = 32;
 
     /** @var list<array{frase: string, entidad: string, prioridad: int}> */
     private const SEEDS_NL = [
@@ -48,27 +55,10 @@ return new class extends Migration
                 : [];
 
             foreach ([$menuAlertas, $menuDic, $moduloId] as $menuId) {
-                foreach ($rolIds as $rolId) {
-                    if ($rolId < 1) {
-                        continue;
-                    }
-                    if (! DB::table('menu_rol')->where('menu_id', $menuId)->where('rol_id', $rolId)->exists()) {
-                        DB::table('menu_rol')->insert(['menu_id' => $menuId, 'rol_id' => $rolId]);
-                    }
+                if ($menuId < 1) {
+                    continue;
                 }
-                // Ancestros
-                $padre = (int) (DB::table('menu')->where('id', $menuId)->value('menu_id') ?? 0);
-                while ($padre > 0) {
-                    foreach ($rolIds as $rolId) {
-                        if ($rolId < 1) {
-                            continue;
-                        }
-                        if (! DB::table('menu_rol')->where('menu_id', $padre)->where('rol_id', $rolId)->exists()) {
-                            DB::table('menu_rol')->insert(['menu_id' => $padre, 'rol_id' => $rolId]);
-                        }
-                    }
-                    $padre = (int) (DB::table('menu')->where('id', $padre)->value('menu_id') ?? 0);
-                }
+                $this->asignarRolesMenuYAncestros($menuId, $rolIds);
             }
         }
 
@@ -90,7 +80,9 @@ return new class extends Migration
                     'updated_at' => now(),
                 ]);
             }
-            ConsultaInteligenteNlDiccionarioSupport::olvidarCache();
+            // Sin auth()/generaKey(): en migrate CLI auth()->id() es null y no aporta.
+            Cache::forget('ci-nl-sinonimos-activos');
+            Cache::forget('ci-nl-sinonimos-activos-');
         }
 
         SuitecrmPermiso::flushCachePermisos();
@@ -107,6 +99,44 @@ return new class extends Migration
         }
         // No borra seeds NL ni el nodo #config-modulo-direccion (puede tener otros ítems).
         SuitecrmPermiso::flushCachePermisos();
+    }
+
+    /**
+     * @param  list<int>  $rolIds
+     */
+    private function asignarRolesMenuYAncestros(int $menuId, array $rolIds): void
+    {
+        $this->asignarRolesAMenu($menuId, $rolIds);
+
+        $vistos = [$menuId => true];
+        $padre = (int) (DB::table('menu')->where('id', $menuId)->value('menu_id') ?? 0);
+        $profundidad = 0;
+
+        while ($padre > 0 && $profundidad < self::MAX_PROFUNDIDAD_MENU) {
+            if (isset($vistos[$padre])) {
+                // Ciclo en menu.menu_id: cortar para no colgar migrate (postgres-lab).
+                break;
+            }
+            $vistos[$padre] = true;
+            $this->asignarRolesAMenu($padre, $rolIds);
+            $padre = (int) (DB::table('menu')->where('id', $padre)->value('menu_id') ?? 0);
+            $profundidad++;
+        }
+    }
+
+    /**
+     * @param  list<int>  $rolIds
+     */
+    private function asignarRolesAMenu(int $menuId, array $rolIds): void
+    {
+        foreach ($rolIds as $rolId) {
+            if ($rolId < 1) {
+                continue;
+            }
+            if (! DB::table('menu_rol')->where('menu_id', $menuId)->where('rol_id', $rolId)->exists()) {
+                DB::table('menu_rol')->insert(['menu_id' => $menuId, 'rol_id' => $rolId]);
+            }
+        }
     }
 
     private function asegurarModuloDireccion(): int

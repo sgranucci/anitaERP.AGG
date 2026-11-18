@@ -65,12 +65,19 @@ return new class extends Migration
                 DB::table('menu_rol')->insert(['menu_id' => $menuId, 'rol_id' => $rolId]);
             }
             // Padres del menú (Dirección) para que el árbol sea visible
+            $vistos = [$menuId => true];
             $padreId = (int) (DB::table('menu')->where('id', $menuId)->value('menu_id') ?? 0);
-            while ($padreId > 0) {
+            $profundidad = 0;
+            while ($padreId > 0 && $profundidad < 32) {
+                if (isset($vistos[$padreId])) {
+                    break;
+                }
+                $vistos[$padreId] = true;
                 if (! DB::table('menu_rol')->where('menu_id', $padreId)->where('rol_id', $rolId)->exists()) {
                     DB::table('menu_rol')->insert(['menu_id' => $padreId, 'rol_id' => $rolId]);
                 }
                 $padreId = (int) (DB::table('menu')->where('id', $padreId)->value('menu_id') ?? 0);
+                $profundidad++;
             }
 
             if (! DB::table('permiso_rol')->where('permiso_id', $permisoId)->where('rol_id', $rolId)->exists()) {
