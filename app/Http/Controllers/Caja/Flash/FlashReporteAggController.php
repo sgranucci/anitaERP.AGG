@@ -120,10 +120,14 @@ class FlashReporteAggController extends Controller
     {
         can('administrar-flash-reporte-agg');
 
+        $rutaRetorno = $this->rutaRetornoProbar($request);
+        $tituloOk = $rutaRetorno === 'flash_caja' ? 'Reenvío Flash Report AGG' : 'Prueba de envío';
+
         $suscripcion = FlashReporteSuscripcion::query()->whereKey((int) $id)->first();
         if ($suscripcion === null) {
-            return redirect()->route('flash_reporte_agg')
+            return redirect()->route($rutaRetorno)
                 ->with('mensaje', 'No existe ese envío.')
+                ->with('titulo_mensaje', $tituloOk)
                 ->with('tipo_mensaje', 'danger');
         }
 
@@ -137,9 +141,9 @@ class FlashReporteAggController extends Controller
                 $e->getMessage()
             );
 
-            return redirect()->route('flash_reporte_agg')
+            return redirect()->route($rutaRetorno)
                 ->with('mensaje', $e->getMessage())
-                ->with('titulo_mensaje', 'Prueba de envío')
+                ->with('titulo_mensaje', $tituloOk)
                 ->with('tipo_mensaje', 'danger');
         }
 
@@ -154,10 +158,18 @@ class FlashReporteAggController extends Controller
         $tipo = $resultado['estado'] === FlashReporteSuscripcion::ESTADO_OK ? 'success' : 'warning';
 
         return redirect()
-            ->route('flash_reporte_agg')
+            ->route($rutaRetorno)
             ->with('mensaje', $resultado['mensaje'])
-            ->with('titulo_mensaje', $dryRun ? 'Simulación' : 'Prueba de envío')
+            ->with('titulo_mensaje', $dryRun ? 'Simulación' : $tituloOk)
             ->with('tipo_mensaje', $tipo);
+    }
+
+    /**
+     * Desde la grilla de Flash diario se reenvía y se vuelve ahí; desde Report AGG queda en esa pantalla.
+     */
+    private function rutaRetornoProbar(Request $request): string
+    {
+        return $request->input('retorno') === 'flash_caja' ? 'flash_caja' : 'flash_reporte_agg';
     }
 
     /**

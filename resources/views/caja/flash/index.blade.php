@@ -24,13 +24,20 @@
             <div class="card-header">
                 <h3 class="card-title">Flash diario</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('administrar-flash-reporte-agg', false))
+                        @include('caja.flash.partials.modal_reenviar_reporte_agg', [
+                            'suscripcionesReenvio' => $suscripcionesReenvio ?? collect(),
+                            'perfilesVistaFlashAgg' => $perfilesVistaFlashAgg ?? [],
+                            'soloBoton' => true,
+                        ])
+                    @endif
                     @if (can('listar-flash-reporte-agg', false))
-                        <a href="{{ route('flash_reporte_agg') }}" class="btn btn-outline-success btn-sm mr-2">
+                        <a href="{{ route('flash_reporte_agg') }}" class="btn btn-outline-light btn-sm mr-2">
                             <i class="fa fa-file-excel-o"></i> Flash Report AGG
                         </a>
                     @endif
                     @if (can('exportar-reporte-flash-caja', false))
-                        <a href="{{ route('flash_caja_reporte_historico') }}" class="btn btn-outline-primary btn-sm mr-2">
+                        <a href="{{ route('flash_caja_reporte_historico') }}" class="btn btn-outline-light btn-sm mr-2">
                             <i class="fa fa-line-chart"></i> Reporte hist&oacute;rico
                         </a>
                     @endif
@@ -144,4 +151,11 @@
         </div>
     </div>
 </div>
+@if (can('administrar-flash-reporte-agg', false))
+    @include('caja.flash.partials.modal_reenviar_reporte_agg', [
+        'suscripcionesReenvio' => $suscripcionesReenvio ?? collect(),
+        'perfilesVistaFlashAgg' => $perfilesVistaFlashAgg ?? [],
+        'soloModal' => true,
+    ])
+@endif
 @endsection

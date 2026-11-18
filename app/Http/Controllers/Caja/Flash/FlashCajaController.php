@@ -9,6 +9,7 @@ use App\Exports\Caja\Flash\FlashCajaReporteExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionFlashCaja;
 use App\Models\Caja\Flash\FlashCaja;
+use App\Models\Caja\Flash\FlashReporteSuscripcion;
 use App\Repositories\Caja\Flash\FlashCajaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Flash\FlashCajaAnitaExportService;
@@ -21,6 +22,7 @@ use App\Support\Caja\Flash\FlashCajaModificacionSupport;
 use App\Support\Caja\Flash\FlashCajaValidacionSupport;
 use App\Support\Caja\Flash\FlashCajaOrigenTotalSupport;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
+use App\Support\Caja\Flash\FlashReporteAggPerfilVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Carbon\Carbon;
@@ -49,6 +51,14 @@ class FlashCajaController extends Controller
         $filtros = $this->resolverFiltrosListado($request);
         $datas = $this->repository->leeFlashCaja($filtros, true);
 
+        $suscripcionesReenvio = collect();
+        if (can('administrar-flash-reporte-agg', false)) {
+            $suscripcionesReenvio = FlashReporteSuscripcion::query()
+                ->where('activo', true)
+                ->orderBy('nombre')
+                ->get();
+        }
+
         return view('caja.flash.index', [
             'datas' => $datas,
             'filtros' => $filtros,
@@ -56,6 +66,8 @@ class FlashCajaController extends Controller
             'camposFiltro' => FlashCajaListadoFiltros::CAMPOS,
             'empresa_query' => $empresa_query,
             'puedeValidarFlash' => FlashCajaValidacionSupport::usuarioPuedeValidar(),
+            'suscripcionesReenvio' => $suscripcionesReenvio,
+            'perfilesVistaFlashAgg' => FlashReporteAggPerfilVistaSupport::etiquetas(),
         ]);
     }
 

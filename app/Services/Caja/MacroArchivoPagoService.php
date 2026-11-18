@@ -30,6 +30,8 @@ use Illuminate\Support\Facades\DB;
  * - Cheques: siempre el ERP (cheque.numerocheque de la cuenta). Anita ya no
  *   aporta el número: auxpag/cpromae queda desactualizado cuando se renumera.
  * - Excluye revertidas/anuladas: AOP en Anita (mismo nro), cpro_fecha_anula, estado ERP
+ *   BAJA/REVERTIDA. PAGADA/CONCILIADA sí se exportan: un clearing IB erróneo
+ *   no debe sacar el cheque del OPG.TXT.
  *
  * Canal: config macro.canal (archivo hoy; webservice después).
  */
@@ -580,7 +582,9 @@ class MacroArchivoPagoService
             ->where('empresa_id', $empresaId)
             ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
             ->whereBetween('numerotransaccion', [$opDesde, $opHasta])
-            ->whereNotIn('estado', ['BAJA', 'REVERTIDA', 'PAGADA', 'CONCILIADA'])
+            // PAGADA/CONCILIADA se incluyen: la conciliación IB puede equivocarse
+            // y el cheque igual tiene que salir en el diskette Macro.
+            ->whereNotIn('estado', ['BAJA', 'REVERTIDA'])
             ->where(function ($q) {
                 $q->whereNull('bloqueado_banco')->orWhere('bloqueado_banco', false);
             })
