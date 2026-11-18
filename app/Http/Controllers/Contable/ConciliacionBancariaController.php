@@ -63,6 +63,8 @@ class ConciliacionBancariaController extends Controller
         $resultado = null;
         $error = null;
 
+        $grabarAutomaticos = $request->boolean('grabar_automaticos');
+
         if ($request->boolean('consultar') && $empresaId > 0 && $cuentacajaId > 0) {
             if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
                 abort(403);
@@ -75,8 +77,19 @@ class ConciliacionBancariaController extends Controller
                     $mes,
                     $anio,
                     (int) Auth::id(),
-                    true,
+                    $grabarAutomaticos,
                 );
+                if ($grabarAutomaticos) {
+                    $paresNuevos = (int) (($resultado['kpi']['pares_auto_nuevos']
+                        ?? $resultado['caratula']['pares_nuevos']
+                        ?? 0));
+                    Session::flash(
+                        'mensaje',
+                        $paresNuevos > 0
+                            ? "Corrida con grabado: se guardaron {$paresNuevos} emparejamiento(s) automático(s)."
+                            : 'Corrida con grabado: no había emparejamientos nuevos para guardar.'
+                    );
+                }
             } catch (\Throwable $e) {
                 $error = $e->getMessage();
                 Session::flash('errores', [$error]);
@@ -89,10 +102,12 @@ class ConciliacionBancariaController extends Controller
             'mes' => $mes,
             'anio' => $anio,
             'consultar' => $request->boolean('consultar') ? 1 : null,
+            'grabar_automaticos' => $grabarAutomaticos ? 1 : null,
         ], fn ($v) => $v !== null && $v !== '');
 
         return view('contable.conciliacion_bancaria.index', [
             'empresa_query' => $empresaQuery,
+            'grabar_automaticos' => $grabarAutomaticos,
             'empresa_id' => $empresaId,
             'cuentacaja_id' => $cuentacajaId,
             'cuentacaja' => $cuentacaja,

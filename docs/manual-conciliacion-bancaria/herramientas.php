@@ -6,9 +6,9 @@
 return [
     'comunes_listado' => [
         [
-            'herramienta' => 'Consultar / Conciliar',
+            'herramienta' => 'Consultar período',
             'ubicacion' => 'Pie del formulario',
-            'accion' => 'Ejecuta la corrida del período (mayor vs extracto)',
+            'accion' => 'Calcula mayor vs extracto sin grabar. Con tilde «Grabar emparejamientos automáticos» (+ confirmación) sí persiste pares.',
             'permiso' => 'listar-conciliacion-bancaria',
         ],
         [

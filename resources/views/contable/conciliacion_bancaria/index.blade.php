@@ -66,11 +66,18 @@
             <form method="get" action="{{ route('conciliacion_bancaria') }}" id="form-conciliacion-bancaria" class="mb-0">
                 <input type="hidden" name="consultar" value="1">
                 <div class="card-body pb-2">
+                    <div class="alert alert-warning py-2 px-3 small mb-3" role="alert">
+                        <strong>Consultar período</strong> solo calcula y muestra el resultado (no graba cruces).
+                        Para grabar los emparejamientos automáticos hay que marcar
+                        <strong>Grabar emparejamientos automáticos</strong> antes de enviar.
+                        El día a día (cheques, transferencias) se trabaja en
+                        <strong>Manual</strong>, no en esta pantalla.
+                    </div>
                     <p class="text-muted small mb-3">
                         Cruza el mayor analítico (subdiario + ctamov vía bridge Anita) contra movimientos Interbanking
                         persistidos. La solapa <strong>Pendientes</strong> lista cheques propios (cpromae), como Contaduría;
                         <strong>Cruce cheques IB</strong> compara débitos CH* del extracto con cheques propios del ERP (código 9).
-                        La carátula usa los de vencimiento en el mes. Los emparejamientos quedan guardados para períodos posteriores.
+                        La carátula usa los de vencimiento en el mes.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -121,8 +128,18 @@
                     </div>
                 </div>
                 <div class="card-footer">
-                    <button type="submit" class="btn btn-primary" id="btn-consultar">
-                        <i class="fa fa-balance-scale"></i> Conciliar
+                    <div class="form-check mb-2">
+                        <input type="checkbox" class="form-check-input" name="grabar_automaticos" id="grabar_automaticos"
+                               value="1" @checked(!empty($grabar_automaticos))
+                               title="Si está marcado, la corrida guarda en la base los pares automáticos (cheques, TRF, etc.)">
+                        <label class="form-check-label" for="grabar_automaticos">
+                            Grabar emparejamientos automáticos
+                            <span class="text-muted">(solo si Contaduría quiere persistir cruces; no usar para “mirar” el mes)</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btn-consultar"
+                            title="Por defecto solo consulta. Con el tilde de arriba, además graba.">
+                        <i class="fa fa-search"></i> <span id="btn-consultar-label">Consultar período</span>
                     </button>
                     <a href="{{ route('conciliacion_bancaria') }}" class="btn btn-outline-secondary">
                         <i class="fa fa-eraser"></i> Limpiar
@@ -461,7 +478,7 @@
     'overlayId' => 'conciliacion-bancaria-overlay',
     'tituloId' => 'conciliacion-bancaria-titulo',
     'subtituloId' => 'conciliacion-bancaria-subtitulo',
-    'titulo' => 'Conciliando…',
+    'titulo' => 'Consultando período…',
     'subtitulo' => 'Puede demorar según el período. No cierre la página.',
 ])
 @endsection

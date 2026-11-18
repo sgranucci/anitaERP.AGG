@@ -242,16 +242,54 @@
         $('#consultacuentacajaModal').modal('hide');
     });
 
+    function actualizarEtiquetaBotonCorrida() {
+        var chk = document.getElementById('grabar_automaticos');
+        var label = document.getElementById('btn-consultar-label');
+        var btn = document.getElementById('btn-consultar');
+        if (!label || !btn) return;
+        if (chk && chk.checked) {
+            label.textContent = 'Consultar y grabar automáticos';
+            btn.title = 'Va a calcular el período y guardar los emparejamientos automáticos en la base.';
+        } else {
+            label.textContent = 'Consultar período';
+            btn.title = 'Solo calcula y muestra el resultado. No graba cruces.';
+        }
+    }
+
+    var chkGrabar = document.getElementById('grabar_automaticos');
+    if (chkGrabar) {
+        chkGrabar.addEventListener('change', actualizarEtiquetaBotonCorrida);
+        actualizarEtiquetaBotonCorrida();
+    }
+
     $('#form-conciliacion-bancaria').on('submit', function (ev) {
         var form = this;
         if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
             return;
         }
-        mostrarOverlay('Conciliando…', 'Puede demorar según el período. No cierre la página.');
+        var grabar = document.getElementById('grabar_automaticos');
+        var vaAGrabar = !!(grabar && grabar.checked);
+        if (vaAGrabar) {
+            var ok = window.confirm(
+                'Vas a GRABAR emparejamientos automáticos (cheques, transferencias, etc.).\n\n'
+                + 'Dejan de aparecer como pendientes en el tablero manual.\n'
+                + 'Si solo querés mirar el mes, cancelá y desmarcá «Grabar emparejamientos automáticos».\n\n'
+                + '¿Continuar y grabar?'
+            );
+            if (!ok) {
+                ev.preventDefault();
+                return false;
+            }
+            mostrarOverlay('Conciliando y grabando…', 'Se guardarán los cruces automáticos. Puede demorar. No cierre la página.');
+        } else {
+            mostrarOverlay('Consultando período…', 'Solo cálculo: no se graba ningún cruce. Puede demorar. No cierre la página.');
+        }
         var btn = document.getElementById('btn-consultar');
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando conciliación…';
+            btn.innerHTML = vaAGrabar
+                ? '<i class="fa fa-spinner fa-spin"></i> Grabando automáticos…'
+                : '<i class="fa fa-spinner fa-spin"></i> Consultando…';
         }
     });
 
