@@ -21,6 +21,12 @@ final class FacturaProveedorPieTotalesSupport
     /** Rótulos de percepción IVA (incluye «Percepción de IVA» / Perc. IVA RG3337). */
     private const PATRON_PERCEPCION_IVA = '/per\.?\s*(?:de\s+)?[il1]\.?\s*v[,.\s]*a|rg\s*(?:5329|3337)|percep(?:ci[oó]n)?\s+(?:de\s+)?(?:iva|i\.?\s*v\.?\s*a)/iu';
 
+    /**
+     * Percepción IIBB del pie: «Per.IIBB», «Perc. IIBB», o rótulo corto «IIBB 2,00».
+     * No matchea «ING BRUTOS 901-…» del membrete (no dice IIBB).
+     */
+    private const PATRON_PERCEPCION_IIBB = '/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb|ingresos\s+brutos)|per\.?\s*[il1]+\.?\s*b{1,2}\.?|percepcion\s+iibb|(?<![a-z])(?:ii\.?\s*bb\.?|iibb)\b/iu';
+
     public function __construct(
         private FacturaProveedorImporteParserSupport $importeParser,
     ) {}
@@ -443,7 +449,7 @@ final class FacturaProveedorPieTotalesSupport
             'iva' => '/\b[il1]\.?\s*v\.?\s*a\.?v?(?:\s*inscripto)?\b/iu',
             'impuestos_internos' => '/imp(?:uestos?)?\s*\.?\s*int(?:ernos)?\b/iu',
             'percepcion_iva' => self::PATRON_PERCEPCION_IVA,
-            'percepcion_iibb' => '/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb)|per\.?\s*[il1]+\.?\s*b+\.?|percepcion\s+iibb/iu',
+            'percepcion_iibb' => self::PATRON_PERCEPCION_IIBB,
             default => null,
         };
         if ($patrones === null) {
@@ -479,7 +485,7 @@ final class FacturaProveedorPieTotalesSupport
         return $out;
     }
 
-    /** 0,10% escrito en la línea no es el importe de la percepción. */
+    /** 0,10% / «IIBB 2,00» escrito en la línea no es el importe de la percepción. */
     private function esAlicuotaEscrita(float $importe, string $linea): bool
     {
         if ($importe <= 0 || $importe >= 100) {
@@ -487,9 +493,15 @@ final class FacturaProveedorPieTotalesSupport
         }
         $punto = rtrim(rtrim(number_format($importe, 2, '.', ''), '0'), '.');
         $coma = str_replace('.', ',', $punto);
+        $num = '(?:'.preg_quote($punto, '/').'|'.preg_quote($coma, '/').')';
 
+        if (preg_match('/(?:^|[^\d])'.$num.'\d*\s*%/u', $linea)) {
+            return true;
+        }
+
+        // Pie Ruiz Hnos / similares: «IIBB 2,00 … 552,50» (alícuota sin %).
         return (bool) preg_match(
-            '/(?:^|[^\d])(?:'.preg_quote($punto, '/').'|'.preg_quote($coma, '/').')\d*\s*%/u',
+            '/(?:ii\.?\s*bb\.?|iibb)\s+'.$num.'\b/iu',
             $linea
         );
     }
@@ -572,8 +584,8 @@ final class FacturaProveedorPieTotalesSupport
         if (preg_match('/\btotal(?:es)?\b/iu', $l) && ! preg_match('/precio|unitario|bultos/iu', $l)) {
             return 'total';
         }
-        // OCR confunde I/l/1: Per.IIBB / Per.llBB / Per.ilBB
-        if (preg_match('/perc(?:ep(?:ci[oó]n)?)?\.?\s*(?:ii\.?\s*bb\.?|iibb)|per\.?\s*[il1]+\.?\s*b{1,2}|percepcion\s+iibb/iu', $l)) {
+        // OCR confunde I/l/1: Per.IIBB / Per.llBB / Per.ilBB / pie corto «IIBB 2,00»
+        if (preg_match(self::PATRON_PERCEPCION_IIBB, $l)) {
             return 'percepcion_iibb';
         }
         if (preg_match(self::PATRON_PERCEPCION_IVA, $l)) {
@@ -945,7 +957,7 @@ final class FacturaProveedorPieTotalesSupport
     private function esLabelPie(string $linea): bool
     {
         return (bool) preg_match(
-            '/^(SUB\s*TOTAL|I\.?\s*V\.?\s*A\.?(?:\s*(?:INSCRIPTO|CONT(?:ADO)?|CTDO)\.?)?|IMPUESTOS?\s*INTERNOS|RG\s*5329|PERCEP\s*I+\.?\s*B+\.?|TOTAL)$/iu',
+            '/^(SUB\s*TOTAL|I\.?\s*V\.?\s*A\.?(?:\s*(?:INSCRIPTO|CONT(?:ADO)?|CTDO)\.?)?|IMPUESTOS?\s*INTERNOS|RG\s*5329|PERCEP\s*I+\.?\s*B+\.?|I\.?I\.?B\.?B\.?(?:\s+\d+[.,]\d+)?|TOTAL)$/iu',
             trim($linea)
         );
     }
@@ -963,6 +975,7 @@ final class FacturaProveedorPieTotalesSupport
             str_contains($l, 'impuestosinternos') || str_contains($l, 'impuestointerno') => 'impuestos_internos',
             str_contains($l, 'rg5329') => 'percepcion_iva',
             str_contains($l, 'percep') && str_contains($l, 'bb') => 'percepcion_iibb',
+            str_starts_with($l, 'iibb') || str_starts_with($l, 'iib') => 'percepcion_iibb',
             $l === 'total' => 'total',
             default => $l,
         };
