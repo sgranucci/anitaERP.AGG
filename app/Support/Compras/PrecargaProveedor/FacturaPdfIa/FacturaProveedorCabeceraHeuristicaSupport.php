@@ -313,13 +313,15 @@ final class FacturaProveedorCabeceraHeuristicaSupport
     private function extraerFechaVencimientoPago(string $texto): ?string
     {
         $vtoCae = $this->extraerFechaVtoCae($texto);
-        // «Fecha vto.:» del encabezado es el pago. «Fecha de Vencimiento» junto al CAE no.
+        // AFIP estándar: «Fecha de Vto. para el pago:». No confundir con Vto. CAE.
+        // «Fecha vto.:» / «Fecha de vencimiento» del encabezado es el pago.
         $patrones = [
-            '/\bfecha\s+vto\.?\s*:?\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/fecha\s+(?:de\s+)?vto\.?\s+para\s+(?:el\s+)?pago[^\d\n]{0,20}(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/\bfecha\s+(?:de\s+)?vto\.?\s*:?\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/fecha\s+(?:de\s+)?vencimiento(?:\s+(?:de\s+)?pago)?[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/vencimiento\s+(?:del\s+)?pago[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
             '/\bvencimiento\b(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
-            '/\bvto\.?(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/\bvto\.?(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI|para))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
         ];
         foreach ($patrones as $patron) {
             if (! preg_match_all($patron, $texto, $matches, PREG_OFFSET_CAPTURE)) {
@@ -336,6 +338,18 @@ final class FacturaProveedorCabeceraHeuristicaSupport
                     continue;
                 }
 
+                return $iso;
+            }
+        }
+
+        // Banda AFIP con rótulos en una línea y las tres fechas en la siguiente.
+        if (preg_match(
+            '/per[ií]odo\s+facturado\s+desde.{0,60}?hasta.{0,60}?fecha\s+(?:de\s+)?vto\.?\s+para\s+(?:el\s+)?pago[^\n]*\n[^\d\n]{0,40}(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\s+(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\s+(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/isu',
+            $texto,
+            $m
+        )) {
+            $iso = $this->isoFecha($m[7], $m[8], $m[9]);
+            if ($vtoCae === null || $iso !== $vtoCae) {
                 return $iso;
             }
         }
