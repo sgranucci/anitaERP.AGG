@@ -135,7 +135,7 @@ Número de factura:
 - Si viene COMPACTO sin guiones (muy común): "Factura N° 0070A00369548"
   → sucursal=70, letra="A", numero_factura=369548 (NO juntes los dígitos en un solo número).
 fecha_factura: ISO YYYY-MM-DD, la de EMISIÓN del comprobante (rótulo "Emisión:" o "Fecha de emisión"). Si dice 21-10-2026 o 05.08.2026 → "2026-10-21" / "2026-08-05". No uses "Inicio de actividades" ni otra fecha del membrete.
-fecha_vencimiento: vencimiento de PAGO comercial (Fecha de vencimiento / Vencimiento / Vto. pago). NO confundir con fecha_vto_cai_cae.
+fecha_vencimiento: vencimiento de PAGO comercial. Rótulos AFIP frecuentes: "Fecha de Vto. para el pago", "Fecha de vencimiento", "Vencimiento", "Vto. pago". NO confundir con fecha_vto_cai_cae ni con "Período Facturado Desde/Hasta".
 fecha_vto_cai_cae: solo el vencimiento del CAE/CAI/CAEA.
 
 Ejemplos reales del mismo proveedor (agente externo ya procesado — usá como referencia de conceptos e importes):

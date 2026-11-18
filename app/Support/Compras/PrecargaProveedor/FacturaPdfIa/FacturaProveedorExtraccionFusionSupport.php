@@ -39,6 +39,11 @@ final class FacturaProveedorExtraccionFusionSupport
                 $fusion[$campo] = $this->elegir($heuristica[$campo] ?? null, $ollama[$campo] ?? null);
                 continue;
             }
+            // Vencimiento de pago: la banda AFIP («Fecha de Vto. para el pago») es determinística.
+            if ($campo === 'fecha_vencimiento') {
+                $fusion[$campo] = $this->elegir($heuristica[$campo] ?? null, $ollama[$campo] ?? null);
+                continue;
+            }
             $fusion[$campo] = $this->elegir($ollama[$campo] ?? null, $heuristica[$campo] ?? null);
         }
 
