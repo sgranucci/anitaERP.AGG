@@ -11,6 +11,7 @@ use App\Support\Configuracion\CotizacionVigenteSupport;
  * Sin cheques el listado quedaba en 0 cuando el pago era solo CHP.
  * Canje banco→banco: no hay cuentacaja; el único cheque del movimiento es el
  * de reemplazo (tiene cheque_reemplaza_id) y hay que mostrar una pata.
+ * OPV no mueve caja: el monto es un lado del asiento, pasado a pesos.
  */
 final class IngresoEgresoListadoMontoSupport
 {
@@ -141,13 +142,101 @@ final class IngresoEgresoListadoMontoSupport
 
         $ingreso = round($ingreso, 2);
         $egreso = round($egreso, 2);
+        $monto = $ingreso != 0.0 ? $ingreso : $egreso;
+
+        // OPV no tiene caja ni cheques. El importe vive en el asiento.
+        // No suma ingresos/egresos de caja: no hubo movimiento de tesorería.
+        if (abs($ingreso) < 0.000001 && abs($egreso) < 0.000001 && self::esOpv($movimiento)) {
+            $asiento = self::asientoOpvEnPesos($movimiento);
+            if ($asiento['monto'] > 0) {
+                $monto = $asiento['monto'];
+                $lineas = array_merge($lineas, $asiento['lineas']);
+            }
+        }
 
         return [
             'ingreso' => $ingreso,
             'egreso' => $egreso,
-            'monto' => $ingreso != 0.0 ? $ingreso : $egreso,
+            'monto' => $monto,
             'lineas' => array_values(array_filter($lineas, static fn ($t) => $t !== '')),
         ];
+    }
+
+    private static function esOpv(object $movimiento): bool
+    {
+        // Solo el atributo ya traído por el listado. No cargar el tipo: si no, cada fila dispara una query.
+        if (method_exists($movimiento, 'getAttributes')) {
+            $abrev = (string) ($movimiento->getAttributes()['abreviaturatipotransaccion_caja'] ?? '');
+        } else {
+            $abrev = (string) ($movimiento->abreviaturatipotransaccion_caja ?? '');
+        }
+
+        return strtoupper(trim($abrev)) === IngresoEgresoOperacionVariaSupport::ABREV_OPV;
+    }
+
+    /**
+     * Un lado del asiento, en pesos. La cotización grabada en la línea manda.
+     *
+     * @return array{monto: float, lineas: list<string>}
+     */
+    private static function asientoOpvEnPesos(object $movimiento): array
+    {
+        $asiento = self::asientoDelMovimiento($movimiento);
+        if ($asiento === null) {
+            return ['monto' => 0.0, 'lineas' => []];
+        }
+        $movimientos = $asiento->asiento_movimientos ?? [];
+        if ($movimientos instanceof \Traversable) {
+            $movimientos = iterator_to_array($movimientos);
+        }
+        if (! is_array($movimientos) || $movimientos === []) {
+            return ['monto' => 0.0, 'lineas' => []];
+        }
+
+        $fecha = self::fechaMovimiento($movimiento);
+        $cotizaciones = CotizacionVigenteSupport::cotizacionesDeclaradas($movimientos);
+        $debe = 0.0;
+        $haber = 0.0;
+        $lineas = [];
+
+        foreach ($movimientos as $linea) {
+            if (! is_object($linea)) {
+                continue;
+            }
+            $nominal = (float) ($linea->monto ?? 0);
+            if (abs($nominal) < 0.000001) {
+                continue;
+            }
+            $coef = self::coeficiente($linea->moneda_id ?? 1, $linea->cotizacion ?? 1, $fecha, $cotizaciones);
+            $pesos = $nominal * $coef;
+            if ($pesos > 0) {
+                $debe += $pesos;
+            } else {
+                $haber += abs($pesos);
+            }
+            $cuenta = $linea->cuentacontables ?? null;
+            $codigo = trim((string) (is_object($cuenta) ? ($cuenta->codigo ?? '') : ''));
+            $nombre = trim((string) (is_object($cuenta) ? ($cuenta->nombre ?? '') : ''));
+            $lineas[] = trim(trim($codigo.' '.$nombre).' '.self::fmt($nominal));
+        }
+
+        $debe = round($debe, 2);
+        $haber = round($haber, 2);
+
+        return [
+            'monto' => $debe >= $haber ? $debe : $haber,
+            'lineas' => $lineas,
+        ];
+    }
+
+    private static function asientoDelMovimiento(object $movimiento): ?object
+    {
+        if (method_exists($movimiento, 'loadMissing')) {
+            $movimiento->loadMissing('asientos');
+        }
+        $asiento = $movimiento->asientos ?? null;
+
+        return is_object($asiento) ? $asiento : null;
     }
 
     /**

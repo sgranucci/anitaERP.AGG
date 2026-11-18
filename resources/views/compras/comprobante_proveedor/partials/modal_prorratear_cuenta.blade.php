@@ -14,9 +14,9 @@
             </div>
             <div class="modal-body">
                 <p class="small text-muted mb-2">
-                    Abre el importe de un concepto (por ejemplo IVA) en varios centros de costo,
-                    aunque el neto no tenga centro. Al aplicar se actualizan los renglones de
-                    conceptos y la vista previa del asiento.
+                    Abre el importe de una cuenta de gasto o de un concepto (por ejemplo IVA)
+                    en varios centros de costo. Al aplicar se actualizan los renglones y la
+                    vista previa del asiento.
                 </p>
                 <div class="row mb-2">
                     <div class="col-md-7">

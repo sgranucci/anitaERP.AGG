@@ -930,7 +930,11 @@ final class GastronomiaChequeoVentasAnitaErpService
             ]),
             'whereArmado' => $where,
         ];
-        if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()) {
+        // Solo pisar IFX si la venta tiene sala gastro conocida. Si sala es null,
+        // usar el IFX default del .env (acncadmin): no heredar CIP/cncadmin de una jornada abierta.
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            && $salaCodigo !== null
+            && trim($salaCodigo) !== '') {
             $payload = \App\Support\Ventas\GastronomiaCrown\GastronomiaCrownAnitaBridgeSupport::mergePayload($payload, $salaCodigo);
         }
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($payload));

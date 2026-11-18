@@ -178,6 +178,7 @@ final class TesoreriaCrownBovedaArqueoSupport
             ->where('deposito_id', $depositoId)
             ->where('estado', TesoreriaCrownBoveda::CONFIRMADO)
             ->whereNull('revierte_id')
+            ->whereDoesntHave('reversa', fn ($q) => $q->where('estado', TesoreriaCrownBoveda::CONFIRMADO))
             ->whereHas('tipo', fn ($q) => $q->where('abreviatura', 'APER'))
             ->orderByDesc('numero')
             ->first();
@@ -204,12 +205,21 @@ final class TesoreriaCrownBovedaArqueoSupport
         Carbon $hastaInclusive,
         bool $excluirApertura = false
     ) {
+        // Excluir reversas y originales ya revertidos: el arqueo usa abs(cantidad) + signo
+        // del tipo; si se incluyen ambos, el movimiento revertido se cuenta dos veces.
         $q = DB::table('tesoreria_crown_boveda_linea as l')
             ->join('tesoreria_crown_boveda as b', 'b.id', '=', 'l.boveda_id')
             ->join('tesoreria_crown_boveda_tipo as t', 't.id', '=', 'b.tipo_id')
             ->leftJoin('tesoreria_crown_boveda_subtipo as st', 'st.id', '=', 'b.subtipo_id')
             ->where('b.deposito_id', $depositoId)
             ->where('b.estado', TesoreriaCrownBoveda::CONFIRMADO)
+            ->whereNull('b.revierte_id')
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('tesoreria_crown_boveda as r')
+                    ->whereColumn('r.revierte_id', 'b.id')
+                    ->where('r.estado', TesoreriaCrownBoveda::CONFIRMADO);
+            })
             ->where('b.confirmado_at', '>', $desdeExclusive)
             ->where('b.confirmado_at', '<=', $hastaInclusive);
         if ($excluirApertura) {
