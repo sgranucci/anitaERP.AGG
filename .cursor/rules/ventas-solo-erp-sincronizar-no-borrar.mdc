@@ -1,0 +1,39 @@
+# Ventas solo en ERP: sincronizar, no borrar
+
+Si una factura está en **anitaERP** y **no** tiene cabecera en Anita (Informix), **no se borra**. Se sincroniza a Anita.
+
+Incidente 13/nov/2026: un control ERP↔Anita del 30–31/10 clasificó 87 ventas como “solo ERP” (entre ellas FAC A-00075-216…221 de Monpab/Indelman) y las eliminó del ERP. Eran comprobantes reales; había que replicarlos, no borrarlas.
+
+## Obligatorio
+
+1. **Nunca** `DELETE` / `eliminarVenta*` / limpiezas masivas sobre ventas “solo ERP” por descuadre con Anita.
+2. Usar el proceso de sincronización:
+
+```bash
+php artisan ventas:sincronizar-solo-erp-anita --desde=YYYY-MM-DD --hasta=YYYY-MM-DD --dry-run
+# Revisar impacto, pedir OK del operador, luego:
+php artisan ventas:sincronizar-solo-erp-anita --desde=YYYY-MM-DD --hasta=YYYY-MM-DD --ejecutar
+```
+
+3. Réplica puntual: `FacturacionService::replicarVentaErpEnAnita($ventaId)` (incluye PV modo `M`).
+4. Dry-run primero + autorización explícita antes de `--ejecutar` (reglas `comandos-actualizacion-dry-run-obligatorio` y `base-datos-no-escribir-sin-preguntar` para escrituras ERP; Anita también pide OK).
+
+## Excepción válida (omitir, no borrar)
+
+POS gastronomía / estacionamiento en la ventana `GASTRONOMIA_VENTAS_SOLO_ERP_DESDE`: viven solo en ERP a propósito. El comando las **omite** (estado `omitida_solo_erp_intencional`) salvo `--incluir-gastro-intencional`. Tampoco se borran.
+
+## Prohibido
+
+```bash
+# ❌ Borrar del ERP porque “no están en Anita”
+# tinker / script que delete venta + asiento + CC por lista solo_erp
+```
+
+## Comprobación rápida
+
+```bash
+php artisan list ventas:sincronizar-solo-erp-anita
+rg "replicarVentaErpEnAnita|VentaSincronizarSoloErpAnita" app --glob '*.php'
+php -l app/Services/Ventas/VentaSincronizarSoloErpAnitaService.php
+php -l app/Console/Commands/VentasSincronizarSoloErpAnitaCommand.php
+```

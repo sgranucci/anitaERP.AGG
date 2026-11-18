@@ -6496,42 +6496,47 @@ class FacturacionService
 
 	// Graba factura en Anita
 	/**
-	 * Réplica de una NDR ya emitida en un punto de venta manual.
-	 * Graba venta y climov. El cobrado queda en lo que el ERP ya aplicó,
-	 * para que la deuda de Anita coincida con la cuenta corriente.
+	 * Réplica en Anita de una venta ya grabada en el ERP (admin / PV manual incluido).
+	 * No borra la venta del ERP. Si Anita ya tiene la cabecera, devuelve ok con ya_en_anita.
 	 *
-	 * @return array{ok:bool, codigo:string, monto:float, cobrado:float, error:?string}
+	 * @return array{ok:bool, codigo:string, monto:float, cobrado:float, ya_en_anita?:bool, error:?string}
 	 */
-	public function replicarNotaDebitoManualEnAnita(int $ventaId): array
+	public function replicarVentaErpEnAnita(int $ventaId): array
 	{
-		$venta = Venta::query()->find($ventaId);
+		$venta = Venta::query()->with(['puntoventas', 'tipotransacciones', 'condicionivas'])->find($ventaId);
 		if ($venta === null) {
 			return ['ok' => false, 'codigo' => '', 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'No está la venta '.$ventaId.'.'];
 		}
 
-		$codigo = (string) $venta->codigo;
-		if (! str_starts_with($codigo, 'NDR ')) {
-			return ['ok' => false, 'codigo' => $codigo, 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'No es una nota de débito NDR.'];
+		$codigo = trim((string) $venta->codigo);
+		$tipoPrefijo = strtoupper(substr($codigo, 0, 3));
+		if ($codigo === '' || ! preg_match('/^[A-Z]{3}\b/', $codigo)) {
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'Código de comprobante inválido.'];
 		}
 
-		$partes = explode(' ', $codigo);
-		$resto = explode('-', $partes[1] ?? '');
-		$letra = (string) ($resto[0] ?? '');
-		$sucursal = (string) ($resto[1] ?? '');
+		$letra = '';
+		if (preg_match('/\s+([A-Z])(?:[\s\-]|$)/', $codigo, $m)) {
+			$letra = $m[1];
+		} elseif ($venta->condicionivas && trim((string) ($venta->condicionivas->letra ?? '')) !== '') {
+			$letra = (string) $venta->condicionivas->letra;
+		}
+		$puntoventa = $venta->puntoventas;
+		$sucursal = $puntoventa ? (string) $puntoventa->codigo : '';
 		$numero = (int) $venta->numerocomprobante;
 		$monto = round(abs((float) $venta->total), 2);
 		if ($letra === '' || $sucursal === '' || $numero <= 0 || $monto < 0.01) {
-			return ['ok' => false, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => 0.0, 'error' => 'La nota no tiene letra, sucursal o importe.'];
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => 0.0, 'error' => 'Falta letra, sucursal o importe.'];
 		}
 
-		$tipo = DB::table('tipotransaccion')->where('id', (int) $venta->tipotransaccion_id)->first();
+		$tipo = $venta->tipotransacciones
+			?: DB::table('tipotransaccion')->where('id', (int) $venta->tipotransaccion_id)->first();
 		$cliente = DB::table('cliente')->where('id', (int) $venta->cliente_id)->first();
 		$empresaCodigo = (string) DB::table('puntoventa as pv')
 			->join('empresa as e', 'e.id', '=', 'pv.empresa_id')
 			->where('pv.id', (int) $venta->puntoventa_id)
 			->value('e.codigo');
-		if ($tipo === null || $cliente === null) {
-			return ['ok' => false, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => 0.0, 'error' => 'Falta el tipo o el cliente de la nota.'];
+		if ($tipo === null || $cliente === null || $empresaCodigo === '') {
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => 0.0, 'error' => 'Falta tipo, cliente o empresa.'];
 		}
 
 		$conceptostotales = [];
@@ -6555,6 +6560,10 @@ class FacturacionService
 				'incluyeimpuesto' => (string) ($item->incluyeimpuesto ?: 'N'),
 				'detalle' => str_replace(["'", '\\'], ' ', (string) $item->detalle),
 				'descripcion' => str_replace(["'", '\\'], ' ', (string) $item->detalle),
+				'articulo_id' => (int) ($item->articulo_id ?? 0),
+				'concepto_venta_id' => (int) ($item->concepto_venta_id ?? 0),
+				'deposito_id' => (int) ($item->deposito_id ?? 0),
+				'omitir_stkmov_anita' => true,
 			];
 		}
 
@@ -6581,9 +6590,12 @@ class FacturacionService
 		$fecha = $venta->fecha instanceof \DateTimeInterface
 			? $venta->fecha->format('Y-m-d')
 			: (string) $venta->fecha;
+		$fechajornada = $venta->fechajornada instanceof \DateTimeInterface
+			? $venta->fechajornada->format('Y-m-d')
+			: (string) ($venta->fechajornada ?: $fecha);
 		$payloadVenta = [
 			'fecha' => $fecha,
-			'fechajornada' => $fecha,
+			'fechajornada' => $fechajornada,
 			'cliente_id' => (int) $venta->cliente_id,
 			'numerocomprobante' => $numero,
 			'codigo' => $codigo,
@@ -6592,15 +6604,17 @@ class FacturacionService
 			'cotizacion' => ((float) $venta->cotizacion) > 0 ? (float) $venta->cotizacion : 1,
 			'leyenda' => str_replace(["'", '\\'], ' ', (string) $venta->leyenda),
 			'descuento' => (float) $venta->descuento,
-			'descuentointegrado' => ' ',
+			'descuentointegrado' => (string) ($venta->descuentointegrado ?: ' '),
 			'usuario_id' => (int) $venta->usuario_id,
-			'vendedor_id' => (int) $venta->vendedor_id,
+			'vendedor_id' => (int) ($venta->vendedor_id ?? 0),
 			'condicioniva_id' => (int) $venta->condicioniva_id,
 			'nombre' => (string) $venta->nombre,
 			'nroinscripcion' => (string) $venta->nroinscripcion,
 			'domicilio' => (string) $venta->domicilio,
-			'condicionventa_id' => (int) $venta->condicionventa_id,
+			'condicionventa_id' => (int) ($venta->condicionventa_id ?? 0),
 			'transporte_id' => $venta->transporte_id,
+			'cae' => $venta->cae,
+			'fechavencimientocae' => $venta->fechavencimientocae,
 		];
 		$dataCAE = [
 			'codigoempresa' => $empresaCodigo,
@@ -6610,6 +6624,15 @@ class FacturacionService
 			'nogravado' => (float) $this->impuestoService->buscaValor($conceptostotales, 'concepto', 'No Gravado', 'importe'),
 			'items' => $lineas,
 		];
+		if (trim((string) ($venta->cae ?? '')) !== '') {
+			$dataCAE['cae'] = (string) $venta->cae;
+			$dataCAE['fechavencimientocae'] = (string) ($venta->fechavencimientocae ?? '');
+		}
+
+		$signoTipo = strtoupper((string) (is_object($tipo) ? ($tipo->signo ?? 'S') : 'S'));
+		$signo = $signoTipo === 'R' ? -1. : 1.;
+		$modoPv = (string) ($puntoventa->modofacturacion ?? 'M');
+		$codigoTipo = (string) (is_object($tipo) ? ($tipo->codigo ?? $tipoPrefijo) : $tipoPrefijo);
 
 		$anita = $this->grabaAnita(
 			$sucursal,
@@ -6621,8 +6644,8 @@ class FacturacionService
 			$conceptostotales,
 			$cuentacorriente,
 			$lineas,
-			1,
-			(string) ($tipo->codigo ?? '002'),
+			$signo,
+			$codigoTipo,
 			0,
 			false,
 			0,
@@ -6634,17 +6657,28 @@ class FacturacionService
 			false,
 			true,
 			true,
-			'M'
+			$modoPv
 		);
-		if (is_array($anita) && isset($anita['error']) && ! $this->esErrorDuplicadoComprobanteEnAnita((string) ($anita['mensaje'] ?? $anita['error']))) {
-			$this->borraAnita(substr($codigo, 0, 3), $letra, $sucursal, $numero, '', true, 'M');
+		if (is_array($anita) && isset($anita['error'])) {
+			$msg = (string) ($anita['mensaje'] ?? $anita['error']);
+			if ($this->esErrorDuplicadoComprobanteEnAnita($msg)) {
+				return [
+					'ok' => true,
+					'codigo' => $codigo,
+					'monto' => $monto,
+					'cobrado' => $cobrado,
+					'ya_en_anita' => true,
+					'error' => null,
+				];
+			}
+			$this->borraAnita($tipoPrefijo, $letra, $sucursal, $numero, $empresaCodigo, true, $modoPv);
 
 			return [
 				'ok' => false,
 				'codigo' => $codigo,
 				'monto' => $monto,
 				'cobrado' => $cobrado,
-				'error' => (string) ($anita['mensaje'] ?? $anita['error']),
+				'error' => $msg,
 			];
 		}
 
@@ -6657,14 +6691,36 @@ class FacturacionService
 				'tabla' => 'climov',
 				'sistema' => 'ventas',
 				'valores' => "cliv_t_cobrado = '".$cobrado."', cliv_estado = '".$estado."'",
-				'whereArmado' => " WHERE cliv_tipo = 'NDR' AND cliv_letra = '".$letra."'"
+				'whereArmado' => " WHERE cliv_tipo = '".$tipoPrefijo."' AND cliv_letra = '".$letra."'"
 					.' AND cliv_sucursal = '.(int) $sucursal
 					.' AND cliv_nro = '.$numero
 					." AND cliv_cliente = '".$clienteAnita."' ",
-			], 'climov cobrado NDR '.$numero);
+			], 'climov cobrado '.$tipoPrefijo.' '.$numero);
 		}
 
 		return ['ok' => true, 'codigo' => $codigo, 'monto' => $monto, 'cobrado' => $cobrado, 'error' => null];
+	}
+
+	/**
+	 * Réplica de una NDR ya emitida en un punto de venta manual.
+	 * Graba venta y climov. El cobrado queda en lo que el ERP ya aplicó,
+	 * para que la deuda de Anita coincida con la cuenta corriente.
+	 *
+	 * @return array{ok:bool, codigo:string, monto:float, cobrado:float, error:?string}
+	 */
+	public function replicarNotaDebitoManualEnAnita(int $ventaId): array
+	{
+		$venta = Venta::query()->find($ventaId);
+		if ($venta === null) {
+			return ['ok' => false, 'codigo' => '', 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'No está la venta '.$ventaId.'.'];
+		}
+
+		$codigo = (string) $venta->codigo;
+		if (! str_starts_with($codigo, 'NDR ')) {
+			return ['ok' => false, 'codigo' => $codigo, 'monto' => 0.0, 'cobrado' => 0.0, 'error' => 'No es una nota de débito NDR.'];
+		}
+
+		return $this->replicarVentaErpEnAnita($ventaId);
 	}
 
 	public function grabaAnita($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
