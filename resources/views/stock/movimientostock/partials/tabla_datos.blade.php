@@ -1,10 +1,20 @@
 @php
     use App\Support\Stock\MovimientoStockFerliSupport;
+    use App\Support\Stock\Surmar\MovimientoSurmarPermisoSupport;
 
-    $puedeEditar = $puede_editar ?? can('editar-movimientos-de-stock', false);
-    $puedeBorrar = $puede_borrar ?? can('borrar-movimientos-de-stock', false);
-    $puedeRevertir = $puede_revertir ?? can('revertir-movimientos-de-stock', false);
-    $puedeListar = $puede_listar ?? can('listar-movimientos-de-stock', false);
+    $modoSurmarTabla = ! empty($modo_surmar);
+    $rutaEditarMov = $ruta_editar_movimientostock
+        ?? ($modoSurmarTabla ? 'editar_movimiento_surmar' : 'editar_movimientostock');
+    $puedeEditar = $puede_editar ?? (
+        can('editar-movimientos-de-stock', false) || can('editar-movimiento-surmar', false)
+    );
+    $puedeBorrar = $puede_borrar ?? (
+        can('borrar-movimientos-de-stock', false) || can('anular-movimiento-surmar', false)
+    );
+    $puedeRevertir = $puede_revertir ?? MovimientoSurmarPermisoSupport::puedeRevertir(false);
+    $puedeListar = $puede_listar ?? (
+        can('listar-movimientos-de-stock', false) || can('listar-movimiento-surmar', false)
+    );
     $mostrarAcciones = $mostrar_acciones ?? true;
     $esFerli = MovimientoStockFerliSupport::esCalzadosFerli();
 @endphp
@@ -68,22 +78,22 @@
                         </form>
                     @endif
                     @if ($puedeEditar && $fila->movSalidaId && $puedeModificarVentanaFila)
-                        <a href="{{ route('editar_movimientostock', ['id' => $fila->movSalidaId]) }}" class="btn-accion-tabla tooltipsC" title="Editar egreso ({{ $fila->movSalidaId }})">
+                        <a href="{{ route($rutaEditarMov, ['id' => $fila->movSalidaId]) }}" class="btn-accion-tabla tooltipsC" title="Editar egreso ({{ $fila->movSalidaId }})">
                             <i class="fa fa-sign-out-alt text-warning"></i>
                         </a>
                     @endif
                     @if ($puedeEditar && $fila->movEntradaId && $puedeModificarVentanaFila)
-                        <a href="{{ route('editar_movimientostock', ['id' => $fila->movEntradaId]) }}" class="btn-accion-tabla tooltipsC" title="Editar ingreso ({{ $fila->movEntradaId }})">
+                        <a href="{{ route($rutaEditarMov, ['id' => $fila->movEntradaId]) }}" class="btn-accion-tabla tooltipsC" title="Editar ingreso ({{ $fila->movEntradaId }})">
                             <i class="fa fa-sign-in-alt text-success"></i>
                         </a>
                     @endif
                 @else
                     @if ($puedeEditar && $fila->movimiento && $puedeModificarVentanaFila)
-                        <a href="{{ route('editar_movimientostock', ['id' => $fila->movimiento->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                        <a href="{{ route($rutaEditarMov, ['id' => $fila->movimiento->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                             <i class="fa fa-edit"></i>
                         </a>
                     @endif
-                    @if ($puedeBorrar && $fila->movimiento && $puedeModificarVentanaFila)
+                    @if ($puedeBorrar && $fila->movimiento && $puedeModificarVentanaFila && ! $modoSurmarTabla)
                         <form action="{{ route('eliminar_movimientostock', ['id' => $fila->movimiento->id]) }}" class="d-inline form-eliminar" method="POST">
                             @csrf @method('delete')
                             <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
@@ -104,7 +114,7 @@
                             'movimientoStockId' => $fila->movimiento->id,
                             'modo' => 'tabla',
                         ])
-                        <a href="{{ route('editar_movimientostock', ['id' => $fila->movimiento->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="btn-accion-tabla tooltipsC" title="Consultar movimiento" target="_blank" rel="noopener">
+                        <a href="{{ route($rutaEditarMov, ['id' => $fila->movimiento->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="btn-accion-tabla tooltipsC" title="Consultar movimiento" target="_blank" rel="noopener">
                             <i class="fa fa-eye"></i>
                         </a>
                     @endif

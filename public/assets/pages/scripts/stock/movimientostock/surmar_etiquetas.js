@@ -577,6 +577,8 @@
         $.ajax({
             url: url,
             method: 'POST',
+            dataType: 'json',
+            headers: { Accept: 'application/json' },
             data: {
                 _token: $('#csrf_token').val() || $('meta[name="csrf-token"]').attr('content'),
                 codigo: raw,
@@ -601,7 +603,8 @@
             },
             error: function (xhr) {
                 var msg = (xhr.responseJSON && (xhr.responseJSON.message || (xhr.responseJSON.errors && Object.values(xhr.responseJSON.errors)[0][0]))) || 'Error al resolver etiqueta';
-                setMsg(msg, false);
+                var preview = raw.length > 40 ? raw.slice(0, 40) + '…' : raw;
+                setMsg(msg + ' [leído: ' + preview + ']', false);
             }
         });
     }

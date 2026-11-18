@@ -375,6 +375,11 @@ class MovimientoStockController extends Controller
                 ? (Depmae::query()->whereKey($depositoActualId)->value('empresa_id') ?? $empresa_query->first()->id)
                 : ($empresa_query->first()->id ?? null)
         );
+        // Listado Surmar a veces abre editar_movimientostock sin ?modo_surmar=1: activar por empresa.
+        if (SurmarSupport::esEmpresaSurmar((int) $empresa_id) && ! $modoSurmar) {
+            $request->merge(['modo_surmar' => 1]);
+            $modoSurmar = true;
+        }
         $centrocosto_query = $this->centrocostoRepository->all();
         $movimientostock->loadMissing([
             'tipotransaccion_stock',
@@ -720,6 +725,13 @@ class MovimientoStockController extends Controller
             $etiqueta = $surmarEtiquetas->resolverEscaneo($codigo, $empresaId, true);
         } catch (\Illuminate\Validation\ValidationException $e) {
             $msg = collect($e->errors())->flatten()->first() ?: 'Etiqueta inválida.';
+            \Illuminate\Support\Facades\Log::warning('surmar.etiqueta.resolver_fallo', [
+                'codigo' => mb_substr($codigo, 0, 240),
+                'codigo_len' => mb_strlen($codigo),
+                'empresa_id' => $empresaId,
+                'mensaje' => $msg,
+                'usuario_id' => auth()->id(),
+            ]);
 
             return response()->json(['ok' => false, 'message' => $msg, 'errors' => $e->errors()], 422);
         }

@@ -5,7 +5,7 @@ namespace App\Support\Stock\Surmar;
 /**
  * Parseo de lectura de etiqueta Surmar (ID ERP, QR v2 o barcode Anita).
  *
- * - Solo dígitos / Code39 `*id*` → id ERP (ZPL Surmar).
+ * - Solo dígitos / Code39 `*id*` / AIM `]A0id` → id ERP (ZPL Surmar).
  * - QR JSON v2 (`{"v":2,"etiqueta_id":…}`) → id ERP.
  * - Anita (a-stkmov.c Ing_articulo): sku-nint-nap-tipo-orden (sep. '-' o "'").
  */
@@ -38,13 +38,13 @@ final class SurmarEtiquetaBarcodeSupport
             return $vacio;
         }
 
-        // QR v2 (y variantes con prefijo Zebra MA,/QA,): {"v":2,"etiqueta_id":16688,…}
+        // QR v2 (y variantes con prefijo Zebra MA,/QA, o AIM ]Q3): {"v":2,"etiqueta_id":16688,…}
         $desdeQr = self::parsearQrJson($raw, $vacio);
         if ($desdeQr !== null) {
             return $desdeQr;
         }
 
-        // Solo dígitos → ID ERP (tras quitar * de Code39)
+        // Solo dígitos → ID ERP (tras quitar * de Code39 / AIM)
         if (preg_match('/^\d+$/', $raw)) {
             $id = (int) $raw;
 
@@ -100,13 +100,20 @@ final class SurmarEtiquetaBarcodeSupport
     }
 
     /**
-     * Trim, BOM, comillas y delimitadores Code39 (*…*).
+     * Trim, BOM, zero-width, AIM de lector, comillas y delimitadores Code39 (*…*).
      */
     private static function normalizarEntrada(string $raw): string
     {
         $raw = trim($raw);
-        $raw = preg_replace('/^\xEF\xBB\xBF/', '', $raw) ?? $raw;
+        $raw = preg_replace('/^\xEF\xBB\xBF/u', '', $raw) ?? $raw;
+        // Zero-width / soft hyphen que meten algunos lectores
+        $raw = preg_replace('/[\x{200B}-\x{200D}\x{FEFF}\x{00AD}]/u', '', $raw) ?? $raw;
         $raw = trim($raw, " \t\n\r\0\x0B\"'");
+
+        // AIM identifier del wedge: ]A0 (Code39), ]C1 (Code128), ]Q3 (QR), etc.
+        if (preg_match('/^\][A-Za-z][0-9A-Za-z](.*)$/s', $raw, $m)) {
+            $raw = trim($m[1]);
+        }
 
         // Code39: start/stop asterisks (*16688* o *16688)
         if (preg_match('/^\*(\d+)\*$/', $raw, $m) || preg_match('/^\*(\d+)$/', $raw, $m)) {
@@ -135,16 +142,22 @@ final class SurmarEtiquetaBarcodeSupport
         if (preg_match('/^[A-Za-z]{1,2},(\{.*\})\s*$/s', $raw, $m)) {
             $json = $m[1];
         }
-        if ($json === '' || $json[0] !== '{') {
-            return null;
+        // JSON embebido en basura del lector
+        if (($json === '' || ($json[0] ?? '') !== '{') && preg_match('/(\{.*\})/s', $raw, $m)) {
+            $json = $m[1];
         }
 
-        $data = json_decode($json, true);
-        if (! is_array($data)) {
-            return null;
+        $id = 0;
+        if ($json !== '' && ($json[0] ?? '') === '{') {
+            $data = json_decode($json, true);
+            if (is_array($data)) {
+                $id = (int) ($data['etiqueta_id'] ?? $data['id'] ?? 0);
+            }
         }
-
-        $id = (int) ($data['etiqueta_id'] ?? $data['id'] ?? 0);
+        // JSON truncado / comillas tipográficas: buscar etiqueta_id a mano
+        if ($id <= 0 && preg_match('/"etiqueta_id"\s*:\s*(\d+)/', $raw, $m)) {
+            $id = (int) $m[1];
+        }
         if ($id <= 0) {
             return null;
         }

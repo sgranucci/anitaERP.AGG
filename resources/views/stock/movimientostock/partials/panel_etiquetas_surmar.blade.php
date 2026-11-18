@@ -20,9 +20,9 @@
             Seleccioná un renglón a la izquierda para piquear sus etiquetas.
         </p>
         <p class="text-muted small mb-2">
-            Escaneá el <strong>ID ERP</strong> o el código Anita
-            <code>sku-nint-nap</code> / <code>nint-nap</code>. Solo <strong>DISPONIBLE</strong>.
-            Obligatorio por ítem en AP, DES y TRA.
+            Escaneá el <strong>barcode</strong> (ID, ej. 16688) o el <strong>QR</strong> de la etiqueta.
+            También vale el código Anita <code>sku-nint-nap</code>. Solo <strong>DISPONIBLE</strong>.
+            Primero hacé clic en el renglón del producto. Obligatorio por ítem en AP, DES y TRA.
             En <strong>AP</strong>, además emití etiquetas nuevas (en que separa / cantidad).
         </p>
         <div class="form-row align-items-end">

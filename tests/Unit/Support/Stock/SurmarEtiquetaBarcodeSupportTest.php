@@ -24,6 +24,24 @@ class SurmarEtiquetaBarcodeSupportTest extends TestCase
         $this->assertSame(16688, $p['etiqueta_id']);
     }
 
+    public function test_aim_code39_y_code128(): void
+    {
+        $p = SurmarEtiquetaBarcodeSupport::parsear(']A016688');
+        $this->assertSame('id', $p['modo']);
+        $this->assertSame(16688, $p['etiqueta_id']);
+
+        $p2 = SurmarEtiquetaBarcodeSupport::parsear(']C116688');
+        $this->assertSame('id', $p2['modo']);
+        $this->assertSame(16688, $p2['etiqueta_id']);
+    }
+
+    public function test_aim_qr_json(): void
+    {
+        $p = SurmarEtiquetaBarcodeSupport::parsear(']Q3{"v":2,"etiqueta_id":16688}');
+        $this->assertSame('id', $p['modo']);
+        $this->assertSame(16688, $p['etiqueta_id']);
+    }
+
     public function test_qr_v2_json(): void
     {
         $qr = '{"v":2,"etiqueta_id":16688,"codigo_articulo":"Y108","nombre":"PALETA FRESCO","cantidad":1,"tipo_unidad":"BIN","nro_apertura":1,"kilos":427,"peso_bruto":462,"lote":"A-38141/1","vencimiento":"20/11/2026","fecha":"17/11/2026","peso_promedio":7.12}';

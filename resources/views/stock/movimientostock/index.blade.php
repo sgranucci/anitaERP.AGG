@@ -153,6 +153,8 @@ $puedeNuevaTransferencia = ! $modoSurmar && can('crear-transferencia-mercaderia'
                         @include('stock.movimientostock.partials.tabla_datos', [
                             'datas' => $datas,
                             'estado_enum' => $estado_enum,
+                            'modo_surmar' => $modoSurmar,
+                            'ruta_editar_movimientostock' => $modoSurmar ? 'editar_movimiento_surmar' : 'editar_movimientostock',
                             'puede_editar' => MovimientoSurmarPermisoSupport::puedeEditar(false),
                             'puede_borrar' => MovimientoSurmarPermisoSupport::puedeAnular(false),
                             'puede_revertir' => MovimientoSurmarPermisoSupport::puedeRevertir(false),
