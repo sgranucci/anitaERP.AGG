@@ -92,7 +92,9 @@ class Tipotransaccion extends Model implements Auditable
     }
 
     /**
-     * Remito ERP / Anita solo con factura de mercadería (FAC / FCE).
+     * Remito ERP / Anita con factura de mercadería local o exportación Ferli.
+     * FAC / FCE (local / FCE MiPyME) y FAF (exportación Ferli WSFEX).
+     * FAE (Interforming) no emite remito en anitaERP (solo hoja factura Anita).
      * NC y ND no generan ni heredan remito.
      */
     public function correspondeRemito(): bool
@@ -103,7 +105,7 @@ class Tipotransaccion extends Model implements Auditable
 
         $abrev = strtoupper(trim((string) ($this->abreviatura ?? '')));
 
-        return in_array($abrev, ['FAC', 'FCE'], true);
+        return in_array($abrev, ['FAC', 'FCE', 'FAF'], true);
     }
 }
 

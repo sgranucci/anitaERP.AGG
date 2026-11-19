@@ -127,7 +127,12 @@ function eliminarPedido(event) {
                                    	<i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-pedidos', false) && $pedido['estado'] == 'Pendiente')
+                       			@php
+									$estadoPedidoBorrar = (string) ($pedido['estado'] ?? '');
+									$puedeBorrarPedido = $estadoPedidoBorrar !== ''
+										&& stripos($estadoPedidoBorrar, 'facturado') === false;
+								@endphp
+                       			@if (can('borrar-pedidos', false) && $puedeBorrarPedido)
                                 	<form action="{{route('eliminar_pedido', ['id' => $pedido['id']])}}" class="d-inline form-eliminar" method="POST">
                                    		@csrf @method("delete")
                                    		<button type="submit" onclick="eliminarPedido(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

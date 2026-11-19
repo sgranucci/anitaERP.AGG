@@ -62,7 +62,7 @@
             <div class="card-header">
                 <h3 class="card-title">Stock por OT</h3>
                 <div class="card-tools">
-                    <a href="{{ route('rep_stockot') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                    <a href="{{ route('rep_stockot', ['olvidar_preferencias' => 1]) }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros y olvidar la selecci&oacute;n recordada">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
                 </div>
@@ -74,6 +74,7 @@
                         Consultá el stock y, en la vista previa, abrí cada orden de trabajo.
                         <strong>Filtrar resultado</strong> acota el listado sin volver a calcular.
                         Pdf y Excel salen con ese recorte, en el formato de siempre.
+                        Al consultar se recuerda marca, depósitos y el resto de filtros para la próxima vez; Limpiar también olvida esa selección.
                     </p>
                     @include('stock.repstockot.form')
                     <div class="form-group row mb-0">

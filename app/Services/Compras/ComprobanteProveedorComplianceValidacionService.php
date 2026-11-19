@@ -19,6 +19,7 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Contable\MontoEsArSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -275,8 +276,18 @@ class ComprobanteProveedorComplianceValidacionService
     {
         $cae = preg_replace('/\D/', '', (string) ($payload['numerocae'] ?? '')) ?? '';
         $fecha = (string) ($payload['fechacomprobante'] ?? '');
-        $ts = strtotime($fecha);
-        $fechaYmd = $ts !== false ? date('Y-m-d', $ts) : preg_replace('/\D/', '', $fecha);
+        // type=date manda Y-m-d; si llega d/m/Y, strtotime US lo invierte (09/11 → sep).
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $fecha, $m)) {
+            $fechaYmd = $m[1].'-'.$m[2].'-'.$m[3];
+        } elseif (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $fecha, $m)) {
+            $fechaYmd = sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
+        } else {
+            $ts = strtotime($fecha);
+            $fechaYmd = $ts !== false ? date('Y-m-d', $ts) : (preg_replace('/\D/', '', $fecha) ?: '');
+        }
+
+        // Total puede venir float o es-AR ("266.200,00"); (float) de es-AR da 266.2.
+        $total = MontoEsArSupport::parse($payload['total'] ?? 0);
 
         return hash('sha256', implode('|', [
             (int) ($payload['empresa_id'] ?? 0),
@@ -286,7 +297,7 @@ class ComprobanteProveedorComplianceValidacionService
             (int) ($payload['sucursal'] ?? 0),
             (int) ($payload['numerocomprobante'] ?? 0),
             (string) $fechaYmd,
-            number_format(round((float) ($payload['total'] ?? 0), 2), 2, '.', ''),
+            number_format(round($total, 2), 2, '.', ''),
             $cae,
             strtoupper(trim((string) ($payload['tipo_autorizacion'] ?? ''))),
         ]));
@@ -495,29 +506,35 @@ class ComprobanteProveedorComplianceValidacionService
         // Preferir la constatación async de pantalla: no volver a llamar al WS al grabar.
         $fingerprint = $this->fingerprintWscdc($payload);
         $cache = $this->leerCacheAsync((string) ($payload['wscdc_async_token'] ?? ''));
+        if (! is_array($cache) || ($cache['fingerprint'] ?? '') !== $fingerprint) {
+            // Token perdido (carrera al redisparar) o contabilizado sin async: misma firma en Redis.
+            $cache = $this->leerCachePorFingerprint($fingerprint);
+        }
         if (is_array($cache) && ($cache['fingerprint'] ?? '') === $fingerprint) {
-            $resultado['wscdc'] = array_merge($cache['wscdc'] ?? [], [
-                'ejecutada' => true,
-                'desde_cache_async' => true,
-            ]);
-            if (! empty($cache['ws_caido'])) {
-                foreach ($cache['avisos'] ?? [] as $aviso) {
-                    $resultado['avisos'][] = (string) $aviso;
-                }
-
-                return;
-            }
-            foreach ($cache['errores'] ?? [] as $err) {
-                $this->agregarHallazgoWscdc($resultado, (string) $err);
-            }
-            foreach ($cache['avisos'] ?? [] as $aviso) {
-                $resultado['avisos'][] = (string) $aviso;
-            }
+            $this->aplicarCacheWscdcAlResultado($cache, $resultado);
 
             return;
         }
 
-        // Sin cache vigente: no martillar ARCA en el POST (la UI debe constatar en vivo).
+        // Fallback: una sola llamada al WS (token vacío / fingerprint distinto / edición contabilizada).
+        $vivo = $this->constatarEnVivo($payload);
+        if (! empty($vivo['listo']) && is_array($vivo['wscdc'] ?? null)) {
+            $this->aplicarCacheWscdcAlResultado([
+                'fingerprint' => $fingerprint,
+                'ok' => (bool) ($vivo['ok'] ?? false),
+                'ws_caido' => ! empty($vivo['wscdc']['ws_caido']),
+                'errores' => $vivo['errores'] ?? [],
+                'avisos' => $vivo['avisos'] ?? [],
+                'wscdc' => array_merge($vivo['wscdc'], [
+                    'ejecutada' => true,
+                    'desde_cache_async' => false,
+                    'desde_fallback_grabar' => true,
+                ]),
+            ], $resultado);
+
+            return;
+        }
+
         $this->agregarHallazgoWscdc(
             $resultado,
             'Falta la constatación ARCA (WSCDC) en vivo para estos datos. Esperá el resultado en pantalla o revisá CAE, número, fecha o total.'
@@ -528,6 +545,32 @@ class ComprobanteProveedorComplianceValidacionService
             'desde_cache_async' => false,
             'motivo' => 'sin_cache_async',
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $cache
+     * @param  ResultadoCompliance  $resultado
+     */
+    private function aplicarCacheWscdcAlResultado(array $cache, array &$resultado): void
+    {
+        $resultado['wscdc'] = array_merge($cache['wscdc'] ?? [], [
+            'ejecutada' => true,
+            'desde_cache_async' => ! empty($cache['wscdc']['desde_cache_async'])
+                || empty($cache['wscdc']['desde_fallback_grabar']),
+        ]);
+        if (! empty($cache['ws_caido'])) {
+            foreach ($cache['avisos'] ?? [] as $aviso) {
+                $resultado['avisos'][] = (string) $aviso;
+            }
+
+            return;
+        }
+        foreach ($cache['errores'] ?? [] as $err) {
+            $this->agregarHallazgoWscdc($resultado, (string) $err);
+        }
+        foreach ($cache['avisos'] ?? [] as $aviso) {
+            $resultado['avisos'][] = (string) $aviso;
+        }
     }
 
     /**
@@ -544,7 +587,7 @@ class ComprobanteProveedorComplianceValidacionService
     ): string {
         $token = Str::random(40);
         $ttl = now()->addHours(2);
-        Cache::put($this->cacheKeyAsync($token), [
+        $payload = [
             'fingerprint' => $fingerprint,
             'ok' => $ok,
             'ws_caido' => ! empty($wscdc['ws_caido']),
@@ -552,7 +595,12 @@ class ComprobanteProveedorComplianceValidacionService
             'avisos' => array_values($avisos),
             'wscdc' => $wscdc,
             'user_id' => Auth::id(),
-        ], $ttl);
+        ];
+        Cache::put($this->cacheKeyAsync($token), $payload, $ttl);
+        // Índice por firma: el POST puede perder el token (carrera JS / edición contabilizada).
+        if ($fingerprint !== '') {
+            Cache::put($this->cacheKeyFingerprint($fingerprint), $payload, $ttl);
+        }
 
         return $token;
     }
@@ -569,9 +617,26 @@ class ComprobanteProveedorComplianceValidacionService
         return is_array($data) ? $data : null;
     }
 
+    /** @return array<string, mixed>|null */
+    private function leerCachePorFingerprint(string $fingerprint): ?array
+    {
+        $fingerprint = trim($fingerprint);
+        if ($fingerprint === '') {
+            return null;
+        }
+        $data = Cache::get($this->cacheKeyFingerprint($fingerprint));
+
+        return is_array($data) ? $data : null;
+    }
+
     private function cacheKeyAsync(string $token): string
     {
         return 'wscdc:cp:async:'.sha1($token);
+    }
+
+    private function cacheKeyFingerprint(string $fingerprint): string
+    {
+        return 'wscdc:cp:fp:'.sha1($fingerprint);
     }
 
     /**

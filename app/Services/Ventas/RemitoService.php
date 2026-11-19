@@ -939,7 +939,7 @@ class RemitoService
 
         $tipo = Tipotransaccion::query()->find($tipoId);
         if ($tipo && ! $tipo->correspondeRemito()) {
-            return ['error' => 'El remito solo se genera con factura (FAC / FCE).'];
+            return ['error' => 'El remito solo se genera con factura (FAC / FCE / FAF).'];
         }
 
         return null;

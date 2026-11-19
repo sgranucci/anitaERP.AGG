@@ -633,6 +633,9 @@ class OrdentrabajoService
 				$this->pedido_combinacionRepository->updatePorOtId($pedidoCombinacion->id);
 			}
 
+			// Stock primero: articulo_movimiento.ordentrabajo_id es RESTRICT.
+			$this->articulo_movimientoService->deletePorOrdentrabajoId($id);
+
 			// Con foreign_key_checks=0 el ON DELETE CASCADE no limpia hijas.
 			$this->ordentrabajo_combinacion_talleRepository->deleteporordentrabajo($id);
 			$this->ordentrabajo_tareaRepository->deleteporordentrabajo($id, 0);
@@ -641,8 +644,6 @@ class OrdentrabajoService
 			);
 
 			$this->ordentrabajoRepository->delete($id);
-			// Redundante si el observer ya limpió; cubre llamadas sin observer.
-			$this->articulo_movimientoService->deletePorOrdentrabajoId($id);
 
 			DB::commit();
 		} catch (\Exception $e) {

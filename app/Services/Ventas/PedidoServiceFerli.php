@@ -941,25 +941,17 @@ class PedidoServiceFerli
 					//$this->pedido_combinacionRepository->deleteporpedido($data['pedido_id']);
 					// si es update busca si hay registros borrados
 					$pedido_combinacion = $this->pedido_combinacionRepository->findPorPedidoId($id);
+					$idsFormulario = array_map('intval', $data['ids'] ?? []);
 					foreach($pedido_combinacion as $idPedidoCombinacion)
 					{
-						// Busca si no existe el id en el array que devuelve el blade
-						$flEncontro = false;
-						foreach ($data['ids'] as $idActual)
-						{
-							if ($idActual == $idPedidoCombinacion->id)
-								$flEncontro = true;
+						if (in_array((int) $idPedidoCombinacion->id, $idsFormulario, true)) {
+							continue;
 						}
-						if (!$flEncontro)
-						{
-							if ($idPedidoCombinacion->ot_id > 0)
-							{
-								// Borra la orden de trabajo
-								$this->ordentrabajoRepository->deletePorCodigo($idPedidoCombinacion->ot_id);
-							}
-							// Borra el item
-							$this->pedido_combinacionRepository->delete($idPedidoCombinacion->id);
+						if ($this->lineaEstaFacturada($idPedidoCombinacion)) {
+							DB::rollback();
+							return ['error' => 'No se puede borrar la línea '.$idPedidoCombinacion->numeroitem.' del pedido: ya está facturada'];
 						}
+						$this->eliminarLineaPedidoYDependencias($idPedidoCombinacion);
 					}
 				}
 				$articulos = $data['articulos_id'];
@@ -1326,30 +1318,88 @@ class PedidoServiceFerli
 		} catch (\Exception $e) 
 		{
 			DB::rollback();
-			dd($e->getMessage());
-			return $e->getMessage();
+			\Log::error('guardaPedido Ferli falló', [
+				'pedido_id' => $id,
+				'mensaje' => $e->getMessage(),
+			]);
+
+			return ['error' => $e->getMessage()];
 		}
 	}
 
 	public function borraPedido($id)
 	{
-		$fl_borro = false;
-
-		$data = $this->pedidoQuery->leePedidoporId($id);
-
-        if (($pedido = $this->pedidoRepository->delete($id)))
-		{
-			$tipo = substr($data[0]->codigo, 0, 3);
-			$letra = substr($data[0]->codigo, 4, 1);
-			$sucursal = substr($data[0]->codigo, 6, 5);
-			$nro = substr($data[0]->codigo, 12, 8);
-
-        	$pedido_combinacion = $this->pedido_combinacionRepository->deleteporpedido($id, $tipo, $letra, $sucursal, $nro);
-
-			$fl_borro = true;
+		$pedido = Pedido::query()->with('pedido_combinaciones')->find($id);
+		if (! $pedido) {
+			return false;
 		}
 
-		return ($fl_borro);
+		foreach ($pedido->pedido_combinaciones as $linea) {
+			if ($this->lineaEstaFacturada($linea)) {
+				return false;
+			}
+		}
+
+		DB::beginTransaction();
+		try {
+			foreach ($pedido->pedido_combinaciones as $linea) {
+				$this->eliminarLineaPedidoYDependencias($linea);
+			}
+
+			if (! $this->pedidoRepository->delete($id)) {
+				DB::rollback();
+				return false;
+			}
+
+			DB::commit();
+			return true;
+		} catch (\Exception $e) {
+			DB::rollback();
+			\Log::error('borraPedido Ferli falló', [
+				'pedido_id' => $id,
+				'mensaje' => $e->getMessage(),
+			]);
+
+			return false;
+		}
+	}
+
+	/**
+	 * Línea facturada por OT o por picking stock: no se borra.
+	 */
+	private function lineaEstaFacturada($linea): bool
+	{
+		$conteo = $this->conteoEstadoLineaCombinacion($linea);
+
+		return ($conteo['facturado'] ?? 0) > 0;
+	}
+
+	/**
+	 * Quita stock, OT y talles de una línea antes de borrarla.
+	 * Sin esto el FK RESTRICT de articulo_movimiento bloquea el delete.
+	 */
+	private function eliminarLineaPedidoYDependencias($linea): void
+	{
+		$pcId = (int) ($linea->id ?? 0);
+		if ($pcId <= 0) {
+			return;
+		}
+
+		$otId = (int) ($linea->ot_id ?? 0);
+
+		// Alta/consumo ligado a la línea (cliente STOCK u otros).
+		$this->articulo_movimientoService->deletePorPedido_combinacionId($pcId);
+
+		if ($otId > 0) {
+			// Limpia stock por OT + tareas + OCT; si la OT ya no existe, sigue.
+			if (! $this->ordentrabajoService->borraOrdenTrabajo($otId)) {
+				$this->articulo_movimientoService->deletePorOrdentrabajoId($otId);
+			}
+		}
+
+		// AMT huérfanos por talle de la línea + talles.
+		$this->pedido_combinacion_talleRepository->deleteporpedido_combinacion($pcId);
+		$this->pedido_combinacionRepository->delete($pcId);
 	}
 
 	// Cierre de pedidos pendientes por fecha 

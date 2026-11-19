@@ -29,6 +29,10 @@ Route::post('seguridad/login', 'Seguridad\LoginController@login')->name('login_p
 Route::get('seguridad/logout', 'Seguridad\LoginController@logout')->name('logout');
 Route::post('ajax-sesion', 'AjaxController@setSession')->name('ajax')->middleware('auth');
 
+// Mercado Libre — notificaciones (sin auth; CSRF except en VerifyCsrfToken)
+Route::post('ventas/mercadolibre-webhook', 'Ventas\Mercadolibre\MercadolibreWebhookController')
+    ->name('mercadolibre_webhook');
+
 Route::middleware('auth')->group(function () {
     Route::get('seguridad/buscador', 'Seguridad\BuscadorGlobalController@index')->name('buscador_global');
     Route::post('seguridad/buscador/eleccion', 'Seguridad\BuscadorGlobalController@eleccion')->name('buscador_global_eleccion');
@@ -983,6 +987,19 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
         ->where(['id' => '[0-9]+', 'formato' => 'PDF|EXCEL|CSV']);
     Route::get('ventas/tiendanube-stock/{id}', 'Ventas\Tiendanube\TiendanubeStockSubidaController@ver')->name('ver_tiendanube_stock_subida')->where('id', '[0-9]+');
     Route::delete('ventas/tiendanube-stock/{id}', 'Ventas\Tiendanube\TiendanubeStockSubidaController@eliminar')->name('eliminar_tiendanube_stock_subida')->where('id', '[0-9]+');
+
+    /*
+     * Facturación pedidos Mercado Libre
+     */
+    Route::get('ventas/mercadolibre-pedidos', 'Ventas\Mercadolibre\MercadolibrePedidoController@index')->name('mercadolibre_pedidos');
+    Route::post('ventas/mercadolibre-pedidos/sincronizar', 'Ventas\Mercadolibre\MercadolibrePedidoController@sincronizar')->name('mercadolibre_pedidos_sincronizar');
+    Route::get('ventas/mercadolibre-pedidos/{id}', 'Ventas\Mercadolibre\MercadolibrePedidoController@show')->name('mercadolibre_pedido_show')->where('id', '[0-9]+');
+    Route::post('ventas/mercadolibre-pedidos/{id}/refrescar', 'Ventas\Mercadolibre\MercadolibrePedidoController@refrescar')->name('mercadolibre_pedido_refrescar')->where('id', '[0-9]+');
+    Route::post('ventas/mercadolibre-pedidos/{id}/facturar', 'Ventas\Mercadolibre\MercadolibrePedidoController@facturar')->name('mercadolibre_pedido_facturar')->where('id', '[0-9]+');
+
+    Route::get('ventas/configuracion-mercadolibre', 'Ventas\Mercadolibre\MercadolibreConfiguracionController@editar')->name('editar_configuracion_mercadolibre');
+    Route::get('ventas/mercadolibre-oauth/autorizar', 'Ventas\Mercadolibre\MercadolibreOauthController@autorizar')->name('mercadolibre_oauth_autorizar');
+    Route::get('ventas/mercadolibre-oauth/callback', 'Ventas\Mercadolibre\MercadolibreOauthController@callback')->name('mercadolibre_oauth_callback');
 } else {
     Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
     Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');

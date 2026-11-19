@@ -7,10 +7,12 @@ use PHPUnit\Framework\TestCase;
 
 class TipotransaccionCorrespondeRemitoTest extends TestCase
 {
-    public function test_fac_y_fce_si_nc_no(): void
+    public function test_fac_fce_faf_si_nc_y_fae_no(): void
     {
         $this->assertTrue((new Tipotransaccion(['abreviatura' => 'FAC', 'operacion' => 'V']))->correspondeRemito());
         $this->assertTrue((new Tipotransaccion(['abreviatura' => 'FCE', 'operacion' => 'V']))->correspondeRemito());
+        $this->assertTrue((new Tipotransaccion(['abreviatura' => 'FAF', 'operacion' => 'V']))->correspondeRemito());
+        $this->assertFalse((new Tipotransaccion(['abreviatura' => 'FAE', 'operacion' => 'V']))->correspondeRemito());
         $this->assertFalse((new Tipotransaccion(['abreviatura' => 'NCD', 'operacion' => 'C']))->correspondeRemito());
         $this->assertFalse((new Tipotransaccion(['abreviatura' => 'NCE', 'operacion' => 'C']))->correspondeRemito());
         $this->assertFalse((new Tipotransaccion(['abreviatura' => 'NCG', 'operacion' => 'C']))->correspondeRemito());

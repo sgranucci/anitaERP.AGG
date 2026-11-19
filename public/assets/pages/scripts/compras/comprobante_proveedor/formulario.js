@@ -5498,9 +5498,7 @@ $(function () {
     }
 
     (function initConstatarWscdcAsync() {
-        if (contabilizado) {
-            return;
-        }
+        // También en contabilizado: Actualizar regenera asiento y exige token WSCDC.
         var url = String($form.attr('data-constatar-wscdc-url') || '').trim();
         if (!url) {
             return;
@@ -5509,6 +5507,7 @@ $(function () {
         var timer = null;
         var seq = 0;
         var ultimaKey = '';
+        var pendienteSubmit = false;
         var $slot = $('#cp-wscdc-async-slot');
         var $token = $('#wscdc_async_token');
         var $fp = $('#wscdc_async_fingerprint');
@@ -5582,6 +5581,19 @@ $(function () {
                 .html('<i class="fa ' + icon + '"></i> <strong>ARCA WSCDC:</strong> ' + $('<div>').text(mensaje).html());
         }
 
+        function intentarSubmitPendiente() {
+            if (!pendienteSubmit) {
+                return;
+            }
+            pendienteSubmit = false;
+            // Con token ya cargado, el gate deja pasar y corren el resto de validaciones.
+            if (typeof $form[0].requestSubmit === 'function') {
+                $form[0].requestSubmit();
+            } else {
+                $form.trigger('submit');
+            }
+        }
+
         function disparar() {
             var p = payloadWscdc();
             var key = clave(p);
@@ -5598,10 +5610,12 @@ $(function () {
                 return;
             }
             if (key === ultimaKey && $token.val()) {
+                intentarSubmitPendiente();
                 return;
             }
             ultimaKey = key;
-            limpiarToken();
+            // No limpiar token acá: si el usuario graba mientras revalida, el token previo
+            // (misma firma en cache Redis) sigue sirviendo; el nuevo lo reemplaza al volver.
             var mySeq = ++seq;
             pintar('loading', 'Constando comprobante en ARCA…');
             $.ajax({
@@ -5614,10 +5628,12 @@ $(function () {
                     return;
                 }
                 if (!res || !res.aplica) {
+                    pendienteSubmit = false;
                     pintar('', '');
                     return;
                 }
                 if (!res.listo) {
+                    pendienteSubmit = false;
                     pintar('aviso', res.mensaje || 'Faltan datos para constatar.');
                     return;
                 }
@@ -5634,17 +5650,20 @@ $(function () {
                         });
                     }
                     pintar('ok', msgOk);
+                    intentarSubmitPendiente();
                     return;
                 }
+                pendienteSubmit = false;
                 pintar(res.bloquear ? 'error' : 'aviso', res.mensaje || (res.errores || []).join(' ') || 'Constatación rechazada.');
             }).fail(function (xhr) {
                 if (mySeq !== seq) {
                     return;
                 }
-                limpiarToken();
+                // Conservar token previo si había: el backend puede resolver por fingerprint.
                 var msg = (xhr.responseJSON && xhr.responseJSON.message)
                     ? xhr.responseJSON.message
                     : 'No se pudo constatar en ARCA (revisá luego).';
+                pendienteSubmit = false;
                 pintar('aviso', msg);
             });
         }
@@ -5660,7 +5679,24 @@ $(function () {
             programar
         );
 
-        // Primera pasada si el form ya viene completo (precarga / edición).
+        // Si hay CAE completo y aún no hay token, esperar la constatación antes de grabar.
+        $form.on('submit.cpWscdcGate', function (e) {
+            var p = payloadWscdc();
+            if (!setCompleto(p)) {
+                return;
+            }
+            if ($token.val()) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            pendienteSubmit = true;
+            pintar('loading', 'Constando comprobante en ARCA antes de grabar…');
+            clearTimeout(timer);
+            disparar();
+        });
+
+        // Primera pasada si el form ya viene completo (precarga / edición / contabilizado).
         setTimeout(programar, 300);
     })();
 });

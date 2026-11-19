@@ -53,6 +53,7 @@ use App\Support\Stock\ArticuloFerliListadoColumnas;
 use App\Support\Stock\ArticuloFerliListadoFiltros;
 use App\Support\Stock\ArticuloFerliListadoPreferenciasUsuario;
 use App\Support\Stock\ArticuloNofacturaSupport;
+use App\Support\Stock\EtiquetaProductoFerliModuloSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -615,14 +616,12 @@ class ArticuloFerliController extends Controller
 
         $combinacion = Combinacion::where('articulo_id', $articulo->id)->get();
 
-        // Módulos de la línea del artículo (reemplazan el QR en la etiqueta)
-        $lineasModulos = [];
-        foreach ($articulo->lineas?->modulos ?? [] as $modulo) {
-            $textoModulo = trim((string) ($modulo->nombre ?: $modulo->codigo));
-            if ($textoModulo !== '') {
-                $lineasModulos[] = str_replace('"', "'", substr($textoModulo, 0, 24));
-            }
-        }
+        // Módulos: «12 A 35-40» arriba y numeración abajo (hasta 3 módulos, misma fuente)
+        $lineasModulos = EtiquetaProductoFerliModuloSupport::lineasDesdeModulos(
+            $articulo->lineas?->modulos ?? []
+        );
+        // Paso entre líneas (no tamaño de fuente): 6 líneas de 3 módulos caben enteras
+        $pasoModulo = 22;
 
         // Arma nombre de archivo
         $nombreEtiqueta = 'tmp/eti-'.Str::random(10).'.txt';
@@ -649,19 +648,20 @@ class ArticuloFerliController extends Controller
                 $etiqueta .= 'A680,5,1,1,2,2,N,"'.$codSku."\"\n";
                 $etiqueta .= 'A630,5,1,3,1,1,N,"'.$combNombreEpl."\"\n";
                 $etiqueta .= 'A600,5,1,3,1,1,N,"'.$nombre2Epl."\"\n";
-                $yModulo = 520;
-                foreach (array_slice($lineasModulos, 0, 4) as $textoModulo) {
+                // Arranca más arriba para aprovechar el hueco bajo la combinación
+                $yModulo = 560;
+                foreach ($lineasModulos as $textoModulo) {
                     $etiqueta .= 'A'.$yModulo.',5,1,2,1,1,N,"'.$textoModulo."\"\n";
-                    $yModulo -= 30;
+                    $yModulo -= $pasoModulo;
                 }
                 $etiqueta .= 'A330,5,1,3,2,1,N,"'.$descripcion."\"\n";
                 $etiqueta .= 'A260,5,1,1,2,2,N,"'.$codSku."\"\n";
                 $etiqueta .= 'A210,5,1,3,1,1,N,"'.$combNombreEpl."\"\n";
                 $etiqueta .= 'A180,5,1,3,1,1,N,"'.$nombre2Epl."\"\n";
-                $yModulo = 100;
-                foreach (array_slice($lineasModulos, 0, 4) as $textoModulo) {
+                $yModulo = 145;
+                foreach ($lineasModulos as $textoModulo) {
                     $etiqueta .= 'A'.$yModulo.',5,1,2,1,1,N,"'.$textoModulo."\"\n";
-                    $yModulo -= 30;
+                    $yModulo -= $pasoModulo;
                 }
                 $etiqueta .= "P1\n";
             }

@@ -1321,33 +1321,40 @@
 
     function borraRenglon() {
         event.preventDefault();
-		ordentrabajo = $(this).parents('tr').find('.otcodigo').val();
-		let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
-		
-		// Busca si tiene factura asociada
+		var $tr = $(this).parents('tr');
+		ordentrabajo = $tr.find('.otcodigo').val();
+		let pedido_combinacion_id = $tr.find(".ids").val();
+		var selfBtn = this;
+
+		var quitarRenglon = function () {
+			if (!confirm("¿Desea borrar renglon?")) {
+				return;
+			}
+			$tr.remove();
+			actualizaRenglones();
+			TotalParesPedido();
+		};
+
+		// Sin OT: no hay factura OT; el save limpia stock/picking si aplica.
+		if (!ordentrabajo || ordentrabajo === '0' || ordentrabajo === '') {
+			quitarRenglon();
+			return;
+		}
+
 		var listarUri = carpetaBase+'/ventas/estadoot/'+ordentrabajo+'/'+pedido_combinacion_id;
-		var flError = false;
-
-		$.get(listarUri, function(data){
-							
-			if (data.numerofactura != -1 && data.numerofactura != -2 && data.numerofactura != -3)
-			{
-				alert("OT ya facturada "+data.numerofactura);
-				flError = true;
-			}
-		});
-
-		setTimeout(() => {
-			if (!flError)
-			{
-				if (confirm("¿Desea borrar renglon?"))
+		$.get(listarUri)
+			.done(function(data){
+				if (data.numerofactura != -1 && data.numerofactura != -2 && data.numerofactura != -3)
 				{
-					$(this).parents('tr').remove();
-					actualizaRenglones();
+					alert("OT ya facturada "+data.numerofactura);
+					return;
 				}
-				TotalParesPedido();
-			}
-		}, 300);
+				quitarRenglon();
+			})
+			.fail(function(){
+				// Si falla la consulta, deja confirmar (backend corta si está facturada).
+				quitarRenglon();
+			});
 	}
 
     function actualizaRenglones() {

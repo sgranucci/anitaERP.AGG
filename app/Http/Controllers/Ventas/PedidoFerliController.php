@@ -644,25 +644,23 @@ class PedidoFerliController extends Controller
     public function eliminar(Request $request, $id)
     {
         can('borrar-pedidos');
-		$fl_borro = false;
+		$fl_borro = $this->pedidoService->borraPedido($id);
+		$mensajeError = 'No se pudo eliminar el pedido. Si tiene líneas facturadas, anule o cierre esas líneas; si tiene OT/stock, reintente (se limpian al borrar).';
+
         if ($request->ajax()) 
 		{
-			if ($this->pedidoService->borraPedido($id))
-				$fl_borro = true;
-
             if ($fl_borro) {
                 return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
             }
-        } else {
-			if ($this->pedidoService->borraPedido($id))
-				$mensaje = 'ok';
-			else 	
-				$mensaje = 'error';
 
-			return redirect('ventas/pedido')->with('mensaje', $mensaje);
+			return response()->json(['mensaje' => 'ng', 'error' => $mensajeError]);
         }
+
+		if ($fl_borro) {
+			return redirect('ventas/pedido')->with('mensaje', 'Pedido eliminado con éxito');
+		}
+
+		return redirect('ventas/pedido')->with('error', $mensajeError);
     }
 
     /**

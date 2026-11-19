@@ -3,13 +3,27 @@
 namespace App\Support\Stock;
 
 use App\Support\Listado\ReporteResultadoTextoSupport;
+use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Parámetros de la consulta Stock por OT y del filtro sobre el resultado.
  */
 final class ReporteStockOtListadoFiltros
 {
+    public const PREFERENCIAS_CLAVE = 'stock_ot';
+
+    private const PREFERENCIAS_CAMPO = 'filtros';
+
+    /** @var list<string> */
+    private const CLAVES_RECORDABLES = [
+        'estado', 'mventa_id', 'desdearticulo_id', 'hastaarticulo_id',
+        'desdelinea_id', 'hastalinea_id', 'desdecategoria_id', 'hastacategoria_id',
+        'desdelote', 'hastalote', 'imprimefoto', 'estadoOt', 'apertura',
+        'deposito_id', 'ambito_deposito', 'avisar_negativos',
+    ];
+
     /** @var array<string, array{label: string, type: string}> */
     public const CAMPOS_TEXTO = [
         'linea' => ['label' => 'Línea', 'type' => 'texto'],
@@ -78,6 +92,70 @@ final class ReporteStockOtListadoFiltros
             'ambito_deposito' => ReporteStockOtDepositoAmbitoSupport::normalizar((string) $request->input('ambito_deposito', 'TODOS')),
             'avisar_negativos' => self::enum($request->input('avisar_negativos'), ['SI', 'NO'], 'SI'),
         ], $texto);
+    }
+
+    /**
+     * El request trae algún filtro de cabecera (no solo paginación / texto de resultado).
+     */
+    public static function requestDefineFiltros(Request $request): bool
+    {
+        foreach (self::CLAVES_RECORDABLES as $key) {
+            if ($request->query->has($key) || $request->request->has($key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function persistirPreferencias(array $filtros): void
+    {
+        $guardar = [];
+        foreach (self::CLAVES_RECORDABLES as $key) {
+            if (! array_key_exists($key, $filtros)) {
+                continue;
+            }
+            $guardar[$key] = $filtros[$key];
+        }
+
+        ReportePreferenciasUsuario::persistirString(
+            self::PREFERENCIAS_CLAVE,
+            self::PREFERENCIAS_CAMPO,
+            json_encode(self::paraQueryString($guardar), JSON_UNESCAPED_UNICODE) ?: '{}'
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function preferenciasGuardadas(): array
+    {
+        $json = ReportePreferenciasUsuario::leerString(
+            self::PREFERENCIAS_CLAVE,
+            self::PREFERENCIAS_CAMPO,
+            ''
+        );
+        if ($json === '') {
+            return [];
+        }
+
+        $decoded = json_decode($json, true);
+        if (! is_array($decoded) || $decoded === []) {
+            return [];
+        }
+
+        return self::resolverDesdeRequest(Request::create('/', 'GET', $decoded));
+    }
+
+    public static function olvidarPreferencias(): void
+    {
+        Cache::forget(generaKey(ReportePreferenciasUsuario::clave(
+            self::PREFERENCIAS_CLAVE,
+            self::PREFERENCIAS_CAMPO
+        )));
     }
 
     /**

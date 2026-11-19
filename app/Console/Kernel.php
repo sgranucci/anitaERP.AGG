@@ -799,6 +799,15 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esFerli()
                 && (bool) config('tiendanube.sync_cron_habilitado', true));
 
+        $schedule->command('mercadolibre:sincronizar-pedidos')
+            ->everyTwoHours()
+            ->between('07:00', '23:00')
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/mercadolibre-sync.log'))
+            ->when(fn () => EntornoEmpresaSupport::esFerli()
+                && (bool) config('mercadolibre.sync_cron_habilitado', true));
+
         // Una vez por día hábil, desde la hora configurada. Si ese minuto se pierde, reintenta
         // el resto del día. Sábados, domingos y feriados no disparan.
         $schedule->command('tiendanube:subir-stock')

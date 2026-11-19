@@ -4309,8 +4309,9 @@ class FacturacionService
 						$opcionesEmision['transporte_id'] = TransporteDepositoSupport::transporteIdDesdeFactura($data, $clienteGraba);
 					}
 					$opcionesEmision['cantidadbulto'] = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
-					// Remito solo en el mostrador admin. Tiendanube no elige punto de venta de remito.
-					if (empty($opcionesEmision['origen_tiendanube'])) {
+					// Remito solo en el mostrador admin. Tiendanube / MeLi no eligen PV de remito.
+					if (empty($opcionesEmision['origen_tiendanube'])
+						&& empty($opcionesEmision['origen_mercadolibre'])) {
 						$opcionesEmision['puntoventaremito_id'] = (int) ($data['puntoventaremito_id'] ?? 0);
 					}
 				} elseif (! empty($opcionesEmision['origen_facturacion_local']) && empty($opcionesEmision['deposito_id'])) {
@@ -10164,6 +10165,7 @@ class FacturacionService
 
 		if ($this->esEmisionPos([], $opcionesEmision)
 			|| ! empty($opcionesEmision['origen_tiendanube'])
+			|| ! empty($opcionesEmision['origen_mercadolibre'])
 			|| ! empty($opcionesEmision['origen_facturacion_local'])
 			|| ! EntornoEmpresaSupport::esFerli()
 		) {

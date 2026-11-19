@@ -38,8 +38,24 @@ class RepStockOtController extends Controller
 
     public function index(Request $request)
     {
+        if ($request->boolean('olvidar_preferencias')) {
+            ReporteStockOtListadoFiltros::olvidarPreferencias();
+
+            return redirect()->route('rep_stockot');
+        }
+
         $filtros = ReporteStockOtListadoFiltros::resolverDesdeRequest($request);
         $consultado = $request->boolean('consultar');
+
+        if ($consultado) {
+            ReporteStockOtListadoFiltros::persistirPreferencias($filtros);
+        } elseif (! ReporteStockOtListadoFiltros::requestDefineFiltros($request)) {
+            $prefs = ReporteStockOtListadoFiltros::preferenciasGuardadas();
+            if ($prefs !== []) {
+                $filtros = $prefs;
+            }
+        }
+
         $filas = null;
         $medidasColumnas = [];
         $preciosColumnas = ['PRECIO'];

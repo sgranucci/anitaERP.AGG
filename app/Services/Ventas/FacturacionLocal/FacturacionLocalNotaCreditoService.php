@@ -53,6 +53,7 @@ final class FacturacionLocalNotaCreditoService
      *   precios_finales: el unitario enviado ya es el importe a acreditar (precio lleno),
      *   sin reaplicar el descuento de línea ni el de pie, y sin tope al precio cobrado.
      *   omitir_tope_factura: la nota puede superar el total de la factura origen.
+     *   omitir_turno: marketplace/automatismos (MeLi) sin turno abierto en el local.
      * @return array{ok:bool,venta_id?:int,factura?:string,pdf_urls?:list<string>,mensaje?:string,warn?:string,error?:string}
      */
     public function generarDesdeFactura(
@@ -65,6 +66,7 @@ final class FacturacionLocalNotaCreditoService
 
         $opciones = $opciones ?? [];
         $localOverrideId = (int) ($opciones['local_venta_id'] ?? 0);
+        $omitirTurno = ! empty($opciones['omitir_turno']);
 
         $emision = FacturacionLocalEmision::query()
             ->where('venta_id', $ventaFacturaId)
@@ -137,8 +139,8 @@ final class FacturacionLocalNotaCreditoService
             return ['ok' => false, 'error' => 'No se encontró el local de la emisión.'];
         }
 
-        $turno = $this->turnoService->turnoAbierto((int) $local->id);
-        if ($turno === null) {
+        $turno = $omitirTurno ? null : $this->turnoService->turnoAbierto((int) $local->id);
+        if (! $omitirTurno && $turno === null) {
             return ['ok' => false, 'error' => 'Debe haber un turno abierto en el local para generar la nota de crédito.'];
         }
 
@@ -207,6 +209,7 @@ final class FacturacionLocalNotaCreditoService
                 $mediosPago,
                 $emision,
                 $turno,
+                $omitirTurno,
                 $motivoDevolucion,
                 $registrarHistorial,
                 $idsNc,
@@ -274,14 +277,16 @@ final class FacturacionLocalNotaCreditoService
                 if ((int) ($emisionBloqueada->venta_nc_id ?? 0) <= 0) {
                     $emisionBloqueada->venta_nc_id = (int) $ventaNc->id;
                 }
-                if ((int) ($emisionBloqueada->turno_operativo_local_id ?? 0) <= 0) {
+                if ($turno && (int) ($emisionBloqueada->turno_operativo_local_id ?? 0) <= 0) {
                     $emisionBloqueada->turno_operativo_local_id = $turno->id;
                 }
                 $emisionBloqueada->save();
 
                 // Importe real de la NC (puede ser parcial). El cierre atribuye la NC al turno
                 // por ventana de emisión (created_at), no por el turno de la factura origen.
-                $this->turnoService->sumarFacturacion($turno, -1 * abs((float) $ventaNc->total));
+                if ($turno && ! $omitirTurno) {
+                    $this->turnoService->sumarFacturacion($turno, -1 * abs((float) $ventaNc->total));
+                }
 
                 $facturaTxt = trim((string) ($resultado['factura'] ?? $ventaNc->codigo));
                 $pdfUrl = url('ventas/listaunafactura/'.$ventaNc->id);
