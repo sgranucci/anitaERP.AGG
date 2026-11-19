@@ -24,11 +24,30 @@ final class MercadolibreApiClient
 
     /**
      * @param  array<string,scalar|null>  $query
+     * @param  array<string,string>  $headers
      * @return array{ok:bool,status:int,data?:mixed,error?:string}
      */
-    public function get(string $path, array $query = []): array
+    public function get(string $path, array $query = [], array $headers = []): array
     {
-        return $this->request('GET', $path, $query);
+        return $this->request('GET', $path, $query, [], false, false, $headers);
+    }
+
+    /**
+     * Envío con formato nuevo (logistic.type = fulfillment | cross_docking | self_service).
+     *
+     * @return array{ok:bool,status:int,data?:mixed,error?:string}
+     */
+    public function obtenerShipment(int|string $shippingId): array
+    {
+        return $this->get('/shipments/'.$shippingId, [], ['x-format-new' => 'true']);
+    }
+
+    /**
+     * @return array{ok:bool,status:int,data?:mixed,error?:string}
+     */
+    public function obtenerPack(int|string $packId): array
+    {
+        return $this->get('/packs/'.$packId);
     }
 
     /**
@@ -118,6 +137,7 @@ final class MercadolibreApiClient
     /**
      * @param  array<string,scalar|null>  $query
      * @param  array<string,mixed>  $body
+     * @param  array<string,string>  $headers
      * @return array{ok:bool,status:int,data?:mixed,error?:string}
      */
     private function request(
@@ -127,6 +147,7 @@ final class MercadolibreApiClient
         array $body = [],
         bool $multipart = false,
         bool $retried = false,
+        array $headers = [],
     ): array {
         $token = MercadolibreTokenSupport::accessToken();
         if ($token === '') {
@@ -139,7 +160,10 @@ final class MercadolibreApiClient
 
         try {
             $pending = Http::withToken($token)
-                ->withHeaders(['User-Agent' => $ua, 'Accept' => 'application/json'])
+                ->withHeaders(array_merge(
+                    ['User-Agent' => $ua, 'Accept' => 'application/json'],
+                    $headers
+                ))
                 ->timeout(60);
 
             if ($multipart) {
@@ -171,7 +195,7 @@ final class MercadolibreApiClient
             $oauth = $this->oauth ?? app(MercadolibreOauthService::class);
             $refresco = $oauth->refrescarSiPuede();
             if ($refresco['ok'] ?? false) {
-                return $this->request($method, $path, $query, $body, $multipart, true);
+                return $this->request($method, $path, $query, $body, $multipart, true, $headers);
             }
         }
 

@@ -32,18 +32,33 @@ final class MercadolibreDefaultsSupport
         ];
     }
 
+    /**
+     * Full = sale del depósito MeLi. Fuente de verdad: GET /shipments/{id} con x-format-new
+     * → logistic.type = fulfillment. No usar el shipping del /items ni solo el id del order.
+     */
     public static function esFull(?array $shippingJson): bool
     {
-        if (! is_array($shippingJson)) {
-            return false;
-        }
-        $logistic = strtolower((string) (
-            $shippingJson['logistic_type']
-            ?? $shippingJson['logistic']['type']
-            ?? ''
-        ));
+        return self::logisticType($shippingJson) === 'fulfillment';
+    }
 
-        return $logistic === 'fulfillment';
+    /**
+     * fulfillment | cross_docking | self_service | ''
+     */
+    public static function logisticType(?array $shippingJson): string
+    {
+        if (! is_array($shippingJson)) {
+            return '';
+        }
+        $logistic = $shippingJson['logistic'] ?? null;
+        $type = '';
+        if (is_array($logistic)) {
+            $type = (string) ($logistic['type'] ?? '');
+        }
+        if ($type === '') {
+            $type = (string) ($shippingJson['logistic_type'] ?? '');
+        }
+
+        return strtolower(trim($type));
     }
 
     public static function puntoventaIdPorCodigo(string $codigo): ?int

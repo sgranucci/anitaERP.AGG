@@ -158,7 +158,8 @@ final class MercadolibrePedidoSyncService
             return $devolverModelo ? $pedido->fresh(['lineas']) : 'actualizado';
         }
 
-        $shipping = is_array($order['shipping'] ?? null) ? $order['shipping'] : [];
+        // Full no viene en el order: solo shipping.id. Hay que ir a /shipments con x-format-new.
+        $shipping = $this->resolverShippingDetalle($order);
         $defaults = MercadolibreDefaultsSupport::resolver($shipping);
         $payments = is_array($order['payments'] ?? null) ? $order['payments'] : [];
         $paymentId = null;
@@ -263,6 +264,55 @@ final class MercadolibrePedidoSyncService
         }
 
         return $devolverModelo ? $pedido->fresh(['lineas']) : ($esNuevo ? 'creado' : 'actualizado');
+    }
+
+    /**
+     * Detalle de envío para decidir Full (fulfillment) vs local (cross_docking / self_service).
+     * Orden → shipping.id; si falta, pack → shipment.id; luego GET /shipments/{id} (x-format-new).
+     *
+     * @param  array<string,mixed>  $order
+     * @return array<string,mixed>
+     */
+    private function resolverShippingDetalle(array $order): array
+    {
+        $shippingBase = is_array($order['shipping'] ?? null) ? $order['shipping'] : [];
+        $shippingId = (int) ($shippingBase['id'] ?? 0);
+
+        if ($shippingId <= 0 && ! empty($order['pack_id'])) {
+            $packResp = $this->api->obtenerPack((int) $order['pack_id']);
+            if (($packResp['ok'] ?? false) && is_array($packResp['data'] ?? null)) {
+                $pack = $packResp['data'];
+                $shippingId = (int) (
+                    $pack['shipment']['id']
+                    ?? $pack['shipping']['id']
+                    ?? $pack['shipment_id']
+                    ?? 0
+                );
+            }
+        }
+
+        if ($shippingId <= 0) {
+            return $shippingBase;
+        }
+
+        $shipResp = $this->api->obtenerShipment($shippingId);
+        if (! ($shipResp['ok'] ?? false) || ! is_array($shipResp['data'] ?? null)) {
+            Log::warning('mercadolibre.sync.shipment', [
+                'shipping_id' => $shippingId,
+                'order_id' => $order['id'] ?? null,
+                'error' => $shipResp['error'] ?? 'sin detalle',
+            ]);
+
+            return $shippingBase !== [] ? $shippingBase : ['id' => $shippingId];
+        }
+
+        $detalle = $shipResp['data'];
+        // Conservar id explícito por si el payload no lo trae arriba.
+        if (empty($detalle['id'])) {
+            $detalle['id'] = $shippingId;
+        }
+
+        return $detalle;
     }
 
     /**
