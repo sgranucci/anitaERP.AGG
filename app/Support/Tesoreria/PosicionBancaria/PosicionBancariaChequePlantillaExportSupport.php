@@ -36,16 +36,16 @@ final class PosicionBancariaChequePlantillaExportSupport
         $emitidos = new PosicionBancariaChequeEmitidoSupport();
         $stats = ['hojas' => 0, 'filas' => 0];
 
-        // Portfolio de tesorería más cheques propios ya emitidos y todavía diferidos.
+        // Mismo universo que conciliación: activos del padrón (sin recorte portfolio).
+        // Emitidos ERP aún no persistidos en el padrón se suman como diferidos.
         /** @var array<int, array{retenidos:array{count:int,importe:float},transito:array{count:int,importe:float},diferidos:array{count:int,importe:float},por_banco:array<string,array{retenidos:float,transito:float,diferidos:float,total:float}>}> $agingPorEmp */
         $agingPorEmp = [];
         /** @var array<int, \Illuminate\Support\Collection<int, \App\Models\Tesoreria\PosicionBancariaCheque>> $carteraPorEmp */
         $carteraPorEmp = [];
         foreach ([1, 2, 3] as $empresaId) {
-            $portfolio = PosicionBancariaCheque::query()
+            $stock = PosicionBancariaCheque::query()
                 ->where('empresa_id', $empresaId)
                 ->where('activo', true)
-                ->where('en_portfolio_posicion', true)
                 ->where(function ($w) {
                     $w->whereNull('estado')->orWhere('estado', '')->orWhere('estado', ' ');
                 })
@@ -53,8 +53,8 @@ final class PosicionBancariaChequePlantillaExportSupport
                 ->orderBy('banco_canonico')
                 ->orderBy('fecha_cheque')
                 ->get();
-            $carteraPorEmp[$empresaId] = $portfolio
-                ->concat($emitidos->diferidosNoDuplicados($fechaPosicion, $empresaId, $portfolio))
+            $carteraPorEmp[$empresaId] = $stock
+                ->concat($emitidos->diferidosNoDuplicados($fechaPosicion, $empresaId, $stock))
                 ->sortBy([
                     ['banco_canonico', 'asc'],
                     ['fecha_cheque', 'asc'],
@@ -336,9 +336,9 @@ final class PosicionBancariaChequePlantillaExportSupport
         $wr->setCellValue('A90', 'Notas');
         $wr->setCellValue(
             'A91',
-            'Disponible HOY = saldo pesos (bloque pesificado) − (cheques retenidos + tránsito) del PORTFOLIO de posición '
-            .'(en_portfolio_posicion=1, planilla tesorería). El padrón completo 2026 queda en ERP para conciliación. '
-            .'Retenidos = venc. ≤ fecha−30d; tránsito = (fecha−30d, fecha]. Completar cotizaciones B41/B42.',
+            'Disponible HOY = saldo pesos (bloque pesificado) − (cheques retenidos + tránsito) del padrón activo '
+            .'(mismo universo que conciliación). Retenidos = venc. ≤ fecha−30d; tránsito = (fecha−30d, fecha]. '
+            .'Completar cotizaciones B41/B42.',
         );
         $wr->mergeCells('A91:E93');
         $wr->getStyle('A91')->getAlignment()->setWrapText(true);

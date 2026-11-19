@@ -17,8 +17,10 @@ use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Combinacion_Estado;
+use App\Models\Caja\Cheque;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
+use App\Observers\Caja\ChequePosicionBancariaObserver;
 use App\Observers\Contable\Asiento_MovimientoObserver;
 use App\Observers\Contable\AsientoObserver;
 use App\Observers\Stock\Articulo_MovimientoObserver;
@@ -165,6 +167,7 @@ class AppServiceProvider extends ServiceProvider
             );
         }
 
+        Cheque::observe(ChequePosicionBancariaObserver::class);
         Pedido_Combinacion::observe(Pedido_CombinacionObserver::class);
         Pedido::observe(PedidoObserver::class);
         Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);

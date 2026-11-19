@@ -40,7 +40,11 @@ final class PosicionBancariaChequeEmitidoSupport
             ->where('empresa_id', $empresaId)
             ->where('origen', 'E')
             ->where(function ($q) {
-                $q->where('estado', ' ')->orWhere('estado', '')->orWhereNull('estado');
+                // blank = diferido clásico; * = emitido/entregado aún no debitado en padrón Anita.
+                $q->where('estado', ' ')
+                    ->orWhere('estado', '')
+                    ->orWhere('estado', '*')
+                    ->orWhereNull('estado');
             })
             ->whereDate('fechapago', '>', $fechaPosicion->toDateString())
             ->whereNotNull('cuentacaja_id')

@@ -22,6 +22,7 @@ use App\Support\Caja\ChequeTerceroCtermaeAnitaMapper;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Tesoreria\PosicionBancaria\PosicionBancariaChequeUpsertDesdeChequeSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 use App\Repositories\Caja\BancoRepositoryInterface;
@@ -663,11 +664,21 @@ class ChequeRepository implements ChequeRepositoryInterface
 
             $chequeId = (int) ($chequeIds[$i] ?? 0);
             if ($funcion === 'update' && $chequeId > 0) {
-                $this->model->findOrFail($chequeId)->update($payload);
+                $cheque = $this->model->findOrFail($chequeId);
+                $cheque->update($payload);
                 $ids[] = $chequeId;
             } else {
                 $cheque = $this->model->create($payload);
                 $ids[] = (int) $cheque->id;
+            }
+            // Macro: mantener padrón posición/conciliación al día con la emisión.
+            try {
+                app(PosicionBancariaChequeUpsertDesdeChequeSupport::class)
+                    ->sincronizarSiAplica($cheque->fresh(['cuentacajas', 'proveedores']) ?? $cheque);
+            } catch (\Throwable $e) {
+                Log::warning('posicion_bancaria_cheque sync desde cheque emitido: '.$e->getMessage(), [
+                    'cheque_id' => $cheque->id ?? null,
+                ]);
             }
         }
 

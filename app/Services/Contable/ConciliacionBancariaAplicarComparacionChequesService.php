@@ -66,14 +66,17 @@ class ConciliacionBancariaAplicarComparacionChequesService
                     $q->whereDate('fecha_cheque', $fechaCheque);
                 }
                 $existentes = $q->get();
+                $tipFila = strtoupper(trim((string) ($fila['tip'] ?: 'CHP')));
+                // OPP y no-CHP van al padrón de conciliación, no a la cartera de posición.
+                $esChequePosicion = in_array($tipFila, ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP', ''], true);
                 $payload = [
-                    'tip' => (string) ($fila['tip'] ?: 'CHP'),
+                    'tip' => $tipFila !== '' ? $tipFila : 'CHP',
                     'fecha_emision' => $fila['fecha_emision'] ?? null,
                     'fecha_cheque' => $fechaCheque,
                     'importe' => abs((float) $fila['importe']),
                     'entregado_a' => mb_substr((string) ($fila['detalle'] ?? ''), 0, 120),
                     'activo' => true,
-                    'en_portfolio_posicion' => true,
+                    'en_portfolio_posicion' => $esChequePosicion,
                     'origen' => 'florencia_comparacion',
                     'origen_json' => [
                         'fuente' => 'comparacion_cheques_anita_erp',

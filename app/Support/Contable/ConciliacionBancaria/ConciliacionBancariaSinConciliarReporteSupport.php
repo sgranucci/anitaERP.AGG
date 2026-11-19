@@ -11,9 +11,16 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Armado del listado estilo Anita “Movimientos de Cuentas sin conciliar”.
+ *
+ * Anita Tesorería solo lista cheques / OP pendientes (CH*, ACP, ANULA, OPP/OPA).
+ * No mete ASI, TRA ni movimientos Interbanking (IB): esos van a la carátula /
+ * solapas de conciliación, no a este reporte.
  */
 final class ConciliacionBancariaSinConciliarReporteSupport
 {
+    /** Tips que Anita incluye en “Movimientos de Cuentas sin conciliar”. */
+    public const TIPS_ANITA = ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP', 'ANULA', 'OPP', 'OPA'];
+
     /**
      * @param  array<string, mixed>  $resultado  Salida de ConciliacionBancariaService::ejecutar / cache
      * @return array{
@@ -26,44 +33,37 @@ final class ConciliacionBancariaSinConciliarReporteSupport
     {
         $filas = [];
         $vistos = [];
+        $vistosNegocio = [];
 
         foreach ($resultado['pendientes_cheques_anulas'] ?? [] as $ch) {
             if (! is_array($ch)) {
                 continue;
             }
-            $fila = self::desdeCheque($ch, 'ANULA');
-            $clave = self::claveFila($fila);
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
-            $filas[] = $fila;
+            self::agregarFila($filas, $vistos, $vistosNegocio, self::desdeCheque($ch, 'ANULA'));
         }
 
         foreach ($resultado['pendientes_cheques_cpromae'] ?? [] as $ch) {
             if (! is_array($ch)) {
                 continue;
             }
-            $fila = self::desdeCheque($ch, (string) ($ch['tip'] ?? 'CHP'));
-            $clave = self::claveFila($fila);
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
-            $filas[] = $fila;
+            self::agregarFila(
+                $filas,
+                $vistos,
+                $vistosNegocio,
+                self::desdeCheque($ch, (string) ($ch['tip'] ?? 'CHP')),
+            );
         }
 
+        // OPP/OPA (y tip Anita) del mayor sin stock cpromae. Excluye ASI/TRA/etc.
         foreach ($resultado['pendientes_contables_otros'] ?? [] as $mov) {
             if (! is_array($mov)) {
                 continue;
             }
             $fila = self::desdeContable($mov);
-            $clave = self::claveFila($fila);
-            if (isset($vistos[$clave])) {
+            if (! self::tipEsAnita((string) ($fila['tip'] ?? ''))) {
                 continue;
             }
-            $vistos[$clave] = true;
-            $filas[] = $fila;
+            self::agregarFila($filas, $vistos, $vistosNegocio, $fila);
         }
 
         // Cheques del mayor pendientes que no estén en stock cpromae (p. ej. tip CH* sin cpromae).
@@ -71,27 +71,10 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             if (! is_array($mov)) {
                 continue;
             }
-            $fila = self::desdeContable($mov);
-            $clave = self::claveFila($fila);
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
-            $filas[] = $fila;
+            self::agregarFila($filas, $vistos, $vistosNegocio, self::desdeContable($mov));
         }
 
-        foreach ($resultado['pendientes_banco'] ?? [] as $mov) {
-            if (! is_array($mov)) {
-                continue;
-            }
-            $fila = self::desdeBanco($mov);
-            $clave = self::claveFila($fila);
-            if (isset($vistos[$clave])) {
-                continue;
-            }
-            $vistos[$clave] = true;
-            $filas[] = $fila;
-        }
+        // No incluir pendientes_banco (IB): Anita no los lista en este reporte.
 
         $filas = ConciliacionBancariaChequeErpEnrichSupport::enriquecerFilasReporte(
             $filas,
@@ -255,42 +238,6 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             'hash' => (string) ($mov['hash'] ?? ''),
             'fuente' => 'contable',
             'empresa_id' => (int) ($mov['empresa_id'] ?? 0),
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $mov
-     * @return array<string, mixed>
-     */
-    private static function desdeBanco(array $mov): array
-    {
-        $tipo = strtoupper(trim((string) ($mov['debit_credit_type'] ?? '')));
-        $imp = abs((float) ($mov['importe'] ?? $mov['amount'] ?? 0));
-        $esDebito = str_starts_with($tipo, 'D') || (float) ($mov['importe'] ?? 0) < 0;
-        $fMov = self::fmtFecha($mov['process_date'] ?? null);
-
-        return [
-            'lado' => 'banco',
-            'tip' => 'IB',
-            'numero' => (string) ($mov['voucher_number'] ?? $mov['id'] ?? ''),
-            'n_orig' => '',
-            'f_mov' => $fMov['txt'],
-            'f_dev' => $fMov['txt'],
-            'f_entr' => '---',
-            'f_conc' => '---',
-            'f_mov_ord' => $fMov['ord'],
-            'detalle' => trim((string) ($mov['code_description_ib'] ?? '').' '.(string) ($mov['additional_info'] ?? '')),
-            'debito' => $esDebito ? round($imp, 2) : 0.0,
-            'credito' => ! $esDebito ? round($imp, 2) : 0.0,
-            'n_con' => (string) ($mov['code'] ?? $mov['transaction_code'] ?? ''),
-            'detalle_concepto' => (string) ($mov['code_description_ib'] ?? ''),
-            'asiento_id' => 0,
-            'cheque_id' => null,
-            'pagoproveedor_id' => null,
-            'concepto_id' => null,
-            'interbanking_id' => (int) ($mov['id'] ?? 0) ?: null,
-            'hash' => (string) ($mov['hash'] ?? ''),
-            'fuente' => 'banco',
         ];
     }
 
@@ -467,6 +414,42 @@ final class ConciliacionBancariaSinConciliarReporteSupport
         }
     }
 
+    public static function tipEsAnita(string $tip): bool
+    {
+        return in_array(strtoupper(trim($tip)), self::TIPS_ANITA, true);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, true>  $vistos
+     * @param  array<string, true>  $vistosNegocio
+     * @param  array<string, mixed>  $fila
+     */
+    private static function agregarFila(array &$filas, array &$vistos, array &$vistosNegocio, array $fila): void
+    {
+        if (! self::tipEsAnita((string) ($fila['tip'] ?? ''))) {
+            return;
+        }
+
+        $clave = self::claveFila($fila);
+        if (isset($vistos[$clave])) {
+            return;
+        }
+
+        // Mismo tip+número+importe con otro hash/detalle (p. ej. OPP en cpromae
+        // como "SUELDOS" y otra vez en el mayor como "NETOS…"): Anita lista una sola.
+        $negocio = self::claveNegocio($fila);
+        if ($negocio !== '' && isset($vistosNegocio[$negocio])) {
+            return;
+        }
+
+        $vistos[$clave] = true;
+        if ($negocio !== '') {
+            $vistosNegocio[$negocio] = true;
+        }
+        $filas[] = $fila;
+    }
+
     /**
      * @param  array<string, mixed>  $fila
      */
@@ -485,6 +468,27 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             number_format((float) ($fila['debito'] ?? 0), 2, '.', ''),
             number_format((float) ($fila['credito'] ?? 0), 2, '.', ''),
             mb_substr((string) ($fila['detalle'] ?? ''), 0, 40),
+        ]);
+    }
+
+    /**
+     * Clave de negocio tip|numero|importes (sin detalle ni hash).
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private static function claveNegocio(array $fila): string
+    {
+        $tip = strtoupper(trim((string) ($fila['tip'] ?? '')));
+        $numero = ltrim((string) preg_replace('/\D/', '', (string) ($fila['numero'] ?? '')), '0');
+        if ($tip === '' || $numero === '') {
+            return '';
+        }
+
+        return implode('|', [
+            $tip,
+            $numero,
+            number_format((float) ($fila['debito'] ?? 0), 2, '.', ''),
+            number_format((float) ($fila['credito'] ?? 0), 2, '.', ''),
         ]);
     }
 
