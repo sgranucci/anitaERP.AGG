@@ -1,0 +1,76 @@
+# El Bierzo: facturación, Anita, remito e impresión
+
+Operatoria y contratos de código para **EMPRESA=EL BIERZO**. Manuales de usuario: `docs/manual-facturacion-bierzo/` (v1.1+) y `docs/manual-ventas/` (v1.4+). Regenerar con `php docs/manual-facturacion-bierzo/generar.php` y `php docs/manual-ventas/generar.php`.
+
+## Réplica Anita (`BIERZO_FACTURACION_GRABA_ANITA`)
+
+| Capa | Dónde |
+|------|--------|
+| Env / config | `.env` → `config/facturacion.php` → `GRABA_ANITA_BRIDGE` |
+| Support | `FacturacionAnitaGrabacionSupport::habilitada()` (solo filtra en El Bierzo; otras instalaciones siempre true) |
+
+- **true** (operación): escribe bridge (venta, vencae, ctamov, pendmae, numerador).
+- **false**: factura queda en ERP + ARCA; no escribe Anita. Tras cambiar: `config:clear` + `queue:restart`.
+
+## Numerador de remito
+
+Al facturar pedido o remito, el número REM se reserva con `traeUltimoNumeroRemito` → `numeraAnita` **en el request**, no en el job diferido.
+
+- Prohibido avanzar el numerador otra vez en `grabaAnita` / cola diferida del mismo remito.
+- Si el bridge está apagado: mensaje de `FacturacionAnitaGrabacionSupport::mensajeErrorNumeradorRemito()`.
+- Referencia: `PedidoFacturaAnitaDeferSupport`.
+
+## Programa de impresión: pedido solo con coeficiente
+
+Columna `comprobante_impresion_programa.pedido_solo_si_cliente_divide` (default **true**, solo El Bierzo).
+
+| Label UI | «Solo imprimir el pedido con cliente con coeficiente» |
+| Support | `ComprobanteImpresionPedidoDivideSupport` |
+| Coeficiente | `ElBierzoDivisionFacturaSupport::clienteTieneCoeficiente` |
+
+- Sesión al facturar (factura+remito+pedido): si el tilde está activo, el formulario **PEDIDO** entra solo con cliente con coeficiente.
+- Impresión explícita `soloFormulario === PEDIDO`: **no** se filtra.
+- Fuera de El Bierzo: siempre incluye el pedido.
+
+## Import Anita: bonificación → descuento o regalo
+
+`PedidoAnitaBonificacionSupport`:
+
+1. Línea Anita bonif (`penv_fl_bonif` o precio 0 con piezas).
+2. Mismo `articulo_id` + ratio del catálogo `descuentoventa` (POR CANTIDAD VENDIDA) → `descuentoventa_id` en la línea paga (fusiona).
+3. Otro artículo o ratio que no matchea → **regalo ERP** (`precioParaImport` → 0).
+
+## PDF remito / listado pedido: columna Bonificación
+
+`PedidoRemitoPdfLineasSupport` (pedido PDF, remito PDF, exports):
+
+- Precio 0 + mismo SKU que la línea anterior con cargo → kilos a **Bonificación** de esa línea (no imprime renglón aparte).
+- Precio 0 + otro SKU → imprime el SKU con **Pesada/Cantidad 0** y kilos en **Bonificación**.
+- Línea con cargo + % descuento por cantidad → bonificación = % sobre pesada/kilos.
+
+Modal facturar pedido/remito: columna **Bonificación** alineada a esa lógica.
+
+## Total cajas / bultos
+
+- Pie del pedido: **Total cajas** editable → `caja_reales` en cabecera.
+- Prioridad bultos al facturar: `caja_reales` editado > `penm_caja_reales` Anita > suma de líneas (`PedidoBultoFacturacionSupport`).
+
+## Prohibido
+
+```text
+❌ Avanzar numerador REM dos veces (request + job).
+❌ Tratar toda bonificación Anita como descuento si el SKU o el ratio no matchean (debe ser regalo precio 0).
+❌ Meter kilos de regalo en la columna Pesada/Cantidad del PDF.
+❌ Filtrar una impresión explícita solo-PEDIDO por el tilde de coeficiente.
+❌ Grabar Anita con BIERZO_FACTURACION_GRABA_ANITA=false “para probar el número”.
+```
+
+## Comprobación rápida
+
+```bash
+rg "FacturacionAnitaGrabacionSupport|traeUltimoNumeroRemito|pedido_solo_si_cliente_divide|PedidoAnitaBonificacionSupport|PedidoRemitoPdfLineasSupport" app --glob '*.php' -l
+php -l app/Support/Ventas/FacturacionAnitaGrabacionSupport.php
+php -l app/Support/Ventas/ComprobanteImpresionPedidoDivideSupport.php
+php -l app/Support/Ventas/PedidoAnitaBonificacionSupport.php
+php -l app/Support/Ventas/PedidoRemitoPdfLineasSupport.php
+```

@@ -6,7 +6,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Pedidos, Facturación y Abonos',
-    'version' => '1.3',
+    'version' => '1.4',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -67,6 +67,7 @@ return [
                 'Si ingresa kilos → redondea hacia arriba las piezas y cajas necesarias (no se fraccionan cajas incompletas en unidades CAJ).',
                 'Descuentos por cantidad: al seleccionar un descuento de tipo «por cantidad vendida», el sistema puede sumar piezas bonificadas y recalcular cajas/kilos.',
                 'Totales del pie del pedido: Total cajas, Total piezas, Total kilos (pedido teórico) y Total pesados (suma de la columna Pesada).',
+                'Total cajas del pie es editable: en planta suelen usar más cajas que la suma de las líneas. Si el pedido vino de Anita con cajas reales (penm_caja_reales), ese valor se precarga; al tipear otro número se guarda en la cabecera y alimenta los bultos al facturar.',
             ],
         ],
         [
@@ -185,8 +186,11 @@ return [
             'items' => [
                 'Anular ítem (cruz roja): marca el renglón como anulado; requiere motivo según permisos.',
                 'Eliminar línea (papelera): quita el renglón del pedido (permiso borrar-items-pedidos).',
-                'Artículo sin cargo (regalo): precio cero en ítems bonificados (permiso especial).',
+                'Artículo sin cargo (regalo): precio cero (permiso entregar-articulo-sin-cargo-pedido-venta). Sirve para regalos a mano y para bonificaciones Anita que no se fusionan (otro SKU o ratio que no está en el catálogo).',
                 'Historia de anulaciones (libro): muestra movimientos del ítem.',
+            ],
+            'parrafos2' => [
+                'Al importar un pedido desde Anita, un renglón de bonificación (flag o precio 0) con el mismo artículo y ratio del catálogo (10×1, 15×2, etc.) se fusiona en la línea paga como descuento por cantidad. Si es otro artículo o no matchea el catálogo, queda como regalo a precio 0. En el PDF del pedido y del remito esos kilos van a la columna Bonificación.',
             ],
         ],
         [
@@ -224,9 +228,10 @@ return [
             'parrafos' => [
                 'La facturación se ejecuta desde la edición del pedido, una vez que la pesada refleja el peso real a entregar.',
                 'Verifique que el pedido esté en estado Pendiente y con pesada cargada → presione Factura → se abre el modal Facturación de Pedido con los ítems pendientes.',
-                'En EL BIERZO la cantidad que va a la factura es la pesada (kilos reales), no los kilos teóricos del pedido. Si hay descuento por línea, el sistema puede calcular bonificación sobre la pesada antes de facturar.',
-                'Al confirmar, el sistema genera remito (tipo REM, letra R) y factura fiscal con emisión ARCA. En repartos especiales puede generar dos comprobantes (división entre unidades de negocio).',
+                'En EL BIERZO la cantidad que va a la factura es la pesada (kilos reales), no los kilos teóricos del pedido. Si hay descuento por línea, el sistema puede calcular bonificación sobre la pesada antes de facturar. La grilla del modal tiene columna Bonificación; el PDF del remito y del listado del pedido también.',
+                'Al confirmar, el sistema genera remito (tipo REM, letra R) y factura fiscal con emisión ARCA. El número del remito se reserva en Anita en ese momento (último REM del punto de venta más uno) y queda grabado; la cola que copia la factura a Anita no vuelve a avanzar el numerador. En repartos especiales puede generar dos comprobantes (división entre unidades de negocio).',
                 'Revise totales en el modal → Genera Factura. Si todo es correcto, verá el número de factura. El pedido pasa a estado Facturado y ya no admite edición.',
+                'La sesión de impresión (si el programa está en automático) incluye factura y remito. El Pedido se incluye solo si el programa no tiene el filtro de coeficiente, o si el cliente tiene coeficiente de división. Detalle en el manual de facturación El Bierzo (programa de impresión).',
             ],
             'tabla' => [
                 'caption' => 'Campos del modal de factura',
@@ -236,7 +241,8 @@ return [
                     ['Punto de venta', 'PV fiscal para la factura (predeterminado EL BIERZO: PV 5).'],
                     ['Pto. venta del remito', 'PV para el remito de traslado (predeterminado: PV 1).'],
                     ['Actividad ARCA', 'Actividad fiscal; se completa desde el PV seleccionado.'],
-                    ['Cantidad de bultos', 'Entero, no obligatorio. En pedidos importados de Anita se precarga con las cajas reales de la cabecera (penm_caja_reales).'],
+                    ['Cantidad de bultos', 'Entero, no obligatorio. Prioridad: Total cajas editado en el pie del pedido; si no, cajas reales importadas de Anita (penm_caja_reales / caja_reales).'],
+                    ['Bonificación', 'Kilos sin cargo (descuento por cantidad o renglón regalo precio 0). En el PDF del remito van a la columna Bonificación.'],
                     ['Leyendas', 'Texto adicional en la factura.'],
                 ],
             ],
@@ -307,7 +313,8 @@ return [
                     ['borrar-items-pedidos', 'Quitar renglones'],
                     ['cierre-de-pedidos', 'Cierre masivo'],
                     ['listar-factura', 'Reimprimir factura emitida'],
-                    ['entregar-articulo-sin-cargo-pedido-venta', 'Ítems bonificados sin cargo'],
+                    ['entregar-articulo-sin-cargo-pedido-venta', 'Ítems regalo / sin cargo (precio 0); también aplica a bonificaciones Anita no fusionadas'],
+                    ['listar-programas-de-impresion / crear- / editar-', 'Programa de impresión (tilde «Solo imprimir el pedido con cliente con coeficiente»)'],
                 ],
             ],
             'tabla2' => [
@@ -340,6 +347,9 @@ return [
                     ['Bultos con decimales', 'La cantidad de bultos es entera; si quedó un decimal, bórrelo. El campo no es obligatorio.'],
                     ['Pedido no pendiente', 'Solo se facturan pedidos Pendientes; reactive si estaba Suspendido.'],
                     ['Impresión física no sale', 'Configure salida en el listado (impresora/comando del usuario).'],
+                    ['Pedido no sale en la sesión al facturar (El Bierzo)', 'El programa tiene «Solo imprimir el pedido con cliente con coeficiente» y el cliente no tiene coeficiente. Use Listar Pedido / Mi impresora para forzar solo el Pedido.'],
+                    ['No se puede numerar el remito / grabación Anita apagada', 'Sistemas: BIERZO_FACTURACION_GRABA_ANITA=true, config:clear y queue:restart. Detalle en el manual de facturación El Bierzo.'],
+                    ['Regalo / bonificación Anita en otro SKU', 'Es correcto: queda precio 0. En el PDF los kilos van a Bonificación (Pesada 0 en esa línea).'],
                 ],
             ],
             'tabla2' => [

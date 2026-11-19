@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.3',
+    'version' => '1.4',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Pedidos, Facturación y Abonos',
 

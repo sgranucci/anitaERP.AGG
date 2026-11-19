@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Facturación, remitos, COT y certificados sanitarios',
-    'version' => '1.0',
+    'version' => '1.1',
     'fecha' => null,
     'empresa' => 'EL BIERZO',
     'url_base' => null,
@@ -15,7 +15,7 @@ return [
         [
             'titulo' => '1. Para qué es este manual',
             'parrafos' => [
-                'Este manual es la operatoria de facturación de El Bierzo en Anita ERP: factura a mano, factura desde un pedido, factura desde un remito, remito (incluido el remito Z), código de operación de traslado (COT) ante ARBA y certificado sanitario SENASA.',
+                'Este manual es la operatoria de facturación de El Bierzo en Anita ERP: factura a mano, factura desde un pedido, factura desde un remito, remito (incluido el remito Z), código de operación de traslado (COT) ante ARBA y certificado sanitario SENASA. Incluye la réplica a Anita, el numerador de remito, el programa de impresión (pedido solo con coeficiente) y cómo se importan las bonificaciones Anita (descuento o regalo).',
                 'Está en el Centro de ayuda, junto al manual de pedidos. El de pedidos explica la carga, la pesada y la política comercial del cliente. Este empieza cuando ya hay mercadería para documentar, trasladar o facturar.',
                 'La letra del comprobante fiscal no se elige a mano. Sale de la condición de IVA del cliente: A, B u otra. El código visible queda así: FAC A-00010-00001234 (tipo, letra, punto de venta de cinco dígitos y número de ocho).',
             ],
@@ -92,6 +92,7 @@ return [
             'titulo' => '4. Qué pasa al guardar la factura',
             'parrafos' => [
                 'Al guardar, el sistema vuelve a calcular impuestos, pide número y graba la venta, los ítems, el asiento y la cuenta corriente. ARCA responde antes de volver al listado. La copia a Anita (comprobante y cuenta corriente) sale después, en segundo plano, para no hacer esperar al operador. Si Anita falla, la factura ya está numerada en ARCA y el sistema reintenta.',
+                'En El Bierzo la réplica a Anita se enciende o apaga con el flag del servidor BIERZO_FACTURACION_GRABA_ANITA. Encendido (true) es el modo de operación: escribe el bridge (venta, vencae, ctamov, pendmae y numerador). Apagado deja la factura en el ERP y en ARCA sin tocar Anita. Tras cambiar el flag hay que limpiar la config y reiniciar los workers de cola.',
             ],
             'tabla' => [
                 'caption' => 'De dónde sale el número',
@@ -99,12 +100,14 @@ return [
                 'rows' => [
                     ['Electrónico (CAE)', 'ARCA entrega el número y el CAE.'],
                     ['CAEA o manual', 'El ERP numera. En CAEA, Anita también avanza su numerador al cerrar.'],
+                    ['Remito (REM R)', 'Al facturar el pedido o el remito, el ERP reserva el número con Anita (último REM de ese punto de venta más uno) y lo graba en el remito. La cola diferida no vuelve a avanzar el numerador.'],
                 ],
             ],
             'items' => [
                 'Si ARCA no responde por un corte, el punto 00010 y el punto 00009 reintentan solos en el punto CAEA 00005. El aviso dice «Comprobante emitido con CAEA por contingencia ARCA.». La espera de ARCA en este circuito es de 18 segundos.',
                 'El punto 00008 es de prueba: no tiene numerador en Anita. El último número CAEA forzado es 43; el próximo sale 44.',
                 'La impresión no es automática por el solo hecho de guardar. Si hay un programa de impresión marcado para dispararse al facturar, se abre la sesión (PDF y/o impresora, según ese programa).',
+                'Si la grabación Anita está apagada y el circuito pide numerar remito: «No se puede numerar el remito: la grabación Anita está apagada (BIERZO_FACTURACION_GRABA_ANITA=false).…».',
             ],
             'parrafos2' => [
                 'Toda factura, nota de débito o nota de crédito letra B calcula percepción de ingresos brutos de CABA, aunque la letra B apague el resto de las percepciones de otras provincias. La alícuota sale del padrón AGIP si está cargado; si no, de la tasa de la provincia. Si el importe no llega al mínimo de percepción, no se percibe. Siguen vigentes el certificado de no retención y las exclusiones de la ficha del cliente. La percepción de IVA del 3 % en letra B no se cobra. La de no categorizado sí, cuando corresponde.',
@@ -115,11 +118,12 @@ return [
             'parrafos' => [
                 'El botón Factura está en el pedido (ventas/pedido/{id}/editar) si el pedido no está Facturado ni Suspendido y no fue transferido al despacho. También está en el listado, en la fila, cuando el pedido está Pendiente, no fue al despacho y hay al menos un ítem pendiente con pesada. Si no cumple, el mensaje es «El pedido no está pesado o no se puede facturar.».',
                 'Se factura la pesada, no los kilos teóricos del pedido. Entran solo ítems pendientes con pesada mayor a cero. Cajas y piezas van las del pedido. El precio es el del pedido; si el renglón tiene descuento, la factura toma el precio de lista menos ese porcentaje. En El Bierzo los descuentos de pie del modal están ocultos: vale el descuento del pedido. Si hay descuento de línea, los kilos bonificados se redondean a un decimal.',
+                'Un renglón sin cargo (precio 0, permiso de regalo o importado desde Anita) no se factura por importe: sus kilos van a la columna Bonificación del PDF del remito y del listado del pedido. Si el regalo es del mismo artículo que el renglón con cargo, se suma a la Bonificación de esa línea. Si es otro SKU, el PDF muestra esa línea con Pesada en 0 y los kilos en Bonificación.',
             ],
             'items' => [
                 'Con la pesada cargada, pulsá Factura. Se abre Facturación de Pedido.',
                 'La fecha es la del día y es solo lectura. Revisá tipo de transacción, punto de venta, cliente, lugar de entrega, punto de venta del remito y actividad ARCA.',
-                'La grilla muestra artículo, descripción, unidad, cajas, piezas, Pesada, bonificación y precio. Podés cargar bultos y leyenda.',
+                'La grilla muestra artículo, descripción, unidad, cajas, piezas, Pesada, Bonificación y precio. Podés cargar bultos y leyenda.',
                 'El sistema calcula un preview. Si hay error, lo muestra en el aviso del cuadro.',
                 'Genera Factura.',
             ],
@@ -128,14 +132,15 @@ return [
                 'headers' => ['Documento', 'Resultado'],
                 'rows' => [
                     ['Factura', 'Número y CAE o CAEA. Impuestos iguales a la factura a mano, incluida la percepción de CABA en letra B.'],
-                    ['Remito', 'REM letra R, con el número que Anita da para ese punto de venta de remito. Queda Facturado y vinculado a la factura.'],
+                    ['Remito', 'REM letra R. El número se reserva en Anita al facturar (último REM del punto de venta más uno) y queda Facturado y vinculado a la factura.'],
                     ['Pedido', 'Pasa a Facturado. Los ítems sin pesada se cierran como falta de stock.'],
                     ['Remito que ya existía', 'Si el pedido ya tenía un remito pendiente sin factura, no se crea otro: se marca facturado y se engancha a la factura.'],
+                    ['Impresión Pedido', 'Si el programa tiene «Solo imprimir el pedido con cliente con coeficiente», el Pedido entra en la sesión solo cuando el cliente tiene coeficiente de división. Factura y remito sí salen igual. Una impresión explícita solo del Pedido no se filtra.'],
                 ],
             ],
             'parrafos2' => [
                 'No se emite una nota de crédito desde este botón: «No se puede generar una nota de crédito desde un pedido. Use un tipo de factura.». Si el total da cero, no emite. Un doble clic queda trabado 180 segundos: «Ya hay una facturación en curso de este pedido. Espere a que termine.».',
-                'Después de facturar, si el programa de impresión está en automático, entra a la sesión con factura y remito. Desde el pedido también se reimprime cada comprobante por su código, y el pedido con Listar Pedido o Mi impresora.',
+                'Después de facturar, si el programa de impresión está en automático, entra a la sesión con factura y remito (y el pedido solo si corresponde por el coeficiente). Desde el pedido también se reimprime cada comprobante por su código, y el pedido con Listar Pedido o Mi impresora.',
             ],
         ],
         [
@@ -189,6 +194,7 @@ return [
             'titulo' => '8. Remito',
             'parrafos' => [
                 'Ventas → Remitos. El alta siempre graba tipo REM, letra R. El código queda REM R {punto de venta}-{número}. El número lo pide Anita. El estado inicial es Pendiente. También se puede generar un remito desde el pedido, con el botón Remito, sin facturar: copia los ítems y queda Pendiente.',
+                'El PDF del remito (y el listado del pedido) muestra columnas Cantidad / Pesada y Bonificación. Los kilos con precio 0 (regalo o bonificación Anita que no se fusionó) van a Bonificación; no inflan la columna de kilos con cargo.',
             ],
             'items' => [
                 'Crear remito. Cliente (código, Enter o F1). No lista morosos ni suspendidos.',
@@ -205,6 +211,7 @@ return [
                 'rows' => [
                     ['Valor asegurado', 'Neto de los renglones no anulados menos 15 %. Es solo lectura. Anita lo usa como seguro.'],
                     ['Precio', 'Solo lectura, salvo el caso del capítulo 9.'],
+                    ['Bonificación (PDF)', 'Kilos sin cargo: mismo SKU se suma a la línea paga; otro SKU se imprime con Pesada 0 y kilos en Bonificación.'],
                     ['Listado', 'Código, fechas, cliente, cajas, piezas, kilos, reparto y estado. Si no tiene factura, badge Sin factura.'],
                     ['Borrar', 'Solo si está Pendiente. Pregunta «Desea eliminar el remito?».'],
                     ['Traer remito', 'Busca por número, sin el resto de filtros. Si no está: «No se encontró ningún remito con ese número.».'],
@@ -246,13 +253,13 @@ return [
                 ],
             ],
             'parrafos2' => [
-                'El PDF del remito sale por la sesión de impresión, formulario REMITO, desde el listado o con Listar Remito en la edición. El número es el último REM R de Anita para ese punto de venta, más uno. Si Anita no responde: «No se pudo obtener numeración de remito desde Anita.».',
+                'El PDF del remito sale por la sesión de impresión, formulario REMITO, desde el listado o con Listar Remito en la edición. Al facturar desde el pedido o desde el remito, el número se reserva en Anita en ese momento (último REM R del punto de venta más uno) y queda grabado en el remito del ERP; la cola que replica la factura a Anita no vuelve a pedir otro número. Si Anita no responde o la grabación está apagada: el mensaje de numerador del capítulo 4.',
             ],
         ],
         [
             'titulo' => '11. Facturar un remito ya emitido',
             'parrafos' => [
-                'Esto es distinto de asignar un remito a una factura que ya existe (capítulo 11). Acá se emite la factura fiscal del remito que todavía no tiene factura.',
+                'Esto es distinto de asignar un remito a una factura que ya existe (capítulo 12). Acá se emite la factura fiscal del remito que todavía no tiene factura.',
                 'Abrí el remito. El botón Factura aparece si no tiene factura asociada y el estado no es Facturado, Suspendido ni Anulado. Pendiente y Entregado sí se pueden facturar. La fuente de verdad es si tiene factura vinculada. El botón no sale si el cliente es el de despacho interno.',
             ],
             'items' => [
@@ -410,6 +417,9 @@ return [
                     ['Debe seleccionar un lugar de entrega del cliente', 'El cliente tiene lugares y falta elegir uno.'],
                     ['No puede facturar cliente STOCK', 'Ese cliente no se factura por este circuito.'],
                     ['El envío no aparece en la sesión de impresión', 'Ningún programa de esa empresa tiene el comprobante Envío en la ruta. En la sesión se destilda con Incluir, igual que las otras copias.'],
+                    ['No se puede numerar el remito: la grabación Anita está apagada…', 'BIERZO_FACTURACION_GRABA_ANITA=false. Sistemas debe reencenderla, config:clear y queue:restart antes de facturar.'],
+                    ['El punto de venta de remito no tiene numerador… / bridge no respondió', 'Anita o el bridge. Revisá numerador REM del PV y conectividad.'],
+                    ['El Pedido no sale en la sesión al facturar', 'El programa tiene «Solo imprimir el pedido con cliente con coeficiente» y ese cliente no tiene coeficiente. Factura y remito sí. Para forzar el pedido: Listar Pedido / Mi impresora (formulario solo PEDIDO).'],
                     ['No se encontraron remitos para la fecha y repartos indicados', 'Fecha, código de reparto y que el remito exista ese día.'],
                     ['Se agotaron las series de certificado SENASA (A-Z)', 'Avisá a sistemas: el numerador de series de Anita llegó al final.'],
                 ],
@@ -433,10 +443,50 @@ return [
                     ['procesar-cot-electronico', 'Pantalla COT, envío, constancia y export del histórico.'],
                     ['editar-cot-configuracion / actualizar-cot-configuracion', 'Ver y guardar el modo del COT.'],
                     ['listar-certificado-sanitario / crear-certificado-sanitario / borrar-certificado-sanitario', 'Listado y PDF, generar, y borrar uno o el historial.'],
+                    ['listar-programas-de-impresion / crear- / editar- / actualizar-', 'ABM del programa de impresión (incluye el tilde de pedido con coeficiente).'],
+                    ['entregar-articulo-sin-cargo-pedido-venta', 'Ítems regalo / sin cargo (precio 0) en el pedido.'],
                 ],
             ],
             'parrafos' => [
                 'El COT operativo está para administrador, encargado de contaduría y encargado de impuestos. La configuración del modo, para administrador, encargado de sistemas, encargado de contaduría y encargado de administración. El certificado está para administrador, encargado de administración, despacho, facturación y encargado de contaduría. Si un botón no aparece, el permiso de la fila es el que falta.',
+            ],
+        ],
+        [
+            'titulo' => '18. Programa de impresión: pedido solo con coeficiente',
+            'parrafos' => [
+                'Ventas → Programas de impresión (o la ruta del ABM de programas). En El Bierzo cada programa tiene el tilde «Solo imprimir el pedido con cliente con coeficiente». Por defecto está marcado.',
+                'Cuando el tilde está activo y la sesión de impresión sale al facturar (factura + remito + pedido juntos), el formulario Pedido se incluye solo si el cliente tiene coeficiente de división de factura. Sin coeficiente, factura y remito sí salen; el pedido no. Una impresión pedida solo del Pedido (Listar Pedido / Mi impresora con formulario PEDIDO) no se filtra: siempre imprime.',
+            ],
+            'tabla' => [
+                'caption' => 'Qué imprime la sesión al facturar',
+                'headers' => ['Situación', 'Pedido', 'Factura / Remito'],
+                'rows' => [
+                    ['Tilde activo + cliente con coeficiente', 'Sí', 'Sí'],
+                    ['Tilde activo + cliente sin coeficiente', 'No', 'Sí'],
+                    ['Tilde apagado', 'Sí', 'Sí'],
+                    ['Impresión explícita solo Pedido', 'Sí (no filtra)', 'No aplica'],
+                ],
+            ],
+            'parrafos2' => [
+                'El coeficiente es el de la ficha del cliente que habilita la división de factura entre unidades de negocio. No confundir con el descuento de línea ni con la bonificación de kilos del remito.',
+            ],
+        ],
+        [
+            'titulo' => '19. Importar pedido de Anita: bonificación y regalo',
+            'parrafos' => [
+                'Cuando un pedido llega desde Anita con renglones de bonificación (flag de bonificación o precio 0 con piezas), el ERP los trata así:',
+            ],
+            'tabla' => [
+                'caption' => 'Bonificación Anita → ERP',
+                'headers' => ['Caso', 'Qué hace el ERP'],
+                'rows' => [
+                    ['Mismo artículo + ratio del catálogo (10×1, 15×2, etc.)', 'Fusiona en la línea paga: asigna el descuento por cantidad vendida. No deja un segundo renglón de regalo.'],
+                    ['Otro artículo, o mismo artículo sin ratio del catálogo', 'Queda como regalo / sin cargo: precio 0, permiso de artículo sin cargo.'],
+                    ['PDF remito / listado pedido', 'Kilos del regalo en columna Bonificación. Mismo SKU: se suman a la línea paga. Otro SKU: línea con Pesada 0 y kilos en Bonificación.'],
+                ],
+            ],
+            'parrafos2' => [
+                'En la factura modal, la columna Bonificación anticipa esos kilos. Al facturar, el remito conserva el número reservado en Anita y la sesión de impresión aplica el filtro del capítulo 18 si el programa lo tiene activo.',
             ],
         ],
     ],
