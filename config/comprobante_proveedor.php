@@ -45,6 +45,7 @@ return [
 
     'import_anita' => [
         'usuario_id' => (int) env('COMPROBANTE_PROVEEDOR_IMPORT_USUARIO_ID', 1),
+        // Último recurso si no hay medio en la OC ni en proveedor_formapago (antes se usaba siempre).
         'formapago_id' => (int) env('COMPROBANTE_PROVEEDOR_IMPORT_FORMAPAGO_ID', 1),
     ],
 

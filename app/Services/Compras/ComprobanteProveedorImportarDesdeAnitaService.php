@@ -20,6 +20,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportAplmovpSuppor
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportBridgeReader;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSupport;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportFormapagoSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportSinCcSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportCcGuardSupport;
@@ -553,7 +554,10 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $compra = $item['compra'];
         /** @var Tipotransaccion_Compra $tipo */
         $tipo = $item['tipo'];
-        $formapagoId = (int) config('comprobante_proveedor.import_anita.formapago_id', 1);
+        $formapagoId = ComprobanteProveedorAnitaImportFormapagoSupport::resolverId(
+            (int) $proveedor->id,
+            isset($item['ordencompra_id']) ? (int) $item['ordencompra_id'] : null,
+        );
 
         $datosCp = [
             'empresa_id' => $item['empresa_id'],
@@ -1613,7 +1617,10 @@ class ComprobanteProveedorImportarDesdeAnitaService
             ]);
         }
 
-        $formapagoId = (int) config('comprobante_proveedor.import_anita.formapago_id', 1);
+        $formapagoId = ComprobanteProveedorAnitaImportFormapagoSupport::resolverId(
+            (int) ($item['proveedor_id'] ?? $comprobante->proveedor_id ?? 0),
+            isset($item['ordencompra_id']) ? (int) $item['ordencompra_id'] : ((int) ($comprobante->ordencompra_id ?? 0) ?: null),
+        );
         Comprobante_Proveedor_Cuota::query()->create([
             'comprobante_proveedor_id' => $comprobante->id,
             'numero_cuota' => 1,

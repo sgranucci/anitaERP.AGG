@@ -14,6 +14,7 @@ use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportAplmovpSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportFormapagoSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOrigenSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportBridgeReader;
@@ -1166,7 +1167,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'monto' => $item['monto_abs'],
             'moneda_id' => $item['moneda_id'],
             'cotizacion' => $item['cotizacion'],
-            'formapago_id' => (int) config('comprobante_proveedor.import_anita.formapago_id', 1),
+            'formapago_id' => ComprobanteProveedorAnitaImportFormapagoSupport::resolverId(
+                (int) $proveedor->id,
+                isset($item['ordencompra_id']) ? (int) $item['ordencompra_id'] : null,
+            ),
             'total_pagado' => 0,
             'detalle' => $leyenda,
         ]);
@@ -1396,7 +1400,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                             'monto' => $item['monto_abs'],
                             'moneda_id' => $item['moneda_id'],
                             'cotizacion' => $item['cotizacion'],
-                            'formapago_id' => (int) config('comprobante_proveedor.import_anita.formapago_id', 1),
+                            'formapago_id' => ComprobanteProveedorAnitaImportFormapagoSupport::resolverId(
+                                (int) $proveedor->id,
+                                isset($item['ordencompra_id']) ? (int) $item['ordencompra_id'] : null,
+                            ),
                             'total_pagado' => 0,
                         ]
                     );

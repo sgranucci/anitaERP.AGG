@@ -6,9 +6,9 @@ namespace App\Support\Compras;
  * Medio de pago del detalle de proyección (Anita l-proy.c, imprime_un_mov).
  *
  * Anita lee occ_medio_pago de la orden de compra vinculada a la factura.
- * Si no hay vínculo, el medio queda vacío. La importación desde Anita dejó
- * las notas de crédito con forma de pago Efectivo por defecto, y el informe
- * las mostraba como efectivo aunque la OC (o Anita) tuviera otro medio.
+ * Si no hay vínculo, el medio queda vacío. El import Anita resuelve el medio
+ * vía OC/proveedor (ComprobanteProveedorAnitaImportFormapagoSupport); el
+ * fallback Efectivo del config solo aplica si no hay ninguno.
  */
 final class ProyeccionPagosMedioPagoSupport
 {
