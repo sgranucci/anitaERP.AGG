@@ -15,6 +15,7 @@ use App\Support\Ventas\ComprobanteImpresionDespachoSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionNasPathSupport;
 use App\Support\Ventas\ComprobanteImpresionPackSupport;
+use App\Support\Ventas\ComprobanteImpresionPedidoDivideSupport;
 use App\Support\Ventas\ComprobanteImpresionResolverSupport;
 use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
 use App\Support\Ventas\CotConstanciaSupport;
@@ -274,9 +275,15 @@ class ComprobanteImpresionSesionService
      */
     public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null): array
     {
-        $venta->loadMissing(['puntoventas', 'puntoventaremito', 'pedidos', 'remitos']);
+        $venta->loadMissing(['puntoventas', 'puntoventaremito', 'pedidos', 'remitos', 'clientes.coeficientes']);
         $contexto = ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta);
         $docs = $this->documentosDesdeVenta($venta);
+        $docs = ComprobanteImpresionPedidoDivideSupport::filtrarDocumentos(
+            $docs,
+            $contexto['programa'] ?? null,
+            $venta->clientes,
+            $soloFormulario
+        );
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $soloFormulario);
 
         return $this->payload($contexto, $pack, 'FACTURA', (int) $venta->id, $modo, $soloFormulario, $docs);
@@ -287,10 +294,17 @@ class ComprobanteImpresionSesionService
      */
     public function armarDesdePedido(Pedido $pedido, string $modo = 'OPERATIVO', ?string $soloFormulario = null, bool $packCompleto = false): array
     {
+        $pedido->loadMissing(['clientes.coeficientes']);
         $contexto = ComprobanteImpresionResolverSupport::contextoDesdePedido($pedido);
         $incluirHermanos = $packCompleto || $soloFormulario === null;
         $docs = $this->documentosDesdePedido($pedido, $incluirHermanos);
         $formulario = $incluirHermanos ? $soloFormulario : ($soloFormulario ?? ComprobanteImpresionFormulario::PEDIDO);
+        $docs = ComprobanteImpresionPedidoDivideSupport::filtrarDocumentos(
+            $docs,
+            $contexto['programa'] ?? null,
+            $pedido->clientes,
+            $formulario
+        );
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $formulario);
 
         return $this->payload($contexto, $pack, 'PEDIDO', (int) $pedido->id, $modo, $formulario, $docs);
@@ -301,10 +315,17 @@ class ComprobanteImpresionSesionService
      */
     public function armarDesdeRemito(Remito $remito, string $modo = 'OPERATIVO', ?string $soloFormulario = null, bool $packCompleto = false): array
     {
+        $remito->loadMissing(['clientes.coeficientes']);
         $contexto = ComprobanteImpresionResolverSupport::contextoDesdeRemito($remito);
         $incluirHermanos = $packCompleto || $soloFormulario === null;
         $docs = $this->documentosDesdeRemito($remito, $incluirHermanos);
         $formulario = $incluirHermanos ? $soloFormulario : ($soloFormulario ?? ComprobanteImpresionFormulario::REMITO);
+        $docs = ComprobanteImpresionPedidoDivideSupport::filtrarDocumentos(
+            $docs,
+            $contexto['programa'] ?? null,
+            $remito->clientes,
+            $formulario
+        );
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $formulario);
 
         return $this->payload($contexto, $pack, 'REMITO', (int) $remito->id, $modo, $formulario, $docs);

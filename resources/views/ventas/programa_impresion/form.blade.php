@@ -105,6 +105,31 @@
         </p>
     </div>
 </div>
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+<div class="form-group row">
+    <label class="col-lg-3 control-label text-right pr-2">Pedido</label>
+    <div class="col-lg-6">
+        @php
+            $pedidoSoloSiDivide = (string) old(
+                'pedido_solo_si_cliente_divide',
+                ($data->pedido_solo_si_cliente_divide ?? true) ? '1' : '0'
+            ) === '1';
+        @endphp
+        <div class="form-check">
+            <input type="hidden" name="pedido_solo_si_cliente_divide" value="0">
+            <input type="checkbox" name="pedido_solo_si_cliente_divide" id="pedido_solo_si_cliente_divide" class="form-check-input" value="1"
+                {{ $pedidoSoloSiDivide ? 'checked' : '' }}>
+            <label class="form-check-label" for="pedido_solo_si_cliente_divide">
+                Solo imprimir el pedido con cliente con coeficiente
+            </label>
+        </div>
+        <p class="text-muted small mb-0">
+            Con el Pedido en la ruta: al facturar se imprime solo si el cliente tiene coeficiente.
+            Destildado: el pedido sale siempre que esté en la ruta. Una impresión explícita del pedido no se filtra.
+        </p>
+    </div>
+</div>
+@endif
 
 <div class="card card-outline card-info mb-3">
     <div class="card-header">

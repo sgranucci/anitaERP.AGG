@@ -11159,7 +11159,14 @@ class FacturacionService
 			}
 			$kiloDescuento = 0;
 			$cantidad = $ventaItem->cantidad;
-			if (config('app.empresa') == 'EL BIERZO' && $ventaItem->descuento != 0) {
+			// Regalo / sin cargo (precio 0): kilos enteros en columna Bonificación.
+			if (EntornoEmpresaSupport::esElBierzo()
+				&& (float) ($ventaItem->precio ?? 0) <= 0.00001
+				&& (float) $ventaItem->cantidad > 0.00001) {
+				$kiloDescuento = (float) $ventaItem->cantidad;
+				$cantidad = 0.0;
+				$flConDescuento = true;
+			} elseif (EntornoEmpresaSupport::esElBierzo() && $ventaItem->descuento != 0) {
 				$cantidad = round($ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.)), 1);
 				$kiloDescuento = $ventaItem->cantidad - $cantidad;
 				$flConDescuento = true;

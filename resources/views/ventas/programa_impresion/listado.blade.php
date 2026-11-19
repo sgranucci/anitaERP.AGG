@@ -52,6 +52,9 @@
 				<th>Disparo al grabar</th>
 				<th>Auto impresora al facturar</th>
 				<th>Plan con envíos</th>
+				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+				<th>Pedido c/coef.</th>
+				@endif
 			</tr>
 		</thead>
 		<tbody>
@@ -66,6 +69,9 @@
 				<td>{{ $data->permite_disparo_al_grabar ? 'Sí' : 'No' }}</td>
 				<td>{{ ($data->enviar_automatico_al_facturar ?? true) ? 'Sí' : 'No' }}</td>
 				<td>{{ ($data->plan_con_envios ?? false) ? 'Sí' : 'No' }}</td>
+				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+				<td>{{ ($data->pedido_solo_si_cliente_divide ?? true) ? 'Sí' : 'No' }}</td>
+				@endif
 			</tr>
 			@endforeach
 		</tbody>

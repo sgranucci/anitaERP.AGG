@@ -7,11 +7,13 @@ use App\Models\Ventas\ComprobanteImpresionFormularioLinea;
 use App\Models\Ventas\ComprobanteImpresionPrograma;
 use App\Models\Ventas\ComprobanteImpresionRegla;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\ComprobanteImpresionReglaClave;
 use App\Support\Ventas\ProgramaImpresionListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProgramaRepositoryInterface
 {
@@ -117,7 +119,7 @@ class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProg
     {
         $empresaId = (int) ($data['empresa_id'] ?? 0);
 
-        return [
+        $cabecera = [
             'codigo' => strtoupper(trim((string) ($data['codigo'] ?? ''))),
             'nombre' => trim((string) ($data['nombre'] ?? '')),
             'empresa_id' => $empresaId > 0 ? $empresaId : null,
@@ -127,6 +129,17 @@ class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProg
                 : true,
             'plan_con_envios' => ! empty($data['plan_con_envios']),
         ];
+
+        if (
+            EntornoEmpresaSupport::esElBierzo()
+            && Schema::hasColumn('comprobante_impresion_programa', 'pedido_solo_si_cliente_divide')
+        ) {
+            $cabecera['pedido_solo_si_cliente_divide'] = array_key_exists('pedido_solo_si_cliente_divide', $data)
+                ? ! empty($data['pedido_solo_si_cliente_divide'])
+                : true;
+        }
+
+        return $cabecera;
     }
 
     private function sincronizarHijas(ComprobanteImpresionPrograma $programa, array $data): void

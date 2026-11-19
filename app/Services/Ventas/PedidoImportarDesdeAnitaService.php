@@ -695,23 +695,29 @@ class PedidoImportarDesdeAnitaService
 
         $out = [];
         foreach ($grupos as $grupo) {
-            if ($grupo['es_bonif'] && $out !== []) {
+            $esBonif = (bool) $grupo['es_bonif'];
+            if ($esBonif && $out !== []) {
                 $ultimo = count($out) - 1;
-                if ((int) $out[$ultimo]['articulo_id'] === (int) $grupo['articulo_id']
-                    && ! $out[$ultimo]['es_bonif']) {
-                    $piezaPaga = (float) $out[$ultimo]['pieza'];
-                    $piezaBonif = (float) $grupo['pieza'];
+                $piezaPaga = (float) $out[$ultimo]['pieza'];
+                $piezaBonif = (float) $grupo['pieza'];
+                $dtoId = PedidoAnitaBonificacionSupport::descuentoventaIdSiFusiona(
+                    true,
+                    (int) $grupo['articulo_id'],
+                    (int) $out[$ultimo]['articulo_id'],
+                    (bool) $out[$ultimo]['es_bonif'],
+                    $piezaPaga,
+                    $piezaBonif
+                );
+                if ($dtoId !== null) {
                     $out[$ultimo]['pieza'] = $piezaPaga + $piezaBonif;
                     $out[$ultimo]['kilo'] = (float) $out[$ultimo]['kilo'] + (float) $grupo['kilo'];
                     $out[$ultimo]['pesada'] = (float) $out[$ultimo]['pesada'] + (float) $grupo['pesada'];
-                    $dtoId = PedidoAnitaBonificacionSupport::resolverDescuentoventaId($piezaPaga, $piezaBonif);
-                    if ($dtoId !== null) {
-                        $out[$ultimo]['descuentoventa_id'] = $dtoId;
-                    }
+                    $out[$ultimo]['descuentoventa_id'] = $dtoId;
                     continue;
                 }
             }
 
+            // Otro artículo / ratio raro / sin línea paga previa: regalo ERP (precio 0).
             $out[] = [
                 'articulo' => $grupo['articulo'],
                 'articulo_id' => $grupo['articulo_id'],
@@ -719,12 +725,12 @@ class PedidoImportarDesdeAnitaService
                 'pieza' => $grupo['pieza'],
                 'kilo' => $grupo['kilo'],
                 'pesada' => $grupo['pesada'],
-                'precio' => $grupo['precio'],
+                'precio' => PedidoAnitaBonificacionSupport::precioParaImport($esBonif, (float) $grupo['precio']),
                 'descuento' => $grupo['descuento'],
                 'incluyeimpuesto' => $grupo['incluyeimpuesto'],
                 'moneda_id' => $grupo['moneda_id'],
                 'observacion' => $grupo['observacion'],
-                'es_bonif' => $grupo['es_bonif'],
+                'es_bonif' => $esBonif,
                 'descuentoventa_id' => null,
             ];
         }

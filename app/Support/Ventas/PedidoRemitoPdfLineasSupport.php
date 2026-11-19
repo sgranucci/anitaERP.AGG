@@ -4,12 +4,14 @@ namespace App\Support\Ventas;
 
 /**
  * Filas de PDF de pedido / remito de depósito.
- * El renglón sin cargo (precio 0, mismo artículo) no se imprime:
- * su pesada va a la columna Bonificación del renglón con cargo.
  *
- * Pedido: usa pesada + % de descuentoventa.
- * Remito: no tiene pesada; el kilo grabado es la pesada bruta y el % puede
- * venir en descuentoventa_id o en remito_articulo.descuento.
+ * - Renglón sin cargo (precio 0) del mismo artículo: no se imprime; su pesada
+ *   va a la columna Bonificación del renglón con cargo.
+ * - Renglón sin cargo de otro artículo (regalo): se imprime el SKU con los kilos
+ *   en Bonificación y Cantidad/Pesada en 0.
+ * - Pedido: usa pesada + % de descuentoventa.
+ * - Remito: no tiene pesada; el kilo grabado es la pesada bruta y el % puede
+ *   venir en descuentoventa_id o en remito_articulo.descuento.
  */
 final class PedidoRemitoPdfLineasSupport
 {
@@ -27,15 +29,41 @@ final class PedidoRemitoPdfLineasSupport
             $kilo = (float) ($item->kilo ?? 0);
             $pesadaBruta = self::pesadaBruta($item, $kilo);
             $articuloId = (int) ($item->articulo_id ?? 0);
+            $pieza = (float) ($item->pieza ?? 0);
+            $caja = (float) ($item->caja ?? 0);
 
-            if ($precio <= 0.00001 && $filas !== []) {
-                $ultimo = count($filas) - 1;
-                if ((int) $filas[$ultimo]['articulo_id'] === $articuloId) {
-                    $extra = $pesadaBruta > 0 ? $pesadaBruta : $kilo;
-                    $filas[$ultimo]['bonificacion'] += $extra;
-                    $totales['bonificacion'] += $extra;
-                    continue;
+            if ($precio <= 0.00001) {
+                $extra = $pesadaBruta > 0 ? $pesadaBruta : $kilo;
+                if ($filas !== []) {
+                    $ultimo = count($filas) - 1;
+                    if ((int) $filas[$ultimo]['articulo_id'] === $articuloId) {
+                        $filas[$ultimo]['bonificacion'] += $extra;
+                        $totales['bonificacion'] += $extra;
+                        continue;
+                    }
                 }
+
+                // Regalo de otro artículo: muestra el SKU con kilos en Bonificación.
+                $filas[] = [
+                    'articulo_id' => $articuloId,
+                    'sku' => $item->articulos->sku ?? '',
+                    'pieza' => $pieza,
+                    'kilo' => $kilo,
+                    'descuento' => $item->descuentoventa_ids->nombre ?? '',
+                    'descripcion' => $item->articulos->descripcion ?? '',
+                    'umd' => optional($item->unidadesdemedidas)->abreviatura
+                        ?? optional(optional($item->articulos)->unidadesdemedidas)->abreviatura
+                        ?? '',
+                    'caja' => $caja,
+                    'precio' => 0.0,
+                    'pesada' => 0.0,
+                    'bonificacion' => $extra,
+                ];
+                $totales['pieza'] += $pieza;
+                $totales['kilo'] += $kilo;
+                $totales['caja'] += $caja;
+                $totales['bonificacion'] += $extra;
+                continue;
             }
 
             $pctBonificacion = self::porcentajeBonificacion($item);
@@ -49,21 +77,21 @@ final class PedidoRemitoPdfLineasSupport
             $filas[] = [
                 'articulo_id' => $articuloId,
                 'sku' => $item->articulos->sku ?? '',
-                'pieza' => (float) ($item->pieza ?? 0),
+                'pieza' => $pieza,
                 'kilo' => $kilo,
                 'descuento' => $item->descuentoventa_ids->nombre ?? '',
                 'descripcion' => $item->articulos->descripcion ?? '',
                 'umd' => optional($item->unidadesdemedidas)->abreviatura
                     ?? optional(optional($item->articulos)->unidadesdemedidas)->abreviatura
                     ?? '',
-                'caja' => (float) ($item->caja ?? 0),
+                'caja' => $caja,
                 'precio' => $precio,
                 'pesada' => $pesadaNeta,
                 'bonificacion' => $bonificacion,
             ];
-            $totales['pieza'] += (float) ($item->pieza ?? 0);
+            $totales['pieza'] += $pieza;
             $totales['kilo'] += $kilo;
-            $totales['caja'] += (float) ($item->caja ?? 0);
+            $totales['caja'] += $caja;
             $totales['pesada'] += $pesadaNeta;
             $totales['bonificacion'] += $bonificacion;
         }

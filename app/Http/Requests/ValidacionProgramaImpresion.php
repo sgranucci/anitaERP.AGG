@@ -40,6 +40,7 @@ class ValidacionProgramaImpresion extends FormRequest
             'permite_disparo_al_grabar' => 'nullable|boolean',
             'enviar_automatico_al_facturar' => 'nullable|boolean',
             'plan_con_envios' => 'nullable|boolean',
+            'pedido_solo_si_cliente_divide' => 'nullable|boolean',
             'formularios' => 'required|array|min:1',
             'formularios.*.id' => 'nullable|integer',
             'formularios.*.orden' => 'nullable|integer|min:1',

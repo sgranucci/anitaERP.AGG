@@ -4,6 +4,7 @@ namespace App\Exports\Ventas;
 
 use App\Repositories\Ventas\ComprobanteImpresionProgramaRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -23,7 +24,7 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private string $colUltima = 'I';
 
     /** @var array<string, mixed>|string|null */
     private $filtros;
@@ -47,6 +48,8 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
 
     public function view(): View
     {
+        $this->colUltima = EntornoEmpresaSupport::esElBierzo() ? 'J' : 'I';
+
         if ($this->flDesdeIndex) {
             $datas = $this->repository->leeProgramas($this->filtros, false);
             foreach ($datas as $row) {
@@ -82,7 +85,7 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
             return [];
         }
         $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
+        foreach (range('A', $this->colUltima) as $c) {
             $cols[$c] = NumberFormat::FORMAT_TEXT;
         }
 
@@ -117,7 +120,7 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
             return [];
         }
 
-        return [
+        $anchos = [
             'A' => 8,
             'B' => 16,
             'C' => 36,
@@ -128,6 +131,11 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
             'H' => 24,
             'I' => 16,
         ];
+        if ($this->colUltima === 'J') {
+            $anchos['J'] = 16;
+        }
+
+        return $anchos;
     }
 
     public function registerEvents(): array
@@ -157,9 +165,9 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
                     }
                 }
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
+                $sheet->mergeCells('A'.$filaTit.':'.$this->colUltima.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(30);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$this->colUltima.$filaTit)->applyFromArray([
                     'font' => ['bold' => true, 'size' => 16, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
                 ]);

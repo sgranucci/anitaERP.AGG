@@ -7,7 +7,9 @@ use Illuminate\Support\Collection;
 
 /**
  * Anita (El Bierzo) graba la bonificación 10x1 / 15x2 como renglón aparte
- * (penv_fl_bonif=1, precio 0). El ERP usa descuentoventa_id en la línea paga.
+ * (penv_fl_bonif=1, precio 0). El ERP:
+ * - mismo artículo + ratio del catálogo → descuentoventa_id en la línea paga;
+ * - otro artículo o ratio que no matchea → regalo / sin cargo (precio 0).
  */
 final class PedidoAnitaBonificacionSupport
 {
@@ -22,6 +24,40 @@ final class PedidoAnitaBonificacionSupport
 
         return self::float($row->penv_precio ?? 0) <= 0.00001
             && self::float($row->penv_pieza ?? 0) > 0;
+    }
+
+    /**
+     * Si conviene fusionar el renglón Anita en la línea paga (10x1 / 15x2).
+     * Devuelve el descuentoventa_id; null = dejarlo como regalo (precio 0).
+     */
+    public static function descuentoventaIdSiFusiona(
+        bool $esBonif,
+        int $articuloIdBonif,
+        int $articuloIdPaga,
+        bool $lineaPagaEsBonif,
+        float $piezaPaga,
+        float $piezaBonif
+    ): ?int {
+        if (! $esBonif || $lineaPagaEsBonif) {
+            return null;
+        }
+        if ($articuloIdBonif <= 0 || $articuloIdBonif !== $articuloIdPaga) {
+            return null;
+        }
+
+        return self::resolverDescuentoventaId($piezaPaga, $piezaBonif);
+    }
+
+    /**
+     * Precio a grabar: toda línea Anita de bonificación que no se fusionó queda en 0 (regalo ERP).
+     */
+    public static function precioParaImport(bool $esBonif, float $precio): float
+    {
+        if ($esBonif) {
+            return 0.0;
+        }
+
+        return $precio;
     }
 
     /**
