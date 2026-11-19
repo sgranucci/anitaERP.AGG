@@ -286,7 +286,7 @@ class PedidoImportarDesdeAnitaInterformingService
             'numero_comprobante' => $nro,
         ];
 
-        return DB::transaction(function () use ($codigo, $campos, $lineasPreparadas, $forzarPisar) {
+        $resultado = DB::transaction(function () use ($codigo, $campos, $lineasPreparadas, $forzarPisar) {
             $pedido = PedidoInterforming::query()->where('codigo', $codigo)->first();
             $esNuevo = $pedido === null;
 
@@ -321,6 +321,29 @@ class PedidoImportarDesdeAnitaInterformingService
                 'pedido_id' => (int) $pedido->id,
             ];
         });
+
+        // Fuera de la TX: engancha Mis aprobaciones (create o reimport que dejó ítems P/C).
+        $pedidoId = (int) ($resultado['pedido_id'] ?? 0);
+        if ($pedidoId > 0 && in_array($resultado['estado'] ?? '', ['creado', 'actualizado'], true)) {
+            try {
+                $sync = app(PedidoInterformingArbolIntegracionService::class)
+                    ->sincronizarTrasImport($pedidoId);
+                Log::info('pedido.importar_anita_interforming.arbol', [
+                    'codigo' => $codigo,
+                    'pedido_id' => $pedidoId,
+                    'sync' => $sync,
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+                Log::warning('pedido.importar_anita_interforming.arbol_error', [
+                    'codigo' => $codigo,
+                    'pedido_id' => $pedidoId,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $resultado;
     }
 
     /**

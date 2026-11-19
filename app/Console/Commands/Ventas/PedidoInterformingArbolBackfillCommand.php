@@ -15,7 +15,7 @@ final class PedidoInterformingArbolBackfillCommand extends Command
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Dispara el árbol y crea pendientes}';
 
-    protected $description = 'INTERFORMING: genera pendientes PE para pedidos sin movimiento de árbol';
+    protected $description = 'INTERFORMING: genera o reabre pendientes PE (sin movimiento, o Aprobado tras reimport Anita a P/C)';
 
     public function handle(PedidoInterformingArbolBackfillService $service): int
     {

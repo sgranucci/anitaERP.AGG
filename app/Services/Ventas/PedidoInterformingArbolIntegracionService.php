@@ -87,6 +87,79 @@ class PedidoInterformingArbolIntegracionService
         }
     }
 
+    /**
+     * Tras import Anita: si hay ítems P/C, asegura un pendiente en Mis aprobaciones.
+     * - Sin movimiento → dispara el árbol.
+     * - Ya hay Pendiente → no-op.
+     * - Solo Aprobado/Rechazado (reimport pisó ítems a P/C) → reabre el último Aprobado.
+     *
+     * @return 'noop'|'noop_sin_pc'|'ya_pendiente'|'reabierto'|'disparado'|'sin_arbol'
+     */
+    public function sincronizarTrasImport(int $pedidoId): string
+    {
+        if ($pedidoId <= 0 || ! $this->hayArbolActivo()) {
+            return 'sin_arbol';
+        }
+
+        $tienePc = PedidoArticuloInterforming::query()
+            ->where('pedido_id', $pedidoId)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereIn('estado', [
+                        PedidoEstadosInterforming::ITEM_PENDIENTE,
+                        PedidoEstadosInterforming::ITEM_CONDICIONAL,
+                    ]);
+            })
+            ->exists();
+
+        if (! $tienePc) {
+            return 'noop_sin_pc';
+        }
+
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        if (Arbolaprobacion_Movimiento::query()
+            ->where('pedido_id', $pedidoId)
+            ->where('estado', $nombrePendiente)
+            ->exists()) {
+            return 'ya_pendiente';
+        }
+
+        $aprobado = Arbolaprobacion_Movimiento::query()
+            ->where('pedido_id', $pedidoId)
+            ->where('estado', $nombreAprobado)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($aprobado) {
+            $obs = trim((string) ($aprobado->observacion ?? ''));
+            if ($obs !== '' && ! str_contains($obs, '[reabierto tras import Anita]')) {
+                $obs .= ' ';
+            }
+            if (! str_contains($obs, '[reabierto tras import Anita]')) {
+                $obs .= '[reabierto tras import Anita]';
+            }
+
+            $aprobado->update([
+                'estado' => $nombrePendiente,
+                'fechaproceso' => null,
+                'fechaenvio' => Carbon::now(),
+                'observacion' => trim($obs),
+            ]);
+
+            return 'reabierto';
+        }
+
+        $this->dispararAlGuardarSeguro($pedidoId);
+
+        return 'disparado';
+    }
+
     public function procesaArbol(
         int $comprobanteId,
         string $operacion,

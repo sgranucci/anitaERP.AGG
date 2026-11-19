@@ -9,12 +9,13 @@ use App\Support\Ventas\PedidoInterformingSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Reengancha pedidos Interforming al árbol PE cuando quedaron sin movimiento.
+ * Reengancha pedidos Interforming al árbol PE cuando quedaron sin pendiente usable.
+ * Cubre: sin movimiento, o movimiento ya Aprobado/Rechazado tras reimport Anita a P/C.
  */
 class PedidoInterformingArbolBackfillService
 {
     /**
-     * Pedidos con ítems P/C, no suspendidos/anulados, sin filas en arbolaprobacion_movimiento.
+     * Pedidos con ítems P/C, no suspendidos/anulados, sin movimiento Pendiente.
      *
      * @return Collection<int, PedidoInterforming>
      */
@@ -24,21 +25,29 @@ class PedidoInterformingArbolBackfillService
             return collect();
         }
 
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
         $q = PedidoInterforming::query()
             ->with(['clientes:id,codigo,nombre', 'pedido_articulos:id,pedido_id,estado'])
             ->whereExists(function ($sub) {
                 $sub->selectRaw('1')
                     ->from('pedido_articulo as pa')
                     ->whereColumn('pa.pedido_id', 'pedido.id')
-                    ->whereIn('pa.estado', [
-                        PedidoEstadosInterforming::ITEM_PENDIENTE,
-                        PedidoEstadosInterforming::ITEM_CONDICIONAL,
-                    ]);
+                    ->where(function ($w) {
+                        $w->whereNull('pa.estado')
+                            ->orWhereIn('pa.estado', [
+                                PedidoEstadosInterforming::ITEM_PENDIENTE,
+                                PedidoEstadosInterforming::ITEM_CONDICIONAL,
+                            ]);
+                    });
             })
-            ->whereNotExists(function ($sub) {
+            ->whereNotExists(function ($sub) use ($nombrePendiente) {
                 $sub->selectRaw('1')
                     ->from('arbolaprobacion_movimiento as m')
-                    ->whereColumn('m.pedido_id', 'pedido.id');
+                    ->whereColumn('m.pedido_id', 'pedido.id')
+                    ->where('m.estado', $nombrePendiente);
             })
             ->where(function ($w) {
                 $w->whereNull('estadopedido')
@@ -79,6 +88,8 @@ class PedidoInterformingArbolBackfillService
             array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
         ]['nombre'];
 
+        $integracion = app(PedidoInterformingArbolIntegracionService::class);
+
         foreach ($candidatos as $pedido) {
             $row = [
                 'id' => (int) $pedido->id,
@@ -92,10 +103,9 @@ class PedidoInterformingArbolBackfillService
             }
 
             try {
-                $nivel = app(PedidoInterformingArbolIntegracionService::class)
-                    ->dispararAlGuardar((int) $pedido->id);
+                $sync = $integracion->sincronizarTrasImport((int) $pedido->id);
                 $disparados++;
-                $row['nivel'] = (int) $nivel;
+                $row['resultado'] = $sync;
 
                 $tienePendiente = Arbolaprobacion_Movimiento::query()
                     ->where('pedido_id', $pedido->id)
@@ -104,12 +114,14 @@ class PedidoInterformingArbolBackfillService
 
                 if ($tienePendiente) {
                     $conPendiente++;
-                    $row['resultado'] = 'pendiente_creado';
-                } elseif ($nivel === -1) {
-                    $row['resultado'] = 'arbol_completo_auto';
+                    if ($sync === 'disparado') {
+                        $row['resultado'] = 'pendiente_creado';
+                    }
+                } elseif ($sync === 'noop_sin_pc' || $sync === 'sin_arbol') {
+                    $sinNivel++;
                 } else {
                     $sinNivel++;
-                    $row['resultado'] = 'sin_pendiente_ni_nivel';
+                    $row['resultado'] = $sync.'_sin_pendiente';
                 }
             } catch (\Throwable $e) {
                 report($e);
