@@ -614,7 +614,7 @@ class TesoreriaCrownJornadaController extends Controller
         $armado = $this->anexoDelDia($request, $jornada, $variante);
         $filas = TesoreriaCrownAnexoListadoFilasSupport::anexo1($armado, $variante);
         $columnas = TesoreriaCrownAnexoListadoFilasSupport::columnasAnexo1($variante);
-        $subtituloExtra = $variante === 'nuevo' ? 'Formato l-anexo1new.c' : 'Formato l-anexo1.c';
+        $subtituloExtra = $variante === 'nuevo' ? 'Formato tesorería ENTRO / SALIO' : 'Formato l-anexo1.c';
 
         return $this->documentoListado((string) $formato, [
             'titulo' => 'Anexo I '.$jornada->fecha->format('d/m/Y'),
@@ -689,7 +689,7 @@ class TesoreriaCrownJornadaController extends Controller
 
         $primera = $jornadas->first();
         $ultima = $jornadas->last();
-        $subtituloExtra = $variante === 'nuevo' ? 'Formato l-anexo1new.c' : 'Formato l-anexo1.c';
+        $subtituloExtra = $variante === 'nuevo' ? 'Formato tesorería ENTRO / SALIO' : 'Formato l-anexo1.c';
         $archivo = $varios
             ? 'anexo1_'.$variante.'_'.$primera->fecha->format('Ymd').'_'.$ultima->fecha->format('Ymd')
             : 'anexo1_'.$variante.'_'.$primera->fecha->format('Ymd');

@@ -134,7 +134,8 @@ final class TesoreriaCrownBovedaSupport
     }
 
     /**
-     * Tipos que a-efeboveda deja cargar a mano. La apertura entra aunque esté inactiva.
+     * Tipos que a-efeboveda deja cargar a mano.
+     * APER ya no se carga: el arqueo trae el saldo de la última jornada cerrada.
      * La habilitación y la rendición las graba el conforme del cajero.
      * Filtra por vigencia a la fecha de la jornada.
      *
@@ -145,10 +146,8 @@ final class TesoreriaCrownBovedaSupport
         $fechaYmd = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fecha);
         $q = TesoreriaCrownBovedaTipo::query()
             ->where('sala_id', $salaId)
-            ->whereNotIn('abreviatura', ['HAB', 'REN'])
-            ->where(function ($q) {
-                $q->where('activo', true)->orWhere('abreviatura', 'APER');
-            });
+            ->where('activo', true)
+            ->whereNotIn('abreviatura', ['HAB', 'REN', 'APER']);
         TesoreriaCrownBovedaVigenciaSupport::aplicarVigenteEn($q, $fechaYmd);
 
         return $q->orderBy('codigo')->get();

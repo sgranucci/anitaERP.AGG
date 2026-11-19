@@ -3,10 +3,10 @@
 namespace App\Support\Caja;
 
 /**
- * Formatos del Anexo I: contable (día/mes/anual, l-anexo1.c) y debe/haber (l-anexo1new.c).
+ * Formatos del Anexo I: contable (día/mes/anual, l-anexo1.c) y debe/haber (ENTRO/SALIO).
  *
  * El formato contable exige `listar-tesoreria-crown-anexo1-contable`.
- * Sin ese permiso (roles de tesorería) solo queda debe/haber.
+ * Sin ese permiso (roles de tesorería) solo queda el resumen ENTRO/SALIO del día.
  */
 final class TesoreriaCrownAnexo1FormatoSupport
 {

@@ -99,35 +99,14 @@
                             <i class="fa fa-chevron-right lw-cortes-ico lw-cortes-ico-cerrado" aria-hidden="true"></i>
                             Arqueo
                         </button>
-                        <button type="button" class="btn btn-sm lw-cortes-toggle collapsed mr-1 mb-1" data-toggle="collapse" data-target="#tc-herramienta-inicio" aria-expanded="false" aria-controls="tc-herramienta-inicio">
-                            <i class="fa fa-chevron-down lw-cortes-ico lw-cortes-ico-abierto" aria-hidden="true"></i>
-                            <i class="fa fa-chevron-right lw-cortes-ico lw-cortes-ico-cerrado" aria-hidden="true"></i>
-                            Inicio de bóveda
-                        </button>
                     </div>
                     <div class="collapse mb-3" id="tc-herramienta-arqueo" data-url="{{ route('composicion_billete_tesoreria_crown_boveda', ['jornada_id' => $jornada->id, 'deposito_id' => $lugar->id], false) }}">
-                        <p class="text-muted small mb-2">Saldo confirmado de {{ $lugar->nombre }} hasta esta jornada. Dólares y euros quedan en su moneda.</p>
+                        <p class="text-muted small mb-2">Saldo confirmado de {{ $lugar->nombre }} hasta esta jornada (trae el cierre de jornadas anteriores). Dólares y euros quedan en su moneda.</p>
                         @include('caja.tesoreria_crown.boveda.partials.saldo_grupos', [
                             'grupos' => $saldo,
                             'vacio' => 'Todavía no hay cantidades confirmadas en este lugar.',
                             'detalleBillete' => true,
                         ])
-                    </div>
-                    <div class="collapse mb-3" id="tc-herramienta-inicio">
-                        @if ($apertura)
-                            <p class="small mb-2">
-                                <a class="text-primary" href="{{ route('editar_tesoreria_crown_boveda', $apertura->id) }}">
-                                    Apertura {{ \App\Support\Caja\TesoreriaCrownNumeradorSupport::visible($apertura->numero) }}
-                                </a>
-                                <span class="text-muted">· saldo con el que arranca esta jornada.</span>
-                            </p>
-                            @include('caja.tesoreria_crown.boveda.partials.saldo_grupos', ['grupos' => $inicio, 'vacio' => 'La apertura no tiene cantidades cargadas.'])
-                        @else
-                            <p class="text-muted small mb-1">Esta jornada no tiene apertura cargada.</p>
-                            @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-boveda', false))
-                                <a class="text-primary small" href="{{ route('nueva_tesoreria_crown_boveda', ['jornada_id' => $jornada->id, 'deposito_id' => $lugar->id, 'tipo_abrev' => 'APER']) }}">Cargar apertura</a>
-                            @endif
-                        @endif
                     </div>
                     <div class="lw-workbench mb-2" data-form="#form-filtros-tesoreria-crown-boveda">
                         <form method="get" action="{{ route('tesoreria_crown_boveda') }}" id="form-filtros-tesoreria-crown-boveda" class="mb-0">

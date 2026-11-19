@@ -25,7 +25,7 @@
                 <a href="{{ $urlAnexo('clasico') }}" class="btn {{ $variante === 'clasico' ? 'btn-info' : 'btn-outline-info' }}" title="Como l-anexo1.c">
                     Día / mes / anual
                 </a>
-                <a href="{{ $urlAnexo('nuevo') }}" class="btn {{ $variante === 'nuevo' ? 'btn-info' : 'btn-outline-info' }}" title="Como l-anexo1new.c">
+                <a href="{{ $urlAnexo('nuevo') }}" class="btn {{ $variante === 'nuevo' ? 'btn-info' : 'btn-outline-info' }}" title="Resumen ENTRO / SALIO del día">
                     Débito / crédito / saldo
                 </a>
             </div>
@@ -37,9 +37,9 @@
         @endif
         <p class="text-muted small mb-2">
             @if ($variante === 'nuevo')
-                Formato de <code>l-anexo1new.c</code>: concepto, fecha, débito, crédito y saldo corrido.
+                Formato tesorería: ENTRO (débito) / SALIO (crédito) con saldo corrido del día, para controlar diferencias.
                 @if (! $puedeContable)
-                    Solo este formato (debe / haber). El contable (día / mes / anual) pide permiso aparte.
+                    Solo este formato. El contable (día / mes / anual) pide permiso aparte.
                 @endif
             @else
                 Formato de <code>l-anexo1.c</code>: concepto con día, mes y anual. Se arma con la jornada.

@@ -56,12 +56,12 @@
                 'sala_id' => $sala->id ?? null,
                 'fecha_desde' => $fechaDesde ?? null,
                 'fecha_hasta' => $fechaHasta ?? null,
-                'formato_anexo' => ($panel ?? '') === 'anexo' ? ($anexoVariante ?? 'clasico') : null,
+                'formato_anexo' => ($panel ?? '') === 'anexo' ? ($anexoVariante ?? 'nuevo') : null,
                 'origen' => 'menu',
             ]);
         } else {
             $exportAnexoParams = ($panel ?? '') === 'anexo'
-                ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'clasico']
+                ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'nuevo']
                 : (
                     ($panel ?? '') === 'anexo2'
                         ? ['id' => $jornada->id, 'grupo_anexo2' => $anexo2['grupo'] ?? 'todo']

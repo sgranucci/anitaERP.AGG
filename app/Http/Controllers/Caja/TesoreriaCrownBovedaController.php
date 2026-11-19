@@ -57,8 +57,6 @@ class TesoreriaCrownBovedaController extends Controller
         $armado = [];
         $movimientos = collect();
         $saldo = [];
-        $inicio = [];
-        $apertura = null;
         if ($jornada && $lugar && $sala) {
             $armado = $this->workbench($request, (int) $sala->id, (int) $jornada->id, (int) $lugar->id);
             if ($armado instanceof \Illuminate\Http\RedirectResponse) {
@@ -75,23 +73,6 @@ class TesoreriaCrownBovedaController extends Controller
                     (int) $sala->id,
                     TesoreriaCrownBovedaSupport::saldoCantidades((int) $lugar->id, $fecha)
                 );
-            }
-            $apertura = TesoreriaCrownBoveda::query()
-                ->with(['tipo', 'lineas.valor.tipoValor'])
-                ->where('jornada_id', $jornada->id)
-                ->where('deposito_id', $lugar->id)
-                ->where('estado', '<>', TesoreriaCrownBoveda::ANULADO)
-                ->whereNull('revierte_id')
-                ->whereHas('tipo', fn ($q) => $q->where('abreviatura', 'APER'))
-                ->orderByDesc('numero')
-                ->first();
-            if ($apertura) {
-                $cantidadesInicio = [];
-                foreach ($apertura->lineas as $linea) {
-                    $valorId = (int) $linea->valor_id;
-                    $cantidadesInicio[$valorId] = ($cantidadesInicio[$valorId] ?? 0.0) + (float) $linea->cantidad;
-                }
-                $inicio = TesoreriaCrownBovedaSupport::saldoAgrupado((int) $sala->id, $cantidadesInicio);
             }
         }
 
@@ -110,8 +91,6 @@ class TesoreriaCrownBovedaController extends Controller
             'lugares' => $lugares,
             'lugar' => $lugar,
             'saldo' => $saldo,
-            'inicio' => $inicio,
-            'apertura' => $apertura,
             'movimientos' => $movimientos,
             'totalesMonedas' => $totalesMonedas,
             'tieneCriterios' => $armado !== []
@@ -965,7 +944,10 @@ class TesoreriaCrownBovedaController extends Controller
         if (in_array($abreviatura, ['HAB', 'REN'], true)) {
             return 'La habilitación y la rendición entran solas cuando el cajero firma.';
         }
-        if (! $tipo->activo && $abreviatura !== 'APER') {
+        if ($abreviatura === 'APER') {
+            return 'La apertura ya no se carga: el arqueo trae el saldo de la última jornada cerrada.';
+        }
+        if (! $tipo->activo) {
             return 'Transacción suspendida.';
         }
         if (stripos((string) $tipo->nombre, 'NO USAR') === 0) {

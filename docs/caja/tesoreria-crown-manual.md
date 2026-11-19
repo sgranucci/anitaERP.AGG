@@ -283,7 +283,9 @@ Están en la jornada, botón **Anexos** del escritorio (aparte de la carga). Pes
 
 ### Anexo I
 
-Sigue `l-anexo1.c` (día / mes / anual) y `l-anexo1new.c` (débito / crédito / saldo). Incluye **apuestas deportivas** como ingreso cuando hay dato ERP. Caja inicial = `caja_final_viii` de la jornada anterior. Poder público / propina / drop / clientes salen de tablas Crown (no de `acumanexo1` / `ppublico` en vivo).
+Sigue `l-anexo1.c` (día / mes / anual) y el formato tesorería ENTRO/SALIO (débito / crédito / saldo). El contable incluye **apuestas deportivas** como ingreso cuando hay dato ERP. Caja inicial = `caja_final_viii` de la jornada anterior. Poder público / propina / drop / clientes salen de tablas Crown (no de `acumanexo1` / `ppublico` en vivo).
+
+**Permisos de formato:** sin `listar-tesoreria-crown-anexo1-contable` (roles de tesorería) solo se ve y exporta ENTRO/SALIO (`nuevo`): ingreso de efectivo, ventas A&B/hotel, propina, bingo, bóveda tipificada, excedentes/fallos, tarjetas, depósitos, etc. Contaduría / sistemas / administrador pueden cambiar a día/mes/anual (`clasico`).
 
 ### Anexo II
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAnexo1Calculo;
+use App\Support\Caja\TesoreriaCrownAnexo1FormatoSupport;
 use App\Support\Caja\TesoreriaCrownAnexo1NewCalculo;
 use App\Support\Caja\TesoreriaCrownAnexo2Calculo;
 use App\Support\Caja\TesoreriaCrownAnexo7Calculo;
@@ -83,7 +84,8 @@ class TesoreriaCrownAnexo1Controller extends Controller
 
         $anexo = null;
         $anexoError = null;
-        $anexoVariante = $request->input('formato_anexo') === 'nuevo' ? 'nuevo' : 'clasico';
+        $anexoVariante = TesoreriaCrownAnexo1FormatoSupport::resolver($request->input('formato_anexo'));
+        $puedeAnexoContable = TesoreriaCrownAnexo1FormatoSupport::puedeFormatoContable();
         $anexo2 = $rescajero = $anexo3 = $anexo7 = $anexo8 = null;
         $anexo2Error = $rescajeroError = $anexo3Error = $anexo7Error = $anexo8Error = null;
         $clientesFormulario = 0;
@@ -194,6 +196,7 @@ class TesoreriaCrownAnexo1Controller extends Controller
             'anexo' => $anexo,
             'anexoError' => $anexoError,
             'anexoVariante' => $anexoVariante,
+            'puedeAnexoContable' => $puedeAnexoContable,
             'anexo2' => $anexo2,
             'anexo2Error' => $anexo2Error,
             'rescajero' => $rescajero,
