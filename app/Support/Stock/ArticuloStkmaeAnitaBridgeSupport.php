@@ -448,7 +448,7 @@ final class ArticuloStkmaeAnitaBridgeSupport
             'acc' => 'update',
             'tabla' => self::tabla(),
             'valores' => implode(",\n", $asignaciones),
-            'whereArmado' => ' WHERE '.self::keyField()." = '".self::escaparSql($skuAnita)."' ",
+            'whereArmado' => ' WHERE '.self::keyField()." = '".self::sqlTexto($skuAnita)."' ",
         ];
     }
 
@@ -530,11 +530,15 @@ final class ArticuloStkmaeAnitaBridgeSupport
 
     private static function sqlQuote(mixed $valor): string
     {
-        return "'".self::escaparSql((string) $valor)."'";
+        return "'".self::sqlTexto($valor)."'";
     }
 
-    private static function escaparSql(string $valor): string
+    /**
+     * Contenido de literal SQL Informix: duplica apóstrofos.
+     * Sin esto, valores como PHARAOH'S FORTUNE rompen stkmae con error 201.
+     */
+    public static function sqlTexto(mixed $valor): string
     {
-        return str_replace("'", "''", $valor);
+        return str_replace("'", "''", (string) ($valor ?? ''));
     }
 }
