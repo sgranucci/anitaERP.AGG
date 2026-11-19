@@ -45,6 +45,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
+use App\Models\Ventas\Remito;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
@@ -76,6 +77,7 @@ use App\Support\Configuracion\RegimenPercepcionSupport;
 use setasign\Fpdi\Fpdi;
 use App\Support\Ventas\CaiRemitoVigenteSupport;
 use App\Support\Ventas\FerliRinNumeracionSupport;
+use App\Support\Ventas\PedidoRemitoPdfLineasSupport;
 use App\Support\Ventas\RemitoFormularioLeyendaSupport;
 use App\Support\Ventas\ReceptorEventualContactoSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
@@ -1299,7 +1301,7 @@ class FacturacionService
 				if ($numeroremito === 'error') {
 					return [
 						'error' => 'Error numerador remito',
-						'mensaje' => 'El punto de venta de remito no tiene numerador configurado en Anita.',
+						'mensaje' => FacturacionAnitaGrabacionSupport::mensajeErrorNumeradorRemito(),
 					];
 				}
 
@@ -7867,16 +7869,17 @@ class FacturacionService
 			}
 		}
 
-		// Numera el remito. En réplica diferida (omitirNumeraAnitaFin) no se corta la
-		// grabación: el número ya está en el ERP; un fallo acá dejaba venta sin vencae.
+		// Numera el remito. El Bierzo ya lo reservó en traeUltimoNumeroRemito (síncrono);
+		// no volver a avanzar acá: con réplica diferida eso corría tarde y duplicaba nros.
 		// Ferli no avanza numerador REM: el remito usa el mismo nro que la factura.
-		if (isset($puntoventaremito) && ! $this->flGrabaComprobanteDividido && ! EntornoEmpresaSupport::esFerli())
-		{
+		if (
+			isset($puntoventaremito)
+			&& ! $this->flGrabaComprobanteDividido
+			&& ! EntornoEmpresaSupport::esFerli()
+			&& ! EntornoEmpresaSupport::esElBierzo()
+		) {
 			$resultadoNumeradorRemito = $this->ventaRepository->numeraAnita('REM', 'R', $puntoventaremito);
-			$falloRemito = (EntornoEmpresaSupport::esElBierzo()
-					&& (! is_int($resultadoNumeradorRemito) || $resultadoNumeradorRemito <= 0))
-				|| (! EntornoEmpresaSupport::esElBierzo() && $resultadoNumeradorRemito == 'Error');
-			if ($falloRemito) {
+			if ($resultadoNumeradorRemito == 'Error') {
 				if ($omitirNumeraAnitaFin) {
 					Log::warning('facturacion.anita.remito_numerador_omitido_post_venta', [
 						'codigo' => $venta['codigo'] ?? null,
@@ -10801,6 +10804,170 @@ class FacturacionService
 	}
 
 	/**
+	 * Remito ERP sin FAC Bierzo visible (reparto 101): misma hoja remito de formulariofactura.
+	 * Usa el PV/empresa del remito (numeración REM R Bierzo), no la FAC Villafranca.
+	 */
+	public function generarPdfRemitoDesdeRemitoArchivo(int $remitoId, string $copiaLeyenda = 'ORIGINAL'): string
+	{
+		$ctx = $this->prepararContextoPdfDesdeRemito($remitoId);
+
+		return $this->renderPdfFacturaDesdeContexto($ctx, $copiaLeyenda, false, true);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function prepararContextoPdfDesdeRemito(int $remitoId): array
+	{
+		ini_set('memory_limit', '512M');
+
+		$remito = Remito::query()
+			->with([
+				'puntoventas.empresas.localidad',
+				'puntoventas.empresas.provincia',
+				'puntoventas.localidades',
+				'puntoventas.provincias',
+				'transportes.localidades',
+				'transportes.condicionivas',
+				'condicionesdeventa',
+				'remito_articulos.articulos.unidadesdemedidas',
+				'remito_articulos.descuentoventa_ids',
+				'remito_articulos.unidadesdemedidas',
+			])
+			->find($remitoId);
+		if (! $remito) {
+			throw new \RuntimeException('Remito no encontrado');
+		}
+
+		$cliente = Cliente::withTrashed()
+			->with([
+				'tipodocumentos',
+				'condicioniibbs',
+				'condicionventas',
+				'localidades',
+				'provincias',
+				'paises',
+				'condicionivas',
+			])
+			->find($remito->cliente_id);
+		if ($cliente === null) {
+			$cliente = new Cliente([
+				'nombre' => '',
+				'domicilio' => '',
+			]);
+			$cliente->exists = false;
+		}
+
+		$articulos = collect($remito->remito_articulos ?? [])->filter(static function ($item) {
+			return (string) ($item->estado ?? '') !== 'A';
+		})->values();
+
+		$lineasPdf = PedidoRemitoPdfLineasSupport::armar($articulos);
+		$tblItem = [];
+		$totalCaja = 0.0;
+		foreach ($lineasPdf['filas'] as $fila) {
+			$caja = (float) ($fila['caja'] ?? 0);
+			$totalCaja += $caja;
+			$precio = (float) ($fila['precio'] ?? 0);
+			$tblItem[] = [
+				'sku' => $fila['sku'] ?? '',
+				'detalle' => $fila['descripcion'] ?? '',
+				'leyenda' => '',
+				'despacho' => '',
+				'color' => '',
+				'cantidad' => (float) ($fila['pesada'] ?? 0),
+				'kilodescuento' => (float) ($fila['bonificacion'] ?? 0),
+				'caja' => $caja,
+				'pieza' => (float) ($fila['pieza'] ?? 0),
+				'precio' => $precio,
+				'preciosindescuento' => $precio,
+				'descuento' => 0.0,
+				'descuentointegrado' => 0.0,
+				'incluyeimpuesto' => '',
+				'moneda_id' => 1,
+				'impuesto_id' => null,
+				'id' => null,
+				'articulo_id' => $fila['articulo_id'] ?? null,
+				'combinacion_id' => null,
+				'talle_id' => null,
+				'medida' => '',
+				'talle_codigo' => null,
+				'talle_nombre' => null,
+			];
+		}
+
+		$venta = new Venta;
+		$venta->exists = false;
+		$venta->forceFill([
+			'id' => 0,
+			'codigo' => '',
+			'fecha' => $remito->fecha,
+			'cliente_id' => $remito->cliente_id,
+			'condicionventa_id' => $remito->condicionventa_id,
+			'vendedor_id' => $remito->vendedor_id,
+			'transporte_id' => $remito->transporte_id,
+			'lugarentrega' => $remito->lugarentrega,
+			'leyenda' => $remito->leyenda,
+			'descuento' => $remito->descuento,
+			'puntoventa_id' => $remito->puntoventa_id,
+			'puntoventaremito_id' => $remito->puntoventa_id,
+			'numeroremito' => (int) ($remito->numero ?? 0),
+			'remito_id' => (int) $remito->id,
+			'cantidadbulto' => $totalCaja,
+			'nombre' => null,
+			'domicilio' => null,
+			'telefono' => null,
+			'nroinscripcion' => null,
+		]);
+		$venta->setRelation('clientes', $cliente);
+		$venta->setRelation('puntoventas', $remito->puntoventas);
+		$venta->setRelation('puntoventaremito', $remito->puntoventas);
+		$venta->setRelation('remitos', $remito);
+		$venta->setRelation('transportes', $remito->transportes);
+		$venta->setRelation('condicionventas', $remito->condicionesdeventa ?? $cliente->condicionventas);
+		$venta->setRelation('condicionivas', $cliente->condicionivas);
+		$venta->setRelation('localidades', $cliente->localidades);
+		$venta->setRelation('provincias', $cliente->provincias);
+		$venta->setRelation('paises', $cliente->paises);
+		$venta->setRelation('gastronomiaEmision', null);
+		$venta->setRelation('estacionamientoEmision', null);
+		$venta->setRelation('facturacionLocalEmision', null);
+		$venta->setRelation('venta_emisiones', collect());
+		$venta->setRelation('venta_impuestos', collect());
+		$venta->setRelation('tipotransacciones', null);
+		$venta->setRelation('monedas', null);
+
+		$pathDir = storage_path('pdf/remito');
+		if (! is_dir($pathDir)) {
+			mkdir($pathDir, 0775, true);
+		}
+
+		$logo = EmpresaLogoArchivo::dataUriDesdeNombre($remito->puntoventas->empresas->nombre ?? null);
+		$nombreCliente = preg_replace(
+			'/[^\w\-]+/',
+			'_',
+			(string) ($cliente->nombre ?? '')
+		);
+
+		return [
+			'venta' => $venta,
+			'conceptosTotales' => [],
+			'lineasTotalesLetraB' => [],
+			'tblItem' => $tblItem,
+			'caiRemito' => CaiRemitoVigenteSupport::paraRemito($remito),
+			'letra' => 'R',
+			'codigoTipoTransaccion' => '91',
+			'codigoTipoTransaccionPad' => '091',
+			'nombreTipoComprobanteImpresion' => 'REMITO',
+			'qrDataUri' => '',
+			'logoEmpresaDataUri' => $logo['uri'] ?? null,
+			'pathDir' => $pathDir,
+			'nombreBase' => 'REM-'.($remito->codigo ?: $remito->id).'-'.$nombreCliente,
+			'cliente' => $cliente,
+		];
+	}
+
+	/**
 	 * @return array<string, mixed>
 	 */
 	public function prepararContextoPdfFactura(int $id): array
@@ -11998,7 +12165,7 @@ class FacturacionService
 						config('facturacion.LETRA_REMITO'), $puntoVentaRemito);
 		if ($numeroRemito === 'error') {
 			return [
-				'error' => 'El punto de venta de remito no tiene numerador configurado en Anita.',
+				'error' => FacturacionAnitaGrabacionSupport::mensajeErrorNumeradorRemito(),
 			];
 		}
 
@@ -12112,19 +12279,7 @@ class FacturacionService
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
 
 		// Este flujo (reparto 101) crea el REM físico antes de la factura dividida.
-		// La factura de Villa omite la numeración del remito, por lo que se reserva acá.
-		if (EntornoEmpresaSupport::esElBierzo() && FacturacionAnitaGrabacionSupport::habilitada()) {
-			$resultadoNumeradorRemito = $this->ventaRepository->numeraAnita(
-				config('facturacion.TIPO_REMITO'),
-				config('facturacion.LETRA_REMITO'),
-				$puntoVentaRemito,
-			);
-			if (! is_int($resultadoNumeradorRemito) || $resultadoNumeradorRemito !== (int) $numeroRemito) {
-				return [
-					'error' => 'No pudo actualizar el numerador del remito en Anita.',
-				];
-			}
-		}
+		// El número ya quedó reservado en Anita vía traeUltimoNumeroRemito (no re-avanzar).
 
 		// Remito ERP solo (flujo pedido Bierzo / reparto 101). No gastronomía ni estacionamiento.
 		$persistRemito = app(\App\Services\Ventas\RemitoService::class)->persistirDesdeFactura([

@@ -73,6 +73,18 @@ return [
             'permiso' => 'listar-pedidos',
         ],
         [
+            'herramienta' => 'Imprimir pedidos del reparto',
+            'ubicacion' => 'Corte amarillo de reparto (ícono impresora)',
+            'accion' => 'Abre la sesión de impresión para todos los pedidos del reparto del filtro actual.',
+            'permiso' => 'listar-pedidos',
+        ],
+        [
+            'herramienta' => 'Imprimir facturas del reparto',
+            'ubicacion' => 'Corte amarillo de reparto (ícono factura / copias)',
+            'accion' => 'Imprime las facturas ya hechas del reparto, o solo copias.',
+            'permiso' => 'listar-factura',
+        ],
+        [
             'herramienta' => 'Facturar reparto',
             'ubicacion' => 'Corte amarillo de reparto',
             'accion' => 'Factura todos los pedidos pesados del reparto e imprime el lote.',

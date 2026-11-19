@@ -128,6 +128,48 @@ class ComprobanteImpresionSesionController extends Controller
     }
 
     /**
+     * Impresión de los comprobantes de pedido de un reparto (index de pedidos).
+     */
+    public function repartoComprobantesPedido(Request $request, int $transporteId)
+    {
+        can('listar-pedidos');
+
+        $filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
+        $soloCopias = $request->boolean('solo_copias');
+        $idsQuery = trim((string) $request->query('pedido_ids', ''));
+        $ids = $idsQuery !== ''
+            ? array_values(array_filter(array_map('intval', explode(',', $idsQuery))))
+            : $this->pedidoQuery->pedidoIdsIndexPorReparto($filtros, $transporteId);
+
+        $retornoQs = PedidoListadoFiltros::paraQueryString($filtros);
+        $retornoPath = ComprobanteImpresionSesionUrlSupport::pathConCarpeta(
+            (string) $request->query('retorno', PedidoListadoSupport::pathRetornoIndex($retornoQs))
+        );
+
+        try {
+            $sesion = $this->sesionService->armarDesdeRepartoPedidos(
+                $ids,
+                $this->modo($request),
+                '',
+                $retornoQs,
+                $soloCopias
+            );
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->to(ComprobanteImpresionSesionUrlSupport::urlAbsolutaRetorno(
+                    $retornoPath !== '' ? $retornoPath : urlAppDesdeRoute('pedido', $retornoQs)
+                ))
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        if ($retornoPath !== '') {
+            $sesion['retorno'] = $retornoPath;
+        }
+
+        return $this->mostrar($request, $sesion);
+    }
+
+    /**
      * Impresión de una o varias facturas de un pedido (lote tipo reparto).
      * Query: venta_ids=1,2,3 (vacío = todas las del pedido), auto=1, enviar_impresora=1.
      */
@@ -411,6 +453,10 @@ class ComprobanteImpresionSesionController extends Controller
 
         if (($sesion['origen_tipo'] ?? '') === 'REPARTO') {
             $retorno = is_array($sesion['lote_retorno'] ?? null) ? $sesion['lote_retorno'] : [];
+            $loteOrigen = (string) ($sesion['lote_origen'] ?? '');
+            if (in_array($loteOrigen, ['pedidos', 'pedidos_comprobantes'], true) || ! empty($sesion['lote_pedido_ids'])) {
+                return route('pedido', $retorno);
+            }
 
             return route('factura', $retorno);
         }
@@ -450,6 +496,13 @@ class ComprobanteImpresionSesionController extends Controller
             }
             if (! empty($sesion['solo_copias'])) {
                 $params['solo_copias'] = 1;
+            }
+            if (($sesion['lote_origen'] ?? '') === 'pedidos_comprobantes' || ! empty($sesion['lote_pedido_ids'])) {
+                if (! empty($sesion['lote_pedido_ids']) && is_array($sesion['lote_pedido_ids'])) {
+                    $params['pedido_ids'] = implode(',', $sesion['lote_pedido_ids']);
+                }
+
+                return redirect()->route('sesion_impresion_reparto_comprobantes_pedido', $params);
             }
             if (($sesion['lote_origen'] ?? '') === 'pedidos') {
                 if (! empty($sesion['lote_venta_ids']) && is_array($sesion['lote_venta_ids'])) {
@@ -559,6 +612,22 @@ class ComprobanteImpresionSesionController extends Controller
         $solo = is_string($solo) && $solo !== '' ? $solo : null;
 
         if ($tipo === 'REPARTO') {
+            $pedidoIds = is_array($sesionSesion) ? ($sesionSesion['lote_pedido_ids'] ?? []) : [];
+            if ($pedidoIds !== []) {
+                $sesion = $this->sesionService->armarDesdeRepartoPedidos(
+                    $pedidoIds,
+                    $modo,
+                    (string) ($sesionSesion['lote_etiqueta'] ?? ''),
+                    is_array($sesionSesion['lote_retorno'] ?? null) ? $sesionSesion['lote_retorno'] : [],
+                    ! empty($sesionSesion['solo_copias']) || $request->boolean('solo_copias')
+                );
+                if (! empty($sesionSesion['retorno'])) {
+                    $sesion['retorno'] = $sesionSesion['retorno'];
+                }
+                $request->session()->put('comprobante_impresion_sesion', $sesion);
+
+                return $sesion;
+            }
             $ids = is_array($sesionSesion) ? ($sesionSesion['lote_venta_ids'] ?? []) : [];
             if ($ids === []) {
                 return is_array($sesionSesion) ? $sesionSesion : [];
@@ -570,6 +639,12 @@ class ComprobanteImpresionSesionController extends Controller
                 is_array($sesionSesion['lote_retorno'] ?? null) ? $sesionSesion['lote_retorno'] : [],
                 ! empty($sesionSesion['solo_copias']) || $request->boolean('solo_copias')
             );
+            if (($sesionSesion['lote_origen'] ?? '') === 'pedidos') {
+                $sesion['lote_origen'] = 'pedidos';
+            }
+            if (! empty($sesionSesion['retorno'])) {
+                $sesion['retorno'] = $sesionSesion['retorno'];
+            }
             $request->session()->put('comprobante_impresion_sesion', $sesion);
 
             return $sesion;

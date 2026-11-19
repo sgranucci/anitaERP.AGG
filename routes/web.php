@@ -2247,6 +2247,8 @@ Route::get('ventas/cliente-cuentacorriente-reporte', 'Ventas\ClienteCuentacorrie
 Route::get('ventas/listar-cliente-cuentacorriente-reporte/{formato}', 'Ventas\ClienteCuentacorrienteReporteController@exportar')->name('listar_cliente_cuentacorriente_reporte');
 Route::get('ventas/ventas-por-concepto', 'Ventas\VentasPorConceptoReporteController@index')->name('ventas_por_concepto');
 Route::get('ventas/listar-ventas-por-concepto/{formato}', 'Ventas\VentasPorConceptoReporteController@exportar')->name('listar_ventas_por_concepto');
+Route::get('ventas/facturacion-cobranzas', 'Ventas\FacturacionCobranzasReporteController@index')->name('facturacion_cobranzas');
+Route::get('ventas/listar-facturacion-cobranzas/{formato}', 'Ventas\FacturacionCobranzasReporteController@exportar')->name('listar_facturacion_cobranzas');
 Route::get('ventas/comision-vendedor-detalle', 'Ventas\ComisionVendedorReporteController@indexDetalle')->name('comision_vendedor_detalle');
 Route::get('ventas/listar-comision-vendedor-detalle/{formato}', 'Ventas\ComisionVendedorReporteController@exportarDetalle')->name('listar_comision_vendedor_detalle');
 Route::get('ventas/comision-vendedor', 'Ventas\ComisionVendedorReporteController@indexResumen')->name('comision_vendedor');
@@ -3180,6 +3182,7 @@ Route::get('ventas/listaunafacturacopias/{id}', 'Ventas\FacturacionController@li
 Route::get('ventas/impresion-sesion/factura/{id}', 'Ventas\ComprobanteImpresionSesionController@factura')->name('sesion_impresion_factura');
 Route::get('ventas/impresion-sesion/reparto/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@reparto')->name('sesion_impresion_reparto');
 Route::get('ventas/impresion-sesion/reparto-pedidos/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@repartoPedidos')->name('sesion_impresion_reparto_pedidos');
+Route::get('ventas/impresion-sesion/reparto-comprobantes-pedido/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@repartoComprobantesPedido')->name('sesion_impresion_reparto_comprobantes_pedido');
 Route::get('ventas/impresion-sesion/pedido/{id}', 'Ventas\ComprobanteImpresionSesionController@pedido')->name('sesion_impresion_pedido');
 Route::get('ventas/impresion-sesion/pedido-facturas/{pedidoId}', 'Ventas\ComprobanteImpresionSesionController@pedidoFacturas')->name('sesion_impresion_pedido_facturas')->where('pedidoId', '[0-9]+');
 Route::get('ventas/impresion-sesion/remito/{id}', 'Ventas\ComprobanteImpresionSesionController@remito')->name('sesion_impresion_remito');

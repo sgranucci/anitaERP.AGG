@@ -16,6 +16,7 @@ use App\Models\Ventas\Venta;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
+use App\Support\Ventas\PedidoAnitaBonificacionSupport;
 use App\Support\Ventas\PedidoDespachoAnitaCierreSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
@@ -532,44 +533,20 @@ class PedidoImportarDesdeAnitaService
 
         $idsConservar = [];
         $pesadaTotal = 0.0;
-        $i = 0;
-        $n = count($lineasAnita);
-        while ($i < $n) {
-            $row = $lineasAnita[$i];
-            $skuRaw = trim((string) ($row->penv_articulo ?? ''));
-            if ($skuRaw === '' || stripos($skuRaw, 'texto') === 0) {
-                $i++;
-                continue;
-            }
+        $pendientes = $this->normalizarLineasAnitaConBonificacion($lineasAnita);
 
-            $articulo = $this->resolverArticulo($skuRaw);
-            if (! $articulo) {
-                $i++;
-                continue;
-            }
-
-            $numeroitem = (int) ($row->penv_orden ?? ($i + 1));
-            $precio = self::floatDesdeAnita($row->penv_precio ?? 0);
-            $descuento = self::floatDesdeAnita($row->penv_dto_art ?? 0);
-            $incluyeimpuesto = trim((string) ($row->penv_incl_impuesto ?? 'N')) ?: 'N';
-            $monedaId = (int) ($row->penv_cod_mon ?? 0);
-            if ($monedaId <= 0) {
-                $monedaId = self::MONEDA_DEFAULT;
-            }
-            $observacion = trim((string) ($row->penv_observacion ?? ''));
-
-            $pieza = 0.0;
-            $kilo = 0.0;
-            $pesadaAnita = 0.0;
-            $ordenActual = $numeroitem;
-
-            while ($i < $n && (int) ($lineasAnita[$i]->penv_orden ?? $ordenActual) === $ordenActual) {
-                $r = $lineasAnita[$i];
-                $pieza += self::floatDesdeAnita($r->penv_pieza ?? 0);
-                $kilo += self::floatDesdeAnita($r->penv_cantidad ?? 0);
-                $pesadaAnita += self::floatDesdeAnita($r->penv_kilos_reales ?? 0);
-                $i++;
-            }
+        foreach ($pendientes as $linea) {
+            $articulo = $linea['articulo'];
+            $numeroitem = (int) $linea['numeroitem'];
+            $pieza = (float) $linea['pieza'];
+            $kilo = (float) $linea['kilo'];
+            $pesadaAnita = (float) $linea['pesada'];
+            $precio = (float) $linea['precio'];
+            $descuento = (float) $linea['descuento'];
+            $incluyeimpuesto = (string) $linea['incluyeimpuesto'];
+            $monedaId = (int) $linea['moneda_id'];
+            $observacion = (string) ($linea['observacion'] ?? '');
+            $descuentoventaId = $linea['descuentoventa_id'];
 
             $uxenv = (float) ($articulo->unidadesxenvase ?? 0);
             $caja = ($uxenv > 0 && $pieza > 0) ? round($pieza / $uxenv, 6) : 0.0;
@@ -580,6 +557,10 @@ class PedidoImportarDesdeAnitaService
                 $pesada = (float) $existente->pesada;
             }
             $pesadaTotal += $pesada;
+
+            if ($descuentoventaId === null && $existente && (int) ($existente->descuentoventa_id ?? 0) > 0) {
+                $descuentoventaId = (int) $existente->descuentoventa_id;
+            }
 
             $campos = [
                 'pedido_id' => $pedidoId,
@@ -594,6 +575,7 @@ class PedidoImportarDesdeAnitaService
                 'incluyeimpuesto' => $incluyeimpuesto,
                 'moneda_id' => $monedaId,
                 'descuento' => $descuento,
+                'descuentoventa_id' => $descuentoventaId,
                 'observacion' => $observacion !== '' ? $observacion : null,
                 'unidadmedida_id' => $articulo->unidadmedida_id ?? null,
                 'estado' => ($forzarEstadoPendiente || $existente === null)
@@ -628,6 +610,126 @@ class PedidoImportarDesdeAnitaService
         }
 
         return $pesadaTotal;
+    }
+
+    /**
+     * Agrupa por penv_orden y fusiona el renglón de bonificación Anita (fl_bonif)
+     * del mismo artículo en la línea paga, resolviendo descuentoventa_id.
+     *
+     * @param  list<object>  $lineasAnita
+     * @return list<array{
+     *     articulo: Articulo,
+     *     numeroitem: int,
+     *     pieza: float,
+     *     kilo: float,
+     *     pesada: float,
+     *     precio: float,
+     *     descuento: float,
+     *     incluyeimpuesto: string,
+     *     moneda_id: int,
+     *     observacion: string,
+     *     descuentoventa_id: int|null
+     * }>
+     */
+    private function normalizarLineasAnitaConBonificacion(array $lineasAnita): array
+    {
+        $grupos = [];
+        $i = 0;
+        $n = count($lineasAnita);
+        while ($i < $n) {
+            $row = $lineasAnita[$i];
+            $skuRaw = trim((string) ($row->penv_articulo ?? ''));
+            if ($skuRaw === '' || stripos($skuRaw, 'texto') === 0) {
+                $i++;
+                continue;
+            }
+
+            $articulo = $this->resolverArticulo($skuRaw);
+            if (! $articulo) {
+                $i++;
+                continue;
+            }
+
+            $numeroitem = (int) ($row->penv_orden ?? ($i + 1));
+            $ordenActual = $numeroitem;
+            $pieza = 0.0;
+            $kilo = 0.0;
+            $pesada = 0.0;
+            $precio = self::floatDesdeAnita($row->penv_precio ?? 0);
+            $descuento = self::floatDesdeAnita($row->penv_dto_art ?? 0);
+            $incluyeimpuesto = trim((string) ($row->penv_incl_impuesto ?? 'N')) ?: 'N';
+            $monedaId = (int) ($row->penv_cod_mon ?? 0);
+            if ($monedaId <= 0) {
+                $monedaId = self::MONEDA_DEFAULT;
+            }
+            $observacion = trim((string) ($row->penv_observacion ?? ''));
+            $esBonif = PedidoAnitaBonificacionSupport::esLineaBonificacionAnita($row);
+
+            while ($i < $n && (int) ($lineasAnita[$i]->penv_orden ?? $ordenActual) === $ordenActual) {
+                $r = $lineasAnita[$i];
+                $pieza += self::floatDesdeAnita($r->penv_pieza ?? 0);
+                $kilo += self::floatDesdeAnita($r->penv_cantidad ?? 0);
+                $pesada += self::floatDesdeAnita($r->penv_kilos_reales ?? 0);
+                if (! PedidoAnitaBonificacionSupport::esLineaBonificacionAnita($r)
+                    && self::floatDesdeAnita($r->penv_precio ?? 0) > 0) {
+                    $precio = self::floatDesdeAnita($r->penv_precio ?? 0);
+                }
+                $i++;
+            }
+
+            $grupos[] = [
+                'articulo' => $articulo,
+                'articulo_id' => (int) $articulo->id,
+                'numeroitem' => $numeroitem,
+                'pieza' => $pieza,
+                'kilo' => $kilo,
+                'pesada' => $pesada,
+                'precio' => $precio,
+                'descuento' => $descuento,
+                'incluyeimpuesto' => $incluyeimpuesto,
+                'moneda_id' => $monedaId,
+                'observacion' => $observacion,
+                'es_bonif' => $esBonif,
+            ];
+        }
+
+        $out = [];
+        foreach ($grupos as $grupo) {
+            if ($grupo['es_bonif'] && $out !== []) {
+                $ultimo = count($out) - 1;
+                if ((int) $out[$ultimo]['articulo_id'] === (int) $grupo['articulo_id']
+                    && ! $out[$ultimo]['es_bonif']) {
+                    $piezaPaga = (float) $out[$ultimo]['pieza'];
+                    $piezaBonif = (float) $grupo['pieza'];
+                    $out[$ultimo]['pieza'] = $piezaPaga + $piezaBonif;
+                    $out[$ultimo]['kilo'] = (float) $out[$ultimo]['kilo'] + (float) $grupo['kilo'];
+                    $out[$ultimo]['pesada'] = (float) $out[$ultimo]['pesada'] + (float) $grupo['pesada'];
+                    $dtoId = PedidoAnitaBonificacionSupport::resolverDescuentoventaId($piezaPaga, $piezaBonif);
+                    if ($dtoId !== null) {
+                        $out[$ultimo]['descuentoventa_id'] = $dtoId;
+                    }
+                    continue;
+                }
+            }
+
+            $out[] = [
+                'articulo' => $grupo['articulo'],
+                'articulo_id' => $grupo['articulo_id'],
+                'numeroitem' => $grupo['numeroitem'],
+                'pieza' => $grupo['pieza'],
+                'kilo' => $grupo['kilo'],
+                'pesada' => $grupo['pesada'],
+                'precio' => $grupo['precio'],
+                'descuento' => $grupo['descuento'],
+                'incluyeimpuesto' => $grupo['incluyeimpuesto'],
+                'moneda_id' => $grupo['moneda_id'],
+                'observacion' => $grupo['observacion'],
+                'es_bonif' => $grupo['es_bonif'],
+                'descuentoventa_id' => null,
+            ];
+        }
+
+        return $out;
     }
 
     private function claveLinea(int $numeroitem, int $articuloId): string

@@ -34,7 +34,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/zonavta/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/zonavta/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/proceso-overlay.js')) ?: time() }}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('includes.ventas.facturacion_circuito_scripts')
@@ -71,6 +71,10 @@
         if (typeof validarListaprecioLineasFormularioVentas === 'function'
             && !validarListaprecioLineasFormularioVentas('#tbody-tabla tr')) {
             return false;
+        }
+
+        if (typeof window.sincronizarDescuentoAnteriorPedido === 'function') {
+            window.sincronizarDescuentoAnteriorPedido();
         }
 
         var form = document.getElementById('formgeneral');
@@ -119,22 +123,19 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar Pedidos de clientes</h3>
-				&nbsp;- ID: {{ $pedido->id }} - Pedido: {{$pedido->codigo}}
-                <div class="card-tools">
+                <h3 class="card-title">Editar pedido · ID {{ $pedido->id }} · {{ $pedido->codigo }}</h3>
+                <div class="card-tools d-flex flex-wrap align-items-center" style="gap: 4px;">
                     @include('includes.ventas.link_mi_impresora')
                     @if (empty($pedidoTransferido) && $pedido->estadopedido != "Facturado")
-					<button type="submit" onclick="pesada()" class="btn btn-success">
-                    	<i class="fa fa-fw fa-check"></i>
-						Pesada
+					<button type="button" onclick="pesada()" class="btn btn-success btn-sm">
+                    	<i class="fa fa-fw fa-check"></i> Pesada
 					</button>
                     @endif
                     @if (!empty($mostrarTransferirDespacho))
-                        <button type="button" onclick="transferirPedidoDespacho()" class="btn btn-success">
-                            <i class="fa fa-fw fa-exchange-alt"></i>
-                            Transferir al despacho
+                        <button type="button" onclick="transferirPedidoDespacho()" class="btn btn-success btn-sm">
+                            <i class="fa fa-fw fa-exchange-alt"></i> Transferir al despacho
                         </button>
                     @endif
                     @if (!empty($pedidoTransferido) && !empty($pedido->transferencia_mercaderia_id) && can('crear-transferencia-mercaderia', false))
@@ -143,21 +144,18 @@
                         </a>
                     @endif
                     @if (!empty($mostrarFacturarPedido) && $pedido->estadopedido != "Facturado" && $pedido->estadopedido != "Suspendido")
-                        <button type="button" onclick="generaFactura()" class="btn btn-primary" data-padron-accion-factura="1">
-                            <i class="fa fa-fw fa-print"></i>
-                            Factura
+                        <button type="button" onclick="generaFactura()" class="btn btn-primary btn-sm" data-padron-accion-factura="1">
+                            <i class="fa fa-fw fa-print"></i> Factura
                         </button>
                         @if (can('crear-remitos', false))
-                        <button type="button" onclick="generaRemito()" class="btn btn-info" data-padron-accion-factura="1">
-                            <i class="fa fa-fw fa-truck"></i>
-                            Remito
+                        <button type="button" onclick="generaRemito()" class="btn btn-info btn-sm" data-padron-accion-factura="1">
+                            <i class="fa fa-fw fa-truck"></i> Remito
                         </button>
                         @endif
                     @endif
                     @if ($pedido->estadopedido != "Facturado" && empty($pedidoTransferido))
-                        <button type="submit" onclick="suspendePedido()" id="suspendepedido" class="btn btn-warning">
-                            <i class="fa fa-fw fa-cross"></i>
-                            Suspender el Pedido
+                        <button type="button" onclick="suspendePedido()" id="suspendepedido" class="btn btn-warning btn-sm">
+                            <i class="fa fa-fw fa-ban"></i> Suspender
                         </button>
                     @else
                         <input type="hidden" id="suspendepedido" value="">
@@ -168,24 +166,24 @@
                     @endphp
                     @if ($ventasPedido->isNotEmpty() && can('listar-factura', false))
                         @foreach ($ventasPedido as $ventaPedido)
-                            <a href="{{ route('lista_una_factura', array_filter(['id' => $ventaPedido->id, 'retorno' => \App\Support\Ventas\PedidoListadoSupport::pathRetornoIndex($filtrosQuery ?? [])])) }}" class="btn btn-primary" title="Listar {{ $ventaPedido->codigo }}" target="_blank" rel="noopener">
+                            <a href="{{ route('lista_una_factura', array_filter(['id' => $ventaPedido->id, 'retorno' => \App\Support\Ventas\PedidoListadoSupport::pathRetornoIndex($filtrosQuery ?? [])])) }}" class="btn btn-outline-primary btn-sm" title="Listar {{ $ventaPedido->codigo }}" target="_blank" rel="noopener">
                                 <i class="fas fa-file-pdf"></i> {{ $ventaPedido->codigo }}
                             </a>
                         @endforeach
                     @endif
                     @if ($remitosPedido->isNotEmpty() && can('listar-remitos', false))
                         @foreach ($remitosPedido as $remitoPedido)
-                            <a href="{{ route('listar_remito_pdf', ['id' => $remitoPedido->id, 'pack' => 1]) }}" class="btn btn-primary" title="Listar remito {{ $remitoPedido->codigo }}">
+                            <a href="{{ route('listar_remito_pdf', ['id' => $remitoPedido->id, 'pack' => 1]) }}" class="btn btn-outline-primary btn-sm" title="Listar remito {{ $remitoPedido->codigo }}">
                                 <i class="fas fa-file-pdf"></i> {{ $remitoPedido->codigo ?: 'Remito' }}
                             </a>
                         @endforeach
                     @endif
-                    <a href="{{ route('listar_pedido_pdf', array_filter(['id' => $pedido['id'], 'retorno' => \App\Support\Ventas\PedidoListadoSupport::pathRetornoIndex($filtrosQuery ?? [])])) }}" class="btn btn-primary" title="Listar el pedido en PDF">
-                        <i class="fas fa-file-pdf"> Listar Pedido</i>
-                    </a>      
+                    <a href="{{ route('listar_pedido_pdf', array_filter(['id' => $pedido['id'], 'retorno' => \App\Support\Ventas\PedidoListadoSupport::pathRetornoIndex($filtrosQuery ?? [])])) }}" class="btn btn-outline-primary btn-sm" title="Listar el pedido en PDF">
+                        <i class="fas fa-file-pdf"></i> Pedido
+                    </a>
                     @if (can('listar-cuentacorriente-cliente', false))
-                        <a href="{{route('listar_cuentacorriente_cliente', ['id' => $pedido->cliente_id])}}" target="_blank" class="btn btn-primary" title="Cuenta Corriente">
-                        <i class="fa fa-folder-open"> Listar Cuenta Corriente</i>
+                        <a href="{{route('listar_cuentacorriente_cliente', ['id' => $pedido->cliente_id])}}" target="_blank" class="btn btn-outline-primary btn-sm" title="Cuenta Corriente">
+                            <i class="fa fa-folder-open"></i> CC
                         </a>
                     @endif
                     @if (empty($ocultarVolver))
@@ -209,20 +207,16 @@
                 </div>
                 <div class="card-footer">
                     @if ($pedido->estadopedido != "Facturado" && empty($pedidoTransferido))
-                        <div class="row">
-                            <div class="col-lg-6">
-                                @if (!empty($puedeActualizarPedido))
-                                    <button type="submit" onclick="return sub()" class="btn btn-success pedido-carga-bloqueable">Guardar</button>
-                                @endif
-                                @if (!empty($soloConsulta))
-                                    <button type="button" class="btn btn-secondary @if(!empty($puedeActualizarPedido)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
-                                @endif
-                            </div>
-                        </div>
+                        @if (!empty($puedeActualizarPedido))
+                            <button type="submit" onclick="return sub()" class="btn btn-success btn-sm pedido-carga-bloqueable">
+								<i class="fa fa-save"></i> Guardar
+							</button>
+                        @endif
+                        @if (!empty($soloConsulta))
+                            <button type="button" class="btn btn-secondary btn-sm @if(!empty($puedeActualizarPedido)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
+                        @endif
                     @elseif (!empty($soloConsulta))
-                        <div class="text-center">
-                            <button type="button" class="btn btn-secondary" onclick="window.close()">Cerrar solapa</button>
-                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="window.close()">Cerrar solapa</button>
                     @endif
                 </div>
             </form>

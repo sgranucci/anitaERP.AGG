@@ -113,6 +113,10 @@
     );
     $leyendasRemito = \App\Support\Ventas\RemitoFormularioLeyendaSupport::desdeVenta($venta);
     $totalKilosRemito = (float) ($totalesDocumento['cantidad'] ?? 0);
+    // Bierzo: Total kilos = cantidad neta + kilos bonificados (las dos columnas del detalle).
+    if ($facturaPdfEsElBierzo) {
+        $totalKilosRemito += (float) ($totalesDocumento['kilodescuento'] ?? 0);
+    }
     $totalBultosRemito = (float) ($venta->cantidadbulto ?? 0);
     $totalPiezasRemito = 0.0;
     foreach ($itemsFactura as $itRemitoTot) {
@@ -187,7 +191,7 @@
                 @include('exports.ventas.partials.formulariofactura_items', [
                     'itemsPagina' => $itemsPagina,
                     'mostrarPrecios' => false,
-                    'mostrarBonificacion' => false,
+                    'mostrarBonificacion' => $facturaPdfEsElBierzo,
                     'mostrarTotalesFila' => $esUltima,
                     'totalesDocumento' => $facturaPdfEsFerli ? $totalesRemito : $totalesDocumento,
                     'esRemitoHoja' => true,

@@ -225,6 +225,11 @@
                 <td class="text-center" style="{{ $facturaPdfCeldaTotales }}">
                     <strong>{{ number_format($totalesDocumento['cantidad'] ?? $totalCantidad, $decCant) }}</strong>
                 </td>
+                @if ($mostrarBonificacion)
+                    <td class="text-center" style="{{ $facturaPdfCeldaTotales }}">
+                        <strong>{{ number_format($totalesDocumento['kilodescuento'] ?? $totalKiloDescuento, $decCant) }}</strong>
+                    </td>
+                @endif
             </tr>
         @elseif ($mostrarTotalesFila)
             <tr class="fila-totales-items">

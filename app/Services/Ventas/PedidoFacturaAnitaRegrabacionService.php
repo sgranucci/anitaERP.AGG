@@ -6,6 +6,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaAnitaReplica;
 use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
+use App\Support\Ventas\PedidoFacturaAnitaReplicaAvisoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaSemaforoSupport;
 use Illuminate\Support\Facades\Log;
 
@@ -118,6 +119,7 @@ final class PedidoFacturaAnitaRegrabacionService
         $fila->save();
 
         PedidoFacturaAnitaSemaforoSupport::levantar();
+        PedidoFacturaAnitaReplicaAvisoSupport::notificarError($ventaId, $mensaje);
 
         Log::warning('pedido.anita.semaforo.levantado', [
             'venta_id' => $ventaId,

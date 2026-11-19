@@ -36,4 +36,19 @@ final class FacturacionAnitaGrabacionSupport
             'motivo' => 'BIERZO_FACTURACION_GRABA_ANITA=false',
         ]);
     }
+
+    /**
+     * Mensaje al fallar traeUltimoNumeroRemito (Anita off o numerador/bridge).
+     */
+    public static function mensajeErrorNumeradorRemito(): string
+    {
+        if (EntornoEmpresaSupport::esElBierzo() && ! self::habilitada()) {
+            return 'No se puede numerar el remito: la grabación Anita está apagada '
+                .'(BIERZO_FACTURACION_GRABA_ANITA=false). Reencendala y reinicie los workers '
+                .'(config:clear + queue:restart) antes de facturar.';
+        }
+
+        return 'El punto de venta de remito no tiene numerador configurado en Anita '
+            .'o el bridge no respondió.';
+    }
 }

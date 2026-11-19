@@ -66,7 +66,8 @@ switch(config('app.empresa'))
             'CLIENTE_STOCK_ID' => '620',
             'CLIENTE_DESPACHO_ID' => (int) env('CLIENTE_DESPACHO_ID', 0),
             'MAIL_CLIENTE_PROVISORIO' => 'info@elbierzo.com.ar',
-            'TOPE_DESCUENTO' => 20,
+            // 0 = sin tope de % kilos sin cargo (regalo) al cargar pedidos/factura/remito
+            'TOPE_DESCUENTO' => (int) env('CLIENTE_TOPE_DESCUENTO', 0),
             'CATEGORIA_SECOS_ID' => 10,
             'SUBCATEGORIA_MAQUINA_ID' => 1,
             'SUBCATEGORIA_TIRA_ID' => 2,

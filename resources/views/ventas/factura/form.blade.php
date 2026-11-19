@@ -986,7 +986,7 @@
 					NC sin factura: &iacute;cono de cubos para combinaci&oacute;n y talles (sube stock).
 				@endif
 				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
-					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo, mismo tope que pedidos).
+					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo).
 				@endif
 			</small>
 		</div>

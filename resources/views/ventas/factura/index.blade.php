@@ -11,6 +11,7 @@ Comprobantes de Venta
 
 <?php
 use App\Helpers\biblioteca;
+use App\Models\Ventas\VentaAnitaReplica;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\FacturaListadoSupport;
 use App\Support\Ventas\PedidoListadoSupport;
@@ -35,6 +36,13 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @if (!empty($anitaReplicaSemaforo))
+            <div class="alert alert-warning py-2 mb-2">
+                <i class="fas fa-exclamation-triangle"></i>
+                Hay comprobantes con r&eacute;plica a Anita pendiente o en error.
+                El cron de regrabado reintenta peri&oacute;dicamente; revis&aacute; el badge en la columna Comprobante.
+            </div>
+        @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Comprobantes de venta</h3>
@@ -142,6 +150,14 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 									{{ $comprobante->tipotransacciones->nombre ?? '' }}&nbsp;
 									{{ $comprobante->clientes->condicionivas->letra ?? '' }}
 									{{ $comprobante->puntoventas->codigo ?? '' }}-{{ $comprobante->numerocomprobante }}
+                                    @php
+                                        $anitaEstado = ($anitaReplicaPorVenta ?? [])[(int) $comprobante->id] ?? null;
+                                    @endphp
+                                    @if ($anitaEstado === VentaAnitaReplica::ESTADO_ERROR)
+                                        <span class="badge badge-danger ml-1" title="Fall&oacute; la r&eacute;plica a Anita; se reintentar&aacute;">Anita error</span>
+                                    @elseif ($anitaEstado === VentaAnitaReplica::ESTADO_PENDIENTE)
+                                        <span class="badge badge-warning ml-1" title="Pendiente de grabar en Anita">Anita pend.</span>
+                                    @endif
         						</td>
         						<td>{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($comprobante) }}</td>
 								<td>{{ $comprobante->puntoventas->empresas->nombre ?? '' }}</td>

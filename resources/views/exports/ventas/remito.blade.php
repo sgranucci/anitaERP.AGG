@@ -176,21 +176,43 @@
 			</tr>
 		</table>
 		@if ($esElBierzo)
+			@php
+				$totalKilosBierzo = (float) ($totales['pesada'] ?? 0) + (float) ($totales['bonificacion'] ?? 0);
+			@endphp
 			<table class="remito-items">
 				<tr class="remito-items-head">
-					<td style="width: 18%;">Artículo</td>
-					<td style="width: 46%;">Descripción</td>
-					<td style="width: 18%; text-align: right;">Piezas</td>
-					<td style="width: 18%; text-align: right;">Cantidad</td>
+					<td style="width: 16%;">Artículo</td>
+					<td style="width: 40%;">Descripción</td>
+					<td style="width: 14%; text-align: right;">Piezas</td>
+					<td style="width: 15%; text-align: right;">Cantidad</td>
+					<td style="width: 15%; text-align: right;">Bonificación</td>
 				</tr>
 				@foreach ($itemsPagina as $item)
 					<tr>
 						<td>{{ $item['sku'] }}</td>
 						<td>{{ $item['descripcion'] }}</td>
 						<td style="text-align: right;">{{ number_format($item['pieza'], 2) }}</td>
-						<td style="text-align: right;">{{ number_format($item['kilo'], 2) }}</td>
+						<td style="text-align: right;">{{ number_format($item['pesada'], 2) }}</td>
+						<td style="text-align: right;">
+							@if ($item['bonificacion'] > 0)
+								{{ number_format($item['bonificacion'], 1) }}
+							@endif
+						</td>
 					</tr>
 				@endforeach
+				@if ($esUltima)
+					<tr>
+						<td><strong>Totales</strong></td>
+						<td></td>
+						<td style="text-align: right;"><strong>{{ number_format($totales['pieza'], 2) }}</strong></td>
+						<td style="text-align: right;"><strong>{{ number_format($totales['pesada'], 2) }}</strong></td>
+						<td style="text-align: right;">
+							@if ($totales['bonificacion'] > 0)
+								<strong>{{ number_format($totales['bonificacion'], 1) }}</strong>
+							@endif
+						</td>
+					</tr>
+				@endif
 			</table>
 		@else
 		<table class="remito-items">
@@ -256,7 +278,7 @@
 					<td style="width: 42%;">
 						<div class="remito-caja-total">
 							<div class="etiq">TOTAL KILOS</div>
-							<div class="valor">{{ number_format($totales['kilo'], 2) }}</div>
+							<div class="valor">{{ number_format($totalKilosBierzo, 2) }}</div>
 						</div>
 						<div class="remito-caja-total">
 							<div class="etiq">TOTAL BULTOS</div>

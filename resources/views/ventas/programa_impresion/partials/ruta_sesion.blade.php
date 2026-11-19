@@ -15,7 +15,11 @@
             $cantidadPapel++;
         }
     }
-    $esLoteReparto = ($sesion['origen_tipo'] ?? '') === 'REPARTO' || ! empty($sesion['lote_venta_ids']);
+    $esLoteReparto = ($sesion['origen_tipo'] ?? '') === 'REPARTO'
+        || ! empty($sesion['lote_venta_ids'])
+        || ! empty($sesion['lote_pedido_ids']);
+    $loteEsPedidos = ($sesion['lote_origen'] ?? '') === 'pedidos_comprobantes'
+        || ! empty($sesion['lote_pedido_ids']);
     $hayEnvio = isset($porFormulario['ENVIO']);
     $mostrarChecksPapel = $cantidadPapel > 1 || $esLoteReparto || $hayEnvio;
 @endphp
@@ -50,7 +54,7 @@
 @if ($mostrarChecksPapel)
     <p class="small text-muted mb-2">
         @if ($esLoteReparto)
-            Marcá la copia a enviar a todas las facturas del reparto.
+            Marcá la copia a enviar a todos los {{ $loteEsPedidos ? 'pedidos' : 'facturas' }} del reparto.
         @else
             Marcá las copias de papel a incluir (impresora o PDF).
         @endif

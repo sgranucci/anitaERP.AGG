@@ -6,6 +6,10 @@ namespace App\Support\Ventas;
  * Filas de PDF de pedido / remito de depósito.
  * El renglón sin cargo (precio 0, mismo artículo) no se imprime:
  * su pesada va a la columna Bonificación del renglón con cargo.
+ *
+ * Pedido: usa pesada + % de descuentoventa.
+ * Remito: no tiene pesada; el kilo grabado es la pesada bruta y el % puede
+ * venir en descuentoventa_id o en remito_articulo.descuento.
  */
 final class PedidoRemitoPdfLineasSupport
 {
@@ -20,8 +24,8 @@ final class PedidoRemitoPdfLineasSupport
 
         foreach ($articulos as $item) {
             $precio = (float) ($item->precio ?? 0);
-            $pesadaBruta = (float) ($item->pesada ?? 0);
             $kilo = (float) ($item->kilo ?? 0);
+            $pesadaBruta = self::pesadaBruta($item, $kilo);
             $articuloId = (int) ($item->articulo_id ?? 0);
 
             if ($precio <= 0.00001 && $filas !== []) {
@@ -34,7 +38,7 @@ final class PedidoRemitoPdfLineasSupport
                 }
             }
 
-            $pctBonificacion = (float) (optional($item->descuentoventa_ids)->porcentajedescuento ?? 0);
+            $pctBonificacion = self::porcentajeBonificacion($item);
             $bonificacion = 0.;
             $pesadaNeta = $pesadaBruta;
             if ($pctBonificacion > 0 && $pesadaBruta > 0) {
@@ -65,5 +69,36 @@ final class PedidoRemitoPdfLineasSupport
         }
 
         return ['filas' => $filas, 'totales' => $totales];
+    }
+
+    /**
+     * @param  object  $item
+     */
+    private static function pesadaBruta($item, float $kilo): float
+    {
+        if ($item instanceof \Illuminate\Database\Eloquent\Model
+            && array_key_exists('pesada', $item->getAttributes())) {
+            return (float) $item->getAttribute('pesada');
+        }
+
+        if (is_object($item) && property_exists($item, 'pesada')) {
+            return (float) $item->pesada;
+        }
+
+        // Remito: el kilo es la pesada bruta.
+        return $kilo;
+    }
+
+    /**
+     * @param  object  $item
+     */
+    private static function porcentajeBonificacion($item): float
+    {
+        $pct = (float) (optional($item->descuentoventa_ids)->porcentajedescuento ?? 0);
+        if ($pct > 0) {
+            return $pct;
+        }
+
+        return (float) ($item->descuento ?? 0);
     }
 }

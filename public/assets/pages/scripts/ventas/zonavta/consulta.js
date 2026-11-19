@@ -65,10 +65,91 @@ function buscar_datos_zonavta(consulta) {
     });
 }
 
-function resolverPorCodigoZonavta(codigo, $ctx) {
+function opcionesFocusTrasEnterZonavta($ctx) {
+    var opts = {};
+    if ($ctx && $ctx.length && $ctx.closest('#tab-lugares-entrega, #cuotas-table, #tab-datos-facturacion').length) {
+        return opts;
+    }
+    // Carga de pedido / remito: Enter en zona → primer artículo de la grilla.
+    if ($('#itemspedido-table').length && $('#formgeneral').length) {
+        opts.focusPrimerArticuloPedido = true;
+        opts.focusSiguiente = '#itemspedido-table tr.item-pedido .codigoarticulo';
+    } else if ($('#itemspedido-table tr.item-pedido .codigoarticulo').length) {
+        opts.focusSiguiente = '#itemspedido-table tr.item-pedido .codigoarticulo';
+    } else if ($('#itemspedido-table .codigoarticulo').length) {
+        opts.focusSiguiente = '#itemspedido-table .codigoarticulo';
+    }
+    return opts;
+}
+
+function enfocarSelectorZonavta($el) {
+    if (!$el || !$el.length || !$el[0]) {
+        return false;
+    }
+    try {
+        $el[0].focus({ preventScroll: false });
+    } catch (err) {
+        $el[0].focus();
+    }
+    if (typeof $el[0].select === 'function') {
+        $el[0].select();
+    }
+    return document.activeElement === $el[0];
+}
+
+function enfocarTrasValidarZonavta(opciones) {
+    opciones = opciones || {};
+
+    var intentar = function () {
+        if (opciones.focusPrimerArticuloPedido && typeof window.enfocarPrimerArticuloPedido === 'function') {
+            window.enfocarPrimerArticuloPedido();
+            return true;
+        }
+        if (!opciones.focusSiguiente) {
+            return false;
+        }
+        var $next = $(opciones.focusSiguiente).first();
+        if (!$next.length) {
+            $next = $('#itemspedido-table tr.item-pedido .codigoarticulo').first();
+        }
+        return enfocarSelectorZonavta($next);
+    };
+
+    // Doble intento: el blur/AJAX a veces roba el foco en el mismo tick.
+    setTimeout(function () {
+        if (!intentar()) {
+            setTimeout(intentar, 50);
+        }
+    }, 0);
+}
+
+function resolverPorCodigoZonavta(codigo, $ctx, opciones) {
+    opciones = opciones || {};
     var codigoZona = $.trim(codigo);
+    var $codigoInput = ($ctx && $ctx.length)
+        ? $ctx.find('.codigozonavta').first()
+        : $('#codigozonavta');
+    if (!$ctx || !$ctx.length) {
+        $ctx = resolverContextoZonavta($codigoInput);
+    }
+    var focusSiguiente = function () {
+        enfocarTrasValidarZonavta(opciones);
+    };
+    var quedarEnCodigo = function () {
+        setTimeout(function () {
+            enfocarSelectorZonavta($codigoInput);
+        }, 0);
+    };
+
     if (codigoZona === '') {
-        limpiarZonavtaEnContexto($ctx);
+        // Sin código: si ya hay id de zona (vino del cliente), no limpiar; solo avanzar.
+        var idActual = ($ctx && $ctx.length)
+            ? $ctx.find('.zonavta_id, #zonavta_id').first().val()
+            : $('#zonavta_id').val();
+        if (!idActual) {
+            limpiarZonavtaEnContexto($ctx);
+        }
+        focusSiguiente();
         return;
     }
 
@@ -76,11 +157,14 @@ function resolverPorCodigoZonavta(codigo, $ctx) {
     $.get(urlRes, function(data) {
         if (data && data.id) {
             aplicarZonavtaEnContexto($ctx, data);
+            focusSiguiente();
         } else {
             limpiarZonavtaEnContexto($ctx);
+            quedarEnCodigo();
         }
     }).fail(function() {
         limpiarZonavtaEnContexto($ctx);
+        quedarEnCodigo();
     });
 }
 
@@ -133,14 +217,36 @@ function manejarEnterCodigoZonavtaCapture(e) {
     e.stopImmediatePropagation();
     var $input = $(target);
     var $ctx = resolverContextoZonavta($input);
-    resolverPorCodigoZonavta($input.val(), $ctx);
+    var opts = opcionesFocusTrasEnterZonavta($ctx);
+    var codigo = $.trim($input.val() || '');
+    var idActual = ($ctx && $ctx.length)
+        ? $ctx.find('.zonavta_id, #zonavta_id').first().val()
+        : $('#zonavta_id').val();
+
+    // Si la zona ya está resuelta (p. ej. vino del cliente), avanzar ya al artículo.
+    if (opts.focusPrimerArticuloPedido && idActual && (codigo !== '' || String(idActual) !== '')) {
+        enfocarTrasValidarZonavta(opts);
+        if (codigo !== '') {
+            resolverPorCodigoZonavta(codigo, $ctx, {});
+        }
+        return;
+    }
+
+    resolverPorCodigoZonavta(codigo, $ctx, opts);
 }
 
-if (!window.__zonavtaF1CaptureActivo) {
-    document.addEventListener('keydown', manejarF1CodigoZonavtaCapture, true);
-    document.addEventListener('keydown', manejarEnterCodigoZonavtaCapture, true);
-    window.__zonavtaF1CaptureActivo = true;
+// Re-bind siempre: si el script se recarga, el handler viejo no debe quedar pegado.
+if (window.__zonavtaF1CaptureHandler) {
+    document.removeEventListener('keydown', window.__zonavtaF1CaptureHandler, true);
 }
+if (window.__zonavtaEnterCaptureHandler) {
+    document.removeEventListener('keydown', window.__zonavtaEnterCaptureHandler, true);
+}
+window.__zonavtaF1CaptureHandler = manejarF1CodigoZonavtaCapture;
+window.__zonavtaEnterCaptureHandler = manejarEnterCodigoZonavtaCapture;
+document.addEventListener('keydown', window.__zonavtaF1CaptureHandler, true);
+document.addEventListener('keydown', window.__zonavtaEnterCaptureHandler, true);
+window.__zonavtaF1CaptureActivo = true;
 
 // Enter en inputs no envía el form; código zona/reparto validan por su handler.
 if (!window.__zonavtaEnterGuardActivo) {
@@ -224,7 +330,7 @@ function activa_eventos_consultazonavta()
         e.preventDefault();
         e.stopPropagation();
         var $ctx = resolverContextoZonavta($(this));
-        resolverPorCodigoZonavta($(this).val(), $ctx);
+        resolverPorCodigoZonavta($(this).val(), $ctx, opcionesFocusTrasEnterZonavta($ctx));
     });
 
     $('.tm-zonavta-campo .codigozonavta').off('blur.zonavta').on('blur.zonavta', function () {
@@ -245,11 +351,22 @@ function activa_eventos_consultazonavta()
 function leeZonaVta()
 {
     var zonavta_id = $("#zonavta_id").val();
+    if (!zonavta_id) {
+        return;
+    }
     var url_res = carpetaBase+'/ventas/leerzonavtaporid/'+zonavta_id;
 
     $.get(url_res, function(data){
-        if (data) {
-            aplicarZonavtaEnContexto($('#tab-datos-facturacion .tm-zonavta-campo').first(), data);
+        if (!data || !data.id) {
+            return;
         }
+        var $ctx = $('#tab-datos-facturacion .tm-zonavta-campo').first();
+        if (!$ctx.length) {
+            $ctx = resolverContextoZonavta($('#codigozonavta'));
+        }
+        if (!$ctx || !$ctx.length) {
+            $ctx = $('#codigozonavta').closest('.form-group.row');
+        }
+        aplicarZonavtaEnContexto($ctx, data);
     });
 }

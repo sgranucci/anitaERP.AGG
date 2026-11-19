@@ -372,21 +372,40 @@ class VentaRepository implements VentaRepositoryInterface
         // El Bierzo numera como a-remito/a-comprob: compemis resuelve la clave
         // y numerador contiene el ultimo numero reservado. No usar MAX(pendmae):
         // el remito puede originarse al facturar sin existir aun en pendmae.
+        // Con Anita apagada NO numerar desde MAX(ERP): genera huecos vs Informix
+        // (incidente 19/nov/2026: 905925/905926 con numerador Anita en 9070xx).
+        // Sin bridge no se emite factura/remito hasta reencender BIERZO_FACTURACION_GRABA_ANITA.
         if (EntornoEmpresaSupport::esElBierzo() && ! FacturacionAnitaGrabacionSupport::habilitada()) {
-            return $this->ultimoNumeroRemitoErp((string) $sucursal);
+            FacturacionAnitaGrabacionSupport::logSiApagada();
+            Log::error('ventas.remito.numerador_bloqueado_anita_apagada', [
+                'tipo' => $tipo,
+                'letra' => $letra,
+                'sucursal' => $sucursal,
+                'motivo' => 'BIERZO_FACTURACION_GRABA_ANITA=false',
+            ]);
+
+            return 'error';
         }
 
+        // El Bierzo + Anita: reservar acá (avance síncrono). Con réplica diferida el
+        // numeraAnita de grabaAnita corre después y dejaba N facturas con el mismo remito.
         if (EntornoEmpresaSupport::esElBierzo()) {
             try {
                 PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
-                $ultimo = $this->leerUltimoNumeradorCompemisEstricto(
-                    (string) $tipo,
-                    (string) $letra,
-                    (string) (int) $sucursal,
-                ) + 1;
+                $reservado = $this->numeraAnita((string) $tipo, (string) $letra, (string) $sucursal);
                 PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+                if (! is_int($reservado) || $reservado <= 0) {
+                    Log::error('ventas.remito.numerador_anita_reserva_fallida', [
+                        'tipo' => $tipo,
+                        'letra' => $letra,
+                        'sucursal' => $sucursal,
+                        'resultado' => $reservado,
+                    ]);
 
-                return $ultimo;
+                    return 'error';
+                }
+
+                return $reservado;
             } catch (\Throwable $e) {
                 Log::error('ventas.remito.numerador_anita_no_disponible', [
                     'tipo' => $tipo,

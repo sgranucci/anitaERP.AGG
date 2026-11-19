@@ -47,6 +47,8 @@ use App\Support\Ventas\Ferli\FacturaMostradorOtFerliSupport;
 use App\Support\Ventas\Ferli\FacturaMostradorPickingFerliSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\LogisticaBierzoSupport;
+use App\Support\Ventas\PedidoFacturaAnitaReplicaAvisoSupport;
+use App\Support\Ventas\PedidoFacturaAnitaSemaforoSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -145,6 +147,12 @@ class FacturacionController extends Controller
             : collect();
         $totalesRango = $this->facturacionService->totalesIndexRango($filtros);
 
+        $anitaReplicaPorVenta = EntornoEmpresaSupport::esElBierzo()
+            ? PedidoFacturaAnitaReplicaAvisoSupport::estadosPorVentaIds($idsPagina)
+            : [];
+        $anitaReplicaSemaforo = EntornoEmpresaSupport::esElBierzo()
+            && PedidoFacturaAnitaSemaforoSupport::levantado();
+
         $datas = [
             'ventas' => $ventas,
             'totalesPorReparto' => $totalesPorReparto,
@@ -157,6 +165,8 @@ class FacturacionController extends Controller
             'ncCompletaPorFactura' => NotaCreditoCompletaUnicaSupport::codigosCompletasPorFactura($idsPagina),
             'ndPorNotaCredito' => NotaDebitoReversionNotaCreditoSupport::codigosNdPorNotaCredito($idsPagina),
             'idsNcPos' => NotaDebitoReversionNotaCreditoSupport::idsEmisionPos($idsPagina),
+            'anitaReplicaPorVenta' => $anitaReplicaPorVenta,
+            'anitaReplicaSemaforo' => $anitaReplicaSemaforo,
         ];
 
         return view('ventas.factura.index', $datas);

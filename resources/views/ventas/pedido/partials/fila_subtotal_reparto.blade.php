@@ -5,6 +5,7 @@
     $etiqueta = $metaReparto ? PedidoListadoSupport::etiquetaSubtotalReparto($metaReparto) : '';
     $accionesReparto = $accionesReparto ?? null;
     $transporteAccionId = (int) ($metaReparto->transporte_id ?? $accionesReparto->transporte_id ?? 0);
+    $cantidadPedidosReparto = (int) ($metaReparto->cantidad_pedidos ?? 0);
     $cantidadVentasReparto = (int) ($accionesReparto->cantidad_ventas ?? 0);
     $cantidadFacturablesReparto = (int) ($accionesReparto->cantidad_facturables ?? 0);
     $retornoImpresion = $retornoIndexPath ?? '';
@@ -22,11 +23,18 @@
     <td></td>
     @if ($conAcciones)
         <td class="text-nowrap">
+            @if (can('listar-pedidos', false) && $cantidadPedidosReparto > 0 && $transporteAccionId > 0)
+                <a href="{{ route('sesion_impresion_reparto_comprobantes_pedido', PedidoListadoSupport::paraImpresionReparto($filtrosImpresion, $transporteAccionId, false, $retornoImpresion)) }}"
+                   class="btn-accion-tabla tooltipsC"
+                   title="Imprimir los pedidos de este reparto">
+                    <i class="fa fa-print"></i>
+                </a>
+            @endif
             @if (can('listar-factura', false) && $cantidadVentasReparto > 0 && $transporteAccionId > 0)
                 <a href="{{ route('sesion_impresion_reparto_pedidos', PedidoListadoSupport::paraImpresionReparto($filtrosImpresion, $transporteAccionId, false, $retornoImpresion)) }}"
                    class="btn-accion-tabla tooltipsC"
                    title="Imprimir las facturas hechas de este reparto">
-                    <i class="fa fa-print"></i>
+                    <i class="fas fa-file-invoice text-primary"></i>
                 </a>
                 <a href="{{ route('sesion_impresion_reparto_pedidos', PedidoListadoSupport::paraImpresionReparto($filtrosImpresion, $transporteAccionId, true, $retornoImpresion)) }}"
                    class="btn-accion-tabla tooltipsC"

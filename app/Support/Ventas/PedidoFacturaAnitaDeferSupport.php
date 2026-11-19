@@ -10,7 +10,8 @@ use Throwable;
 
 /**
  * Diferimiento de Anita en factura de pedido, remito y mostrador (El Bierzo).
- * ARCA (número + CAE) y el numerador de remito siguen síncronos.
+ * ARCA (número + CAE) siguen síncronos. El remito se reserva en emisión con
+ * numeraAnita vía traeUltimoNumeroRemito (no en el job diferido).
  * Venta / vencae / ctamov van a cola Laravel (no Apache / terminating).
  */
 final class PedidoFacturaAnitaDeferSupport

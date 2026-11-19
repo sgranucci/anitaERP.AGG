@@ -42,6 +42,12 @@ interface PedidoQueryInterface
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public function pedidoIdsIndexPorReparto(array $filtros, int $transporteId): array;
+
+    /**
+     * @param  array<string, mixed>  $filtros
      * @return \Illuminate\Support\Collection<int, \App\Models\Ventas\Pedido>
      */
     public function pedidosIndexPorReparto(array $filtros, int $transporteId);

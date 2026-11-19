@@ -2911,7 +2911,10 @@
 
 	function controlDescuento(ptr)
 	{
-		let topedescuento = $("#topedescuento").val();
+		let topedescuento = parseFloat($("#topedescuento").val());
+		if (!topedescuento || topedescuento <= 0) {
+			return true;
+		}
 		var articuloDescuento_id = $(ptr).parents("tr").find(".articulo_id").val();
 		var kiloActual = $(ptr).parents("tr").find(".kilo").val();
 		var totalKiloConCargo = 0;
@@ -2943,7 +2946,7 @@
 		{
 			let diferencia = parseFloat(totalKiloSinCargo / totalKiloConCargo * 100);
 
-			if (diferencia > parseFloat(topedescuento))
+			if (diferencia > topedescuento)
 			{
 				var dif = redondearDecimales(diferencia, 2);
 

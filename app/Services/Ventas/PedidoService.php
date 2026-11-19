@@ -245,6 +245,15 @@ class PedidoService
 		return $this->pedidoQuery->ventaIdsIndexPorReparto($filtros, $transporteId);
 	}
 
+	/**
+	 * @param  array<string, mixed>  $filtros
+	 * @return list<int>
+	 */
+	public function pedidoIdsIndexPorReparto(array $filtros, int $transporteId): array
+	{
+		return $this->pedidoQuery->pedidoIdsIndexPorReparto($filtros, $transporteId);
+	}
+
 	public function listarPedido($id)
 	{
 		$resultado = $this->imprimirPedido((int) $id);
@@ -736,82 +745,103 @@ class PedidoService
 					$listaprecios = $data['listasprecios_id'];
 					$incluyeimpuestos = $data['incluyeimpuestos'];
 					$monedas = $data['monedas_id'];
-					$descuentoventa_ids = $data['descuentoventaanterior_ids'];
-					$descuentos = $data['descuentos'];
-					$loteids = $data['loteids'];
-					$observaciones = $data['observaciones'];
-					$ids = $data['ids'];
+					$descuentoventa_ids = $data['descuentoventaanterior_ids'] ?? [];
+					$descuentos = $data['descuentos'] ?? [];
+					$loteids = $data['loteids'] ?? [];
+					$observaciones = $data['observaciones'] ?? [];
+					$ids = $data['ids'] ?? [];
 					$estadosItems = $data['estados'] ?? [];
 
 					if ($funcion == 'update')
 					{
-						$_id = $pedido_articulo;
-
-						// Borra los que sobran
-						if ($q_pedido_articulo > count($articulos))
-						{
-							for ($d = count($articulos); $d < $q_pedido_articulo; $d++)
-								$this->pedido_articuloRepository->delete($_id[$d]);
+						// Match por ids[] del formulario (no por orden de SKU de findPorPedidoId):
+						// en El Bierzo el listado se reordena por SKU y un save posicional
+						// pisaba descuentoventa_id / artículos entre renglones.
+						$idsExistentes = [];
+						foreach ($pedido_articulo as $filaExistente) {
+							$idsExistentes[] = (int) (is_array($filaExistente)
+								? ($filaExistente['id'] ?? 0)
+								: ($filaExistente->id ?? 0));
 						}
+						$idsExistentes = array_values(array_filter($idsExistentes, static fn (int $x) => $x > 0));
+						$setExistentes = array_fill_keys($idsExistentes, true);
+						$idsConservar = [];
 
-						// Actualiza los que ya existian
-						for ($i = 0; $i < $q_pedido_articulo && $i < count($articulos); $i++)
+						for ($i = 0; $i < count($articulos); $i++)
 						{
-							if ($i < count($articulos))
-							{
-								$pedido_articulo = $this->pedido_articuloRepository->update([
-											"pedido_id" => $id,
-											"articulo_id" => $articulos[$i],
-											"unidadmedida_id" => $unidadmedida_ids[$i],
-											"numeroitem" => $numeroitems[$i],
-											"caja" => $cajas[$i],
-											"pieza" => $piezas[$i],
-											"kilo" => $kilos[$i],
-											"pesada" => $pesadas[$i],
-											"precio" => $precios[$i] ?? 0,
-											"listaprecio_id" => $listaprecios[$i],
-											"incluyeimpuesto" => $incluyeimpuestos[$i],
-											"moneda_id" => $monedas[$i],
-											"descuentoventa_id" => $descuentoventa_ids[$i],
-											"descuento" => $descuentos[$i],
-											"descuentointegrado" => '',
-											"lote_id" => $loteids[$i],
-											"observacion" => $observaciones[$i],
-											"estado" => PedidoEstadoErpSupport::normalizarEstadoItem($estadosItems[$i] ?? null)
-											], $_id[$i]);
+							if ($articulos[$i] === '' || $articulos[$i] === null) {
+								continue;
+							}
+
+							$dtoRaw = $descuentoventa_ids[$i] ?? null;
+							$descuentoventaId = ($dtoRaw === '' || $dtoRaw === null) ? null : (int) $dtoRaw;
+							$payload = [
+								"pedido_id" => $id,
+								"articulo_id" => $articulos[$i],
+								"unidadmedida_id" => $unidadmedida_ids[$i] ?? null,
+								"numeroitem" => $numeroitems[$i] ?? ($i + 1),
+								"caja" => $cajas[$i] ?? 0,
+								"pieza" => $piezas[$i] ?? 0,
+								"kilo" => $kilos[$i] ?? 0,
+								"pesada" => $pesadas[$i] ?? 0,
+								"precio" => $precios[$i] ?? 0,
+								"listaprecio_id" => $listaprecios[$i] ?? null,
+								"incluyeimpuesto" => $incluyeimpuestos[$i] ?? 'N',
+								"moneda_id" => $monedas[$i] ?? null,
+								"descuentoventa_id" => $descuentoventaId,
+								"descuento" => $descuentos[$i] ?? 0,
+								"descuentointegrado" => '',
+								"lote_id" => $loteids[$i] ?? null,
+								"observacion" => $observaciones[$i] ?? null,
+								"estado" => PedidoEstadoErpSupport::normalizarEstadoItem($estadosItems[$i] ?? null),
+							];
+
+							$lineaId = (int) ($ids[$i] ?? 0);
+							if ($lineaId > 0 && isset($setExistentes[$lineaId])) {
+								$this->pedido_articuloRepository->updatePorId($payload, $lineaId);
+								$idsConservar[] = $lineaId;
+							} else {
+								$this->pedido_articuloRepository->create($payload);
+								$articuloIdsAvisoProduccion[] = $articulos[$i];
 							}
 						}
-						if ($q_pedido_articulo > count($articulos))
-							$i = $d; 
+
+						foreach ($idsExistentes as $existenteId) {
+							if (! in_array($existenteId, $idsConservar, true)) {
+								$this->pedido_articuloRepository->delete($existenteId);
+							}
+						}
 					}
 					else
-						$i = 0;
-
-					for ($i_movimiento = $i; $i_movimiento < count($articulos); $i_movimiento++)
 					{
-						if ($articulos[$i_movimiento] != '') 
+						for ($i_movimiento = 0; $i_movimiento < count($articulos); $i_movimiento++)
 						{
-							$pedido_articulo = $this->pedido_articuloRepository->create([
-									"pedido_id" => $id,
-									"articulo_id" => $articulos[$i_movimiento],
-									"unidadmedida_id" => $unidadmedida_ids[$i_movimiento],
-									"numeroitem" => $numeroitems[$i_movimiento],
-									"caja" => $cajas[$i_movimiento],
-									"pieza" => $piezas[$i_movimiento],
-									"kilo" => $kilos[$i_movimiento],
-									"pesada" => $pesadas[$i_movimiento],
-									"precio" => $precios[$i_movimiento] ?? 0,
-									"listaprecio_id" => $listaprecios[$i_movimiento],
-									"incluyeimpuesto" => $incluyeimpuestos[$i_movimiento],
-									"moneda_id" => $monedas[$i_movimiento],
-									"descuentoventa_id" => $descuentoventa_ids[$i_movimiento],
-									"descuento" => $descuentos[$i_movimiento],
-									"descuentointegrado" => '',
-									"lote_id" => $loteids[$i_movimiento],
-									"observacion" => $observaciones[$i_movimiento],
-									"estado" => PedidoEstadoErpSupport::normalizarEstadoItem($estadosItems[$i_movimiento] ?? PedidoEstadoErpSupport::PENDIENTE)
-								]);
-							$articuloIdsAvisoProduccion[] = $articulos[$i_movimiento];
+							if ($articulos[$i_movimiento] != '')
+							{
+								$dtoRaw = $descuentoventa_ids[$i_movimiento] ?? null;
+								$descuentoventaId = ($dtoRaw === '' || $dtoRaw === null) ? null : (int) $dtoRaw;
+								$this->pedido_articuloRepository->create([
+										"pedido_id" => $id,
+										"articulo_id" => $articulos[$i_movimiento],
+										"unidadmedida_id" => $unidadmedida_ids[$i_movimiento],
+										"numeroitem" => $numeroitems[$i_movimiento],
+										"caja" => $cajas[$i_movimiento],
+										"pieza" => $piezas[$i_movimiento],
+										"kilo" => $kilos[$i_movimiento],
+										"pesada" => $pesadas[$i_movimiento],
+										"precio" => $precios[$i_movimiento] ?? 0,
+										"listaprecio_id" => $listaprecios[$i_movimiento],
+										"incluyeimpuesto" => $incluyeimpuestos[$i_movimiento],
+										"moneda_id" => $monedas[$i_movimiento],
+										"descuentoventa_id" => $descuentoventaId,
+										"descuento" => $descuentos[$i_movimiento] ?? 0,
+										"descuentointegrado" => '',
+										"lote_id" => $loteids[$i_movimiento],
+										"observacion" => $observaciones[$i_movimiento],
+										"estado" => PedidoEstadoErpSupport::normalizarEstadoItem($estadosItems[$i_movimiento] ?? PedidoEstadoErpSupport::PENDIENTE)
+									]);
+								$articuloIdsAvisoProduccion[] = $articulos[$i_movimiento];
+							}
 						}
 					}
 				}

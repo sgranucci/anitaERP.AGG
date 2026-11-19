@@ -18,9 +18,11 @@ use App\Repositories\Ventas\Remito_ArticuloRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
+use App\Models\Ventas\Venta;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\PuntoventaRemitoSupport;
@@ -138,15 +140,26 @@ class RemitoService
             throw new \RuntimeException('Remito no encontrado');
         }
 
-        // Ferli: mismo layout FAC/REM Anita (formulariofactura hoja remito).
+        // Ferli / El Bierzo con FAC visible: mismo layout FAC/REM Anita (formulariofactura hoja remito).
         $ventaId = (int) ($remito->venta_id ?? 0);
-        if (EntornoEmpresaSupport::esFerli() && $ventaId > 0) {
+        if ($ventaId <= 0) {
+            $ventaId = (int) (Venta::query()->where('remito_id', $id)->value('id') ?? 0);
+        }
+        if ($ventaId > 0
+            && (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esElBierzo())
+            && PedidoFacturaAnitaArchivosSupport::esVentaIdVisible($ventaId)) {
             return app(FacturacionService::class)->generarPdfFacturaArchivo(
                 $ventaId,
                 'ORIGINAL',
                 false,
                 true
             );
+        }
+
+        // El Bierzo sin FAC visible (reparto 101 / Solo Remito): mismo formulario remito,
+        // numeración REM R del PV Bierzo; no usar la FAC oculta de Villafranca.
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            return app(FacturacionService::class)->generarPdfRemitoDesdeRemitoArchivo((int) $id);
         }
 
         $nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($remito->clientes)->nombre);
@@ -159,11 +172,7 @@ class RemitoService
         }
 
         $pdf = App::make('dompdf.wrapper');
-        if (EntornoEmpresaSupport::esElBierzo()) {
-            $pdf->setPaper('a4', 'portrait');
-        } else {
-            $pdf->setPaper('legal', 'landscape');
-        }
+        $pdf->setPaper('legal', 'landscape');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
         return $path.'/'.$nombre_pdf.'.pdf';
@@ -255,7 +264,9 @@ class RemitoService
 
                 $numero = $this->ventaRepository->traeUltimoNumeroRemito('REM', 'R', $puntoventa->codigo);
                 if ($numero === 'error') {
-                    throw new \RuntimeException('No se pudo obtener numeración de remito desde Anita.');
+                    throw new \RuntimeException(
+                        \App\Support\Ventas\FacturacionAnitaGrabacionSupport::mensajeErrorNumeradorRemito()
+                    );
                 }
 
                 $data['tipocomprobante'] = 'REM';
@@ -625,7 +636,7 @@ class RemitoService
 
         $numero = $this->ventaRepository->traeUltimoNumeroRemito('REM', 'R', $puntoventa->codigo);
         if ($numero === 'error') {
-            return ['error' => 'No se pudo obtener numeración de remito'];
+            return ['error' => \App\Support\Ventas\FacturacionAnitaGrabacionSupport::mensajeErrorNumeradorRemito()];
         }
 
         $articulos_id = [];

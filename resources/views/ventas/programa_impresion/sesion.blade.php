@@ -63,22 +63,27 @@ window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora
                     @endif
                 </p>
                 <p class="text-muted small mb-3">{{ $sesion['motivo'] ?? '' }} — modo {{ $sesion['modo'] ?? 'OPERATIVO' }}</p>
-                @if (! empty($sesion['lote_venta_ids']))
+                @if (! empty($sesion['lote_venta_ids']) || ! empty($sesion['lote_pedido_ids']))
                     @php
                         $loteSoloCopias = ! empty($sesion['solo_copias']);
                         $lotePackCompleto = ! empty($sesion['lote_pack_completo']);
+                        $loteEsPedidos = ($sesion['lote_origen'] ?? '') === 'pedidos_comprobantes'
+                            || ! empty($sesion['lote_pedido_ids']);
+                        $loteCantidad = (int) ($sesion['lote_cantidad']
+                            ?? count($loteEsPedidos ? ($sesion['lote_pedido_ids'] ?? []) : ($sesion['lote_venta_ids'] ?? [])));
                         $loteEjemploCopia = $loteSoloCopias
                             ? 'Duplicado o Triplicado'
                             : 'Triplicado';
+                        $loteNombreDocs = $loteEsPedidos ? 'pedidos' : 'facturas';
                     @endphp
                     <div class="alert alert-info py-2 mb-3">
                         Se van a usar
-                        <strong>{{ (int) ($sesion['lote_cantidad'] ?? count($sesion['lote_venta_ids'])) }}</strong>
-                        comprobantes del filtro actual{{ $loteSoloCopias ? ' (solo copias, sin original)' : '' }}.
+                        <strong>{{ $loteCantidad }}</strong>
+                        {{ $loteNombreDocs }} del filtro actual{{ $loteSoloCopias ? ' (solo copias, sin original)' : '' }}.
                         @if ($lotePackCompleto)
                             Se imprimen todas las copias del programa (como al facturar pedido por pedido).
                         @else
-                            Marcá la copia (por ejemplo {{ $loteEjemploCopia }}) y ejecutá: sale esa copia en todas las facturas del reparto.
+                            Marcá la copia (por ejemplo {{ $loteEjemploCopia }}) y ejecutá: sale esa copia en todos los {{ $loteNombreDocs }} del reparto.
                         @endif
                     </div>
                 @endif

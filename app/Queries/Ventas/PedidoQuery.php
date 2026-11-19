@@ -235,14 +235,26 @@ class PedidoQuery implements PedidoQueryInterface
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public function pedidoIdsIndexPorReparto(array $filtros, int $transporteId): array
+    {
+        return $this->queryPedidoIndexFiltros($filtros)
+            ->where('pedido.transporte_id', $transporteId)
+            ->orderBy('pedido.id')
+            ->pluck('pedido.id')
+            ->map(static fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
      */
     public function pedidosIndexPorReparto(array $filtros, int $transporteId)
     {
-        $ids = $this->queryPedidoIndexFiltros($filtros)
-            ->where('pedido.transporte_id', $transporteId)
-            ->pluck('pedido.id')
-            ->map(static fn ($id) => (int) $id)
-            ->all();
+        $ids = $this->pedidoIdsIndexPorReparto($filtros, $transporteId);
 
         if ($ids === []) {
             return $this->model->newQuery()->whereRaw('1 = 0')->get();

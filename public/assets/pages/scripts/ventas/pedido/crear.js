@@ -686,6 +686,30 @@
 
 	window.enfocarCodigoClientePedidoAlCargar = enfocarCodigoClientePedidoAlCargar;
 
+	function enfocarPrimerArticuloPedido() {
+		if (!$('#itemspedido-table').length) {
+			return;
+		}
+		if (!$('#tbody-tabla tr.item-pedido').length) {
+			agregaRenglon(undefined, { enfocarArticulo: true });
+			return;
+		}
+		var el = document.querySelector('#itemspedido-table tr.item-pedido .codigoarticulo');
+		if (!el || el.disabled || el.readOnly) {
+			return;
+		}
+		try {
+			el.focus({ preventScroll: false });
+		} catch (e) {
+			el.focus();
+		}
+		if (typeof el.select === 'function') {
+			el.select();
+		}
+	}
+
+	window.enfocarPrimerArticuloPedido = enfocarPrimerArticuloPedido;
+
 	function initPedidoEnterNavigation() {
 		var form = document.getElementById('formgeneral');
 
@@ -1189,6 +1213,13 @@
 		activa_eventos(true);
 		TotalPedido();
 
+		$(document).off('input.pedidoCajasManual change.pedidoCajasManual', '#totalcajaspedido')
+			.on('input.pedidoCajasManual change.pedidoCajasManual', '#totalcajaspedido', function () {
+				$(this).data('cajas-manual', true);
+				var n = parseInt(String($(this).val() || '0').replace(',', '.'), 10);
+				$('#caja_reales').val(!isNaN(n) && n > 0 ? n : '');
+			});
+
 		var clienteIdInicial = $('#cliente_id').val();
 		if (clienteIdInicial && $.isNumeric(clienteIdInicial) && parseInt(clienteIdInicial, 10) > 0) {
 			completarCliente_Entrega(clienteIdInicial, false);
@@ -1571,7 +1602,7 @@
 			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
 				totCaja += parseFloat($(this).val());
 		});
-		$("#totalcajaspedido").val(totCaja.toFixed(2));		
+		sincronizarTotalCajasPedido(totCaja);
 		$(".pieza").each(function() {
 			if (parseFloat($(this).val()) >= 1 && parseFloat($(this).val()) <= 999999)
 				totPieza += parseFloat($(this).val());
@@ -2059,11 +2090,39 @@
 	function sincronizarDescuentoAnteriorPedido()
 	{
 		$('#tbody-tabla tr.item-pedido').each(function () {
-			var descuentoId = $(this).find('.descuentoventa_id').val() || '';
+			var $tr = $(this);
+			var descuentoId = $tr.find('.descuentoventa_id').val() || '';
+			var anterior = $tr.find('.descuentoventaanterior_id').val() || '';
 			if (descuentoId !== '') {
-				$(this).find('.descuentoventaanterior_id').val(descuentoId);
+				$tr.find('.descuentoventaanterior_id').val(descuentoId);
+			} else if (anterior !== '' && $tr.find('.descuentoventa_id').prop('disabled')) {
+				// Select deshabilitado (Select2 a veces pierde .val): conservar el hidden.
+				$tr.find('.descuentoventa_id').val(anterior);
 			}
 		});
+	}
+	window.sincronizarDescuentoAnteriorPedido = sincronizarDescuentoAnteriorPedido;
+
+	function sincronizarTotalCajasPedido(totCajaLineas)
+	{
+		var $total = $('#totalcajaspedido');
+		if (!$total.length) {
+			return;
+		}
+		var manual = $total.data('cajas-manual');
+		var cajaReales = $('#caja_reales').val();
+		if (manual) {
+			var editado = parseInt(String($total.val() || '0').replace(',', '.'), 10);
+			if (!isNaN(editado) && editado >= 0) {
+				$('#caja_reales').val(editado > 0 ? editado : '');
+			}
+			return;
+		}
+		if (cajaReales !== '' && cajaReales !== undefined && !isNaN(parseInt(cajaReales, 10)) && parseInt(cajaReales, 10) > 0) {
+			$total.val(parseInt(cajaReales, 10));
+			return;
+		}
+		$total.val(Math.round(totCajaLineas || 0));
 	}
 
 	function mensajeErrorGuardadoPedido(xhr)
@@ -3733,7 +3792,8 @@
 		let pieza = $(ptr).parents("tr").find(".pieza").val();
 		let kilo = $(ptr).parents("tr").find(".kilo").val();
 		let articulo_id = $(ptr).parents("tr").find(".articulo_id").val();
-		let descuentoventa_id = $(ptr).parents("tr").find(".descuentoventa_id").val();
+		let descuentoventa_id = $(ptr).parents("tr").find(".descuentoventa_id").val()
+			|| $(ptr).parents("tr").find(".descuentoventaanterior_id").val();
 		var unidadmedida = $(ptr).parents("tr").find(".unidadmedida").val();
 
 		$(ptr).parents("tr").find(".unidadmedida").val(unidadmedida);
@@ -3949,7 +4009,11 @@
 
 	function controlDescuento(ptr)
 	{
-		let topedescuento = $("#topedescuento").val();
+		let topedescuento = parseFloat($("#topedescuento").val());
+		// 0 o vacío = sin tope (El Bierzo: regalos sin límite del 20%)
+		if (!topedescuento || topedescuento <= 0) {
+			return true;
+		}
 		var articuloDescuento_id = $(ptr).parents("tr").find(".articulo_id").val();
 		var kiloActual = $(ptr).parents("tr").find(".kilo").val();
 		var totalKiloConCargo = 0;
@@ -3981,7 +4045,7 @@
 		{
 			let diferencia = parseFloat(totalKiloSinCargo / totalKiloConCargo * 100);
 
-			if (diferencia > parseFloat(topedescuento))
+			if (diferencia > topedescuento)
 			{
 				var dif = redondearDecimales(diferencia, 2);
 

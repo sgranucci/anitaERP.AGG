@@ -253,7 +253,10 @@
 	}
 
 	function controlDescuentoFactura(ptr) {
-		var topedescuento = $('#topedescuento').val();
+		var topedescuento = parseFloat($('#topedescuento').val());
+		if (!topedescuento || topedescuento <= 0) {
+			return true;
+		}
 		var articuloDescuento_id = $(ptr).parents('tr').find('.articulo_id').val();
 		var kiloActual = parseFloat(($(ptr).parents('tr').find('.kilo').val() || '0').toString().replace(',', '.'));
 		var totalKiloConCargo = 0;
@@ -281,7 +284,7 @@
 		if (totalKiloConCargo > 0) {
 			var diferencia = totalKiloSinCargo / totalKiloConCargo * 100;
 
-			if (diferencia > parseFloat(topedescuento)) {
+			if (diferencia > topedescuento) {
 				var dif = typeof redondearDecimales === 'function' ? redondearDecimales(diferencia, 2) : diferencia.toFixed(2);
 
 				alert('No puede tener artículos sin cargo por mas del ' + topedescuento + '%. Kilos ' + totalKiloConCargo + ' Sin Cargo ' +

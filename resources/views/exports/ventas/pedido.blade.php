@@ -162,16 +162,16 @@
 					</td>
 				</tr>
 				<tr class="pedido-items-head">
-					<th style="width: 8%;">Sku</th>
-					<th style="width: 8%;">Unid.</th>
-					<th style="width: 8%;">Kg.</th>
-					<th style="width: 11%;">Descuento</th>
-					<th style="width: 22%;">Descripción</th>
-					<th style="width: 6%;">UMD</th>
-					<th style="width: 8%;">Cajas</th>
-					<th style="width: 10%;">Precio</th>
-					<th style="width: 9%;">Pesada</th>
-					<th style="width: 10%;">Bonificación</th>
+					<th style="width: 5%;">Sku</th>
+					<th style="width: 7%;">Unid.</th>
+					<th style="width: 7%;">Kg.</th>
+					<th style="width: 7%;">Descuento</th>
+					<th style="width: 32%;">Descripción</th>
+					<th style="width: 5%;">UMD</th>
+					<th style="width: 7%;">Cajas</th>
+					<th style="width: 9%;">Precio</th>
+					<th style="width: 8%;">Pesada</th>
+					<th style="width: 7%;">Bonificación</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -234,6 +234,10 @@
 				<tr class="pedido-kilos-cuadro-total">
 					<td class="pedido-kilos-cuadro-etiq">Total kilos (pesada + bonificación)</td>
 					<td class="pedido-kilos-cuadro-valor">{{ number_format($totalKilosPesadaBonificacion, 2) }}</td>
+				</tr>
+				<tr>
+					<td class="pedido-kilos-cuadro-etiq">Cajas</td>
+					<td class="pedido-kilos-cuadro-valor">{{ number_format((float) ($totales['caja'] ?? 0), 2) }}</td>
 				</tr>
 			</table>
 		@endif
