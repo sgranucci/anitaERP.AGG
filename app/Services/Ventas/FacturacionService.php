@@ -11003,6 +11003,7 @@ class FacturacionService
 			'tipotransacciones',
 			'venta_exportaciones.incoterms',
 			'venta_exportaciones.formapagos',
+			'pedidos.condicionesdeventa',
 		]);
 
 		// SoftDeletes + deleted_at '0000-00-00' ocultan el cliente; para reimpresión hay que traerlo igual.

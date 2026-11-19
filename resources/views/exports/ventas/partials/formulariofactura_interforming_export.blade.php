@@ -195,6 +195,10 @@
                         <td class="lbl-meta">INCOTERMS</td>
                         <td>{{ $incotermAbr }}</td>
                     </tr>
+                    <tr>
+                        <td class="lbl-meta">ORDEN DE COMPRA</td>
+                        <td>{{ $ifExp['orden_compra'] ?? '' }}</td>
+                    </tr>
                 </table>
             </td>
         </tr>

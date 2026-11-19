@@ -66,11 +66,74 @@ final class InterformingFacturaExportacionPdfSupport
     }
 
     /**
+     * Cliente / destinatario de Tierra del Fuego (FAE Interforming).
+     */
+    public static function esClienteTierraDelFuego(Venta $venta): bool
+    {
+        foreach ([
+            (string) ($venta->provincias->nombre ?? ''),
+            (string) ($venta->clientes->provincias->nombre ?? ''),
+        ] as $nombre) {
+            if (self::nombreEsTierraDelFuego($nombre)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function nombreEsTierraDelFuego(string $nombre): bool
+    {
+        $n = mb_strtoupper(trim($nombre));
+        if ($n === '') {
+            return false;
+        }
+        $n = strtr($n, [
+            'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
+            'Ä' => 'A', 'Ë' => 'E', 'Ï' => 'I', 'Ö' => 'O', 'Ü' => 'U',
+        ]);
+
+        return str_contains($n, 'TIERRA DEL FUEGO');
+    }
+
+    /**
+     * COND.DE PAGO en FAE: forma de pago de exportación; en Tierra del Fuego
+     * la del pedido (condicionventa), p.ej. «15 dias fecha de factura».
+     */
+    public static function textoCondicionPago(Venta $venta, ?object $formapago = null): string
+    {
+        if (self::esClienteTierraDelFuego($venta)) {
+            $pedido = $venta->pedidos;
+            $desdePedido = trim((string) ($pedido?->condicionesdeventa?->nombre ?? ''));
+            if ($desdePedido !== '') {
+                return $desdePedido;
+            }
+            $desdeVenta = trim((string) ($venta->condicionventas->nombre ?? ''));
+            if ($desdeVenta !== '') {
+                return $desdeVenta;
+            }
+        }
+
+        return trim((string) ($formapago->nombre ?? $venta->condicionventas->nombre ?? ''));
+    }
+
+    /**
+     * OC del pedido (Interforming) para imprimir bajo INCOTERMS.
+     */
+    public static function ordenCompraDesdePedido(Venta $venta): string
+    {
+        $venta->loadMissing('pedidos');
+
+        return trim((string) ($venta->pedidos->orden_compra ?? ''));
+    }
+
+    /**
      * @return array{
      *   exportacion: ?object,
      *   incoterm_abrev: string,
      *   incoterm_nombre: string,
      *   forma_pago: string,
+     *   orden_compra: string,
      *   peso_neto: float,
      *   bultos: float,
      *   destino: string,
@@ -87,6 +150,15 @@ final class InterformingFacturaExportacionPdfSupport
      */
     public static function contextoVista(Venta $venta): array
     {
+        $venta->loadMissing([
+            'pedidos.condicionesdeventa',
+            'condicionventas',
+            'provincias',
+            'clientes.provincias',
+            'venta_exportaciones.incoterms',
+            'venta_exportaciones.formapagos',
+        ]);
+
         $exp = $venta->venta_exportaciones->first();
         $incoterm = $exp?->incoterms;
         $formapago = $exp?->formapagos;
@@ -124,7 +196,8 @@ final class InterformingFacturaExportacionPdfSupport
             'exportacion' => $exp,
             'incoterm_abrev' => trim((string) ($incoterm->abreviatura ?? '')),
             'incoterm_nombre' => trim((string) ($incoterm->nombre ?? '')),
-            'forma_pago' => trim((string) ($formapago->nombre ?? $venta->condicionventas->nombre ?? '')),
+            'forma_pago' => self::textoCondicionPago($venta, $formapago),
+            'orden_compra' => self::ordenCompraDesdePedido($venta),
             'peso_neto' => (float) ($exp->peso_neto ?? 0),
             'bultos' => (float) ($venta->cantidadbulto ?? 0),
             'destino' => $destino,
