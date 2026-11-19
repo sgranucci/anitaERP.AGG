@@ -271,9 +271,115 @@
             if (usados[m.hash]) return;
             var mismoImp = Math.abs(Math.abs(m.importe) - Math.abs(base.importe)) <= tolerancia;
             var mismaRef = refBase && refCheque(m, ladoOtra) === refBase;
-            // Solo marca visualmente; el tilde lo pone el usuario o "Sugerir par".
             if (mismoImp || mismaRef) m._sugerido = true;
         });
+    }
+
+    /**
+     * Busca el mejor candidato del otro lado (prioridad: misma ref de cheque, luego importe).
+     * @return {{mejor: object, diff: number, porRef: boolean}|null}
+     */
+    function buscarMejorPar(base, ladoBase) {
+        var otra = ladoBase === 'c' ? estado.banco : estado.contables;
+        var usados = ladoBase === 'c' ? mapHashesB : mapHashesC;
+        var ladoOtra = ladoBase === 'c' ? 'b' : 'c';
+        var refBase = refCheque(base, ladoBase);
+        var mejor = null;
+        var mejorDiff = 1e12;
+        var mejorPorRef = null;
+        otra.forEach(function (m) {
+            if (usados[m.hash]) return;
+            var d = Math.abs(Math.abs(m.importe) - Math.abs(base.importe));
+            if (refBase && refCheque(m, ladoOtra) === refBase) {
+                if (!mejorPorRef || d < Math.abs(Math.abs(mejorPorRef.importe) - Math.abs(base.importe))) {
+                    mejorPorRef = m;
+                }
+            }
+            if (d < mejorDiff) {
+                mejorDiff = d;
+                mejor = m;
+            }
+        });
+        if (mejorPorRef) {
+            mejor = mejorPorRef;
+            mejorDiff = Math.abs(Math.abs(mejor.importe) - Math.abs(base.importe));
+        }
+        if (!mejor || (mejorDiff > 1 && !mejorPorRef)) {
+            return null;
+        }
+        return { mejor: mejor, diff: mejorDiff, porRef: !!mejorPorRef };
+    }
+
+    /** Tilda el par 1:1 sin conciliar; Enter / Conciliar confirma. */
+    function aplicarParSugerido(base, ladoBase, mejor) {
+        limpiarSugeridos();
+        base._sugerido = true;
+        mejor._sugerido = true;
+        if (ladoBase === 'c') {
+            selC = {};
+            selC[base.hash] = true;
+            selB = {};
+            selB[mejor.hash] = true;
+            focoLado = 'b';
+            focoHash = mejor.hash;
+        } else {
+            selB = {};
+            selB[base.hash] = true;
+            selC = {};
+            selC[mejor.hash] = true;
+            focoLado = 'c';
+            focoHash = mejor.hash;
+        }
+        pintar();
+        resaltarParEnListas();
+        document.getElementById('estado-cruce').textContent =
+            'Par listo (' + dinero(mejor.importe) + '). Enter o Conciliar para confirmar · Esc limpia.';
+    }
+
+    /**
+     * @param {{silencio?: boolean}} [opciones]
+     * @return {boolean}
+     */
+    function sugerir(opciones) {
+        opciones = opciones || {};
+        var silencio = !!opciones.silencio;
+        var c = seleccionados('c');
+        var b = seleccionados('b');
+        if (c.length === 1 && b.length === 1) {
+            limpiarSugeridos();
+            c[0]._sugerido = true;
+            b[0]._sugerido = true;
+            focoLado = 'c';
+            focoHash = c[0].hash;
+            pintar();
+            resaltarParEnListas();
+            document.getElementById('estado-cruce').textContent =
+                'Ya hay un par 1:1. Enter o Conciliar para confirmar · Esc limpia.';
+            return true;
+        }
+        var base = null;
+        var ladoBase = null;
+        if (c.length === 1 && b.length === 0) {
+            base = c[0];
+            ladoBase = 'c';
+        } else if (b.length === 1 && c.length === 0) {
+            base = b[0];
+            ladoBase = 'b';
+        } else if (c.length === 0 && b.length === 0 && focoHash) {
+            base = buscar(focoLado === 'c' ? estado.contables : estado.banco, focoHash);
+            ladoBase = focoLado;
+        }
+        if (!base) {
+            if (!silencio) alert('Elegí un solo movimiento (de un lado) para buscar el par.');
+            return false;
+        }
+        var hallado = buscarMejorPar(base, ladoBase);
+        if (!hallado) {
+            if (!silencio) alert('No hay un importe cercano entre los pendientes.');
+            return false;
+        }
+        aplicarParSugerido(base, ladoBase, hallado.mejor);
+        return true;
     }
 
     function filaHtml(mov, lado, imp) {
@@ -599,7 +705,7 @@
         var nC = countSel(selC);
         var nB = countSel(selB);
         if (!nC && !nB) {
-            el.textContent = 'Elegí movimientos. Enter concilia 1:1 · Esc limpia · Ctrl+clic multi.';
+            el.textContent = 'Tildá un movimiento: se sugiere el par. Enter confirma · Esc limpia · Ctrl+clic multi.';
             return;
         }
         el.textContent = 'Selección ' + nC + ' contable / ' + nB + ' banco · dif. ' + dinero(sumaSel('c') - sumaSel('b'));
@@ -657,19 +763,34 @@
 
     function seleccionar(lado, hash, multi) {
         var mapa = lado === 'c' ? selC : selB;
+        var activoAntes = !!mapa[hash];
         if (!multi) {
-            var yaActivo = !!mapa[hash];
-            if (lado === 'c') selC = {};
-            else selB = {};
+            // Clic en el tildado → limpia el par entero (no re-sugerir).
+            if (activoAntes) {
+                selC = {};
+                selB = {};
+                focoLado = lado;
+                focoHash = null;
+                limpiarSugeridos();
+                pintar();
+                return;
+            }
+            // Clic en otra fila: base exclusiva y rearmar par del otro lado.
+            selC = {};
+            selB = {};
             mapa = lado === 'c' ? selC : selB;
-            // Clic en el único tildado → destilda; clic en otro → deja solo ese.
-            if (!yaActivo) mapa[hash] = true;
+            mapa[hash] = true;
         } else {
             mapa[hash] = !mapa[hash];
             if (!mapa[hash]) delete mapa[hash];
         }
         focoLado = lado;
         focoHash = hash;
+        // Solo al tildar (no al destildar): sugiere y tilda el mejor del otro lado. Enter confirma.
+        if (!multi && !activoAntes
+            && ((countSel(selC) === 1 && countSel(selB) === 0) || (countSel(selB) === 1 && countSel(selC) === 0))) {
+            if (sugerir({ silencio: true })) return;
+        }
         marcarSugeridosDesdeBase();
         pintar();
     }
@@ -904,89 +1025,6 @@
             overlay(false);
             alert(e.message || 'Error');
         });
-    }
-
-    function sugerir() {
-        var c = seleccionados('c');
-        var b = seleccionados('b');
-        if (c.length === 1 && b.length === 1) {
-            limpiarSugeridos();
-            c[0]._sugerido = true;
-            b[0]._sugerido = true;
-            focoLado = 'c';
-            focoHash = c[0].hash;
-            pintar();
-            resaltarParEnListas();
-            document.getElementById('estado-cruce').textContent =
-                'Ya hay un par 1:1. Enter o Conciliar para confirmar · Esc limpia.';
-            return;
-        }
-        var base = null;
-        var ladoBase = null;
-        if (c.length === 1 && b.length === 0) {
-            base = c[0];
-            ladoBase = 'c';
-        } else if (b.length === 1 && c.length === 0) {
-            base = b[0];
-            ladoBase = 'b';
-        } else if (c.length === 0 && b.length === 0 && focoHash) {
-            base = buscar(focoLado === 'c' ? estado.contables : estado.banco, focoHash);
-            ladoBase = focoLado;
-        }
-        if (!base) {
-            alert('Elegí un solo movimiento (de un lado) para buscar el par.');
-            return;
-        }
-        var otra = ladoBase === 'c' ? estado.banco : estado.contables;
-        var usados = ladoBase === 'c' ? mapHashesB : mapHashesC;
-        var ladoOtra = ladoBase === 'c' ? 'b' : 'c';
-        var refBase = refCheque(base, ladoBase);
-        var mejor = null;
-        var mejorDiff = 1e12;
-        var mejorPorRef = null;
-        otra.forEach(function (m) {
-            if (usados[m.hash]) return;
-            var d = Math.abs(Math.abs(m.importe) - Math.abs(base.importe));
-            if (refBase && refCheque(m, ladoOtra) === refBase) {
-                if (!mejorPorRef || d < Math.abs(Math.abs(mejorPorRef.importe) - Math.abs(base.importe))) {
-                    mejorPorRef = m;
-                }
-            }
-            if (d < mejorDiff) {
-                mejorDiff = d;
-                mejor = m;
-            }
-        });
-        if (mejorPorRef) {
-            mejor = mejorPorRef;
-            mejorDiff = Math.abs(Math.abs(mejor.importe) - Math.abs(base.importe));
-        }
-        if (!mejor || (mejorDiff > 1 && !mejorPorRef)) {
-            alert('No hay un importe cercano entre los pendientes.');
-            return;
-        }
-        limpiarSugeridos();
-        base._sugerido = true;
-        mejor._sugerido = true;
-        if (ladoBase === 'c') {
-            selC = {};
-            selC[base.hash] = true;
-            selB = {};
-            selB[mejor.hash] = true;
-            focoLado = 'b';
-            focoHash = mejor.hash;
-        } else {
-            selB = {};
-            selB[base.hash] = true;
-            selC = {};
-            selC[mejor.hash] = true;
-            focoLado = 'c';
-            focoHash = mejor.hash;
-        }
-        pintar();
-        resaltarParEnListas();
-        document.getElementById('estado-cruce').textContent =
-            'Par sugerido (' + dinero(mejor.importe) + '). Enter o Conciliar · Esc limpia.';
     }
 
     function exportar() {

@@ -7,7 +7,11 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Corrige cuotas ANITA_IMPORT que quedaron en Efectivo por el default del import.
- * Prioridad: OC → proveedor. No toca cuotas que ya no son Efectivo.
+ *
+ * Prioridad: OC no-Efectivo → proveedor no-Efectivo.
+ * Efectivo en la OC no bloquea: se intenta el proveedor.
+ * También corrige cuotas de OC en Efectivo cuando el proveedor tiene otro medio
+ * (la proyección lee primero el medio de la OC vinculada).
  */
 final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
 {
@@ -19,6 +23,9 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
      *   via_proveedor: int,
      *   quedan_efectivo: int,
      *   actualizadas: int,
+     *   oc_candidatas: int,
+     *   oc_a_actualizar: int,
+     *   oc_actualizadas: int,
      *   por_destino: array<string, int>,
      *   muestra: list<array{cuota_id:int,cp_id:int,proveedor_id:int,ordencompra_id:?int,formapago_id:int,origen:string,etiqueta:string}>
      * }
@@ -40,6 +47,9 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
             'via_proveedor' => 0,
             'quedan_efectivo' => 0,
             'actualizadas' => 0,
+            'oc_candidatas' => 0,
+            'oc_a_actualizar' => 0,
+            'oc_actualizadas' => 0,
             'por_destino' => [],
             'muestra' => [],
         ];
@@ -75,6 +85,8 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
         }
 
         $actualizaciones = [];
+        /** @var array<int, array{proveedor_id:int, formapago_id:int}> $ocsACorregir */
+        $ocsACorregir = [];
 
         foreach ($query->cursor() as $row) {
             $stats['candidatas']++;
@@ -82,29 +94,21 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
             $ordencompraId = (int) ($row->ordencompra_id ?? 0) ?: null;
 
             $viaOc = ComprobanteProveedorAnitaImportFormapagoSupport::desdeOrdencompra($ordencompraId);
-            $viaProv = null;
-            $origen = '';
-            if ($viaOc !== null && $viaOc > 0) {
-                $nuevo = $viaOc;
-                $origen = 'oc';
-            } else {
-                $viaProv = ComprobanteProveedorAnitaImportFormapagoSupport::desdeProveedor($proveedorId);
-                if ($viaProv !== null && $viaProv > 0) {
-                    $nuevo = $viaProv;
-                    $origen = 'proveedor';
-                } else {
-                    $stats['quedan_efectivo']++;
+            $viaProv = ComprobanteProveedorAnitaImportFormapagoSupport::desdeProveedor($proveedorId);
+            $elegido = ComprobanteProveedorAnitaImportFormapagoSupport::elegirNoEfectivo(
+                $viaOc,
+                $viaProv,
+                $efectivoId
+            );
 
-                    continue;
-                }
-            }
-
-            if ($nuevo === $efectivoId) {
-                // OC o proveedor confirman Efectivo: no es el default erróneo del import.
+            if ($elegido === null) {
                 $stats['quedan_efectivo']++;
 
                 continue;
             }
+
+            $nuevo = $elegido['id'];
+            $origen = $elegido['origen'];
 
             $stats['a_actualizar']++;
             if ($origen === 'oc') {
@@ -136,6 +140,19 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
             if (! $dryRun) {
                 $actualizaciones[$nuevo][] = (int) $row->cuota_id;
             }
+
+            // Si la OC quedó en Efectivo y corregimos vía proveedor, hay que
+            // alinear las cuotas de la OC (la proyección lee ese medio primero).
+            if (
+                $ordencompraId !== null
+                && $origen === 'proveedor'
+                && ($viaOc === null || $viaOc === $efectivoId)
+            ) {
+                $ocsACorregir[$ordencompraId] = [
+                    'proveedor_id' => $proveedorId,
+                    'formapago_id' => $nuevo,
+                ];
+            }
         }
 
         if (! $dryRun) {
@@ -152,6 +169,63 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
             }
         }
 
+        $ocStats = self::corregirCuotasOcEfectivo($ocsACorregir, $efectivoId, $dryRun);
+        $stats['oc_candidatas'] = $ocStats['candidatas'];
+        $stats['oc_a_actualizar'] = $ocStats['a_actualizar'];
+        $stats['oc_actualizadas'] = $ocStats['actualizadas'];
+
         return $stats;
+    }
+
+    /**
+     * @param  array<int, array{proveedor_id:int, formapago_id:int}>  $ocsACorregir
+     * @return array{candidatas:int, a_actualizar:int, actualizadas:int}
+     */
+    private static function corregirCuotasOcEfectivo(array $ocsACorregir, int $efectivoId, bool $dryRun): array
+    {
+        $out = ['candidatas' => 0, 'a_actualizar' => 0, 'actualizadas' => 0];
+        if ($ocsACorregir === []) {
+            return $out;
+        }
+
+        $porDestino = [];
+        foreach ($ocsACorregir as $ordencompraId => $meta) {
+            $cuotaIds = DB::table('ordencompra_comprobante_cuota as occu')
+                ->join('ordencompra_comprobante as occ', 'occ.id', '=', 'occu.ordencompra_comprobante_id')
+                ->where('occ.ordencompra_id', $ordencompraId)
+                ->where('occu.formapago_id', $efectivoId)
+                ->pluck('occu.id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+
+            if ($cuotaIds === []) {
+                continue;
+            }
+
+            $out['candidatas'] += count($cuotaIds);
+            $out['a_actualizar'] += count($cuotaIds);
+            $nuevo = (int) $meta['formapago_id'];
+            $porDestino[$nuevo] = array_merge($porDestino[$nuevo] ?? [], $cuotaIds);
+        }
+
+        if ($dryRun) {
+            return $out;
+        }
+
+        foreach ($porDestino as $formapagoId => $cuotaIds) {
+            foreach (array_chunk($cuotaIds, 500) as $chunk) {
+                $out['actualizadas'] += DB::table('ordencompra_comprobante_cuota')
+                    ->whereIn('id', $chunk)
+                    ->where('formapago_id', $efectivoId)
+                    ->update([
+                        'formapago_id' => (int) $formapagoId,
+                        'updated_at' => now(),
+                    ]);
+            }
+        }
+
+        ComprobanteProveedorAnitaImportFormapagoSupport::resetCache();
+
+        return $out;
     }
 }

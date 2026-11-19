@@ -9,8 +9,10 @@
     $modo = $modo ?? \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_RESUMEN;
     $esDetalle = $modo === \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_DETALLE;
     $esMensual = $modo === \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_MENSUAL;
+    $esMensualOc = $modo === \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_MENSUAL_OC;
+    $usaMeses = $esMensual || $esMensualOc;
     $meses = $meses ?? [];
-    if ($esMensual && $meses === [] && ! empty($filas[0]['precios_mes']) && is_array($filas[0]['precios_mes'])) {
+    if ($usaMeses && $meses === [] && ! empty($filas[0]['precios_mes']) && is_array($filas[0]['precios_mes'])) {
         $meses = array_keys($filas[0]['precios_mes']);
     }
 
@@ -67,12 +69,29 @@
         return number_format((float) $pct, 2, ',', '.').'%';
     };
 
-    $colspanVacio = $esMensual
-        ? (5 + count($meses) + max(0, count($meses) - 1) + 1)
-        : 14;
+    if ($esMensualOc) {
+        $colspanVacio = 7 + count($meses);
+    } elseif ($esMensual) {
+        $colspanVacio = 5 + count($meses) + max(0, count($meses) - 1) + 1;
+    } else {
+        $colspanVacio = 14;
+    }
 @endphp
 <thead style="background:#85C1E9;color:#17202A;">
-@if ($esMensual)
+@if ($esMensualOc)
+    <tr>
+        <th>Empresa</th>
+        <th>SKU</th>
+        <th>Descripci&oacute;n</th>
+        <th>OC</th>
+        <th>C&oacute;d.Prov.</th>
+        <th>Proveedor</th>
+        <th>Mon</th>
+        @foreach ($meses as $ym)
+            <th class="text-right">{{ \App\Support\Compras\HistorialPreciosArticuloFiltros::etiquetaMes($ym) }}</th>
+        @endforeach
+    </tr>
+@elseif ($esMensual)
     <tr>
         <th>SKU</th>
         <th>Descripci&oacute;n</th>
@@ -125,7 +144,42 @@
 </thead>
 <tbody>
 @forelse ($filas ?? [] as $fila)
-    @if ($esMensual)
+    @if ($esMensualOc)
+        <tr>
+            <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+            <td>
+                @if ($puedeVerArticulo && (int) ($fila['articulo_id'] ?? 0) > 0)
+                    <a href="{{ route('editar_articulo', array_merge(['id' => $fila['articulo_id']], $queryConsulta)) }}"
+                        class="text-primary" target="_blank" rel="noopener">{{ $fila['sku'] ?? '' }}</a>
+                @else
+                    {{ $fila['sku'] ?? '' }}
+                @endif
+            </td>
+            <td>{{ $fila['descripcion_articulo'] ?? '' }}</td>
+            <td>
+                @if ($puedeVerOrdencompra && (int) ($fila['ordencompra_id'] ?? 0) > 0)
+                    <a href="{{ route('editar_ordencompra', array_merge(['id' => $fila['ordencompra_id']], $queryConsulta)) }}"
+                        class="text-primary" target="_blank" rel="noopener">{{ $fila['numeroordencompra'] ?? '' }}</a>
+                @else
+                    {{ $fila['numeroordencompra'] ?? '' }}
+                @endif
+            </td>
+            <td>
+                @if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0)
+                    <a href="{{ route('editar_proveedor', array_merge(['id' => $fila['proveedor_id']], $queryConsulta)) }}"
+                        class="text-primary" target="_blank" rel="noopener">{{ $fila['codigoproveedor'] ?? '' }}</a>
+                @else
+                    {{ $fila['codigoproveedor'] ?? '' }}
+                @endif
+            </td>
+            <td>{{ $fila['nombreproveedor'] ?? '' }}</td>
+            <td>{{ $fila['moneda_abrev'] ?? '' }}</td>
+            @foreach ($meses as $ym)
+                @php $precioMes = $fila['precios_mes'][$ym] ?? null; @endphp
+                <td class="text-right">{{ $formatearNum($precioMes, 4) }}</td>
+            @endforeach
+        </tr>
+    @elseif ($esMensual)
         @php
             $variacionPeriodo = $fila['variacion_periodo_pct'] ?? null;
             $clsPeriodo = $claseVariacion($variacionPeriodo);

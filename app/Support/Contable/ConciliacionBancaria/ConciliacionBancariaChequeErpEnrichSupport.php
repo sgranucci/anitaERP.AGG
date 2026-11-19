@@ -123,15 +123,26 @@ final class ConciliacionBancariaChequeErpEnrichSupport
             }
             $sinImporte = abs((float) ($f['debito'] ?? 0)) < 0.005
                 && abs((float) ($f['credito'] ?? 0)) < 0.005;
-            if ($sinImporte && abs((float) ($src['importe'] ?? 0)) > 0.005) {
-                $imp = round(abs((float) $src['importe']), 2);
-                // Misma regla que desdeCheque: solo ANULA va a débitos.
-                if (strcasecmp($tip, 'ANULA') === 0) {
-                    $f['debito'] = $imp;
+            if ($sinImporte) {
+                $debeSrc = $src['debe'] ?? null;
+                $haberSrc = $src['haber'] ?? null;
+                if ($debeSrc !== null && abs((float) $debeSrc) > 0.005) {
+                    $f['debito'] = round((float) $debeSrc, 2);
                     $f['credito'] = 0.0;
-                } else {
+                } elseif ($haberSrc !== null && abs((float) $haberSrc) > 0.005) {
                     $f['debito'] = 0.0;
-                    $f['credito'] = $imp;
+                    $f['credito'] = round((float) $haberSrc, 2);
+                } elseif (abs((float) ($src['importe'] ?? 0)) > 0.005) {
+                    $impSigned = (float) $src['importe'];
+                    $imp = round(abs($impSigned), 2);
+                    // Misma regla que desdeCheque: ANULA o importe (−) → débitos.
+                    if (strcasecmp($tip, 'ANULA') === 0 || $impSigned < -0.005) {
+                        $f['debito'] = $imp;
+                        $f['credito'] = 0.0;
+                    } else {
+                        $f['debito'] = 0.0;
+                        $f['credito'] = $imp;
+                    }
                 }
             }
         }

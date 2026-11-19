@@ -442,7 +442,15 @@
 		return $.trim($row.find('select[name="centrocostodestino_ids[]"] option:selected').text());
 	}
 
-	function rechazarArticuloPorCentrocosto($row, mensaje) {
+	var ptrReqCcDestinoRow = null;
+	var reqCcDestinoConfirmado = false;
+	var reqCcDestinoLimpiarSiCancelar = false;
+	var reqCcDestinoModalRegistrado = false;
+
+	function limpiarArticuloFilaPorCentrocosto($row) {
+		if (!$row || !$row.length) {
+			return;
+		}
 		$row.find('.articulo_id').val('');
 		$row.find('.codigoarticulo').val('');
 		$row.find('.descripcionarticulo').val('');
@@ -452,6 +460,176 @@
 		if (window.ArticuloProveedorOperativo && typeof window.ArticuloProveedorOperativo.aplicarAFila === 'function') {
 			window.ArticuloProveedorOperativo.aplicarAFila($row, null, null);
 		}
+	}
+
+	function opcionesCcDestinoPermitidos($row, payload) {
+		var idsOk = window.ArticuloCentrocostoCuenta
+			? window.ArticuloCentrocostoCuenta.idsPermitidos(payload)
+			: [];
+		var opts = [];
+		$row.find('select[name="centrocostodestino_ids[]"] option').each(function () {
+			var id = parseInt(this.value, 10) || 0;
+			if (id > 0 && idsOk.indexOf(id) >= 0) {
+				opts.push({ id: id, texto: $.trim($(this).text()) });
+			}
+		});
+		return opts;
+	}
+
+	function $modalReqCcDestino() {
+		return $('#modalReqCcDestinoArticulo');
+	}
+
+	function asegurarModalReqCcDestinoEnBody() {
+		var $modal = $modalReqCcDestino();
+		if ($modal.length && $modal.parent()[0] !== document.body) {
+			$modal.appendTo('body');
+		}
+		return $modal;
+	}
+
+	function aplicarCcDestinoEnFila($row, ccId) {
+		var $sel = $row.find('select[name="centrocostodestino_ids[]"]');
+		if (!$sel.length) {
+			return false;
+		}
+		var valor = String(ccId);
+		if (!$sel.find('option[value="' + valor.replace(/"/g, '\\"') + '"]').length) {
+			return false;
+		}
+		$sel.val(valor);
+		$sel.data('cc-antes', valor);
+		$sel.data('req-valor-anterior', valor);
+		marcarCcManual($row);
+		return true;
+	}
+
+	function abrirModalCcDestinoArticulo($row, payload, opcionesModal) {
+		opcionesModal = opcionesModal || {};
+		var $modal = asegurarModalReqCcDestinoEnBody();
+		if (!$modal.length || !$row || !$row.length) {
+			if (opcionesModal.limpiarSiCancelar) {
+				limpiarArticuloFilaPorCentrocosto($row);
+			}
+			return;
+		}
+		if ($modal.hasClass('show') && ptrReqCcDestinoRow && ptrReqCcDestinoRow[0] !== $row[0]) {
+			return;
+		}
+
+		var sku = String($row.find('.codigoarticulo').val() || '').trim();
+		var desc = String($row.find('.descripcionarticulo').val() || '').trim();
+		var ccTexto = opcionesModal.ccTexto || textoCentroSeleccionado($row);
+		var mensaje = window.ArticuloCentrocostoCuenta
+			? window.ArticuloCentrocostoCuenta.mensajeCambiarDestino(payload, sku, ccTexto)
+			: 'El centro de costo destino no está habilitado para este artículo.';
+		var opts = opcionesCcDestinoPermitidos($row, payload);
+		var $select = $('#modalReqCcDestinoArticuloSelect');
+		var $sinOpts = $('#modalReqCcDestinoArticuloSinOpciones');
+		var $error = $('#modalReqCcDestinoArticuloError');
+		var $grupo = $('#modalReqCcDestinoArticuloGrupo');
+		var $btnOk = $('#modalReqCcDestinoArticuloConfirmar');
+		var $btnCancel = $('#modalReqCcDestinoArticuloCancelar');
+
+		ptrReqCcDestinoRow = $row;
+		reqCcDestinoConfirmado = false;
+		reqCcDestinoLimpiarSiCancelar = !!opcionesModal.limpiarSiCancelar;
+		$row.data('req-cuenta-cc', payload || {});
+		pintarCuentaArticulo($row, payload);
+
+		$('#modalReqCcDestinoArticuloMensaje').text(mensaje);
+		$('#modalReqCcDestinoArticuloArticulo').text(
+			(sku ? sku : 'Artículo') + (desc ? (' — ' + desc) : '')
+		);
+		$btnCancel.text(reqCcDestinoLimpiarSiCancelar ? 'Cancelar artículo' : 'Cancelar');
+		$error.addClass('d-none').text('');
+		$select.empty();
+		if (!opts.length) {
+			$grupo.addClass('d-none');
+			$sinOpts.removeClass('d-none');
+			$btnOk.prop('disabled', true);
+		} else {
+			$grupo.removeClass('d-none');
+			$sinOpts.addClass('d-none');
+			$btnOk.prop('disabled', false);
+			for (var i = 0; i < opts.length; i++) {
+				$select.append($('<option>', { value: opts[i].id, text: opts[i].texto }));
+			}
+			$select.val(String(opts[0].id));
+		}
+
+		registrarModalCcDestinoArticulo();
+		$modal.modal('show');
+	}
+
+	function registrarModalCcDestinoArticulo() {
+		if (reqCcDestinoModalRegistrado) {
+			return;
+		}
+		reqCcDestinoModalRegistrado = true;
+		var $modal = asegurarModalReqCcDestinoEnBody();
+
+		$(document)
+			.off('click.reqCcDestinoModal', '#modalReqCcDestinoArticuloConfirmar')
+			.on('click.reqCcDestinoModal', '#modalReqCcDestinoArticuloConfirmar', function () {
+				var $row = ptrReqCcDestinoRow;
+				var $error = $('#modalReqCcDestinoArticuloError');
+				var ccId = parseInt($('#modalReqCcDestinoArticuloSelect').val(), 10) || 0;
+				var payload = $row && $row.length ? $row.data('req-cuenta-cc') : null;
+				if (!$row || !$row.length) {
+					reqCcDestinoConfirmado = true;
+					$modal.modal('hide');
+					return;
+				}
+				if (!ccId || !window.ArticuloCentrocostoCuenta || !window.ArticuloCentrocostoCuenta.permitido(payload, ccId)) {
+					$error.removeClass('d-none').text('Seleccione un centro de costo destino habilitado.');
+					return;
+				}
+				if (!aplicarCcDestinoEnFila($row, ccId)) {
+					$error.removeClass('d-none').text('No se pudo aplicar el centro de costo en la línea.');
+					return;
+				}
+				pintarCuentaArticulo($row, payload);
+				reqCcDestinoConfirmado = true;
+				$modal.modal('hide');
+				var $cant = $row.find('.cantidad-linea').first();
+				if ($cant.length) {
+					$cant.trigger('focus');
+				}
+			});
+
+		$modal
+			.off('hidden.bs.modal.reqCcDestinoModal')
+			.on('hidden.bs.modal.reqCcDestinoModal', function () {
+				var $row = ptrReqCcDestinoRow;
+				var limpiar = reqCcDestinoLimpiarSiCancelar;
+				if (!reqCcDestinoConfirmado && limpiar && $row && $row.length) {
+					limpiarArticuloFilaPorCentrocosto($row);
+					setTimeout(function () {
+						$row.find('.codigoarticulo').first().trigger('focus');
+					}, 0);
+				} else if (!reqCcDestinoConfirmado && $row && $row.length) {
+					setTimeout(function () {
+						$row.find('select[name="centrocostodestino_ids[]"]').first().trigger('focus');
+					}, 0);
+				}
+				ptrReqCcDestinoRow = null;
+				reqCcDestinoConfirmado = false;
+				reqCcDestinoLimpiarSiCancelar = false;
+			});
+
+		$modal
+			.off('shown.bs.modal.reqCcDestinoModal')
+			.on('shown.bs.modal.reqCcDestinoModal', function () {
+				var $select = $('#modalReqCcDestinoArticuloSelect');
+				if ($select.is(':visible') && !$select.prop('disabled')) {
+					$select.trigger('focus');
+				}
+			});
+	}
+
+	function rechazarArticuloPorCentrocosto($row, mensaje) {
+		limpiarArticuloFilaPorCentrocosto($row);
 		setTimeout(function () {
 			alert(mensaje);
 			$row.find('.codigoarticulo').first().trigger('focus');
@@ -554,11 +732,7 @@
 			if (opciones.avisar && filaArticuloEditable($row)
 				&& window.ArticuloCentrocostoCuenta
 				&& !window.ArticuloCentrocostoCuenta.permitido(resp, ccId)) {
-				var sku = String($row.find('.codigoarticulo').val() || '').trim();
-				rechazarArticuloPorCentrocosto(
-					$row,
-					window.ArticuloCentrocostoCuenta.mensaje(resp, sku, textoCentroSeleccionado($row))
-				);
+				abrirModalCcDestinoArticulo($row, resp, { limpiarSiCancelar: true });
 				return;
 			}
 			pintarCuentaArticulo($row, resp);
@@ -591,7 +765,9 @@
 				if (!window.ArticuloCentrocostoCuenta) {
 					return;
 				}
-				var faltan = [];
+				var $primeraInvalida = null;
+				var payloadInvalido = null;
+				var extras = 0;
 				$(SELECTOR_TABLA).find(SELECTOR_FILA).each(function () {
 					var $row = $(this);
 					var cant = parseFloat($row.find('.cantidad-linea').val()) || 0;
@@ -604,15 +780,24 @@
 					if (!payload || window.ArticuloCentrocostoCuenta.permitido(payload, ccId)) {
 						return;
 					}
-					var sku = String($row.find('.codigoarticulo').val() || '').trim();
-					faltan.push(window.ArticuloCentrocostoCuenta.mensaje(payload, sku, textoCentroSeleccionado($row)));
+					if (!$primeraInvalida) {
+						$primeraInvalida = $row;
+						payloadInvalido = payload;
+					} else {
+						extras += 1;
+					}
 				});
-				if (!faltan.length) {
+				if (!$primeraInvalida) {
 					return;
 				}
 				e.preventDefault();
 				e.stopImmediatePropagation();
-				alert(faltan.join('\n'));
+				abrirModalCcDestinoArticulo($primeraInvalida, payloadInvalido, { limpiarSiCancelar: false });
+				if (extras > 0) {
+					setTimeout(function () {
+						alert('Hay ' + extras + ' línea(s) más con centro de costo destino no habilitado. Corrija una por una.');
+					}, 0);
+				}
 				return false;
 			});
 	}
@@ -722,14 +907,16 @@
 			.on('change.reqPatronCc', SELECTOR_TABLA + ' ' + SELECTOR_FILA + ':first select[name="centrocostodestino_ids[]"]', function () {
 				var $sel = $(this);
 				var valorAnterior = $sel.data('req-valor-anterior');
-				if (!centrocostoLineaPermitido($sel.closest(SELECTOR_FILA), $sel.val())) {
-					var $rowCc = $sel.closest(SELECTOR_FILA);
-					var textoIntentado = textoCentroSeleccionado($rowCc);
+				var $rowCc = $sel.closest(SELECTOR_FILA);
+				if (!centrocostoLineaPermitido($rowCc, $sel.val())) {
+					var textoIntentadoPrimera = textoCentroSeleccionado($rowCc);
 					if (valorAnterior) {
 						$sel.val(valorAnterior);
 					}
-					var skuCc = String($rowCc.find('.codigoarticulo').val() || '').trim();
-					alert(window.ArticuloCentrocostoCuenta.mensaje($rowCc.data('req-cuenta-cc'), skuCc, textoIntentado));
+					abrirModalCcDestinoArticulo($rowCc, $rowCc.data('req-cuenta-cc'), {
+						limpiarSiCancelar: false,
+						ccTexto: textoIntentadoPrimera
+					});
 					return;
 				}
 				$sel.data('req-valor-anterior', $sel.val());
@@ -744,12 +931,14 @@
 				var $rowCc = $sel.closest(SELECTOR_FILA);
 				var anterior = $sel.data('cc-antes');
 				if (!centrocostoLineaPermitido($rowCc, $sel.val())) {
-					var textoIntentado = textoCentroSeleccionado($rowCc);
+					var textoIntentadoManual = textoCentroSeleccionado($rowCc);
 					if (anterior) {
 						$sel.val(anterior);
 					}
-					var skuCc = String($rowCc.find('.codigoarticulo').val() || '').trim();
-					alert(window.ArticuloCentrocostoCuenta.mensaje($rowCc.data('req-cuenta-cc'), skuCc, textoIntentado));
+					abrirModalCcDestinoArticulo($rowCc, $rowCc.data('req-cuenta-cc'), {
+						limpiarSiCancelar: false,
+						ccTexto: textoIntentadoManual
+					});
 					return;
 				}
 				$sel.data('cc-antes', $sel.val());
@@ -1084,6 +1273,7 @@
 		registrarAtajosF1();
 		registrarEnterLineas();
 		registrarDetalleLineaModal();
+		registrarModalCcDestinoArticulo();
 		initPatronesIniciales();
 		initDetalleLineaBadges();
 		if (esPantallaRequisicionLineas()) {

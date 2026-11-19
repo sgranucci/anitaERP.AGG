@@ -151,9 +151,16 @@ final class ConciliacionBancariaSinConciliarReporteSupport
         $imp = (float) ($ch['importe'] ?? 0);
         $debe = $ch['debe'] ?? null;
         $haber = $ch['haber'] ?? null;
+        if ($debe !== null && abs((float) $debe) < 0.005) {
+            $debe = null;
+        }
+        if ($haber !== null && abs((float) $haber) < 0.005) {
+            $haber = null;
+        }
         if ($debe === null && $haber === null) {
-            // Stock de cheques propios: crédito (pendiente de débito bancario).
-            if (strcasecmp($tip, 'ANULA') === 0) {
+            // Misma convención que Anita Bridge: importe (−) → Débitos, (+) → Créditos.
+            // CHP emitido sin signo suele venir positivo (crédito pendiente de débito bancario).
+            if (strcasecmp($tip, 'ANULA') === 0 || $imp < -0.005) {
                 $debe = abs($imp) > 0.005 ? abs($imp) : null;
                 $haber = null;
             } else {

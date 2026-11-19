@@ -10,6 +10,7 @@ use App\Models\Compras\Tipotransaccion_Compra;
 use App\Services\Caja\IngresoEgresoService;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPeriodoLockSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaResultadoCache;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -77,6 +78,15 @@ class ConciliacionBancariaGastoDocumentoService
             $motivo = $borrador['faltantes'][0] ?? 'No hay gastos bancarios para documentar.';
             throw new RuntimeException($motivo);
         }
+
+        // Generar EGR/ICO sí contabiliza: exige período abierto (alcance Interbanking)
+        // además del control de Caja dentro de guardaIngresoEgreso.
+        ConciliacionBancariaPeriodoLockSupport::assertMesOperable(
+            $empresaId,
+            $mes,
+            $anio,
+            Auth::id() ? (int) Auth::id() : null,
+        );
 
         $tipoCaja = Tipotransaccion_Caja::query()
             ->where('abreviatura', (string) $borrador['tipo_caja'])

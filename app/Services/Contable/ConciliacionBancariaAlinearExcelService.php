@@ -641,9 +641,19 @@ class ConciliacionBancariaAlinearExcelService
      */
     private function contableProtegidoPorExcel(array $mov, array $cheques, array $tipNumero = []): bool
     {
-        // ANULA de cheque (ya conciliado o fuera del Excel) no debe cerrarse sintético.
+        // tipNumero poblado = alineación Anita Bridge (Tip|Numero). Contaduría suele ir solo con $cheques.
+        $modoAnita = $tipNumero !== [];
+        $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
+        $esTipCheque = in_array($tipo, ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'], true);
+
         if (ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov)) {
-            return true;
+            // Contaduría: las ANULA se mantienen. Anita Bridge no las lista → se cierran.
+            if (! $modoAnita) {
+                return true;
+            }
+            $nAnula = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
+
+            return $nAnula !== null && isset($tipNumero['ANULA|'.$nAnula]);
         }
 
         if ($cheques === [] && $tipNumero === []) {
@@ -651,11 +661,12 @@ class ConciliacionBancariaAlinearExcelService
         }
 
         $n = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
-        if ($n !== null && isset($cheques[$n])) {
+        // Por nro de cheque del Excel solo se protege el tip cheque.
+        // Un OPP con "Ch: N" duplica el CHP de Anita y debe cerrarse (no protegerlo).
+        if ($n !== null && isset($cheques[$n]) && ($esTipCheque || ! $modoAnita)) {
             return true;
         }
 
-        $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
         $digNro = ConciliacionBancariaExcelReferenciaSupport::soloDigitos((string) ($mov['nro'] ?? ''));
         $nroOp = ConciliacionBancariaReferenciaSupport::extraerOrdenPagoContable($mov) ?? '';
         $clavesTip = [];
@@ -668,7 +679,8 @@ class ConciliacionBancariaAlinearExcelService
         if ($nroOp !== '') {
             $clavesTip[] = 'OPP|'.$nroOp;
         }
-        if ($digNro !== '') {
+        // En modo Anita no inventar OPP|nroCheque: el Excel trae CHP|nro; el OPP es el duplicado rojo.
+        if (! $modoAnita && $digNro !== '') {
             $clavesTip[] = 'OPP|'.$digNro;
         }
         foreach ($clavesTip as $clave) {
@@ -677,14 +689,11 @@ class ConciliacionBancariaAlinearExcelService
             }
         }
 
-        if (in_array($tipo, ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'], true)) {
+        if ($esTipCheque) {
             $dig = $digNro;
             if ($dig !== '' && isset($cheques[$dig])) {
                 return true;
             }
-            // Cheque propio pendiente Contaduría: proteger todos los CH* no matcheados por número
-            // solo si el número aparece en Excel; si no hay número, no forzar cierre de CHP genéricos
-            // cuando hay lista Excel (evitar cerrar cheques reales).
             if ($dig !== '' && $dig !== '0') {
                 return isset($cheques[$dig]);
             }

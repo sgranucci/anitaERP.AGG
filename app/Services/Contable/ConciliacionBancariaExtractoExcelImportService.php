@@ -6,7 +6,6 @@ use App\Models\Caja\Cuentacaja;
 use App\Services\Caja\InterbankingMovimientoPersistenciaService;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExtractoSupport;
-use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPeriodoLockSupport;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
 
@@ -57,16 +56,6 @@ class ConciliacionBancariaExtractoExcelImportService
         }
 
         $movimientos = $extracto['movimientos'] ?? [];
-        if (! $omitirValidacionCierre && $movimientos !== []) {
-            $ctrl = ConciliacionBancariaExtractoSupport::controlesDesdeMovimientos($movimientos);
-            if ($ctrl['fecha_desde'] !== null) {
-                ConciliacionBancariaPeriodoLockSupport::assertFechaOperable(
-                    $empresaId,
-                    $ctrl['fecha_desde'],
-                    Auth::id() ? (int) Auth::id() : null,
-                );
-            }
-        }
 
         $reg = ConciliacionBancariaExtractoSupport::registrarDesdeImportacion(
             $empresaId,

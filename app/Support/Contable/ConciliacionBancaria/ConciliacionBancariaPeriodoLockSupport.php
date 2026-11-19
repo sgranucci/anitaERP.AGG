@@ -10,8 +10,10 @@ use Carbon\Carbon;
 use RuntimeException;
 
 /**
- * Lock operativo de conciliación vs agenda PeriodoCierreContable (alcance interbanking)
- * y vs estado local de la ejecución (cerrado/aprobado).
+ * Lock operativo de conciliación:
+ * - Cruce de pares / importar extracto: solo estado local (cerrado/aprobado).
+ * - Agenda PeriodoCierreContable (alcance interbanking): para operaciones que
+ *   contabilizan, p. ej. generar egreso/ICO de gastos bancarios.
  */
 final class ConciliacionBancariaPeriodoLockSupport
 {
@@ -40,8 +42,8 @@ final class ConciliacionBancariaPeriodoLockSupport
     }
 
     /**
-     * Bloquea altas/bajas de pares si el período local está cerrado/aprobado
-     * o si la agenda de cierre contable ya cerró Interbanking.
+     * Bloquea altas/bajas de pares si el período local de conciliación está cerrado/aprobado.
+     * No consulta la agenda de cierre contable: conciliar no genera asientos.
      */
     public static function assertEditable(
         int $empresaId,
@@ -50,7 +52,7 @@ final class ConciliacionBancariaPeriodoLockSupport
         int $anio,
         ?int $usuarioId = null,
     ): void {
-        self::assertMesOperable($empresaId, $mes, $anio, $usuarioId);
+        unset($usuarioId);
 
         $ejec = ConciliacionBancariaEjecucion::query()
             ->where('empresa_id', $empresaId)

@@ -473,11 +473,12 @@ final class ArticuloPrecioUltimaCompraSupport
 
     /**
      * COM cuya cantidad del artículo quedó cubierta por DEP confirmadas (recepcion_referencia_id).
+     * Usado también por el historial de precios de compra para anular esas COM (no sumar líneas DEP).
      *
      * @param  list<int|string|null>  $recepcionIds
      * @return array<string, true> clave "recepcionId|articuloId"
      */
-    private static function clavesRecepcionArticuloCubiertasPorDep(array $recepcionIds): array
+    public static function clavesRecepcionArticuloCubiertasPorDep(array $recepcionIds): array
     {
         $recepcionIds = array_values(array_unique(array_filter(
             array_map('intval', $recepcionIds),

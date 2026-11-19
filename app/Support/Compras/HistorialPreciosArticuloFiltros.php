@@ -21,6 +21,11 @@ final class HistorialPreciosArticuloFiltros
     /** Precios del período encolumnados por mes + variación % entre meses. */
     public const MODO_MENSUAL = 'mensual';
 
+    /**
+     * Una fila por compra/OC con el precio en la columna del mes (estilo control items / solapa Reporte).
+     */
+    public const MODO_MENSUAL_OC = 'mensual_oc';
+
     public const AGRUPACION_ARTICULO = 'articulo';
 
     public const AGRUPACION_ARTICULO_PROVEEDOR = 'articulo_proveedor';
@@ -32,7 +37,8 @@ final class HistorialPreciosArticuloFiltros
     public const OPCIONES_MODO = [
         ['valor' => self::MODO_RESUMEN, 'etiqueta' => 'Resumen (último / anterior / variación)'],
         ['valor' => self::MODO_DETALLE, 'etiqueta' => 'Detalle de compras (todas las variaciones)'],
-        ['valor' => self::MODO_MENSUAL, 'etiqueta' => 'Por mes (columnas de precio + variación %)'],
+        ['valor' => self::MODO_MENSUAL, 'etiqueta' => 'Por mes (último precio del mes + variación %)'],
+        ['valor' => self::MODO_MENSUAL_OC, 'etiqueta' => 'Por mes y OC (una fila por compra, como control items)'],
     ];
 
     /** @var list<array{valor: string, etiqueta: string}> */
@@ -192,7 +198,22 @@ final class HistorialPreciosArticuloFiltros
 
     public static function modoValido(string $modo): bool
     {
-        return in_array($modo, [self::MODO_RESUMEN, self::MODO_DETALLE, self::MODO_MENSUAL], true);
+        return in_array($modo, [
+            self::MODO_RESUMEN,
+            self::MODO_DETALLE,
+            self::MODO_MENSUAL,
+            self::MODO_MENSUAL_OC,
+        ], true);
+    }
+
+    public static function usaColumnasMes(string $modo): bool
+    {
+        return $modo === self::MODO_MENSUAL || $modo === self::MODO_MENSUAL_OC;
+    }
+
+    public static function esMensualOc(string $modo): bool
+    {
+        return $modo === self::MODO_MENSUAL_OC;
     }
 
     /**

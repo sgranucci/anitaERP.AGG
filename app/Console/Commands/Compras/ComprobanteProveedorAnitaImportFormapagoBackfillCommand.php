@@ -49,6 +49,9 @@ class ComprobanteProveedorAnitaImportFormapagoBackfillCommand extends Command
             ['  vía proveedor', $stats['via_proveedor']],
             ['Quedan Efectivo (OC/prov sin otro medio)', $stats['quedan_efectivo']],
             ['Actualizadas', $stats['actualizadas']],
+            ['Cuotas OC en Efectivo candidatas', $stats['oc_candidatas']],
+            ['Cuotas OC a actualizar', $stats['oc_a_actualizar']],
+            ['Cuotas OC actualizadas', $stats['oc_actualizadas']],
         ]);
 
         if ($filasDestino !== []) {

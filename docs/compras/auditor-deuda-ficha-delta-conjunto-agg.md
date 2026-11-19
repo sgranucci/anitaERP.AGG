@@ -52,6 +52,41 @@ A partir del 18/11 el auditor compara contra esta base. Si el conjunto no se mue
 
 ---
 
+## Corregido: 19/11/2026 — Rebisco FAC EDESUR sin asiento
+
+| | Cron 19/11 (antes) | 19/11 (después) |
+|---|---:|---:|
+| Delta proveedores Rebisco | −339.693.892,17 | −297.971.512,89 |
+| Delta anticipos Rebisco | 38.874.018,07 | 38.874.018,07 |
+| **Delta conjunto Rebisco** | **−300.819.874,10** | **−259.097.494,82** |
+
+Variación cron 18→19 (antes de corregir): **−41.722.379,28** · solo **211010001**. Tras armar el asiento: variación **0,00** vs 18/11. Biyemas y Kandiko no se movieron. Ficha siempre cuadrada.
+
+### Origen
+
+El 18/11 a las 15:37 (después del corte 07:50) Federico Rodriguez (`frodriguez`) contabilizó desde precarga **3048** la FAC **A-9904-2780436** de **326 EDESUR S.A.** (cp **35762**, total **41.722.379,28**, leyenda «servicio»).
+
+Tipo compra **FAC** (`tipotransaccion_compra` id **107**) tenía **`asientocontable = N`**: `contabilizar` dejó CC y **no** generó asiento. Deuda +41.722.379,28 sin Haber en proveedores.
+
+### Corrección (19/11)
+
+1. `tipotransaccion_compra` id 107: `asientocontable` **N → S** (quedan FAC futuras con asiento; mismo criterio que NDR Ferli).
+2. `descontabilizarSinPagos(35762)` + `contabilizar(35762)`.
+3. Asiento ERP **177518** (nro **239094**) / Anita nro interno **431209**, `SYNC_OK`:
+
+| Cuenta | Monto |
+|---|---:|
+| 521170005 LUZ | +2.469.502,47 |
+| 521170005 LUZ | +29.923.897,34 |
+| 114010009 IVA PERCEPCION POR 3EROS | +1.014.987,01 |
+| 114010002 IVA C.FISCAL INDIRECTO | +9.134.883,09 |
+| 211010001 PROVEEDORES MONEDA NACIONAL | −41.722.379,28 |
+| 114010002 IVA C.FISCAL INDIRECTO | −820.890,63 |
+
+Auditor re-corrido: Rebisco **OK / delta estable**. Base vigente del 17/11 se mantiene (**−259.097.494,82**).
+
+---
+
 ## Salto documentado: 16/11 → 17/11/2026
 
 La alerta del mail fue solo por el delta de Biyemas. La ficha siguió en cero. Kandiko y Rebisco no se movieron.

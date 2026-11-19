@@ -202,7 +202,8 @@
                 <p class="small text-muted mt-2 mb-0">
                     Atajos: <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Espacio</kbd> marcar · <kbd>Enter</kbd> conciliar ·
                     <kbd>S</kbd> sugerir · <kbd>Esc</kbd> limpiar · <kbd>Ctrl</kbd>+clic multi-selección.
-                    Multi-match: seleccioná N de un lado y M del otro; si las sumas coinciden, se guarda el grupo.
+                    Al tildar un movimiento se tilda solo el mejor par del otro lado; confirmá con Enter (no concilia solo).
+                    Multi-match: Ctrl+clic para N:M; si las sumas coinciden, se guarda el grupo.
                     Extracto: Excel Contaduría, CSV (fecha;importe;concepto), OFX, CAMT.053 o MT940 — también para bancos sin Interbanking.
                     Evidencia: adjuntá el respaldo al cerrar o aprobar el período (o con Adjuntar si ya hay corrida).
                 </p>

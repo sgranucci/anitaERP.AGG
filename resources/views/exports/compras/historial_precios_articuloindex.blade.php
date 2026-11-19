@@ -2,9 +2,14 @@
     $modoExport = $modo ?? 'resumen';
     $mesesExport = $meses ?? [];
     $esMensualExport = $modoExport === \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_MENSUAL;
-    $colspanExport = $esMensualExport
-        ? (5 + count($mesesExport) + max(0, count($mesesExport) - 1) + 1)
-        : 14;
+    $esMensualOcExport = $modoExport === \App\Support\Compras\HistorialPreciosArticuloFiltros::MODO_MENSUAL_OC;
+    if ($esMensualOcExport) {
+        $colspanExport = 7 + count($mesesExport);
+    } elseif ($esMensualExport) {
+        $colspanExport = 5 + count($mesesExport) + max(0, count($mesesExport) - 1) + 1;
+    } else {
+        $colspanExport = 14;
+    }
 @endphp
 <table>
     @if (!empty($reservarFilaLogoExcel))

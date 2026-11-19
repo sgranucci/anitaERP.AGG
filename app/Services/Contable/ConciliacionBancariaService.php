@@ -1137,8 +1137,6 @@ class ConciliacionBancariaService
             throw new RuntimeException('El período ya está aprobado.');
         }
 
-        ConciliacionBancariaPeriodoLockSupport::assertMesOperable($empresaId, $mes, $anio, $usuarioId);
-
         $cerradoAt = now();
         $ejec->estado = 'cerrado';
         $ejec->cerrado_at = $cerradoAt;
@@ -1162,8 +1160,6 @@ class ConciliacionBancariaService
 
     public function reabrirPeriodo(int $empresaId, int $cuentacajaId, int $mes, int $anio): ConciliacionBancariaEjecucion
     {
-        ConciliacionBancariaPeriodoLockSupport::assertMesOperable($empresaId, $mes, $anio);
-
         $ejec = ConciliacionBancariaEjecucion::query()
             ->where('empresa_id', $empresaId)
             ->where('cuentacaja_id', $cuentacajaId)
@@ -2249,12 +2245,20 @@ class ConciliacionBancariaService
             if ($n === '' || $n === '0') {
                 continue;
             }
+            $tip = (string) ($row->tip ?: 'CHP');
+            $imp = (float) $row->importe;
+            $esCheque = in_array(strtoupper($tip), ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'], true);
             $seed = [
-                'tip' => (string) ($row->tip ?: 'CHP'),
-                'importe' => abs((float) $row->importe),
+                'tip' => $tip,
+                // Solo los CH* van en absoluto; TED/COB/EGR conservan el signo Anita (− = Débitos).
+                'importe' => $esCheque ? abs($imp) : round($imp, 2),
                 'fecha_emision' => optional($row->fecha_emision)?->toDateString(),
                 'fecha_cheque' => optional($row->fecha_cheque)?->toDateString(),
             ];
+            if (! $esCheque) {
+                $seed['debe'] = $imp < -0.005 ? round(abs($imp), 2) : null;
+                $seed['haber'] = $imp > 0.005 ? round($imp, 2) : null;
+            }
             $detalle = trim((string) ($row->entregado_a ?? ''));
             if ($detalle !== '') {
                 $seed['detalle'] = $detalle;

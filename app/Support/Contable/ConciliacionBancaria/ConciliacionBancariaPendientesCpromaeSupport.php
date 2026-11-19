@@ -120,12 +120,24 @@ final class ConciliacionBancariaPendientesCpromaeSupport
             if (isset($seed['tip']) && $seed['tip'] !== '') {
                 $base['tip'] = (string) $seed['tip'];
             }
+            // Débito/crédito Anita (TED en Débitos, CHP en Créditos, etc.).
+            if (array_key_exists('debe', $seed) || array_key_exists('haber', $seed)) {
+                $base['debe'] = isset($seed['debe']) && $seed['debe'] !== null
+                    ? round((float) $seed['debe'], 2)
+                    : null;
+                $base['haber'] = isset($seed['haber']) && $seed['haber'] !== null
+                    ? round((float) $seed['haber'], 2)
+                    : null;
+            }
             // Semilla con importe 0 no debe pisar un monto ERP/cpromae válido.
             $impSeed = isset($seed['importe']) ? round((float) $seed['importe'], 2) : null;
             if ($impSeed !== null && abs($impSeed) > 0.005) {
                 $impBase = abs((float) ($base['importe'] ?? 0));
                 if ($impBase < 0.005 || abs(abs($impSeed) - $impBase) > 0.02) {
-                    $base['importe'] = abs($impSeed);
+                    // CH* quedan en absoluto (crédito pendiente). Resto conserva signo Anita (− = débito).
+                    $tipSeed = strtoupper(trim((string) ($base['tip'] ?? $seed['tip'] ?? 'CHP')));
+                    $esCheque = in_array($tipSeed, ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'], true) || $tipSeed === '';
+                    $base['importe'] = $esCheque ? abs($impSeed) : $impSeed;
                     $base['origen_json'] = array_merge(
                         is_array($base['origen_json'] ?? null) ? $base['origen_json'] : [],
                         ['importe_desde_excel' => true],
@@ -207,9 +219,25 @@ final class ConciliacionBancariaPendientesCpromaeSupport
             if ($n === '' || $n === '0') {
                 continue;
             }
+            $tip = (string) ($ch['tip'] ?? 'CHP');
+            $tipUp = strtoupper(trim($tip));
+            $imp = (float) ($ch['importe'] ?? 0);
+            // CH*: absoluto (crédito pendiente). Resto: conserva signo Anita (− = Débitos).
+            $esCheque = in_array($tipUp, ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'], true) || $tipUp === '';
+            $debe = array_key_exists('debe', $ch) ? $ch['debe'] : null;
+            $haber = array_key_exists('haber', $ch) ? $ch['haber'] : null;
+            if ($debe === null && $haber === null) {
+                if ($imp < -0.005) {
+                    $debe = abs($imp);
+                } elseif ($imp > 0.005) {
+                    $haber = abs($imp);
+                }
+            }
             $out[$n] = [
-                'tip' => (string) ($ch['tip'] ?? 'CHP'),
-                'importe' => abs((float) ($ch['importe'] ?? 0)),
+                'tip' => $tip !== '' ? $tip : 'CHP',
+                'importe' => $esCheque ? abs($imp) : round($imp, 2),
+                'debe' => $debe !== null ? round((float) $debe, 2) : null,
+                'haber' => $haber !== null ? round((float) $haber, 2) : null,
                 'fecha_emision' => $ch['fecha_emision'] ?? null,
                 'fecha_cheque' => $ch['fecha_cheque'] ?? null,
                 'detalle' => (string) ($ch['detalle'] ?? ''),

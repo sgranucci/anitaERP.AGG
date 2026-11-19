@@ -86,6 +86,22 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
 
     public function columnFormats(): array
     {
+        if ($this->esMensualOc()) {
+            $formats = [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'D' => NumberFormat::FORMAT_TEXT,
+                'E' => NumberFormat::FORMAT_TEXT,
+            ];
+            $col = 8; // H = primer mes
+            foreach ($this->meses as $ym) {
+                $formats[Coordinate::stringFromColumnIndex($col)] = self::FORMAT_IMPORTE;
+                $col++;
+            }
+
+            return $formats;
+        }
+
         if ($this->esMensual()) {
             $formats = [
                 'A' => NumberFormat::FORMAT_TEXT,
@@ -138,6 +154,25 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
 
     public function columnWidths(): array
     {
+        if ($this->esMensualOc()) {
+            $widths = [
+                'A' => 16,
+                'B' => 14,
+                'C' => 36,
+                'D' => 12,
+                'E' => 10,
+                'F' => 28,
+                'G' => 8,
+            ];
+            $col = 8;
+            foreach ($this->meses as $ym) {
+                $widths[Coordinate::stringFromColumnIndex($col)] = 11;
+                $col++;
+            }
+
+            return $widths;
+        }
+
         if ($this->esMensual()) {
             $widths = [
                 'A' => 14,
@@ -255,11 +290,18 @@ class HistorialPreciosArticuloExport implements FromView, ShouldAutoSize, WithCo
         return $this->modo === HistorialPreciosArticuloFiltros::MODO_MENSUAL;
     }
 
+    private function esMensualOc(): bool
+    {
+        return $this->modo === HistorialPreciosArticuloFiltros::MODO_MENSUAL_OC;
+    }
+
     private function cantidadColumnas(): int
     {
+        $nMeses = count($this->meses);
+        if ($this->esMensualOc()) {
+            return 7 + $nMeses;
+        }
         if ($this->esMensual()) {
-            $nMeses = count($this->meses);
-
             return 5 + $nMeses + max(0, $nMeses - 1) + 1;
         }
 

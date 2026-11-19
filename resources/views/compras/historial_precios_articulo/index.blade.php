@@ -37,10 +37,12 @@
             <form method="get" action="{{ route('reporte_historial_precios_articulo') }}" id="form-historial-precios-articulo" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Precios unitarios de recepciones de proveedor <strong>confirmadas</strong>.
-                        En resumen muestra &uacute;ltimo precio, precio anterior, variaci&oacute;n %, proveedor y fecha de &uacute;ltima compra.
-                        El detalle lista todas las compras del per&iacute;odo con la variaci&oacute;n respecto de la compra previa.
-                        El formato por mes encolumnado usa el &uacute;ltimo precio de cada mes del rango y la variaci&oacute;n % entre meses consecutivos con compra.
+                        Precios unitarios de recepciones de proveedor <strong>confirmadas</strong> (COM).
+                        Una DEP confirmada que cubre la cantidad del art&iacute;culo <strong>anula</strong> el precio de esa COM (no agrega l&iacute;neas de devoluci&oacute;n).
+                        Resumen: &uacute;ltimo / anterior / variaci&oacute;n %.
+                        Detalle: todas las compras del per&iacute;odo.
+                        Por mes: &uacute;ltimo precio de cada mes + variaci&oacute;n % entre meses.
+                        Por mes y OC: una fila por compra con el precio en la columna del mes (estilo control items / solapa Reporte).
                     </p>
 
                     @php

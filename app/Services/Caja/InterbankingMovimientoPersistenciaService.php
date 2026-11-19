@@ -5,7 +5,6 @@ namespace App\Services\Caja;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\InterbankingMovimiento;
 use App\Support\Caja\InterbankingCuentacajaParametrosSupport;
-use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Throwable;
 
@@ -61,6 +60,8 @@ class InterbankingMovimientoPersistenciaService
         ?Carbon $syncedAt = null,
         bool $omitirValidacionCierre = false
     ): int {
+        // Flag legado: traer/persistir extracto no contabiliza; el cierre aplica al generar gastos.
+        unset($omitirValidacionCierre);
         $syncedAt = $syncedAt ?? now();
         $guardados = 0;
 
@@ -76,14 +77,6 @@ class InterbankingMovimientoPersistenciaService
                 } catch (Throwable) {
                     $processDate = null;
                 }
-            }
-
-            if (! $omitirValidacionCierre && $processDate !== null) {
-                PeriodoContableCierreSupport::assertOperacionPermitida(
-                    $empresaId,
-                    $processDate->format('Y-m-d'),
-                    PeriodoContableCierreSupport::ALCANCE_INTERBANKING
-                );
             }
 
             $hash = $this->dedupeHash($empresaId, $accountNumber, $bankNumber, $currency, $movementType, $m);
@@ -139,14 +132,8 @@ class InterbankingMovimientoPersistenciaService
         int $maxPaginas = 80,
         bool $omitirValidacionCierre = false
     ): array {
-        if (! $omitirValidacionCierre) {
-            PeriodoContableCierreSupport::assertRangoOperacionPermitido(
-                $empresaId,
-                $dateSince,
-                $dateUntil,
-                PeriodoContableCierreSupport::ALCANCE_INTERBANKING
-            );
-        }
+        // Sincronizar IB no contabiliza; el cierre aplica al generar gastos.
+        $omitirValidacionCierre = true;
 
         $pageSize = max(1, min(500, $pageSize));
         $filasTotales = 0;

@@ -273,7 +273,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
                 $detalle = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(8, $r)));
                 $deb = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(9, $r))) ?? 0.0;
                 $cred = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(10, $r))) ?? 0.0;
-                $importe = $cred > 0 ? $cred : -$deb;
+                $importe = $cred > 0.005 ? $cred : ($deb > 0.005 ? -$deb : 0.0);
                 if ($numero === '' && abs($importe) < 0.005) {
                     continue;
                 }
@@ -281,6 +281,8 @@ final class ConciliacionBancariaExcelReferenciaSupport
                     'tip' => $tip,
                     'numero' => $numero,
                     'importe' => round($importe, 2),
+                    'debe' => $deb > 0.005 ? round($deb, 2) : null,
+                    'haber' => $cred > 0.005 ? round($cred, 2) : null,
                     'detalle' => $detalle,
                     'fecha_emision' => $fechaEmision,
                     'fecha_cheque' => $fechaCheque,
@@ -699,7 +701,8 @@ final class ConciliacionBancariaExcelReferenciaSupport
                 $detalle = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(8, $r)));
                 $deb = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(9, $r))) ?? 0.0;
                 $cred = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(10, $r))) ?? 0.0;
-                $importe = $cred > 0 ? $cred : -$deb;
+                // Anita: Créditos (+), Débitos (−). Conservar debe/haber para el reporte ERP.
+                $importe = $cred > 0.005 ? $cred : ($deb > 0.005 ? -$deb : 0.0);
                 if ($numero === '' && abs($importe) < 0.005) {
                     continue;
                 }
@@ -707,6 +710,8 @@ final class ConciliacionBancariaExcelReferenciaSupport
                     'tip' => $tip,
                     'numero' => $numero,
                     'importe' => round($importe, 2),
+                    'debe' => $deb > 0.005 ? round($deb, 2) : null,
+                    'haber' => $cred > 0.005 ? round($cred, 2) : null,
                     'detalle' => $detalle,
                     'fecha_emision' => $fechaEmision,
                     'fecha_cheque' => $fechaCheque,

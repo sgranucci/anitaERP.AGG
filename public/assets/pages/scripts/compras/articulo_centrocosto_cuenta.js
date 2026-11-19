@@ -60,6 +60,14 @@
 			+ 'Habilítelo en la cuenta o elija otro artículo.';
 	}
 
+	function mensajeCambiarDestino(payload, sku, ccTexto) {
+		var art = sku ? ('El artículo ' + sku) : 'El artículo';
+		var cc = ccTexto ? String(ccTexto).trim() : 'actual';
+		return art + ' no admite el centro de costo destino ' + cc
+			+ '. La cuenta ' + textoCuenta(payload) + ' no tiene habilitado ese centro. '
+			+ 'Elija un CC destino permitido para continuar.';
+	}
+
 	function consultar(articuloId, empresaId) {
 		return $.get(url(articuloId), { empresa_id: empresaId });
 	}
@@ -70,6 +78,7 @@
 		restringe: restringe,
 		permitido: permitido,
 		mensaje: mensaje,
+		mensajeCambiarDestino: mensajeCambiarDestino,
 		consultar: consultar
 	};
 }(window, jQuery));

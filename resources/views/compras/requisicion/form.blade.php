@@ -680,6 +680,7 @@
             </div>
         </div>
     </div>
+    @include('compras.requisicion.partials.modal_centrocosto_destino_articulo')
     @php
         $reqTotMonto = 0.0;
         $reqTotMonAbrev = '—';

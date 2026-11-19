@@ -6,6 +6,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\HistorialPreciosArticuloFiltros;
 use App\Support\Compras\OrdencompraReporteCriteriosSupport;
+use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
@@ -32,17 +33,19 @@ class HistorialPreciosArticuloService
     {
         $compras = $this->consultarCompras($filtros);
         $modo = (string) ($filtros['modo'] ?? HistorialPreciosArticuloFiltros::MODO_RESUMEN);
-        $meses = $modo === HistorialPreciosArticuloFiltros::MODO_MENSUAL
+        $meses = HistorialPreciosArticuloFiltros::usaColumnasMes($modo)
             ? HistorialPreciosArticuloFiltros::mesesDelPeriodo($filtros)
             : [];
 
         $filas = match ($modo) {
             HistorialPreciosArticuloFiltros::MODO_DETALLE => $this->armarDetalle($compras, $filtros),
             HistorialPreciosArticuloFiltros::MODO_MENSUAL => $this->armarMensual($compras, $filtros, $meses),
+            HistorialPreciosArticuloFiltros::MODO_MENSUAL_OC => $this->armarMensualOc($compras, $meses),
             default => $this->armarResumen($compras, $filtros),
         };
 
-        if (! empty($filtros['solo_con_variacion'])) {
+        if (! empty($filtros['solo_con_variacion'])
+            && $modo !== HistorialPreciosArticuloFiltros::MODO_MENSUAL_OC) {
             $filas = array_values(array_filter(
                 $filas,
                 static function (array $f) use ($modo): bool {
@@ -206,7 +209,38 @@ class HistorialPreciosArticuloService
 
         $this->aplicarFiltros($query, $filtros);
 
-        return $query->get();
+        $compras = $query->get();
+
+        return $this->excluirComCubiertasPorDep($compras);
+    }
+
+    /**
+     * Anula precios de COM cuya cantidad del artículo quedó cubierta por DEP confirmadas.
+     * No agrega líneas DEP: solo saca esas COM de la serie de precios.
+     *
+     * @param  Collection<int, object>  $compras
+     * @return Collection<int, object>
+     */
+    private function excluirComCubiertasPorDep(Collection $compras): Collection
+    {
+        if ($compras->isEmpty()) {
+            return $compras;
+        }
+
+        $cubiertas = ArticuloPrecioUltimaCompraSupport::clavesRecepcionArticuloCubiertasPorDep(
+            $compras->pluck('recepcion_id')->all()
+        );
+        if ($cubiertas === []) {
+            return $compras;
+        }
+
+        return $compras
+            ->reject(static function (object $compra) use ($cubiertas): bool {
+                $clave = (int) ($compra->recepcion_id ?? 0).'|'.(int) ($compra->articulo_id ?? 0);
+
+                return isset($cubiertas[$clave]);
+            })
+            ->values();
     }
 
     /**
@@ -408,6 +442,86 @@ class HistorialPreciosArticuloService
 
             return strcmp((string) ($a['codigoproveedor'] ?? ''), (string) ($b['codigoproveedor'] ?? ''));
         });
+
+        return $filas;
+    }
+
+    /**
+     * Una fila por compra (COM) con el precio en la columna del mes de esa recepción.
+     * Equivale a la solapa «Reporte» del control items histórico (Empresa / Descripción / OC × mes).
+     *
+     * @param  Collection<int, object>  $compras
+     * @param  list<string>  $meses
+     * @return list<array<string, mixed>>
+     */
+    private function armarMensualOc(Collection $compras, array $meses): array
+    {
+        if ($meses === []) {
+            return [];
+        }
+
+        $mesesSet = array_fill_keys($meses, true);
+        $filas = [];
+
+        // Orden cronológico ascendente para el listado tipo pivot (mes a mes).
+        $ordenadas = $compras->sort(static function (object $a, object $b): int {
+            $cmpFecha = strcmp((string) ($a->fecha ?? ''), (string) ($b->fecha ?? ''));
+            if ($cmpFecha !== 0) {
+                return $cmpFecha;
+            }
+            $cmpSku = strcmp((string) ($a->sku ?? ''), (string) ($b->sku ?? ''));
+            if ($cmpSku !== 0) {
+                return $cmpSku;
+            }
+
+            return ((int) ($a->recepcion_id ?? 0)) <=> ((int) ($b->recepcion_id ?? 0));
+        })->values();
+
+        foreach ($ordenadas as $compra) {
+            $fecha = (string) ($compra->fecha ?? '');
+            if ($fecha === '') {
+                continue;
+            }
+            try {
+                $ym = Carbon::parse($fecha)->format('Y-m');
+            } catch (\Throwable) {
+                continue;
+            }
+            if (! isset($mesesSet[$ym])) {
+                continue;
+            }
+
+            $preciosMes = [];
+            foreach ($meses as $mes) {
+                $preciosMes[$mes] = $mes === $ym
+                    ? round((float) ($compra->precio ?? 0), 6)
+                    : null;
+            }
+
+            $filas[] = [
+                'tipo_fila' => 'mensual_oc',
+                'articulo_id' => (int) ($compra->articulo_id ?? 0),
+                'sku' => (string) ($compra->sku ?? ''),
+                'descripcion_articulo' => (string) ($compra->descripcion_articulo ?? ''),
+                'proveedor_id' => (int) ($compra->proveedor_id ?? 0),
+                'codigoproveedor' => (string) ($compra->codigoproveedor ?? ''),
+                'nombreproveedor' => (string) ($compra->nombreproveedor ?? ''),
+                'moneda_abrev' => (string) ($compra->moneda_abrev ?? ''),
+                'empresa_id' => (int) ($compra->empresa_id ?? 0),
+                'nombreempresa' => (string) ($compra->nombreempresa ?? ''),
+                'recepcion_id' => (int) ($compra->recepcion_id ?? 0),
+                'numerorecepcion' => (string) ($compra->numerorecepcion ?? ''),
+                'ordencompra_id' => isset($compra->ordencompra_id) ? (int) $compra->ordencompra_id : null,
+                'numeroordencompra' => (string) ($compra->numeroordencompra ?? ''),
+                'fecha_ultima' => $fecha,
+                'precios_mes' => $preciosMes,
+                'variaciones_pct_mes' => [],
+                'variacion_periodo_pct' => null,
+                'variacion_pct' => null,
+                'precio_ultimo' => round((float) ($compra->precio ?? 0), 6),
+                'precio_anterior' => null,
+            ];
+        }
 
         return $filas;
     }

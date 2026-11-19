@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\DB;
  *
  * `promov` no trae medio. Anita muestra el de la OC (`occ_medio_pago`); si no hay
  * vínculo, el del proveedor. El default Efectivo del config solo es último recurso.
+ *
+ * Efectivo en la OC no se trata como medio confirmado: suele ser el default del
+ * import. En ese caso se intenta el proveedor (cheque/transferencia).
  */
 final class ComprobanteProveedorAnitaImportFormapagoSupport
 {
@@ -54,21 +57,46 @@ final class ComprobanteProveedorAnitaImportFormapagoSupport
     }
 
     /**
-     * Prioridad: OC (no-Efectivo si hay) → proveedor (no-Efectivo si hay) → config.
+     * Prioridad: OC no-Efectivo → proveedor (cualquier medio) → OC Efectivo → config.
      */
     public static function resolverId(?int $proveedorId, ?int $ordencompraId = null): int
     {
         $desdeOc = self::desdeOrdencompra($ordencompraId);
+        $desdeProv = self::desdeProveedor($proveedorId);
+        $efectivo = self::idEfectivo();
+
+        $correccion = self::elegirNoEfectivo($desdeOc, $desdeProv, $efectivo);
+        if ($correccion !== null) {
+            return $correccion['id'];
+        }
+
         if ($desdeOc !== null && $desdeOc > 0) {
             return $desdeOc;
         }
 
-        $desdeProv = self::desdeProveedor($proveedorId);
         if ($desdeProv !== null && $desdeProv > 0) {
             return $desdeProv;
         }
 
         return self::idFallbackConfig();
+    }
+
+    /**
+     * Elige un formapago distinto de Efectivo para corregir defaults erróneos.
+     *
+     * @return array{id:int, origen:string}|null
+     */
+    public static function elegirNoEfectivo(?int $viaOc, ?int $viaProv, int $efectivoId): ?array
+    {
+        if ($viaOc !== null && $viaOc > 0 && $viaOc !== $efectivoId) {
+            return ['id' => $viaOc, 'origen' => 'oc'];
+        }
+
+        if ($viaProv !== null && $viaProv > 0 && $viaProv !== $efectivoId) {
+            return ['id' => $viaProv, 'origen' => 'proveedor'];
+        }
+
+        return null;
     }
 
     public static function desdeOrdencompra(?int $ordencompraId): ?int
