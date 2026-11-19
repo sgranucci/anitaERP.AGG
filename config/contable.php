@@ -133,7 +133,8 @@ return [
     */
     'percepcion_sufrida' => [
         'fecha_limite_anita' => env('PERCEPCION_SUFRIDA_FECHA_LIMITE_ANITA', '2026-09-30'),
-        'cuenta_iibb' => (int) preg_replace('/\D/', '', (string) env('PERCEPCION_SUFRIDA_CUENTA_IIBB', '214010004')),
+        // Crown: 130208000. AGG: 214010004. Definir siempre en .env del cliente.
+        'cuenta_iibb' => (int) preg_replace('/\D/', '', (string) env('PERCEPCION_SUFRIDA_CUENTA_IIBB', '130208000')),
         'cuenta_iva' => (int) preg_replace('/\D/', '', (string) env('PERCEPCION_SUFRIDA_CUENTA_IVA', '114010009')),
         // Régimen del CSV F.2051 (percepciones impositivas sufridas). 493 = RG 2408, impuesto 767.
         'regimen_percepcion_iva' => (int) env('PERCEPCION_IVA_REGIMEN', 493),

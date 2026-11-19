@@ -1,107 +1,89 @@
-# Crown — alerta delta 18/11/2026: factura Galeno del 17/11
+# Crown — informe correcciones delta 19/11/2026
 
 **Para:** Contaduría  
 **Empresa:** Emprendimientos Crown SA  
-**Asunto:** Revisar imputación de la FA A-1069-844630 (Galeno) y corregir la cuenta de proveedores de Andes Investment
+**Fecha:** 19/11/2026  
+**Asunto:** Se corrigieron las 3 causas del aviso de delta conjunto
 
 ---
 
-## Qué pasó
+## Resultado
 
-El auditor diario del 18/11 avisó que se movió el **delta conjunto** de proveedores + anticipos.
+| Control | Antes (alerta 19/11) | Después de corregir |
+|---|---:|---:|
+| Deuda vs ficha | 0 diferencias | 0 diferencias |
+| Delta conjunto | −750.480.285,96 | **−747.307.756,46** |
+| Variación vs base comparable | +360.312 (ALERTA) | **0,00 (estable)** |
 
-- **Deuda vs ficha:** cuadrada (sin diferencias). No hay problema de ficha.
-- **Variación del delta:** **−3.019.078,00** respecto del 17/11.
-- Ese importe sale **entero** de una sola línea del asiento cargado ayer.
+El conjunto nuevo coincide con el del 18/11 **sin** la cuenta GALENO FONDO (que salió del control al corregir Andes). No debería volver a alertar por estas tres causas.
 
 ---
 
-## Comprobante a revisar (cargado 17/11/2026 09:55)
+## Qué se corrigió
+
+### 1) Albano Giovanni — FDS C-5-1 (#13048)
 
 | Campo | Valor |
 |---|---|
-| Proveedor | **3022 GALENO ARGENTINA S.A.** |
-| Comprobante | **FA A-1069-844630** |
-| Fecha comprobante | 19/10/2026 |
-| Total | 39.697.125,30 |
-| Leyenda | DIF PLAN Y APORTES 09-26 |
-| Asiento | 634454 (nro 824533) |
-| Estado | CONTABILIZADO |
-| Cuenta corriente | Cerrada (aplicada) |
+| Problema | Asiento con Haber 4.800.000 en `310101000` y **sin** CC |
+| Acción | Se creó CC **#3489** por **4.800.000,00** (fecha 03/02/2026), abierta |
+| Cuota | `total_pagado` pasó de 4.800.000 → **0** (estaba marcada pagada sin pago en ERP) |
 
-Cuenta de proveedores del maestro de Galeno: **330180000 GALENO** (no usa la genérica 310101000).
+Quedó deuda espejo del mayor. Si la factura ya estaba paga en la práctica, Contaduría debe registrar el pago (OPP) para cerrar esta CC; no anular la CC a mano.
 
----
+### 2) VTO HPE A-4-201370 (#33625)
 
-## Asiento tal como quedó
-
-| Cuenta | Nombre | Debe / Haber |
-|---|---|---:|
-| 310210000 | **GALENO FONDO** | **+3.019.078,00 Debe** |
-| 710127000 | ADICIONAL OB.SOCIAL | +36.678.047,30 Debe |
-| 330180000 | GALENO | −39.697.125,30 Haber |
-
----
-
-## Por qué no es lógico (y por eso saltó el control)
-
-1. La **deuda del proveedor** vive en **330180000 GALENO** (cuenta del maestro). Ahí fue el Haber y ahí se manejó la CC.
-2. Parte del pasivo del asiento (**3.019.078**) se mandó a **310210000 GALENO FONDO**, que **no es** la cuenta de proveedores de Galeno.
-3. En FONDO no queda deuda abierta de esta factura. El mayor de FONDO sí se movió. El control compara mayor vs deuda por cuenta: en FONDO queda mayor sin deuda → mueve el delta → ALERTA.
-4. Mientras el Haber esté en GALENO y un tramo del Debe en GALENO FONDO, **cada carga así va a volver a disparar el aviso**, aunque la ficha siga cuadrada.
-
-El control no está “confundido”: refleja que el asiento parte el pasivo en una cuenta que no es la de la deuda del proveedor.
-
----
-
-## Qué tiene que cambiar Contaduría
-
-Revisar y **corregir la imputación de esta factura / asiento 634454** para que el pasivo del proveedor quede alineado con la cuenta de Galeno:
-
-**Opción A (preferida si FONDO no es deuda de proveedor)**  
-- Llevar los **3.019.078** a **330180000 GALENO** (junto con el resto del Haber de proveedor), o a la cuenta de resultado/gasto que corresponda al concepto “fondo / plan y aportes”, **no** a una cuenta de pasivo ajena a la deuda de Galeno.
-- Criterio: la pierna que representa la deuda con Galeno tiene que estar en **330180000** (su cuenta de proveedores).
-
-**Opción B (si Contaduría sostiene que esos 3.019.078 son un pasivo distinto “Galeno Fondo”)**  
-- Entonces ese pasivo tiene que tener **deuda / CC espejo** en esa misma cuenta, no solo el movimiento de mayor. Hoy la CC de la factura está en la órbita de **330180000**, no de FONDO.
-- Sin deuda en FONDO, el control seguirá alertando.
-
-En ambos casos: **no dejar un Debe en 310210000 sin contrapartida de deuda en esa misma cuenta** si la factura es de Galeno y la deuda se registra contra 330180000.
-
----
-
-## Segundo cambio: cuenta del proveedor Andes Investment
-
-Además del asiento de Galeno, hay que **corregir el maestro** de este proveedor:
-
-| Campo | Valor actual |
+| Campo | Valor |
 |---|---|
-| Proveedor | **2736 ANDES INVESTMENT CORP.** |
-| Cuenta MN | **310210000 GALENO FONDO** ← incorrecta |
-| Cuenta ME | **310210000 GALENO FONDO** ← incorrecta |
-| Cuenta corriente de Andes | **0** filas |
+| Problema | Concepto Debe **7.519.050** iba a `310150000` LEASING (pasivo del proveedor) |
+| Acción | Se reimputó a **`715335000` ALQUILER DE EQUIPOS/MAQUINARIA** |
+| Asiento | 634566 — balancea en 0 |
 
-GALENO FONDO no es una cuenta de deuda de Andes. Quedó cargada en el maestro y por eso el auditor la incluye entre las cuentas de proveedores que controla. No es la causa del asiento de ayer, pero **hay que cambiarle la cuenta** a la que corresponda (en general **310101000 PROVEEDORES $**, u otra Pasivo real de ese proveedor).
+Asiento corregido:
 
-Mientras Andes tenga FONDO como cuenta de proveedores, esa cuenta sigue entrando al control aunque Andes no opere ahí.
+| Cuenta | Importe |
+|---|---:|
+| 715335000 ALQUILER DE EQUIPOS/MAQUINARIA | +7.519.050,00 |
+| 711331000 IVA PERDIDO 21% | +1.579.000,50 |
+| 310150000 PROVEEDORES BS.REC.EN LEASING | −9.098.050,50 |
+
+### 3) Galeno FA A-1069-844630 + Andes Investment
+
+**Galeno (asiento 634454):** el Debe de **3.019.078** salió de `310210000` GALENO FONDO y pasó a **`130308000` OTROS GAST PAG.ADELANTADO** (junto al resto del gasto de la factura).
+
+Asiento corregido:
+
+| Cuenta | Importe |
+|---|---:|
+| 130308000 OTROS GAST PAG.ADELANTADO | +39.697.125,30 |
+| 330180000 GALENO | −39.697.125,30 |
+
+**Andes Investment (2736):** cuenta MN/ME de `310210000` GALENO FONDO → **`310101000` PROVEEDORES $**.  
+Con eso **ningún proveedor** queda con GALENO FONDO: esa cuenta **deja de entrar** al control de delta proveedores.
 
 ---
 
-## Pedido concreto
+## Lectura para Contaduría
 
-1. Revisar la FA **A-1069-844630** / asiento **634454**.
-2. Definir la imputación correcta de los **3.019.078** (¿gasto/resultado o pasivo Galeno?).
-3. Reimputar para que no quede pasivo en **GALENO FONDO** desacoplado de la deuda del proveedor.
-4. En el maestro, cambiar la cuenta de **2736 ANDES INVESTMENT CORP.**: sacar **310210000 GALENO FONDO** y poner la cuenta de proveedores correcta.
-5. Avisar a Sistemas cuando ambos puntos estén hechos, para verificar que el delta del día siguiente quede estable.
+1. **Albano:** CC abierta de 4,8 M. Si corresponde pago, cargarlo; si no, queda deuda real a gestionar.
+2. **VTO HPE:** los próximos vencimientos no deben debitar `310150000` como gasto. Usar gasto/activo (como `715335000`) y dejar el pasivo solo en el Haber.
+3. **Galeno / sueldos:** el asiento de sueldos que acredita FONDO ya no mueve el delta de proveedores (FONDO salió del universo controlado). Revisar igual si FONDO es la cuenta correcta en sueldos.
+4. Base vigente del control: **−747.307.756,46** al 19/11/2026.
 
 ---
 
-## Números de referencia (auditor)
+## Números de referencia
 
-| | 17/11 | 18/11 | Variación |
+| | 18/11 (con FONDO) | 19/11 alerta | 19/11 post-fix |
 |---|---:|---:|---:|
-| Delta conjunto | −747.821.519,96 | −750.840.597,96 | **−3.019.078,00** |
-| Delta 310210000 GALENO FONDO | −513.763,50 | −3.532.841,50 | **−3.019.078,00** |
+| Delta conjunto | −750.840.597,96 | −750.480.285,96 | **−747.307.756,46** |
+| Variación día a día | −3.019.078 (Galeno) | +360.312 | **0** |
 
-Base vigente tras la alerta: conjunto **−750.840.597,96** al 18/11/2026 (mientras no se corrija el asiento, ese es el nuevo piso del control).
+Desglose del salto 18→19 que se revirtió:
+
+| Cuenta | Variación alerta | Corrección |
+|---|---:|---|
+| 310101000 PROVEEDORES $ | +4.800.000 | CC Albano |
+| 310150000 LEASING | −7.519.050 | Reimputación VTO |
+| 310210000 GALENO FONDO | +3.079.362 | Sale del control (Andes) + FA Galeno a prepaid |
+| **Neto** | **+360.312** | **Estable** |
