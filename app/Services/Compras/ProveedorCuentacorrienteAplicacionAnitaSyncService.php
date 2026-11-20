@@ -3,10 +3,12 @@
 namespace App\Services\Compras;
 
 use App\ApiAnita;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\PagoproveedorDevolucionRetencionSupport;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorrienteAnitaLadoSupport;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplmovpAnitaMapper;
@@ -15,6 +17,7 @@ use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMappe
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 /**
  * Espejo ERP → Anita de una aplicación de CC: aplmovp + promov.prov_t_pagado.
@@ -61,14 +64,32 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             return;
         }
 
-        $ids = Proveedor_Cuentacorriente_Aplicacion::query()
+        $aplicaciones = Proveedor_Cuentacorriente_Aplicacion::query()
             ->where('pagoproveedor_id', $pagoproveedorId)
             ->where('total', '<', 0)
-            ->pluck('id')
-            ->all();
+            ->orderBy('id')
+            ->get();
 
-        $this->syncPorIdsAplicacion($ids);
+        // Cada aplicación es independiente: si una FAC no tiene promov, no debe
+        // impedir la cabecera promov de la OP (ni el resto de aplicaciones).
+        $errores = [];
+        foreach ($aplicaciones as $apl) {
+            try {
+                $this->syncAplicar($apl);
+            } catch (Throwable $e) {
+                $errores[] = $e->getMessage();
+                Log::warning('anita_bridge.fallo', [
+                    'contexto' => 'aplmovp sync OP '.$pagoproveedorId.' apl '.$apl->id,
+                    'mensaje' => $e->getMessage(),
+                ]);
+            }
+        }
+
         $this->sincronizarPromovCabeceraPago($pagoproveedorId);
+
+        if ($errores !== []) {
+            throw new RuntimeException(implode('; ', $errores));
+        }
     }
 
     /**
@@ -407,13 +428,22 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         }
 
         $api = new ApiAnita;
-        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
-            'acc' => 'list',
-            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
-            'tabla' => 'promov',
-            'campos' => 'prov_t_pagado, prov_nro_cuota',
-            'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
-        ]));
+        $parsed = $this->listarPromovCuota($lado);
+        if ($parsed['error_lectura'] !== null) {
+            $error = 'Anita promov '.$lado['etiqueta'].': '.$parsed['error_lectura'];
+            if ($obligatorio) {
+                throw new RuntimeException($error);
+            }
+            Log::warning('anita_bridge.fallo', ['contexto' => 'promov list '.$lado['etiqueta'], 'mensaje' => $error]);
+
+            return;
+        }
+        if ($parsed['filas'] === []) {
+            // FAC/NC pagada sin promov: sincronizar el comprobante ERP → Anita y reintentar.
+            if ($obligatorio && $this->asegurarPromovDesdeComprobanteErp($cc, $lado)) {
+                $parsed = $this->listarPromovCuota($lado);
+            }
+        }
         if ($parsed['error_lectura'] !== null) {
             $error = 'Anita promov '.$lado['etiqueta'].': '.$parsed['error_lectura'];
             if ($obligatorio) {
@@ -681,6 +711,73 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         }
 
         return $max + 1;
+    }
+
+    /**
+     * @param  Lado  $lado
+     * @return array{filas: list<object>, error_lectura: ?string}
+     */
+    private function listarPromovCuota(array $lado): array
+    {
+        return ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => 'promov',
+            'campos' => 'prov_t_pagado, prov_nro_cuota',
+            'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
+        ]));
+    }
+
+    /**
+     * Si la CC apunta a una factura ERP que aún no está en promov Anita (PENDIENTE
+     * o SYNC_OK desfasado), la sincroniza y deja la cuota lista para t_pagado.
+     *
+     * @param  Lado  $lado
+     */
+    private function asegurarPromovDesdeComprobanteErp(Proveedor_Cuentacorriente $cc, array $lado): bool
+    {
+        $cc->loadMissing([
+            'comprobante_proveedores.comprobante_proveedor_cuotas',
+            'comprobante_proveedores.tipotransaccion_compras',
+            'comprobante_proveedores.proveedores',
+            'comprobante_proveedores.empresas',
+        ]);
+        $comprobante = $cc->comprobante_proveedores;
+        if (! $comprobante instanceof Comprobante_Proveedor) {
+            return false;
+        }
+
+        $estado = strtoupper(trim((string) ($comprobante->anita_sync_estado ?? '')));
+        // Importado/omitido: no reenviar al bridge (puede duplicar compra Anita).
+        if (in_array($estado, [
+            ComprobanteProveedorAnitaSyncEstado::IMPORTADO,
+            ComprobanteProveedorAnitaSyncEstado::OMITIDO,
+        ], true)) {
+            return false;
+        }
+
+        try {
+            $sync = app(ComprobanteProveedorAnitaSyncService::class);
+            if ((int) ($comprobante->anita_nro_interno ?? 0) <= 0) {
+                $sync->syncCreate($comprobante->fresh());
+            } else {
+                $sync->syncUpdate($comprobante->fresh());
+            }
+            Log::info('anita_bridge.promov_asegurado_desde_erp', [
+                'etiqueta' => $lado['etiqueta'] ?? '',
+                'comprobante_proveedor_id' => (int) $comprobante->id,
+                'anita_sync_estado_previo' => $estado,
+            ]);
+
+            return true;
+        } catch (Throwable $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'asegurar promov FAC '.$lado['etiqueta'].' desde ERP #'.$comprobante->id,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /**

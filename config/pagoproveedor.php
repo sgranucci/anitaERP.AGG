@@ -109,7 +109,7 @@ return [
         'usuario_id' => (int) env('PAGOPROVEEDOR_AUDITORIA_ANITA_USUARIO_ID', 1),
         'email' => env('PAGOPROVEEDOR_AUDITORIA_ANITA_EMAIL', env('COMPROBANTE_PROVEEDOR_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com')),
         'ventana_dias' => max(1, (int) env('PAGOPROVEEDOR_AUDITORIA_ANITA_VENTANA_DIAS', 7)),
-        'auto_reparar' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_AUTO_REPARAR', false), FILTER_VALIDATE_BOOLEAN),
+        'auto_reparar' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_AUTO_REPARAR', true), FILTER_VALIDATE_BOOLEAN),
         'mail_siempre' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_MAIL_SIEMPRE', false), FILTER_VALIDATE_BOOLEAN),
         'mail_si_reparo' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_MAIL_SI_REPARO', true), FILTER_VALIDATE_BOOLEAN),
     ],

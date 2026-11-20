@@ -1741,8 +1741,7 @@ class PagoproveedorService
             // Sin caja local (neto 0 / solo aplicación de anticipos): igual espeja pago + auxpag FAC,
             // CC (promov/aplmovp) y retenciones. No hay tesmov de banco.
             IngresoEgresoAnitaTesmovSupport::grabarCabeceraDesdePagoproveedor($pago, $reemplazar);
-            $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
-            PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
+            $this->sincronizarCcYRetencionesAnita($pago, $reemplazar);
 
             return;
         }
@@ -1759,9 +1758,33 @@ class PagoproveedorService
         }
 
         IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($movimiento->fresh());
-        $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
-        PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
+        $this->sincronizarCcYRetencionesAnita($pago, $reemplazar);
         $this->endosarChequesTercerosAnita($pago->fresh());
+    }
+
+    /**
+     * CC (aplmovp/promov) y retenciones son independientes: si falla una FAC, igual
+     * se escriben cabecera OP (dentro del sync CC) y certificados de retención.
+     */
+    private function sincronizarCcYRetencionesAnita(Pagoproveedor $pago, bool $reemplazar): void
+    {
+        $errorCc = null;
+        try {
+            $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
+        } catch (\Throwable $e) {
+            $errorCc = $e;
+            Log::error('pagoproveedor.anita.cc_sync.fallo', [
+                'pagoproveedor_id' => $pago->id,
+                'numero' => $pago->numerotransaccion,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+
+        PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
+
+        if ($errorCc !== null) {
+            throw $errorCc;
+        }
     }
 
     /**
