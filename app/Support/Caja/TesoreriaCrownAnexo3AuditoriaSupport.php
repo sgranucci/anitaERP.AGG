@@ -2,10 +2,12 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAsignacion;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownMesa;
+use Illuminate\Support\Collection;
 
 /**
  * Detalle de auditoría de una celda del Anexo III (l-anexo3new.c).
@@ -53,8 +55,14 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
      *     cierre_url: ?string
      * }
      */
-    public static function deRequest(TesoreriaCrownJornada $jornada, string $columna, string $scope, ?int $asignacionId, ?string $tipoGrupo): array
-    {
+    public static function deRequest(
+        TesoreriaCrownJornada $jornada,
+        string $columna,
+        string $scope,
+        ?int $asignacionId,
+        ?string $tipoGrupo,
+        ?int $cajeroCrownId = null
+    ): array {
         if (! isset(self::COLUMNAS[$columna])) {
             abort(422, 'Columna de anexo III no válida.');
         }
@@ -71,11 +79,12 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
         }
 
         if ($scope === 'fila') {
-            if ($asignacionId === null || $asignacionId < 1) {
-                abort(422, 'Falta la asignación.');
+            if (($cajeroCrownId === null || $cajeroCrownId < 1)
+                && ($asignacionId === null || $asignacionId < 1)) {
+                abort(422, 'Falta el cajero.');
             }
 
-            return self::fila($armado, $jornada, $asignacionId, $columna, $etiqueta);
+            return self::fila($armado, $jornada, $asignacionId, $columna, $etiqueta, $cajeroCrownId);
         }
 
         if ($scope === 'grupo') {
@@ -93,21 +102,28 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
      * @param  array{filas: list<array<string, mixed>>, grupos: list<array<string, mixed>>, totales: array<string, float>, total_tarjetas: float}  $armado
      * @return array<string, mixed>
      */
-    private static function fila(array $armado, TesoreriaCrownJornada $jornada, int $asignacionId, string $columna, string $etiqueta): array
-    {
-        $fila = null;
-        foreach ($armado['filas'] as $candidato) {
-            if ((int) ($candidato['asignacion_id'] ?? 0) === $asignacionId && empty($candidato['propina'])) {
-                $fila = $candidato;
-                break;
-            }
-        }
+    private static function fila(
+        array $armado,
+        TesoreriaCrownJornada $jornada,
+        ?int $asignacionId,
+        string $columna,
+        string $etiqueta,
+        ?int $cajeroCrownId = null
+    ): array {
+        $fila = self::buscarFila($armado, $asignacionId, $cajeroCrownId);
         if ($fila === null) {
-            abort(404, 'No hay fila del anexo III para esa asignación.');
+            abort(404, 'No hay fila del anexo III para ese cajero.');
         }
 
-        $asignacion = self::cargarAsignacion($jornada, $asignacionId);
-        $detalle = self::detalleDeAsignacion($asignacion, $columna, $fila);
+        $contexto = self::contextoDeFila($jornada, $fila);
+        $detalle = self::detalleDeDocumentos(
+            $contexto['docs'],
+            $contexto['tarea'],
+            $columna,
+            $fila,
+            $jornada,
+            $contexto['cajero']
+        );
 
         return [
             'titulo' => trim($fila['caja'].' · '.$fila['cajero']),
@@ -119,10 +135,70 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
             'avisos' => $detalle['avisos'],
             'movimientos' => $detalle['movimientos'],
             'cierre_url' => route('ver_tesoreria_crown_cierre', [
-                'jornada' => $asignacion->jornada_id,
-                'cajero' => $asignacion->cajero_crown_id,
+                'jornada' => $jornada->id,
+                'cajero' => (int) ($fila['cajero_crown_id'] ?? $contexto['cajero']->id),
             ]),
         ];
+    }
+
+    /**
+     * @param  array{filas: list<array<string, mixed>>}  $armado
+     * @return array<string, mixed>|null
+     */
+    private static function buscarFila(array $armado, ?int $asignacionId, ?int $cajeroCrownId): ?array
+    {
+        foreach ($armado['filas'] as $candidato) {
+            if (! empty($candidato['propina'])) {
+                continue;
+            }
+            if ($cajeroCrownId !== null && $cajeroCrownId > 0
+                && (int) ($candidato['cajero_crown_id'] ?? 0) === $cajeroCrownId) {
+                return $candidato;
+            }
+            if ($asignacionId !== null && $asignacionId > 0
+                && (int) ($candidato['asignacion_id'] ?? 0) === $asignacionId) {
+                return $candidato;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @return array{docs: Collection, tarea: string, cajero: CajeroCrown}
+     */
+    private static function contextoDeFila(TesoreriaCrownJornada $jornada, array $fila): array
+    {
+        $cajeroId = (int) ($fila['cajero_crown_id'] ?? 0);
+        $asignacionId = (int) ($fila['asignacion_id'] ?? 0);
+
+        if ($cajeroId > 0) {
+            $cajero = CajeroCrown::query()->findOrFail($cajeroId);
+            $docs = TesoreriaCrownDiaCajeroSupport::comprobantes((int) $jornada->id, $cajeroId);
+            $docs->loadMissing(['lineas.valor.tipoValor', 'reversa', 'jornada']);
+            foreach ($docs as $doc) {
+                $doc->setRelation('jornada', $jornada);
+            }
+
+            return [
+                'docs' => $docs,
+                'tarea' => (string) ($fila['tarea'] ?? $cajero->tipo_tarea ?? ''),
+                'cajero' => $cajero,
+            ];
+        }
+
+        if ($asignacionId > 0) {
+            $asignacion = self::cargarAsignacion($jornada, $asignacionId);
+
+            return [
+                'docs' => $asignacion->comprobantes,
+                'tarea' => $asignacion->tipoTareaEfectiva(),
+                'cajero' => $asignacion->cajero,
+            ];
+        }
+
+        abort(404, 'No hay cajero para auditar esa fila.');
     }
 
     /**
@@ -165,12 +241,18 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
 
                 continue;
             }
-            $asignacionId = (int) ($fila['asignacion_id'] ?? 0);
-            if ($asignacionId < 1) {
+            if ((int) ($fila['cajero_crown_id'] ?? 0) < 1 && (int) ($fila['asignacion_id'] ?? 0) < 1) {
                 continue;
             }
-            $asignacion = self::cargarAsignacion($jornada, $asignacionId);
-            $parte = self::detalleDeAsignacion($asignacion, $columna, $fila);
+            $contexto = self::contextoDeFila($jornada, $fila);
+            $parte = self::detalleDeDocumentos(
+                $contexto['docs'],
+                $contexto['tarea'],
+                $columna,
+                $fila,
+                $jornada,
+                $contexto['cajero']
+            );
             foreach ($parte['movimientos'] as $mov) {
                 $mov['caja'] = (string) $fila['caja'];
                 $movimientos[] = $mov;
@@ -290,12 +372,18 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
                 'Anita reimprime acá el efectivo residual de la última caja de empleados (RESC_efectivo) al listar la propina; no es un segundo movimiento de efectivo.',
             ];
             $movimientos = [];
-            $asignacionId = (int) ($fila['asignacion_id'] ?? 0);
-            if ($asignacionId > 0) {
-                $asignacion = self::cargarAsignacion($jornada, $asignacionId);
+            if ((int) ($fila['cajero_crown_id'] ?? 0) > 0 || (int) ($fila['asignacion_id'] ?? 0) > 0) {
+                $contexto = self::contextoDeFila($jornada, $fila);
                 $filaBase = $fila;
                 $filaBase['propina'] = false;
-                $parte = self::detalleDeAsignacion($asignacion, 'efectivo', $filaBase);
+                $parte = self::detalleDeDocumentos(
+                    $contexto['docs'],
+                    $contexto['tarea'],
+                    'efectivo',
+                    $filaBase,
+                    $jornada,
+                    $contexto['cajero']
+                );
                 $movimientos = $parte['movimientos'];
             }
 
@@ -314,17 +402,24 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
     }
 
     /**
+     * @param  Collection<int, TesoreriaCrownComprobante>|\Illuminate\Database\Eloquent\Collection<int, TesoreriaCrownComprobante>  $docs
      * @param  array<string, mixed>  $fila
      * @return array{movimientos: list<array<string, mixed>>, avisos: list<string>, formula: ?string}
      */
-    private static function detalleDeAsignacion(TesoreriaCrownAsignacion $asignacion, string $columna, array $fila): array
-    {
-        $conforme = $asignacion->comprobantes->filter(
+    private static function detalleDeDocumentos(
+        $docs,
+        string $tarea,
+        string $columna,
+        array $fila,
+        TesoreriaCrownJornada $jornada,
+        CajeroCrown $cajero
+    ): array {
+        $conforme = $docs->filter(
             fn (TesoreriaCrownComprobante $doc) => $doc->estado === TesoreriaCrownComprobanteSupport::CONFORME
         );
         $movimientos = [];
         $avisos = [];
-        $formula = self::formulaColumna($columna, (string) ($fila['tarea'] ?? ''));
+        $formula = self::formulaColumna($columna, (string) ($fila['tarea'] ?? $tarea));
 
         if ($columna === 'egresos') {
             foreach ($conforme as $doc) {
@@ -491,7 +586,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
                 if ($parteCol === 'ctacte' && ! in_array((string) ($fila['tarea'] ?? ''), ['G', 'H'], true)) {
                     continue;
                 }
-                $parte = self::detalleDeAsignacion($asignacion, $parteCol, $fila);
+                $parte = self::detalleDeDocumentos($docs, $tarea, $parteCol, $fila, $jornada, $cajero);
                 foreach ($parte['movimientos'] as $mov) {
                     $signo = $parteCol === 'recargo_fin' ? -1 : 1;
                     $mov['aporte'] = round($signo * (float) $mov['aporte'], 2);
@@ -548,7 +643,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
                 $movimientos[] = $mov;
             }
             foreach ($partes as $parteCol => $signo) {
-                $parte = self::detalleDeAsignacion($asignacion, $parteCol, $fila);
+                $parte = self::detalleDeDocumentos($docs, $tarea, $parteCol, $fila, $jornada, $cajero);
                 foreach ($parte['movimientos'] as $mov) {
                     $mov['aporte'] = round($signo * (float) $mov['aporte'], 2);
                     $mov['grupo_columna'] = self::COLUMNAS[$parteCol].($signo < 0 ? ' (−)' : '');
@@ -560,16 +655,16 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
         }
 
         if ($columna === 'diferencia') {
-            $tarea = (string) ($fila['tarea'] ?? '');
-            if ($tarea === 'E') {
+            $tareaFila = (string) ($fila['tarea'] ?? $tarea);
+            if ($tareaFila === 'E') {
                 return [
                     'movimientos' => [],
                     'avisos' => ['En caja de empleados la diferencia del listado es siempre cero.'],
                     'formula' => $formula,
                 ];
             }
-            if (in_array($tarea, ['G', 'H'], true)) {
-                $calc = TesoreriaCrownCierreCalculo::de($asignacion);
+            if (in_array($tareaFila, ['G', 'H'], true)) {
+                $calc = TesoreriaCrownCierreCalculo::deCajero($cajero, $jornada, false);
                 $avisos[] = sprintf(
                     'Diferencia del cierre: rendido %s − habilitado %s − a rendir/resultado %s = %s.',
                     number_format((float) $calc['rendido'], 2, ',', '.'),
@@ -588,7 +683,7 @@ final class TesoreriaCrownAnexo3AuditoriaSupport
                 ];
             }
             // Otras tareas: diferencia = resultado
-            $parte = self::detalleDeAsignacion($asignacion, 'resultado', $fila);
+            $parte = self::detalleDeDocumentos($docs, $tarea, 'resultado', $fila, $jornada, $cajero);
             $avisos[] = 'En este tipo de caja Dif. cajero = Resultado del listado.';
 
             return [

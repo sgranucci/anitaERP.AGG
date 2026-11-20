@@ -166,15 +166,25 @@ final class TesoreriaCrownKardexValoresSupport
         return TesoreriaCrownBovedaSupport::tiposActivos($salaId, $fecha);
     }
 
+    /**
+     * Subtipos vigentes del tipo.
+     *
+     * MES (propina mesas) no se ofrece en carga manual: la propina de mesa
+     * se carga en el estado final (solo monto). Sigue en BD para legado/Anita.
+     */
     public static function subtiposDeTipo(
         int $tipoId,
-        null|string|\Carbon\CarbonInterface $fecha = null
+        null|string|\Carbon\CarbonInterface $fecha = null,
+        bool $paraCargaManual = true
     ): Collection {
         $fechaYmd = TesoreriaCrownBovedaVigenciaSupport::normalizarFecha($fecha);
         $q = TesoreriaCrownBovedaSubtipo::query()
             ->with('tipo')
             ->where('tipo_id', $tipoId)
             ->where('activo', true);
+        if ($paraCargaManual) {
+            $q->where('codigo', '!=', 'MES');
+        }
         TesoreriaCrownBovedaVigenciaSupport::aplicarVigenteEn($q, $fechaYmd);
 
         return $q->orderBy('codigo')->get();

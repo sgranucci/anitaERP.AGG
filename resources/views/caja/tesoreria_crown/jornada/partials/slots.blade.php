@@ -19,8 +19,9 @@
 
         return $slotsIndexUrl.'?'.http_build_query($query);
     };
-    $puedeCrearSlot = $jornada->estaAbierta() && can('crear-tesoreria-crown-slot', false);
-    $puedeEliminarBorrador = $jornada->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false);
+    $puedeCargarSlot = \App\Support\Caja\TesoreriaCrownSlotSupport::permiteCarga($jornada);
+    $puedeCrearSlot = $puedeCargarSlot && can('crear-tesoreria-crown-slot', false);
+    $puedeEliminarBorrador = $puedeCargarSlot && can('eliminar-borrador-tesoreria-crown-slot', false);
 @endphp
 
 <div class="d-flex flex-wrap align-items-center mb-3">

@@ -10,15 +10,15 @@
         'egresos', 'ingresos', 'fichas_casino', 'pago_cashless', 'vta_cashless',
         'pago_voucher', 'venta_voucher', 'online', 'resultado', 'diferencia',
     ];
-    $auditCelda = function (float $valor, string $columna, string $scope, ?int $asignacionId = null, ?string $tipo = null) use ($pesos) {
+    $auditCelda = function (float $valor, string $columna, string $scope, ?int $cajeroCrownId = null, ?string $tipo = null) use ($pesos) {
         $texto = $pesos($valor);
         if ($texto === '') {
             return '';
         }
         $attrs = ' type="button" class="btn btn-link btn-sm p-0 text-primary js-tc-audit"';
         $attrs .= ' data-columna="'.e($columna).'" data-scope="'.e($scope).'"';
-        if ($asignacionId) {
-            $attrs .= ' data-asignacion-id="'.(int) $asignacionId.'"';
+        if ($cajeroCrownId) {
+            $attrs .= ' data-cajero-crown-id="'.(int) $cajeroCrownId.'"';
         }
         if ($tipo) {
             $attrs .= ' data-tipo="'.e($tipo).'"';
@@ -72,20 +72,20 @@
                                 @foreach ($grupo['filas'] as $fila)
                                     @php
                                         $scopeFila = ! empty($fila['propina']) ? 'propina' : 'fila';
-                                        $asignacionId = (int) ($fila['asignacion_id'] ?? 0) ?: null;
+                                        $cajeroCrownId = (int) ($fila['cajero_crown_id'] ?? 0) ?: null;
                                     @endphp
                                     <tr>
                                         <td>
-                                            @if ($asignacionId && empty($fila['propina']))
+                                            @if ($cajeroCrownId && empty($fila['propina']))
                                                 <a class="text-primary" target="_blank" rel="noopener"
-                                                   href="{{ route('ver_tesoreria_crown_cierre', ['jornada' => $jornada->id, 'cajero' => ($fila['cajero_crown_id'] ?? $asignacionId)]) }}">{{ $fila['caja'] }}</a>
+                                                   href="{{ route('ver_tesoreria_crown_cierre', ['jornada' => $jornada->id, 'cajero' => $cajeroCrownId]) }}">{{ $fila['caja'] }}</a>
                                             @else
                                                 {{ $fila['caja'] }}
                                             @endif
                                         </td>
                                         <td>{{ $fila['cajero'] }}</td>
                                         @foreach ($celdasAudit as $columna)
-                                            <td class="text-right">{!! $auditCelda((float) ($fila[$columna] ?? 0), $columna, $scopeFila, $asignacionId) !!}</td>
+                                            <td class="text-right">{!! $auditCelda((float) ($fila[$columna] ?? 0), $columna, $scopeFila, $cajeroCrownId) !!}</td>
                                         @endforeach
                                     </tr>
                                 @endforeach

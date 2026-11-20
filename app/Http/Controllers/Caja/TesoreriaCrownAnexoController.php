@@ -446,6 +446,7 @@ class TesoreriaCrownAnexoController extends Controller
         $columna = (string) $request->query('columna', '');
         $scope = (string) $request->query('scope', 'fila');
         $asignacionId = $request->query('asignacion_id');
+        $cajeroCrownId = $request->query('cajero_crown_id');
         $tipoGrupo = $request->query('tipo');
 
         $detalle = TesoreriaCrownAnexo3AuditoriaSupport::deRequest(
@@ -453,7 +454,8 @@ class TesoreriaCrownAnexoController extends Controller
             $columna,
             $scope,
             $asignacionId !== null && $asignacionId !== '' ? (int) $asignacionId : null,
-            $tipoGrupo !== null && $tipoGrupo !== '' ? (string) $tipoGrupo : null
+            $tipoGrupo !== null && $tipoGrupo !== '' ? (string) $tipoGrupo : null,
+            $cajeroCrownId !== null && $cajeroCrownId !== '' ? (int) $cajeroCrownId : null
         );
 
         return response()->json($detalle);

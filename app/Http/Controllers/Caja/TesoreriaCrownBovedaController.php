@@ -37,6 +37,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 
 class TesoreriaCrownBovedaController extends Controller
 {
@@ -895,10 +896,31 @@ class TesoreriaCrownBovedaController extends Controller
             'clienteNombre' => $cliente?->nombre ?? '',
             'subtipoId' => old('subtipo_id', $movimiento?->subtipo_id ?? ''),
             'subtipoTexto' => old('subtipo_texto', $movimiento?->subtipo_texto ?? ''),
+            'importePesos' => $this->montoInicialFormulario($movimiento),
             'subtipos' => $tipo
                 ? TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id, $fechaJornada)
                 : collect(),
         ];
+    }
+
+    /**
+     * Monto para subtipos sin billetaje (HIB): importe_pesos o suma de líneas legadas.
+     */
+    private function montoInicialFormulario(?TesoreriaCrownBoveda $movimiento): string|float
+    {
+        if ($movimiento === null) {
+            return '';
+        }
+        if ($movimiento->importe_pesos !== null && abs((float) $movimiento->importe_pesos) >= 0.01) {
+            return (float) $movimiento->importe_pesos;
+        }
+        $movimiento->loadMissing('lineas.valor');
+        $suma = 0.0;
+        foreach ($movimiento->lineas as $linea) {
+            $suma += (float) $linea->cantidad * (float) ($linea->valor->denominacion ?? 0);
+        }
+
+        return abs($suma) >= 0.01 ? round($suma, 2) : '';
     }
 
     private function resolverTipo(
@@ -942,7 +964,7 @@ class TesoreriaCrownBovedaController extends Controller
     ): TesoreriaCrownBovedaTipo|string {
         $abreviatura = strtoupper(trim((string) $tipo->abreviatura));
         if (in_array($abreviatura, ['HAB', 'REN'], true)) {
-            return 'La habilitación y la rendición entran solas cuando el cajero firma.';
+            return 'La habilitación y la rendición entran solas al guardar el comprobante (no se cargan a mano).';
         }
         if ($abreviatura === 'APER') {
             return 'La apertura ya no se carga: el arqueo trae el saldo de la última jornada cerrada.';
@@ -1155,6 +1177,7 @@ class TesoreriaCrownBovedaController extends Controller
             'tipo_id' => ['required', 'integer', 'min:1'],
             'subtipo_id' => ['nullable', 'integer', 'min:0'],
             'subtipo_texto' => ['nullable', 'string', 'max:80'],
+            'monto' => ['nullable', 'numeric', 'min:0'],
             'legajo' => ['nullable', 'integer', 'min:0'],
             'cliente_id' => ['nullable', 'integer', 'min:0'],
             'comprobante_tipo' => ['nullable', 'string', 'max:1'],
@@ -1174,11 +1197,15 @@ class TesoreriaCrownBovedaController extends Controller
         $subtipoId = (int) ($datos['subtipo_id'] ?? 0);
         $subtipoTexto = trim((string) ($datos['subtipo_texto'] ?? ''));
         $subtiposTipo = TesoreriaCrownKardexValoresSupport::subtiposDeTipo((int) $tipo->id, $fechaJornada);
+        $subtipo = null;
         if ($subtiposTipo->isNotEmpty()) {
             if ($subtipoId <= 0 || ! $subtiposTipo->contains('id', $subtipoId)) {
                 return 'Elegí el subtipo del movimiento.';
             }
             $subtipo = $subtiposTipo->firstWhere('id', $subtipoId);
+            if ($subtipo && strtoupper((string) $subtipo->codigo) === 'MES') {
+                return 'La propina de mesas no se carga acá: usá el estado final de mesa (solo monto).';
+            }
             if ($subtipo && strtoupper((string) $subtipo->codigo) === 'OTR' && $subtipoTexto === '') {
                 return 'Completá el detalle del subtipo «Otro».';
             }
@@ -1186,6 +1213,7 @@ class TesoreriaCrownBovedaController extends Controller
             $subtipoId = 0;
             $subtipoTexto = '';
         }
+        $sinBilletaje = $subtipo !== null && ! (bool) ($subtipo->mueve_billetaje ?? true);
         $referencia = TesoreriaCrownBovedaSupport::referenciaDelTipo($tipo);
         $legajo = null;
         $clienteId = null;
@@ -1202,25 +1230,34 @@ class TesoreriaCrownBovedaController extends Controller
                 return 'Ingresá un cliente que exista.';
             }
         }
-        $monedas = TesoreriaCrownBovedaSupport::monedasDelTipo($tipo);
-        $valores = TesoreriaCrownValor::query()
-            ->with('tipoValor')
-            ->where('sala_id', $movimiento->sala_id)
-            ->where('activo', true)
-            ->get()
-            ->filter(fn (TesoreriaCrownValor $valor) => in_array((string) ($valor->tipoValor->codigo ?? ''), $monedas, true))
-            ->pluck('id')
-            ->all();
         $lineas = [];
-        foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
-            $cantidad = (int) $cantidad;
-            if ($cantidad <= 0 || ! in_array((int) $valorId, $valores, true)) {
-                continue;
+        $importePesos = null;
+        if ($sinBilletaje) {
+            $monto = round((float) ($datos['monto'] ?? 0), 2);
+            if ($monto < 0.01) {
+                return 'Ingresá el monto de la operación (este subtipo no mueve billetaje).';
             }
-            $lineas[(int) $valorId] = $cantidad;
-        }
-        if ($lineas === []) {
-            return 'No se puede grabar una operación en cero.';
+            $importePesos = $monto;
+        } else {
+            $monedas = TesoreriaCrownBovedaSupport::monedasDelTipo($tipo);
+            $valores = TesoreriaCrownValor::query()
+                ->with('tipoValor')
+                ->where('sala_id', $movimiento->sala_id)
+                ->where('activo', true)
+                ->get()
+                ->filter(fn (TesoreriaCrownValor $valor) => in_array((string) ($valor->tipoValor->codigo ?? ''), $monedas, true))
+                ->pluck('id')
+                ->all();
+            foreach ((array) ($datos['cantidad'] ?? []) as $valorId => $cantidad) {
+                $cantidad = (int) $cantidad;
+                if ($cantidad <= 0 || ! in_array((int) $valorId, $valores, true)) {
+                    continue;
+                }
+                $lineas[(int) $valorId] = $cantidad;
+            }
+            if ($lineas === []) {
+                return 'No se puede grabar una operación en cero.';
+            }
         }
         $comprobanteId = $movimiento->comprobante_id;
         if ($request->exists('comprobante_numero') || $request->exists('comprobante_tipo')) {
@@ -1235,7 +1272,7 @@ class TesoreriaCrownBovedaController extends Controller
             $comprobanteId = $comprobante?->id;
         }
 
-        DB::transaction(function () use ($movimiento, $datos, $tipo, $legajo, $clienteId, $lineas, $comprobanteId, $subtipoId, $subtipoTexto) {
+        DB::transaction(function () use ($movimiento, $datos, $tipo, $legajo, $clienteId, $lineas, $comprobanteId, $subtipoId, $subtipoTexto, $importePesos, $sinBilletaje) {
             $movimiento->tipo_id = $tipo->id;
             $movimiento->subtipo_id = $subtipoId > 0 ? $subtipoId : null;
             $movimiento->subtipo_texto = $subtipoTexto !== '' ? mb_substr($subtipoTexto, 0, 80) : null;
@@ -1246,6 +1283,9 @@ class TesoreriaCrownBovedaController extends Controller
             $movimiento->legajo = $legajo;
             $movimiento->cliente_id = $clienteId;
             $movimiento->comprobante_id = $comprobanteId;
+            if (Schema::hasColumn('tesoreria_crown_boveda', 'importe_pesos')) {
+                $movimiento->importe_pesos = $sinBilletaje ? $importePesos : null;
+            }
             $movimiento->save();
             EloquentAuditDeleteSupport::each($movimiento->lineas()->getQuery());
             foreach ($lineas as $valorId => $cantidad) {

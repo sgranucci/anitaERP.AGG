@@ -18,6 +18,9 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  *
  * AGG / otros: mismas tablas con columnas extra (estado, nombre lista, moneda,
  * usuario, descripción, cód. art. proveedor, descuento).
+ *
+ * Escritura ERP→Anita: deshabilitada en Crown (catálogo/listas viven en anitaERP;
+ * Anita queda con códigos previos / no se regraba listapmov al guardar).
  */
 final class ListaprecioProveedorAnitaEsquemaSupport
 {
@@ -26,6 +29,14 @@ final class ListaprecioProveedorAnitaEsquemaSupport
     public const TABLA_MOVIMIENTO = 'listapmov';
 
     public const KEY_CABECERA = 'lispm_nro';
+
+    /**
+     * Persistencia ERP → Anita (`listapmae` / `listapmov`).
+     */
+    public static function escrituraHabilitada(): bool
+    {
+        return ! EntornoEmpresaSupport::esCrown();
+    }
 
     /**
      * @return list<string>

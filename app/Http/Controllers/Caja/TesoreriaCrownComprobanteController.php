@@ -985,6 +985,8 @@ class TesoreriaCrownComprobanteController extends Controller
 
         $nuevo->load('lineas');
         TesoreriaCrownFirmaSupport::pasarAPendiente($nuevo);
+        // Impacto en bóveda al crear la reversa (no espera firmas).
+        TesoreriaCrownBovedaSupport::asentarCajero($nuevo);
 
         return $nuevo;
     }

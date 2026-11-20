@@ -35,7 +35,7 @@
                         'placeholder' => 'Máquina, nombre o número',
                         'toggleTarget' => '#panel-filtros-tesoreria-crown-slot',
                         'formId' => 'form-filtros-tesoreria-crown-slot',
-                        'nuevoRegistroUrl' => (($jornadaAlta ?? null) && $jornadaAlta->estaAbierta())
+                        'nuevoRegistroUrl' => (($jornadaAlta ?? null) && \App\Support\Caja\TesoreriaCrownSlotSupport::permiteCarga($jornadaAlta))
                             ? route('nueva_tesoreria_crown_slot', ['jornada_id' => $jornadaAlta->id, 'origen' => 'menu'])
                             : null,
                         'nuevoRegistroCan' => 'crear-tesoreria-crown-slot',
@@ -148,7 +148,7 @@
                                     <a href="{{ route('editar_tesoreria_crown_slot', ['id' => $slot->id, 'origen' => 'menu']) }}" class="btn-accion-tabla tooltipsC" title="{{ $slot->esBorrador() ? 'Editar' : 'Consultar' }}">
                                         <i class="fa fa-edit"></i>
                                     </a>
-                                    @if ($slot->esBorrador() && $slot->jornada?->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false))
+                                    @if ($slot->esBorrador() && \App\Support\Caja\TesoreriaCrownSlotSupport::permiteCarga($slot->jornada) && can('eliminar-borrador-tesoreria-crown-slot', false))
                                         <form method="POST" action="{{ route('eliminar_tesoreria_crown_slot', $slot->id) }}" class="d-inline" onsubmit="return confirm('¿Eliminar este borrador?');">
                                             @csrf
                                             @method('DELETE')

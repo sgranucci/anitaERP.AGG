@@ -27,10 +27,11 @@
                 var params = new URLSearchParams();
                 params.set('columna', boton.getAttribute('data-columna') || '');
                 params.set('scope', boton.getAttribute('data-scope') || 'fila');
-                var asignacionId = boton.getAttribute('data-asignacion-id');
+                var cajeroCrownId = boton.getAttribute('data-cajero-crown-id')
+                    || boton.getAttribute('data-asignacion-id');
                 var tipo = boton.getAttribute('data-tipo');
-                if (asignacionId) {
-                    params.set('asignacion_id', asignacionId);
+                if (cajeroCrownId) {
+                    params.set('cajero_crown_id', cajeroCrownId);
                 }
                 if (tipo) {
                     params.set('tipo', tipo);

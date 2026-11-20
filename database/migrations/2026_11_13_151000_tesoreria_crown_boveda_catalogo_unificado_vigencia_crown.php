@@ -207,11 +207,13 @@ return new class extends Migration
                 ['PBS', 'Prueba bill / slot', true, null],
                 ['CAM', 'Cambio', true, null],
                 ['TOR', 'Torneo / evento', true, null],
+                ['OTR', 'Otro (detalle en texto)', true, null],
             ],
             28 => [ // ECAM
                 ['PBS', 'Prueba bill / slot', true, null],
                 ['CAM', 'Cambio', true, null],
                 ['TOR', 'Torneo / evento', true, null],
+                ['OTR', 'Otro (detalle en texto)', true, null],
             ],
             44 => [ // BGO
                 ['VCA', 'Venta de cartones', true, '0'],

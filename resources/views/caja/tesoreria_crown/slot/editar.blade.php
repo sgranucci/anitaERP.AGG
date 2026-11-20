@@ -170,7 +170,7 @@
                         </div>
                     </div>
                 </form>
-                @if (! empty($borradorGuardado) && $slot->jornada->estaAbierta())
+                @if (! empty($borradorGuardado) && ! empty($puedeCargar))
                     <form method="POST" action="{{ route('confirmar_tesoreria_crown_slot', $slot->id) }}" id="form-slot-confirmar-guardado" class="mt-3" autocomplete="off" data-enter-campos="1">
                         @csrf
                         @if ($desdeMenu)
@@ -196,7 +196,7 @@
                         </form>
                     @endif
                 @endif
-                @if ($editable && $slot->esBorrador() && $slot->jornada->estaAbierta() && can('eliminar-borrador-tesoreria-crown-slot', false))
+                @if ($editable && $slot->esBorrador() && ! empty($puedeCargar) && can('eliminar-borrador-tesoreria-crown-slot', false))
                     <form method="POST" action="{{ route('eliminar_tesoreria_crown_slot', $slot->id) }}" class="mt-3" onsubmit="return confirm('¿Eliminar este borrador?');">
                         @csrf
                         @method('DELETE')

@@ -29,6 +29,14 @@
     $subtipos = $subtipos ?? collect();
     $subtipoId = old('subtipo_id', $subtipoId ?? '');
     $subtipoTexto = old('subtipo_texto', $subtipoTexto ?? '');
+    $stInicial = $subtipos->firstWhere('id', (int) $subtipoId);
+    $sinBilletajeInicial = $stInicial && ! ($stInicial->mueve_billetaje ?? true);
+    $montoInicial = old('monto', $monto ?? ($importePesos ?? ''));
+    if ($montoInicial === null || $montoInicial === '') {
+        $montoInicial = '';
+    } else {
+        $montoInicial = number_format((float) $montoInicial, 2, '.', '');
+    }
 @endphp
 <div class="form-group row tc-boveda-subtipo {{ $subtipos->isEmpty() ? 'd-none' : '' }}" id="tc-boveda-subtipo-wrap"
      data-url="{{ route('subtipos_tesoreria_crown_kardex_valores') }}"
@@ -47,14 +55,14 @@
                     </option>
                 @endforeach
             </select>
-            <input type="text" name="subtipo_texto" id="subtipo_texto" class="form-control mt-2 {{ strtoupper((string) optional($subtipos->firstWhere('id', (int) $subtipoId))->codigo) === 'OTR' ? '' : 'd-none' }}"
+            <input type="text" name="subtipo_texto" id="subtipo_texto" class="form-control mt-2 {{ strtoupper((string) optional($stInicial)->codigo) === 'OTR' ? '' : 'd-none' }}"
                    maxlength="80" placeholder="Detalle del subtipo (obligatorio si es Otro)"
                    value="{{ $subtipoTexto }}">
-            <small id="tc-boveda-subtipo-aviso" class="form-text text-muted d-none">
-                Este subtipo no mueve billetaje: queda asentado solo a fines informativos (RRHH).
+            <small id="tc-boveda-subtipo-aviso" class="form-text text-muted {{ $sinBilletajeInicial ? '' : 'd-none' }}">
+                Este subtipo no mueve billetaje: cargá solo el monto (informativo RRHH).
             </small>
         @else
-            @php $stSel = $subtipos->firstWhere('id', (int) $subtipoId); @endphp
+            @php $stSel = $stInicial; @endphp
             <p class="form-control-plaintext mb-0">
                 {{ $stSel?->etiqueta() ?? '—' }}
                 @if ($subtipoTexto !== '')
@@ -63,6 +71,21 @@
                 @if ($stSel && ! ($stSel->mueve_billetaje ?? true))
                     <span class="d-block text-muted">Sin billetaje (informativo RRHH).</span>
                 @endif
+            </p>
+        @endif
+    </div>
+</div>
+<div class="form-group row tc-boveda-monto-wrap {{ $sinBilletajeInicial ? '' : 'is-off' }}" id="tc-boveda-monto-wrap">
+    <label for="monto" class="col-lg-3 control-label text-right pr-2{{ $editable ? ' requerido' : '' }}">Monto</label>
+    <div class="col-lg-4">
+        @if ($editable)
+            <input type="number" name="monto" id="monto" class="form-control text-right" min="0.01" step="0.01" inputmode="decimal"
+                   value="{{ $montoInicial }}" {{ $sinBilletajeInicial ? 'required' : 'disabled' }}
+                   title="Solo monto. No mueve billetaje.">
+            <small class="form-text text-muted">Sin billetes: el importe queda solo a fines informativos.</small>
+        @else
+            <p class="form-control-plaintext mb-0">
+                {{ $montoInicial !== '' ? number_format((float) $montoInicial, 2, ',', '.') : '—' }}
             </p>
         @endif
     </div>
@@ -110,6 +133,7 @@
         @endif
     </div>
 </div>
+<div id="tc-boveda-billetes-wrap" class="{{ $sinBilletajeInicial ? 'is-off' : '' }}">
 @if ($editable)
     <div class="border rounded px-3 py-2 mb-3 bg-light d-flex flex-wrap align-items-center" style="position:sticky;top:3.5rem;z-index:5;">
         @foreach ($grupos as $grupoBarra)
@@ -250,6 +274,7 @@
         <strong class="js-total-final h5 mb-0">{{ number_format((float) $efectivoPesos['total'], 2, ',', '.') }}</strong>
     </div>
 @endif
+</div>{{-- /#tc-boveda-billetes-wrap --}}
 @if ($editable && ! empty($ofrecerEmitir))
     <div class="form-group row">
         <div class="col-lg-8 offset-lg-3">

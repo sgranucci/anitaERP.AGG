@@ -2,10 +2,13 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\CajeroCrown;
 use App\Models\Caja\TesoreriaCrownAsignacion;
+use App\Models\Caja\TesoreriaCrownCierre;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownJornada;
 use App\Models\Caja\TesoreriaCrownMesa;
+use Illuminate\Support\Collection;
 
 /**
  * Resumen de cajeros (l-rescajero.c) y base del anexo III (l-anexo3new.c).
@@ -19,6 +22,9 @@ use App\Models\Caja\TesoreriaCrownMesa;
  * - Dif. cajero = misma diferencia del cierre
  *
  * Orden: agrupa por tipo de caja (E → G → H → K → T), con subtítulo y subtotal por grupo.
+ *
+ * Fuente: cajeros con movimiento/cierre en la jornada (cajero_crown_id), no asignaciones
+ * legacy (muchas HAB/REN/cierres nativos llevan asignacion_id null).
  */
 final class TesoreriaCrownResumenCajeroCalculo
 {
@@ -59,22 +65,74 @@ final class TesoreriaCrownResumenCajeroCalculo
             return;
         }
 
-        $asignaciones = TesoreriaCrownAsignacion::query()
-            ->whereIn('jornada_id', array_keys($pendientes))
-            ->with([
-                'deposito',
-                'cajero',
-                'cierre',
-                'comprobantes.lineas.valor.tipoValor',
-                'comprobantes.reversa',
-            ])
-            ->orderBy('deposito_id')
+        $jornadaIds = array_keys($pendientes);
+        $idsComp = TesoreriaCrownComprobante::query()
+            ->whereIn('jornada_id', $jornadaIds)
+            ->whereNotNull('cajero_crown_id')
+            ->distinct()
+            ->get(['jornada_id', 'cajero_crown_id']);
+        $idsCierre = TesoreriaCrownCierre::query()
+            ->whereIn('jornada_id', $jornadaIds)
+            ->whereNotNull('cajero_crown_id')
+            ->distinct()
+            ->get(['jornada_id', 'cajero_crown_id']);
+
+        $cajerosPorJornada = [];
+        foreach ($idsComp->concat($idsCierre) as $row) {
+            $jid = (int) $row->jornada_id;
+            $cid = (int) $row->cajero_crown_id;
+            if ($cid > 0) {
+                $cajerosPorJornada[$jid][$cid] = $cid;
+            }
+        }
+        $todosCajeros = [];
+        foreach ($cajerosPorJornada as $ids) {
+            foreach ($ids as $cid) {
+                $todosCajeros[$cid] = $cid;
+            }
+        }
+
+        $cajeros = $todosCajeros === []
+            ? collect()
+            : CajeroCrown::query()
+                ->with('caja')
+                ->whereIn('id', array_values($todosCajeros))
+                ->orderBy('codigo')
+                ->get()
+                ->keyBy('id');
+
+        $comprobantes = TesoreriaCrownComprobante::query()
+            ->whereIn('jornada_id', $jornadaIds)
+            ->whereNotNull('cajero_crown_id')
+            ->with(['lineas.valor.tipoValor', 'reversa'])
+            ->orderBy('id')
             ->get()
-            ->groupBy('jornada_id');
+            ->groupBy(fn ($doc) => (int) $doc->jornada_id.'|'.(int) $doc->cajero_crown_id);
+
+        $cierres = TesoreriaCrownCierre::query()
+            ->whereIn('jornada_id', $jornadaIds)
+            ->whereNotNull('cajero_crown_id')
+            ->whereNull('reabierta_at')
+            ->orderBy('id')
+            ->get()
+            ->keyBy(fn ($c) => (int) $c->jornada_id.'|'.(int) $c->cajero_crown_id);
 
         foreach ($pendientes as $jornadaId => $jornada) {
-            $grupo = $asignaciones->get($jornadaId, collect());
-            self::$cachePorJornada[$jornadaId] = self::armarDesdeAsignaciones($jornada, $grupo);
+            $ids = array_values($cajerosPorJornada[$jornadaId] ?? []);
+            $contextos = [];
+            foreach ($ids as $cajeroId) {
+                $cajero = $cajeros->get($cajeroId);
+                if (! $cajero) {
+                    continue;
+                }
+                $clave = $jornadaId.'|'.$cajeroId;
+                $contextos[] = [
+                    'cajero' => $cajero,
+                    'docs' => $comprobantes->get($clave, collect()),
+                    'cierre' => $cierres->get($clave),
+                ];
+            }
+            self::$cachePorJornada[$jornadaId] = self::armarDesdeContextos($jornada, $contextos);
         }
     }
 
@@ -98,23 +156,63 @@ final class TesoreriaCrownResumenCajeroCalculo
             return self::$cachePorJornada[$jornadaId];
         }
 
-        $asignaciones = $jornada->asignaciones()
-            ->with([
-                'deposito',
-                'cajero',
-                'cierre',
-                'comprobantes.lineas.valor.tipoValor',
-                'comprobantes.reversa',
-                'jornada',
-            ])
-            ->orderBy('deposito_id')
-            ->get();
+        $idsComp = TesoreriaCrownComprobante::query()
+            ->where('jornada_id', $jornadaId)
+            ->whereNotNull('cajero_crown_id')
+            ->distinct()
+            ->pluck('cajero_crown_id');
+        $idsCierre = TesoreriaCrownCierre::query()
+            ->where('jornada_id', $jornadaId)
+            ->whereNotNull('cajero_crown_id')
+            ->distinct()
+            ->pluck('cajero_crown_id');
+        $ids = $idsComp->merge($idsCierre)->unique()->filter()->values();
 
-        return self::$cachePorJornada[$jornadaId] = self::armarDesdeAsignaciones($jornada, $asignaciones);
+        if ($ids->isEmpty()) {
+            return self::$cachePorJornada[$jornadaId] = self::armarDesdeContextos($jornada, []);
+        }
+
+        $cajeros = CajeroCrown::query()
+            ->with('caja')
+            ->whereIn('id', $ids)
+            ->orderBy('codigo')
+            ->get()
+            ->keyBy('id');
+
+        $comprobantes = TesoreriaCrownComprobante::query()
+            ->where('jornada_id', $jornadaId)
+            ->whereIn('cajero_crown_id', $ids)
+            ->with(['lineas.valor.tipoValor', 'reversa'])
+            ->orderBy('id')
+            ->get()
+            ->groupBy('cajero_crown_id');
+
+        $cierres = TesoreriaCrownCierre::query()
+            ->where('jornada_id', $jornadaId)
+            ->whereIn('cajero_crown_id', $ids)
+            ->whereNull('reabierta_at')
+            ->orderBy('id')
+            ->get()
+            ->keyBy('cajero_crown_id');
+
+        $contextos = [];
+        foreach ($ids as $cajeroId) {
+            $cajero = $cajeros->get($cajeroId);
+            if (! $cajero) {
+                continue;
+            }
+            $contextos[] = [
+                'cajero' => $cajero,
+                'docs' => $comprobantes->get($cajeroId, collect()),
+                'cierre' => $cierres->get($cajeroId),
+            ];
+        }
+
+        return self::$cachePorJornada[$jornadaId] = self::armarDesdeContextos($jornada, $contextos);
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, TesoreriaCrownAsignacion>  $asignaciones
+     * @param  list<array{cajero: CajeroCrown, docs: Collection, cierre: ?TesoreriaCrownCierre}>  $contextos
      * @return array{
      *     filas: list<array<string, mixed>>,
      *     grupos: list<array{tipo: string, titulo: string, filas: list<array<string, mixed>>, totales: array<string, float>}>,
@@ -123,20 +221,22 @@ final class TesoreriaCrownResumenCajeroCalculo
      *     avisos: list<string>
      * }
      */
-    private static function armarDesdeAsignaciones(TesoreriaCrownJornada $jornada, $asignaciones): array
+    private static function armarDesdeContextos(TesoreriaCrownJornada $jornada, array $contextos): array
     {
-        // Evita N+1: cada línea de comprobante pedía jornada por id.
-        foreach ($asignaciones as $asignacion) {
-            $asignacion->setRelation('jornada', $jornada);
-            foreach ($asignacion->comprobantes as $doc) {
+        foreach ($contextos as $ctx) {
+            foreach ($ctx['docs'] as $doc) {
                 $doc->setRelation('jornada', $jornada);
-                $doc->setRelation('asignacion', $asignacion);
             }
         }
 
         $porTipo = [];
-        foreach ($asignaciones as $asignacion) {
-            $fila = self::deAsignacion($asignacion);
+        foreach ($contextos as $ctx) {
+            $fila = self::deDocumentos(
+                $jornada,
+                $ctx['cajero'],
+                $ctx['docs'],
+                $ctx['cierre']
+            );
             if ($fila === null) {
                 continue;
             }
@@ -216,26 +316,73 @@ final class TesoreriaCrownResumenCajeroCalculo
     }
 
     /**
+     * Compat Anita / asignaciones legacy.
+     *
      * @return array<string, mixed>|null
      */
     public static function deAsignacion(TesoreriaCrownAsignacion $asignacion): ?array
     {
         TesoreriaCrownCierreCalculo::cargarRelaciones($asignacion, ['deposito', 'cajero']);
-        $conforme = $asignacion->comprobantes->filter(
+        $jornada = $asignacion->jornada;
+        if (! $jornada instanceof TesoreriaCrownJornada) {
+            return null;
+        }
+        $cajero = $asignacion->cajero;
+        if (! $cajero instanceof CajeroCrown) {
+            return null;
+        }
+
+        return self::deDocumentos(
+            $jornada,
+            $cajero,
+            $asignacion->comprobantes,
+            $asignacion->cierre,
+            (int) $asignacion->id,
+            $asignacion->tipoTareaEfectiva(),
+            $asignacion->deposito,
+            (string) $asignacion->turno
+        );
+    }
+
+    /**
+     * @param  Collection<int, TesoreriaCrownComprobante>|\Illuminate\Database\Eloquent\Collection<int, TesoreriaCrownComprobante>  $docs
+     * @return array<string, mixed>|null
+     */
+    public static function deDocumentos(
+        TesoreriaCrownJornada $jornada,
+        CajeroCrown $cajero,
+        $docs,
+        ?TesoreriaCrownCierre $cierre,
+        int $asignacionId = 0,
+        ?string $tareaForzada = null,
+        $deposito = null,
+        string $turno = ''
+    ): ?array {
+        $conforme = $docs->filter(
             fn (TesoreriaCrownComprobante $doc) => $doc->estado === TesoreriaCrownComprobanteSupport::CONFORME
         );
         $hayRendicion = $conforme->contains(
             fn (TesoreriaCrownComprobante $doc) => $doc->tipo === TesoreriaCrownComprobanteSupport::RENDICION
         );
-        if (! $hayRendicion && $asignacion->cierre === null) {
+        if (! $hayRendicion && $cierre === null) {
             return null;
         }
 
-        $calc = TesoreriaCrownCierreCalculo::de($asignacion, false);
+        $tarea = $tareaForzada !== null && $tareaForzada !== ''
+            ? $tareaForzada
+            : trim((string) ($cajero->tipo_tarea ?? ''));
+
+        $calc = TesoreriaCrownCierreCalculo::calcular(
+            $tarea,
+            $docs,
+            $jornada,
+            $cierre,
+            (int) $jornada->sala_id,
+            false
+        );
         $detalle = self::detalleRendiciones($conforme);
 
         $egresos = (float) $calc['habilitado'];
-        $tarea = $asignacion->tipoTareaEfectiva();
         // Anita: ingresos = efectivo rendido (con medios). En gastro/hotel también
         // suma fallo de mozo + transferencia/cta cte (rescajero.fc).
         $ingresos = round(
@@ -266,20 +413,24 @@ final class TesoreriaCrownResumenCajeroCalculo
         $diferencia = in_array($tarea, ['G', 'H'], true)
             ? (float) $calc['diferencia']
             : ($tarea === 'E' ? 0.0 : $resultado);
-        $deposito = $asignacion->deposito;
-        $cajaEtiqueta = trim((string) ($deposito->nombre ?? ''));
+
+        $caja = $deposito ?? $cajero->caja;
+        $cajaEtiqueta = trim((string) ($caja->nombre ?? ''));
         if ($cajaEtiqueta === '') {
-            $cajaEtiqueta = (string) ($deposito->codigo ?? '');
+            $cajaEtiqueta = (string) ($caja->codigo ?? '');
+        }
+        if ($cajaEtiqueta === '') {
+            $cajaEtiqueta = trim((string) ($cajero->nombre ?? ''));
         }
 
         return [
-            'asignacion_id' => (int) $asignacion->id,
-            'cajero_crown_id' => (int) $asignacion->cajero_crown_id,
-            'caja' => $cajaEtiqueta !== '' ? $cajaEtiqueta : (string) ($asignacion->cajero->nombre ?? ''),
-            'caja_codigo' => (string) ($deposito->codigo ?? ''),
-            'cajero' => (string) ($asignacion->cajero->nombre ?? ''),
-            'legajo' => (int) ($asignacion->cajero->legajo ?? 0),
-            'turno' => (string) $asignacion->turno,
+            'asignacion_id' => $asignacionId,
+            'cajero_crown_id' => (int) $cajero->id,
+            'caja' => $cajaEtiqueta,
+            'caja_codigo' => (string) ($caja->codigo ?? $cajero->codigo ?? ''),
+            'cajero' => (string) ($cajero->nombre ?? ''),
+            'legajo' => (int) ($cajero->legajo ?? 0),
+            'turno' => $turno,
             'tarea' => $tarea,
             'cierre_x' => $detalle['cierre_x'],
             'egresos' => $egresos,
@@ -426,6 +577,7 @@ final class TesoreriaCrownResumenCajeroCalculo
         $ultima = $filasEmpleados[array_key_last($filasEmpleados)];
         $fila = self::filaVacia();
         $fila['asignacion_id'] = (int) ($ultima['asignacion_id'] ?? 0);
+        $fila['cajero_crown_id'] = (int) ($ultima['cajero_crown_id'] ?? 0);
         $fila['caja'] = (string) $ultima['caja'];
         $fila['caja_codigo'] = (string) $ultima['caja_codigo'];
         $fila['cajero'] = (string) $ultima['cajero'];
@@ -445,6 +597,7 @@ final class TesoreriaCrownResumenCajeroCalculo
     {
         $fila = [
             'asignacion_id' => 0,
+            'cajero_crown_id' => 0,
             'caja' => '',
             'caja_codigo' => '',
             'cajero' => '',

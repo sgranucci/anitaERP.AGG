@@ -44,14 +44,13 @@ class TesoreriaCrownSlotController extends Controller
             }
         }
         $filtrosQuery = TesoreriaCrownSlotListadoFiltros::paraQueryString($filtros);
-        // Alta: jornada abierta de la sala (no filtra el listado histórico).
+        // Alta: si hay filtro a una jornada cargable (abierta o lag +1), esa;
+        // si no, día anterior cuando la abierta es la siguiente (CashBox).
         $jornadaAlta = null;
-        if ($sala) {
-            $jornadaAlta = TesoreriaCrownJornada::query()
-                ->where('sala_id', $sala->id)
-                ->where('estado', TesoreriaCrownJornada::ABIERTA)
-                ->orderByDesc('fecha')
-                ->first();
+        if ($jornada && TesoreriaCrownSlotSupport::permiteCarga($jornada)) {
+            $jornadaAlta = $jornada;
+        } elseif ($sala) {
+            $jornadaAlta = TesoreriaCrownSlotSupport::jornadaPreferidaParaAlta((int) $sala->id);
         }
         $query = TesoreriaCrownSlot::query()
             ->with(['jornada', 'sala'])
@@ -142,8 +141,8 @@ class TesoreriaCrownSlotController extends Controller
 
         $jornada = $this->jornadaEnAlcance((int) $request->input('jornada_id'));
         $volver = route('ver_tesoreria_crown_jornada', $jornada->id).'?panel=slots';
-        if (! $jornada->estaAbierta()) {
-            return redirect()->to($volver)->with('mensaje-error', 'La jornada está cerrada.');
+        if (! TesoreriaCrownSlotSupport::permiteCarga($jornada)) {
+            return redirect()->to($volver)->with('mensaje-error', TesoreriaCrownSlotSupport::mensajeSinCarga());
         }
 
         return view('caja.tesoreria_crown.slot.crear', [
@@ -159,8 +158,8 @@ class TesoreriaCrownSlotController extends Controller
         can('crear-tesoreria-crown-slot');
 
         $jornada = $this->jornadaEnAlcance((int) $request->input('jornada_id'));
-        if (! $jornada->estaAbierta()) {
-            return back()->with('mensaje-error', 'La jornada está cerrada.');
+        if (! TesoreriaCrownSlotSupport::permiteCarga($jornada)) {
+            return back()->with('mensaje-error', TesoreriaCrownSlotSupport::mensajeSinCarga());
         }
         $datos = $request->validate([
             'tipo' => ['required', Rule::in(array_keys(TesoreriaCrownSlot::tiposCarga()))],
@@ -200,9 +199,10 @@ class TesoreriaCrownSlotController extends Controller
         $borradorGuardado = $slot->esBorrador()
             && $slot->esRecuento()
             && TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot);
+        $puedeCargar = TesoreriaCrownSlotSupport::permiteCarga($slot->jornada);
         $editable = $slot->esBorrador()
             && $slot->esRecuento()
-            && $slot->jornada->estaAbierta()
+            && $puedeCargar
             && ! $borradorGuardado
             && (can('crear-tesoreria-crown-slot', false) || can('editar-tesoreria-crown-slot', false));
 
@@ -212,6 +212,7 @@ class TesoreriaCrownSlotController extends Controller
             'cantidades' => $slot->lineas->pluck('cantidad', 'valor_id'),
             'editable' => $editable,
             'borradorGuardado' => $borradorGuardado,
+            'puedeCargar' => $puedeCargar,
             'escritorio' => TesoreriaCrownEscritorioNav::armar($slot->jornada),
         ]);
     }
@@ -222,7 +223,7 @@ class TesoreriaCrownSlotController extends Controller
         can('crear-tesoreria-crown-slot');
 
         $slot = $this->slotEnAlcance($id);
-        if (! $slot->esBorrador() || ! $slot->esRecuento() || ! $slot->jornada->estaAbierta()) {
+        if (! $slot->esBorrador() || ! $slot->esRecuento() || ! TesoreriaCrownSlotSupport::permiteCarga($slot->jornada)) {
             return back()->with('mensaje-error', 'Este recuento ya no se puede modificar.');
         }
         if (TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
@@ -244,7 +245,7 @@ class TesoreriaCrownSlotController extends Controller
         can('editar-tesoreria-crown-slot');
 
         $slot = $this->slotEnAlcance($id);
-        if (! $slot->esBorrador() || ! $slot->esRecuento() || ! $slot->jornada->estaAbierta()) {
+        if (! $slot->esBorrador() || ! $slot->esRecuento() || ! TesoreriaCrownSlotSupport::permiteCarga($slot->jornada)) {
             return back()->with('mensaje-error', 'Este recuento ya no se puede confirmar.');
         }
         if (! TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
@@ -300,8 +301,8 @@ class TesoreriaCrownSlotController extends Controller
         can('crear-tesoreria-crown-slot');
 
         $slot = $this->slotEnAlcance($id);
-        if (! $slot->esBorrador() || ! $slot->jornada->estaAbierta()) {
-            return back()->with('mensaje-error', 'Solo se revierte un borrador con la jornada abierta.');
+        if (! $slot->esBorrador() || ! TesoreriaCrownSlotSupport::permiteCarga($slot->jornada)) {
+            return back()->with('mensaje-error', 'Solo se revierte un borrador si la jornada admite carga de recuento.');
         }
         if (! TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
             return back()->with('mensaje-error', 'Este borrador todavía no tiene composición guardada.');
@@ -317,8 +318,8 @@ class TesoreriaCrownSlotController extends Controller
         can('eliminar-borrador-tesoreria-crown-slot');
 
         $slot = $this->slotEnAlcance($id);
-        if (! $slot->esBorrador() || ! $slot->jornada->estaAbierta()) {
-            return back()->with('mensaje-error', 'Solo se puede eliminar un borrador con la jornada abierta.');
+        if (! $slot->esBorrador() || ! TesoreriaCrownSlotSupport::permiteCarga($slot->jornada)) {
+            return back()->with('mensaje-error', 'Solo se puede eliminar un borrador si la jornada admite carga de recuento.');
         }
         if (TesoreriaCrownBorradorSupport::lineasTieneComposicion($slot)) {
             return back()->with(

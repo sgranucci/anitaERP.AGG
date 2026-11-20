@@ -54,7 +54,7 @@
             texto.value = '';
             texto.classList.add('d-none');
         }
-        actualizarAvisoSubtipo();
+        actualizarModoMonto();
         if (!tipoId || !url) {
             wrap.classList.add('d-none');
             select.removeAttribute('required');
@@ -72,7 +72,7 @@
             if (!filas.length) {
                 wrap.classList.add('d-none');
                 select.removeAttribute('required');
-                actualizarAvisoSubtipo();
+                actualizarModoMonto();
                 return;
             }
             filas.forEach(function (fila) {
@@ -88,26 +88,59 @@
             });
             wrap.classList.remove('d-none');
             select.setAttribute('required', 'required');
-            actualizarAvisoSubtipo();
+            actualizarModoMonto();
         }).catch(function () {
             wrap.classList.add('d-none');
-            actualizarAvisoSubtipo();
+            actualizarModoMonto();
         });
     }
 
-    function actualizarAvisoSubtipo() {
+    function subtipoSinBilletaje() {
         var select = document.getElementById('subtipo_id');
+        if (!select || !select.value) {
+            return false;
+        }
+        var opt = select.options[select.selectedIndex];
+        return opt ? (opt.getAttribute('data-mueve-billetaje') || '1') === '0' : false;
+    }
+
+    function actualizarAvisoSubtipo() {
         var aviso = document.getElementById('tc-boveda-subtipo-aviso');
         if (!aviso) {
             return;
         }
-        if (!select || !select.value) {
-            aviso.classList.add('d-none');
-            return;
+        aviso.classList.toggle('d-none', !subtipoSinBilletaje());
+    }
+
+    function actualizarModoMonto() {
+        var sinBilletaje = subtipoSinBilletaje();
+        var wrapMonto = document.getElementById('tc-boveda-monto-wrap');
+        var wrapBilletes = document.getElementById('tc-boveda-billetes-wrap');
+        var inputMonto = document.getElementById('monto');
+        if (wrapMonto) {
+            wrapMonto.classList.toggle('is-off', !sinBilletaje);
         }
-        var opt = select.options[select.selectedIndex];
-        var mueve = opt ? (opt.getAttribute('data-mueve-billetaje') || '1') : '1';
-        aviso.classList.toggle('d-none', mueve !== '0');
+        if (wrapBilletes) {
+            wrapBilletes.classList.toggle('is-off', sinBilletaje);
+        }
+        if (inputMonto) {
+            inputMonto.disabled = !sinBilletaje;
+            if (sinBilletaje) {
+                inputMonto.setAttribute('required', 'required');
+            } else {
+                inputMonto.removeAttribute('required');
+                inputMonto.value = '';
+            }
+        }
+        if (sinBilletaje) {
+            document.querySelectorAll('#tc-boveda-billetes-wrap input[data-denom]').forEach(function (input) {
+                input.value = '';
+                input.disabled = true;
+            });
+        } else {
+            aplicarTipo();
+        }
+        actualizarAvisoSubtipo();
     }
 
     function totalPanel(panel) {
@@ -195,11 +228,11 @@
                     texto.value = '';
                 }
             }
-            actualizarAvisoSubtipo();
+            actualizarModoMonto();
         });
-        actualizarAvisoSubtipo();
     }
     aplicarTipo();
+    actualizarModoMonto();
 
     document.addEventListener('submit', function (evento) {
         var form = evento.target;
@@ -237,13 +270,33 @@
             return;
         }
         var esComentario = actual.id === 'comentario';
+        var esMonto = actual.id === 'monto';
         var esCantidad = actual.matches && actual.matches('input[data-denom]');
-        if (!esComentario && !esCantidad) {
+        if (!esComentario && !esCantidad && !esMonto) {
             return;
         }
         evento.preventDefault();
         evento.stopPropagation();
-        if (esComentario && typeof actual.reportValidity === 'function' && !actual.reportValidity()) {
+        if ((esComentario || esMonto) && typeof actual.reportValidity === 'function' && !actual.reportValidity()) {
+            return;
+        }
+        if (esComentario && subtipoSinBilletaje()) {
+            var monto = form.querySelector('#monto');
+            if (monto && !monto.disabled) {
+                monto.focus();
+                return;
+            }
+        }
+        if (esMonto) {
+            var firmaDesdeMonto = form.querySelector('#firma_usuario');
+            if (firmaDesdeMonto && !firmaDesdeMonto.disabled) {
+                firmaDesdeMonto.focus();
+                return;
+            }
+            var botonDesdeMonto = form.querySelector('button[type="submit"], input[type="submit"]');
+            if (botonDesdeMonto) {
+                botonDesdeMonto.focus();
+            }
             return;
         }
         var cantidades = cantidadesVisibles(form);

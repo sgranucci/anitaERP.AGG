@@ -136,7 +136,7 @@ final class TesoreriaCrownBovedaSupport
     /**
      * Tipos que a-efeboveda deja cargar a mano.
      * APER ya no se carga: el arqueo trae el saldo de la última jornada cerrada.
-     * La habilitación y la rendición las graba el conforme del cajero.
+     * La habilitación y la rendición se asientan al guardar el comprobante (borrador en adelante).
      * Filtra por vigencia a la fecha de la jornada.
      *
      * @return Collection<int, TesoreriaCrownBovedaTipo>

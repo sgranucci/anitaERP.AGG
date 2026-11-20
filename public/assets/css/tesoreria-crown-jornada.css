@@ -803,7 +803,9 @@
 .tc-efeb-fila.is-off,
 .tc-efeb-total.is-off,
 .tc-efeb-moneda.is-off,
-.tc-efeb-ref.is-off {
+.tc-efeb-ref.is-off,
+.tc-boveda-monto-wrap.is-off,
+#tc-boveda-billetes-wrap.is-off {
     display: none;
 }
 

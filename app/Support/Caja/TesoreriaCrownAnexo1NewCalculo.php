@@ -179,7 +179,7 @@ final class TesoreriaCrownAnexo1NewCalculo
             if (! empty($fila['propina'])) {
                 continue;
             }
-            $tipoCaja = (string) ($fila['tipo'] ?? '');
+            $tipoCaja = (string) ($fila['tarea'] ?? '');
             $dif = (float) ($fila['diferencia'] ?? 0);
             if ($dif > 0.001) {
                 $excedente += $dif;

@@ -12,6 +12,7 @@ use App\Models\Compras\Condicioncompra;
 use App\Models\Stock\Articulo;
 use App\Models\Compras\Listaprecio_Proveedor_Articulo;
 use App\Support\Compras\ListaprecioProveedorAnitaEsquemaSupport as AnitaEsquema;
+use App\Support\Stock\ArticuloSkuMapeoSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -43,6 +44,10 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
 
     public function persistirEnAnita(int $listaprecio_proveedor_id): void
     {
+        if (! AnitaEsquema::escrituraHabilitada()) {
+            return;
+        }
+
         $this->actualizarAnitaDesdeErp($listaprecio_proveedor_id);
     }
 
@@ -202,7 +207,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
 
             foreach ($movs as $m) {
                 $sku = ltrim((string) $m->listpv_articulo, '0');
-                $art = Articulo::where('sku', $sku)->first();
+                $art = ArticuloSkuMapeoSupport::resolverArticuloPorSkuOMapeo($sku)
+                    ?? Articulo::where('sku', $sku)->first();
                 if (! $art) {
                     continue;
                 }
@@ -353,7 +359,8 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         $orden = 0;
         foreach ($lineas as $ln) {
             $fecha = Carbon::parse($ln->fechavigencia)->format('Ymd');
-            $sku = $ln->articulos?->sku ?? '';
+            // Crown: articulos recodificados en ERP siguen con sku_anterior en Anita.
+            $sku = ArticuloSkuMapeoSupport::skuParaAnita($ln->articulos);
             $sku = str_pad((string) $sku, 13, '0', STR_PAD_LEFT);
 
             $dataMov = [

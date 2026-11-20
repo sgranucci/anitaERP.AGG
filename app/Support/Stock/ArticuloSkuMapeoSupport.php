@@ -82,6 +82,33 @@ final class ArticuloSkuMapeoSupport
         return ArticuloSkuMatchSupport::resolverCanonico($skuNuevo);
     }
 
+    /**
+     * SKU a escribir en Anita (stkmae / listapmov / etc.).
+     *
+     * En Crown el ABM de artículos no recodifica Anita: si hubo mapeo ERP,
+     * Anita sigue con sku_anterior.
+     */
+    public static function skuParaAnita(?Articulo $articulo): string
+    {
+        if ($articulo === null) {
+            return '';
+        }
+
+        $skuErp = trim((string) ($articulo->sku ?? ''));
+        if ($skuErp === '' || ! self::tablaExiste()) {
+            return $skuErp;
+        }
+
+        $anterior = Articulo_Sku_Mapeo::query()
+            ->where('articulo_id', (int) $articulo->id)
+            ->orderByDesc('id')
+            ->value('sku_anterior');
+
+        $anterior = $anterior !== null ? trim((string) $anterior) : '';
+
+        return $anterior !== '' ? $anterior : $skuErp;
+    }
+
     public static function idUsoMantenimiento(): ?int
     {
         $id = Usoarticulo::query()
