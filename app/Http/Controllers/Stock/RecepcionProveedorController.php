@@ -30,6 +30,7 @@ use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\RecepcionProveedorDevolucionDisponibleSupport;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
 use App\Support\Seguridad\IngresoProveedorConsultaSupport;
@@ -680,9 +681,19 @@ class RecepcionProveedorController extends Controller
                 ->with('mensaje', 'Solo se puede devolver contra una recepción confirmada.');
         }
 
+        try {
+            RecepcionProveedorDevolucionDisponibleSupport::assertOrigenTieneDisponible($recepcion);
+        } catch (\Throwable $e) {
+            return redirect('stock/recepcion-proveedor/'.$id.'/editar')
+                ->with('mensaje', $e->getMessage());
+        }
+
+        $disponiblePorClave = RecepcionProveedorDevolucionDisponibleSupport::disponiblesDesdeOrigen($recepcion);
+
         return view('stock.recepcion_proveedor.devolucion', [
             'recepcion' => $recepcion,
             'moneda_query' => Moneda::query()->orderBy('nombre')->get(),
+            'disponibleDevolucionPorClave' => $disponiblePorClave,
         ]);
     }
 

@@ -11,9 +11,12 @@ use App\Support\Stock\RecepcionProveedorIntercompanySupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Stock\RecepcionCircuitoRelacion;
+use App\Support\Stock\RecepcionProveedorDevolucionDisponibleSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInterface
@@ -61,6 +64,7 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
             'recepcion_proveedor_archivos',
             'creousuarios',
             'recepcion_referencia',
+            'devoluciones_confirmadas',
         ])->find($id);
 
         if (! $row) {
@@ -74,7 +78,19 @@ class Recepcion_ProveedorRepository implements Recepcion_ProveedorRepositoryInte
     {
         $query = $this->consultaRecepciones($filtros);
 
-        return $paginar ? $query->paginate(10) : $query->get();
+        if ($paginar) {
+            /** @var LengthAwarePaginator $page */
+            $page = $query->paginate(10);
+            RecepcionProveedorDevolucionDisponibleSupport::adjuntarDepsConfirmadasAlListado($page->getCollection());
+
+            return $page;
+        }
+
+        /** @var Collection<int, object> $rows */
+        $rows = $query->get();
+        RecepcionProveedorDevolucionDisponibleSupport::adjuntarDepsConfirmadasAlListado($rows);
+
+        return $rows;
     }
 
     /**

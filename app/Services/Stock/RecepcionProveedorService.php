@@ -22,6 +22,7 @@ use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Stock\RecepcionProveedorDepositoSupport;
+use App\Support\Stock\RecepcionProveedorDevolucionDisponibleSupport;
 use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use App\Support\Stock\RecepcionProveedorImportacionSupport;
 use App\Support\Stock\RecepcionProveedorIntercompanySupport;
@@ -373,6 +374,19 @@ class RecepcionProveedorService
                 }
             }
 
+            if ($recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION) {
+                $this->validarCantidadesDevolucionSobreReferencia(
+                    $recepcion,
+                    $recepcion->recepcion_proveedor_articulos
+                        ->map(static fn ($linea): array => [
+                            'articulo_id' => (int) $linea->articulo_id,
+                            'ordencompra_articulo_id' => $linea->ordencompra_articulo_id,
+                            'cantidad' => (float) $linea->cantidad,
+                        ])
+                        ->all()
+                );
+            }
+
             $movId = null;
             $asientoId = null;
             $anitaIntentada = false;
@@ -621,7 +635,11 @@ class RecepcionProveedorService
         if ($origen->estado !== RecepcionProveedorEstados::CONFIRMADA) {
             throw new \RuntimeException('Solo se puede devolver contra una recepción confirmada.');
         }
+        if ($origen->tipo !== Recepcion_Proveedor::TIPO_RECEPCION) {
+            throw new \RuntimeException('Solo se puede devolver contra una recepción (COM), no contra otra devolución.');
+        }
 
+        RecepcionProveedorDevolucionDisponibleSupport::assertOrigenTieneDisponible($origen);
         $this->validarCantidadesDevolucion($origen, $data['items'] ?? []);
 
         $data['tipo'] = Recepcion_Proveedor::TIPO_DEVOLUCION;
@@ -694,24 +712,45 @@ class RecepcionProveedorService
     }
 
     /** @param list<array<string, mixed>> $items */
-    private function validarCantidadesDevolucion(Recepcion_Proveedor $origen, array $items): void
-    {
-        $recibidoPorLinea = [];
-        foreach ($origen->recepcion_proveedor_articulos as $linea) {
-            $key = (int) $linea->articulo_id.'-'.(int) ($linea->ordencompra_articulo_id ?? 0);
-            $recibidoPorLinea[$key] = ($recibidoPorLinea[$key] ?? 0) + (float) $linea->cantidad;
+    private function validarCantidadesDevolucion(
+        Recepcion_Proveedor $origen,
+        array $items,
+        ?int $excluirRecepcionId = null
+    ): void {
+        RecepcionProveedorDevolucionDisponibleSupport::assertCantidadesDentroDisponible(
+            RecepcionProveedorDevolucionDisponibleSupport::disponiblesDesdeOrigen($origen, $excluirRecepcionId),
+            $items
+        );
+    }
+
+    /**
+     * Validación al confirmar DEP (cubre borradores o caminos que no pasaron por crearDevolucion).
+     *
+     * @param  list<array<string, mixed>>  $items
+     */
+    private function validarCantidadesDevolucionSobreReferencia(
+        Recepcion_Proveedor $devolucion,
+        array $items
+    ): void {
+        $origenId = (int) ($devolucion->recepcion_referencia_id ?? 0);
+        if ($origenId <= 0) {
+            throw new \RuntimeException('La devolución no tiene recepción de origen (COM).');
         }
 
-        foreach ($items as $idx => $item) {
-            $key = (int) ($item['articulo_id'] ?? 0).'-'.(int) ($item['ordencompra_articulo_id'] ?? 0);
-            $max = $recibidoPorLinea[$key] ?? 0;
-            $cant = (float) ($item['cantidad'] ?? 0);
-            if ($cant > $max + 0.000001) {
-                throw new \RuntimeException(
-                    'Línea '.($idx + 1).": cantidad a devolver ({$cant}) supera lo recepcionado ({$max})."
-                );
-            }
+        $origen = Recepcion_Proveedor::query()
+            ->with('recepcion_proveedor_articulos')
+            ->find($origenId);
+        if (! $origen instanceof Recepcion_Proveedor) {
+            throw new \RuntimeException('No se encontró la recepción de origen de la devolución.');
         }
+        if ($origen->tipo !== Recepcion_Proveedor::TIPO_RECEPCION) {
+            throw new \RuntimeException('La devolución debe referenciar una recepción (COM).');
+        }
+        if ($origen->estado !== RecepcionProveedorEstados::CONFIRMADA) {
+            throw new \RuntimeException('Solo se puede devolver contra una recepción confirmada.');
+        }
+
+        $this->validarCantidadesDevolucion($origen, $items, (int) $devolucion->id);
     }
 
     public function precargaDesdeOc(int $numeroOc, ?string $fechaRecepcion = null): array

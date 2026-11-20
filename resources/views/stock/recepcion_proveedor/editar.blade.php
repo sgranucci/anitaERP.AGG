@@ -38,6 +38,16 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @if(($recepcion->tipo ?? '') === 'RECEPCION' && ($recepcion->devoluciones_confirmadas ?? collect())->isNotEmpty())
+        <div class="alert alert-warning">
+            Este COM tiene devolución(es) confirmada(s):
+            @foreach($recepcion->devoluciones_confirmadas as $dep)
+                <a href="{{ route('editar_recepcion_proveedor', $dep->id) }}" class="font-weight-bold">
+                    DEP {{ $dep->numerorecepcion }}
+                </a>@if(! $loop->last), @endif
+            @endforeach
+        </div>
+        @endif
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">
@@ -49,6 +59,12 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                         @endif
                     @else
                         Recepción {{ $recepcion->numerorecepcion }}
+                        @foreach($recepcion->devoluciones_confirmadas ?? [] as $dep)
+                            <a href="{{ route('editar_recepcion_proveedor', $dep->id) }}"
+                               class="badge badge-warning ml-2" title="Devolución confirmada">
+                                DEP {{ $dep->numerorecepcion }}
+                            </a>
+                        @endforeach
                     @endif
                     @if($recepcion->estado === 'BORRADOR')
                         <span class="badge badge-secondary ml-2">BORRADOR</span>

@@ -23,7 +23,16 @@
         <tr>
             <td>{{ $row->numerorecepcion }}</td>
             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
-            <td>{{ $row->tipo }}</td>
+            <td>
+                {{ $row->tipo }}
+                @php
+                    $depsExport = is_array($row->deps_confirmadas ?? null) ? $row->deps_confirmadas : [];
+                    $depsNros = array_map(static fn ($d) => 'DEP '.$d['numerorecepcion'], $depsExport);
+                @endphp
+                @if($depsNros !== [])
+                    ({{ implode(', ', $depsNros) }})
+                @endif
+            </td>
             <td>{{ ($row->tipo ?? '') === 'DEVOLUCION' ? ($row->numerorecepcion_origen ?? '') : '' }}</td>
             <td>{{ $row->numeroordencompra }}</td>
             <td>{{ $row->estado }}</td>

@@ -37,8 +37,9 @@ Devolución — {{ $recepcion->numerorecepcion }}
                             .
                         @endif
                         Se registra con la <strong>fecha de hoy</strong> (no afecta el cierre del período de la recepción).
-                        Las cantidades vienen precargadas con lo recepcionado (devolución total habitual).
-                        Ajuste solo las líneas que correspondan; no pueden superar lo recepcionado.
+                        Las cantidades vienen precargadas con lo <strong>aún disponible</strong>
+                        (recepcionado menos devoluciones confirmadas previas).
+                        Ajuste solo las líneas que correspondan; no pueden superar ese disponible.
                     </div>
                     @include('stock.recepcion_proveedor.form', ['modoEdicion' => true, 'recepcion' => $recepcion, 'modoDevolucion' => true])
                 </div>

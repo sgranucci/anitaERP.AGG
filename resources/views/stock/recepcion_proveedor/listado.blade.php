@@ -39,7 +39,12 @@
         <tr>
             <td>{{ $row->numerorecepcion }}</td>
             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
-            <td>{{ $row->tipo }}</td>
+            <td>
+                {{ $row->tipo }}
+                @foreach((is_array($row->deps_confirmadas ?? null) ? $row->deps_confirmadas : []) as $dep)
+                    · DEP {{ $dep['numerorecepcion'] }}
+                @endforeach
+            </td>
             <td>{{ ($row->tipo ?? '') === 'DEVOLUCION' ? ($row->numerorecepcion_origen ?? '') : '' }}</td>
             <td>{{ $row->numeroordencompra }}</td>
             <td>{{ $row->nombreproveedor }}</td>

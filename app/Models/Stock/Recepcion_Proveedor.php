@@ -80,6 +80,14 @@ class Recepcion_Proveedor extends Model implements Auditable
         return $this->belongsTo(self::class, 'recepcion_referencia_id');
     }
 
+    public function devoluciones_confirmadas()
+    {
+        return $this->hasMany(self::class, 'recepcion_referencia_id')
+            ->where('tipo', self::TIPO_DEVOLUCION)
+            ->where('estado', self::ESTADO_CONFIRMADA)
+            ->orderBy('id');
+    }
+
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');

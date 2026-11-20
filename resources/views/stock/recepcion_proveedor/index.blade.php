@@ -98,6 +98,8 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                             $tieneDiff = $row->fl_precio_diferencia || $row->fl_diferencia_cantidad || $row->fl_articulo_extra || $row->fl_faltante_oc;
                             $esBorrador = ($row->estado ?? '') === 'BORRADOR';
                             $precioPendiente = ! empty($row->fl_precio_pendiente_aprobacion);
+                            $depsConfirmadas = is_array($row->deps_confirmadas ?? null) ? $row->deps_confirmadas : [];
+                            $tieneDeps = $depsConfirmadas !== [];
                         @endphp
                         <tr class="@if($precioPendiente) table-info @elseif($esBorrador) table-secondary @elseif($tieneDiff) table-warning @endif">
                             <td>
@@ -108,7 +110,19 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                                 @endif
                             </td>
                             <td>{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '' }}</td>
-                            <td>{{ $row->tipo }}</td>
+                            <td>
+                                {{ $row->tipo }}
+                                @if($tieneDeps)
+                                    @foreach($depsConfirmadas as $dep)
+                                        <a href="{{ route('editar_recepcion_proveedor', ['id' => $dep['id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                           class="badge badge-warning ml-1"
+                                           target="_blank" rel="noopener"
+                                           title="Devuelta con DEP {{ $dep['numerorecepcion'] }}">
+                                            DEP {{ $dep['numerorecepcion'] }}
+                                        </a>
+                                    @endforeach
+                                @endif
+                            </td>
                             <td>
                                 @if(($row->tipo ?? '') === 'DEVOLUCION' && ! empty($row->recepcion_referencia_id) && ! empty($row->numerorecepcion_origen))
                                 <a href="{{ route('editar_recepcion_proveedor', ['id' => $row->recepcion_referencia_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"

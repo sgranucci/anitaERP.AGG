@@ -130,7 +130,7 @@
             ) || 0;
             if (cant > max + 0.000001) {
                 errores.push(
-                    'Línea ' + (idx + 1) + ': cantidad a devolver (' + cant + ') supera lo recepcionado (' + max + ').'
+                    'Línea ' + (idx + 1) + ': cantidad a devolver (' + cant + ') supera lo disponible (' + max + ').'
                 );
             }
         });
@@ -2387,7 +2387,7 @@
             html += '<td class="text-right align-middle">';
             if (esModoDevolucion()) {
                 html += '<span class="d-block">' + (maxDevolucion > 0 ? maxDevolucion : '—') + '</span>';
-                html += '<small class="text-muted">recibida</small>';
+                html += '<small class="text-muted">disponible</small>';
             } else {
                 html += htmlCeldaCantidadOc(item);
             }

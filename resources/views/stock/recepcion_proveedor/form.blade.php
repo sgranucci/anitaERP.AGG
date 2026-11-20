@@ -106,22 +106,14 @@
         }
     }
     if ($modoDevolucion ?? false) {
-        $items = array_values(array_map(static function (array $item): array {
-            $tieneMaxOrigen = array_key_exists('cantidad_recepcionada_origen', $item)
-                && $item['cantidad_recepcionada_origen'] !== null
-                && $item['cantidad_recepcionada_origen'] !== '';
-            if (! $tieneMaxOrigen) {
-                $recibida = (float) ($item['cantidad'] ?? 0);
-                $item['cantidad_recepcionada_origen'] = $recibida;
-                $item['cantidad'] = $recibida;
-                $item['cantidad_rechazada'] = 0;
-                $item['accion_linea_oc'] = $recibida > 0.000001
-                    ? RecepcionProveedorAccionLineaOc::RECIBIR
-                    : RecepcionProveedorAccionLineaOc::PENDIENTE;
-            }
-
-            return $item;
-        }, $items ?? []));
+        $disponibleDevolucionPorClave = $disponibleDevolucionPorClave
+            ?? (isset($recepcion) && $recepcion
+                ? \App\Support\Stock\RecepcionProveedorDevolucionDisponibleSupport::disponiblesDesdeOrigen($recepcion)
+                : []);
+        $items = \App\Support\Stock\RecepcionProveedorDevolucionDisponibleSupport::aplicarDisponibleAItems(
+            $items ?? [],
+            $disponibleDevolucionPorClave
+        );
     }
     $items = $items ?? [];
 
@@ -530,10 +522,10 @@
                 @endif
                 <th class="col-color ms-col-color-talle" style="display:none;">Color</th>
                 <th class="col-talle ms-col-color-talle" style="display:none;">Talle</th>
-                <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad recepcionada en el COM origen' : 'Cantidad pedida en la OC; si ya hubo recepciones confirmadas muestra ingresada y pendiente' }}">
-                    {{ ($modoDevolucion ?? false) ? 'Recibida' : 'Cant. OC' }}
+                <th class="col-qty text-right" title="{{ ($modoDevolucion ?? false) ? 'Cantidad aún disponible para devolver (COM origen menos DEPs confirmadas)' : 'Cantidad pedida en la OC; si ya hubo recepciones confirmadas muestra ingresada y pendiente' }}">
+                    {{ ($modoDevolucion ?? false) ? 'Disponible' : 'Cant. OC' }}
                 </th>
-                <th class="col-qty" title="{{ ($modoDevolucion ?? false) ? 'Cantidad a devolver (no puede superar lo recepcionado)' : 'Cantidad del remito en unidad de compra (ver columna Conversi&oacute;n)' }}">
+                <th class="col-qty" title="{{ ($modoDevolucion ?? false) ? 'Cantidad a devolver (no puede superar lo disponible tras DEPs previas)' : 'Cantidad del remito en unidad de compra (ver columna Conversi&oacute;n)' }}">
                     {{ ($modoDevolucion ?? false) ? 'Cant. a devolver' : 'Cant. recibida' }}
                 </th>
                 @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
