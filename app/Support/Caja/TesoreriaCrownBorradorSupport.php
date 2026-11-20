@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\TesoreriaCrownBoveda;
 use App\Models\Caja\TesoreriaCrownComprobante;
 use App\Models\Caja\TesoreriaCrownComprobanteLinea;
 use App\Models\Caja\TesoreriaCrownCierreFiscal;
@@ -36,6 +37,18 @@ final class TesoreriaCrownBorradorSupport
     public static function lineasTieneComposicion(Model $movimiento): bool
     {
         return self::relacionLineasConCantidad($movimiento);
+    }
+
+    /**
+     * Bóveda: billetes o monto informativo (HIB / sin billetaje).
+     */
+    public static function bovedaTieneComposicion(TesoreriaCrownBoveda $movimiento): bool
+    {
+        if (self::lineasTieneComposicion($movimiento)) {
+            return true;
+        }
+
+        return abs((float) ($movimiento->importe_pesos ?? 0)) >= 0.01;
     }
 
     public static function mesaTieneComposicion(TesoreriaCrownMesa $movimiento): bool
@@ -85,6 +98,11 @@ final class TesoreriaCrownBorradorSupport
             if (array_key_exists('total', $movimiento->getAttributes())
                 || $movimiento->isFillable('total')) {
                 $movimiento->total = 0;
+                $movimiento->save();
+            }
+            if (array_key_exists('importe_pesos', $movimiento->getAttributes())
+                || $movimiento->isFillable('importe_pesos')) {
+                $movimiento->importe_pesos = null;
                 $movimiento->save();
             }
         });

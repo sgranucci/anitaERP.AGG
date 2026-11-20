@@ -480,7 +480,7 @@ class TesoreriaCrownBovedaController extends Controller
 
         $movimiento = $this->movimientoEnAlcance($id);
         $borradorGuardado = $movimiento->esBorrador()
-            && TesoreriaCrownBorradorSupport::lineasTieneComposicion($movimiento);
+            && TesoreriaCrownBorradorSupport::bovedaTieneComposicion($movimiento);
 
         return view('caja.tesoreria_crown.boveda.editar', array_merge(
             $this->datosCarga((int) $movimiento->sala_id, $movimiento),
@@ -505,7 +505,7 @@ class TesoreriaCrownBovedaController extends Controller
         if (! $movimiento->esBorrador() || ! $movimiento->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Este movimiento ya no se puede modificar.');
         }
-        if (TesoreriaCrownBorradorSupport::lineasTieneComposicion($movimiento)) {
+        if (TesoreriaCrownBorradorSupport::bovedaTieneComposicion($movimiento)) {
             return back()->with(
                 'mensaje-error',
                 'La composición del borrador ya está guardada. Para cambiarla, revertí el borrador.'
@@ -530,12 +530,13 @@ class TesoreriaCrownBovedaController extends Controller
         if (! $movimiento->esBorrador()) {
             return back()->with('mensaje-error', 'Este movimiento ya no está en borrador.');
         }
-        if (! TesoreriaCrownBorradorSupport::lineasTieneComposicion($movimiento)
-            && $request->exists('cantidad')) {
+        if (! TesoreriaCrownBorradorSupport::bovedaTieneComposicion($movimiento)
+            && ($request->exists('cantidad') || $request->filled('monto') || $request->exists('tipo_id'))) {
             if ($error = $this->persistirBorrador($request, $movimiento)) {
                 return back()->withInput()->with('mensaje-error', $error);
             }
             $movimiento->unsetRelation('lineas');
+            $movimiento->refresh();
         }
         $movimiento->load(['tipo', 'lineas', 'deposito.tipoDeposito', 'jornada']);
         if ($error = TesoreriaCrownBovedaPredepositoSupport::validarRdep($movimiento)) {
@@ -652,7 +653,7 @@ class TesoreriaCrownBovedaController extends Controller
         if (! $movimiento->esBorrador() || ! $movimiento->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Solo se revierte un borrador de una jornada abierta.');
         }
-        if (! TesoreriaCrownBorradorSupport::lineasTieneComposicion($movimiento)) {
+        if (! TesoreriaCrownBorradorSupport::bovedaTieneComposicion($movimiento)) {
             return back()->with('mensaje-error', 'Este borrador todavía no tiene composición guardada.');
         }
         TesoreriaCrownBorradorSupport::vaciarLineas($movimiento);
@@ -669,7 +670,7 @@ class TesoreriaCrownBovedaController extends Controller
         if (! $movimiento->esBorrador() || ! $movimiento->jornada->estaAbierta()) {
             return back()->with('mensaje-error', 'Solo se borra un borrador de una jornada abierta.');
         }
-        if (TesoreriaCrownBorradorSupport::lineasTieneComposicion($movimiento)) {
+        if (TesoreriaCrownBorradorSupport::bovedaTieneComposicion($movimiento)) {
             return back()->with(
                 'mensaje-error',
                 'Un borrador con composición guardada no se elimina. Revertilo para vaciarlo o confirmalo.'
@@ -1123,7 +1124,8 @@ class TesoreriaCrownBovedaController extends Controller
 
     private function aplicarConfirmacion(Request $request, TesoreriaCrownBoveda $movimiento): ?string
     {
-        if ($movimiento->lineas()->doesntExist()) {
+        $movimiento->loadMissing('subtipo');
+        if (! TesoreriaCrownBorradorSupport::bovedaTieneComposicion($movimiento)) {
             return 'No se puede grabar una operación en cero.';
         }
         if (trim((string) $request->input('firma_usuario')) === '' || trim((string) $request->input('firma_password')) === '') {
