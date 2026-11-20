@@ -616,12 +616,10 @@ class ArticuloFerliController extends Controller
 
         $combinacion = Combinacion::where('articulo_id', $articulo->id)->get();
 
-        // Módulos: «12 A 35-40» arriba y numeración abajo (hasta 3 módulos, misma fuente)
-        $lineasModulos = EtiquetaProductoFerliModuloSupport::lineasDesdeModulos(
+        // Módulos: «12 A 35-40» + numeración; línea fina LO entre módulos (casi sin ocupar espacio)
+        $bloquesModulos = EtiquetaProductoFerliModuloSupport::bloquesDesdeModulos(
             $articulo->lineas?->modulos ?? []
         );
-        // Paso entre líneas (no tamaño de fuente): 6 líneas de 3 módulos caben enteras
-        $pasoModulo = 22;
 
         // Arma nombre de archivo
         $nombreEtiqueta = 'tmp/eti-'.Str::random(10).'.txt';
@@ -648,20 +646,17 @@ class ArticuloFerliController extends Controller
                 $etiqueta .= 'A680,5,1,1,2,2,N,"'.$codSku."\"\n";
                 $etiqueta .= 'A630,5,1,3,1,1,N,"'.$combNombreEpl."\"\n";
                 $etiqueta .= 'A600,5,1,3,1,1,N,"'.$nombre2Epl."\"\n";
-                // Arranca más arriba para aprovechar el hueco bajo la combinación
-                $yModulo = 560;
-                foreach ($lineasModulos as $textoModulo) {
-                    $etiqueta .= 'A'.$yModulo.',5,1,2,1,1,N,"'.$textoModulo."\"\n";
-                    $yModulo -= $pasoModulo;
+                // Copia superior: módulos bajo la combinación + separadores
+                foreach (EtiquetaProductoFerliModuloSupport::comandosEpl($bloquesModulos, 560) as $cmd) {
+                    $etiqueta .= $cmd."\n";
                 }
                 $etiqueta .= 'A330,5,1,3,2,1,N,"'.$descripcion."\"\n";
                 $etiqueta .= 'A260,5,1,1,2,2,N,"'.$codSku."\"\n";
                 $etiqueta .= 'A210,5,1,3,1,1,N,"'.$combNombreEpl."\"\n";
                 $etiqueta .= 'A180,5,1,3,1,1,N,"'.$nombre2Epl."\"\n";
-                $yModulo = 145;
-                foreach ($lineasModulos as $textoModulo) {
-                    $etiqueta .= 'A'.$yModulo.',5,1,2,1,1,N,"'.$textoModulo."\"\n";
-                    $yModulo -= $pasoModulo;
+                // Copia inferior (misma etiqueta doble)
+                foreach (EtiquetaProductoFerliModuloSupport::comandosEpl($bloquesModulos, 145) as $cmd) {
+                    $etiqueta .= $cmd."\n";
                 }
                 $etiqueta .= "P1\n";
             }

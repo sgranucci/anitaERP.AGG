@@ -812,7 +812,18 @@
 							@endif
                				<td class="factura-col-item">
                					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
-                				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ $valorOldIndice('listasprecios_id', $idxItem, $item->listaprecio_id ?? '') }}" />
+                				@php
+                					$listaPrecioLineaForm = $valorOldIndice('listasprecios_id', $idxItem, $item->listaprecio_id ?? '');
+                					if (($listaPrecioLineaForm === '' || $listaPrecioLineaForm === null)
+                						&& (! empty($flGeneraNotaDeCredito) || ! empty($flGeneraNotaDeDebito))
+                					) {
+                						$listaPrecioLineaForm = $data->clientes->listaprecio_id
+                							?? \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::resolverListaCabecera(
+                								(int) ($data->cliente_id ?? 0)
+                							);
+                					}
+                				@endphp
+                				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ $listaPrecioLineaForm }}" />
                 				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{ $valorOldIndice('monedas_id', $idxItem, $item->moneda_id ?? '') }}" />
                 				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{ $valorOldIndice('incluyeimpuestos', $idxItem, $item->incluyeimpuesto ?? '') }}" />
                 				<input type="hidden" name="ids[]" class="form-control ids" value="{{$item->id??''}}" />

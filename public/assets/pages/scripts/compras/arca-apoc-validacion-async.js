@@ -190,6 +190,16 @@
 
             url = url.replace('__ID__', String(entityId));
 
+            // Comprobante usa URL fija + body; ABM proveedor/cliente suele llevar el id en la URL (__ID__).
+            var body = {};
+            if (url.indexOf(String(entityId)) === -1) {
+                if (cfg.esCliente) {
+                    body.cliente_id = entityId;
+                } else {
+                    body.proveedor_id = entityId;
+                }
+            }
+
             if (xhrActivo) {
                 xhrActivo.abort();
             }
@@ -204,7 +214,7 @@
                     'X-Requested-With': 'XMLHttpRequest',
                     Accept: 'application/json',
                 },
-                data: JSON.stringify({}),
+                data: JSON.stringify(body),
             });
 
             xhrActivo.always(function () {

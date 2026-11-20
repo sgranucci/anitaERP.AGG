@@ -59,6 +59,7 @@ use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ProveedorSuspendidoOperacionSupport;
 use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorTipoCargaSesion;
@@ -1483,6 +1484,26 @@ class Comprobante_ProveedorController extends Controller
                 'ok' => true,
                 'regularizado' => true,
                 'message' => null,
+                'validacion' => null,
+                'proveedor' => [
+                    'id' => $proveedor->id,
+                    'codigo' => $proveedor->codigo,
+                    'nombre' => $proveedor->nombre,
+                    'condicioniva_id' => $condicionivaId,
+                    'estado' => (string) $proveedor->estado,
+                ],
+            ]);
+        }
+
+        // Ferli (avisar): el banner amarillo de suspendido ya informa; el modal de padrón
+        // (IVA no activo) se lee como bloqueo y corta la carga aunque esté permitido.
+        if (ProveedorSuspendidoOperacionSupport::esSuspendido($proveedor)
+            && ProveedorSuspendidoOperacionSupport::permiteCargaConAviso()) {
+            return response()->json([
+                'ok' => true,
+                'skipped' => true,
+                'motivo' => 'proveedor_suspendido_avisar',
+                'message' => ProveedorSuspendidoOperacionSupport::mensajeAviso(),
                 'validacion' => null,
                 'proveedor' => [
                     'id' => $proveedor->id,

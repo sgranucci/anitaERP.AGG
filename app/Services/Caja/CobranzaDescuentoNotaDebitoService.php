@@ -14,6 +14,7 @@ use App\Services\Ventas\ClienteCuentacorrienteAplicacionService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CobranzaDescuentoConfigSupport;
 use App\Support\Ventas\ArcaFceNcMostradorSupport;
+use App\Support\Ventas\ArticuloListaprecioLineaVentasSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use Illuminate\Support\Facades\Log;
@@ -259,6 +260,11 @@ final class CobranzaDescuentoNotaDebitoService
         $descripciones = [];
         $impuestoIds = [];
         $incluye = [];
+        $listasprecios = [];
+
+        $listaCabecera = ArticuloListaprecioLineaVentasSupport::resolverListaCabecera(
+            (int) ($ncp->cliente_id ?? 0)
+        );
 
         $emisiones = ($ncp->relationLoaded('venta_emisiones')
             ? $ncp->venta_emisiones
@@ -276,6 +282,7 @@ final class CobranzaDescuentoNotaDebitoService
             $incluye[] = trim((string) ($emision->incluyeimpuesto ?? '')) !== ''
                 ? (string) $emision->incluyeimpuesto
                 : '1';
+            $listasprecios[] = $listaCabecera;
         }
 
         $fechaNd = $this->fechaYmd($fecha);
@@ -298,7 +305,7 @@ final class CobranzaDescuentoNotaDebitoService
             'cliente_id' => (int) $ncp->cliente_id,
             'moneda_id' => (int) $ncp->moneda_id,
             'cotizacion' => (float) ($ncp->cotizacion ?: 0),
-            'listaprecio_id' => 1,
+            'listaprecio_id' => $listaCabecera > 0 ? $listaCabecera : 1,
             'descuentolinea' => 0.,
             'descuentopie' => 0.,
             'descuentoimportepie' => 0.,
@@ -309,6 +316,7 @@ final class CobranzaDescuentoNotaDebitoService
             'descripcionarticulos' => $descripciones,
             'impuesto_ids' => $impuestoIds,
             'incluyeimpuestos' => $incluye,
+            'listasprecios_id' => $listasprecios,
             'opciones_emision' => [
                 'omitir_movimiento_stock' => true,
             ],

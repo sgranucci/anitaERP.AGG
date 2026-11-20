@@ -3233,6 +3233,18 @@ class FacturacionService
 				);
 			}
 
+			// NC / ND de reversión: el precio e incluyeimpuesto ya vienen del origen.
+			// venta_emision no guarda listaprecio_id; artículos de descuento (NCP) a menudo
+			// no tienen fila en precio — no cortar la anulación por eso.
+			if ($articulo_id
+				&& ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecio_id)
+				&& $omitirResolucionOtMostrador
+			) {
+				$listaprecio_id = \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::resolverListaCabecera(
+					(int) $cliente_id,
+				);
+			}
+
 			if ($articulo_id && ! \App\Support\Ventas\ArticuloListaprecioLineaVentasSupport::listaprecioIdValido($listaprecio_id)) {
 				$etiqueta = $sku ?? (string) ($articulos[$offItem] ?? $offItem + 1);
 
@@ -4864,6 +4876,12 @@ class FacturacionService
 				{
 					$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
+					// 0 no es NULL: MySQL rechaza FK fk_venta_transporte (no hay transporte.id=0).
+					$transporteIdOt = (int) ($this->transporteIdFacturaOt($data, $pedido) ?? 0);
+					if ($transporteIdOt <= 0) {
+						$transporteIdOt = (int) ($cliente->transporte_id ?? 0);
+					}
+
 					$venta = ['fecha' => $fechaFactura,
 						'fechajornada' => $fechaFactura,
 						'empresa_id' => $puntoventa->empresa_id,
@@ -4874,7 +4892,7 @@ class FacturacionService
 						'cliente_id' => $cliente->id,
 						'condicionventa_id' => $pedido->condicionventa_id,
 						'vendedor_id' => $pedido->vendedor_id,
-						'transporte_id' => $this->transporteIdFacturaOt($data, $pedido),
+						'transporte_id' => $transporteIdOt > 0 ? $transporteIdOt : null,
 						'total' => $totalComprobante * $signo,
 						'moneda_id' => $moneda_id,
 						'cotizacion' => $cotizacion,
@@ -5336,7 +5354,9 @@ class FacturacionService
 
 	protected function transporteIdFacturaOt(array $data, $pedido)
 	{
-		return $pedido->transporte_id;
+		$transporteId = (int) ($pedido->transporte_id ?? 0);
+
+		return $transporteId > 0 ? $transporteId : null;
 	}
 
 	public function grabaFacturaERP($empresa, $codigoTipoTransaccion, $tipotransaccion, $fechaFactura,  
@@ -5763,7 +5783,17 @@ class FacturacionService
 
 				if (! $omitirMovimientoStock && empty($itemEmision['omitir_stock_linea']) && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
 				{
+					// Ferli: con combinación el saldo por talle lee articulo_movimiento_talle.
 					$dataTalle = [];
+					$talleIdEmision = (int) ($itemEmision['talle_id'] ?? 0);
+					if (EntornoEmpresaSupport::esFerli() && $talleIdEmision > 0) {
+						$dataTalle[] = [
+							'id' => null,
+							'talle_id' => $talleIdEmision,
+							'cantidad' => abs((float) $itemEmision['cantidad']),
+							'precio' => $itemEmision['precio'],
+						];
+					}
 					$dataFirmado = \App\Support\Ventas\TipotransaccionOperacionStockSupport::firmarPayloadMovimiento(
 						$dataArticuloMovimiento,
 						$forzarOperacionStock ?? $tipotransaccion->operacionstock

@@ -572,6 +572,7 @@ final class ComprobanteProveedorPdfIaService
                 $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
             }
             $proveedor = $this->resolucionSupport->resolverProveedorPorCuit($cuitProveedor);
+            $this->anexarAvisoProveedorSuspendido($proveedor, $advertencias);
             $extraido = $this->aplicarCuitProveedorCorregido($extraido, $proveedor, $advertencias, $cuitProveedor);
             $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
             if ($tipoAbreviaturaElegida !== '') {
@@ -663,6 +664,7 @@ final class ComprobanteProveedorPdfIaService
             }
 
             $proveedor = $this->resolucionSupport->resolverProveedorPorOc($cuitProveedor, $numeroOc);
+            $this->anexarAvisoProveedorSuspendido($proveedor, $advertencias);
             $extraido = $this->aplicarCuitProveedorCorregido($extraido, $proveedor, $advertencias, $cuitProveedor);
 
             // FC / ND / NC (o REC/REM) desde OCR/LLM; el tipo fino (FIA, CGA…) lo arma listaConcepto + CC.
@@ -1147,6 +1149,19 @@ final class ComprobanteProveedorPdfIaService
      * @param  list<string>  $advertencias
      * @return array<string, mixed>
      */
+    /**
+     * @param  array{aviso?: string}  $proveedor
+     * @param  list<string>  $advertencias
+     */
+    private function anexarAvisoProveedorSuspendido(array $proveedor, array &$advertencias): void
+    {
+        $aviso = trim((string) ($proveedor['aviso'] ?? ''));
+        if ($aviso === '') {
+            return;
+        }
+        $advertencias[] = $aviso;
+    }
+
     private function aplicarCuitProveedorCorregido(
         array $extraido,
         array $proveedor,

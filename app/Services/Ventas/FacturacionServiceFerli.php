@@ -68,8 +68,12 @@ class FacturacionServiceFerli extends FacturacionService
     protected function transporteIdFacturaOt(array $data, $pedido)
     {
         $transporteId = (int) ($data['transporte_id'] ?? 0);
+        if ($transporteId <= 0) {
+            $transporteId = (int) ($pedido->transporte_id ?? 0);
+        }
 
-        return $transporteId > 0 ? $transporteId : $pedido->transporte_id;
+        // 0 rompe fk_venta_transporte; null = sin reparto.
+        return $transporteId > 0 ? $transporteId : null;
     }
 
     public function generaFacturaPorItemOt(array $data)

@@ -64,6 +64,27 @@ final class ArticuloListaprecioLineaVentasSupport
         return (int) $listaConPrecio;
     }
 
+    /**
+     * Lista de cabecera sin exigir precio vigente del artículo.
+     * NC / ND de reversión ya traen el precio del comprobante origen.
+     */
+    public static function resolverListaCabecera(?int $clienteId): int
+    {
+        if ($clienteId !== null && $clienteId > 0) {
+            $listaCliente = (int) Cliente::query()->whereKey($clienteId)->value('listaprecio_id');
+            if ($listaCliente > 0 && Listaprecio::query()->whereKey($listaCliente)->exists()) {
+                return $listaCliente;
+            }
+        }
+
+        $listaDefault = (int) config('precio.listaprecio_default_id');
+        if ($listaDefault > 0 && Listaprecio::query()->whereKey($listaDefault)->exists()) {
+            return $listaDefault;
+        }
+
+        return (int) Listaprecio::query()->orderBy('id')->value('id');
+    }
+
     private static function tienePrecioVigente(int $articuloId, int $listaId, string $fechaYmd): bool
     {
         if ($listaId <= 0) {

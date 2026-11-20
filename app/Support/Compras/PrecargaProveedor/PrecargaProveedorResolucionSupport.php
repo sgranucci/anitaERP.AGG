@@ -3,9 +3,11 @@
 namespace App\Support\Compras\PrecargaProveedor;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Proveedor;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\OrdencompraService;
+use App\Support\Compras\ProveedorSuspendidoOperacionSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
 
@@ -317,7 +319,7 @@ final class PrecargaProveedorResolucionSupport
     }
 
     /**
-     * @return array{proveedor_id: int, codigo: string, nombre: string}
+     * @return array{proveedor_id: int, codigo: string, nombre: string, aviso?: string}
      */
     public function resolverProveedorPorOc(string $cuitProveedor, string $numeroOc): array
     {
@@ -343,13 +345,16 @@ final class PrecargaProveedorResolucionSupport
             throw new RuntimeException('Proveedor de la OC (código '.$codigoProveedorOc.') no existe en el ERP');
         }
 
-        $this->assertProveedorHabilitado($proveedor);
+        $aviso = $this->assertProveedorHabilitado($proveedor);
 
         $resultado = [
             'proveedor_id' => (int) $proveedor->id,
             'codigo' => (string) $proveedor->codigo,
             'nombre' => (string) $proveedor->nombre,
         ];
+        if ($aviso !== null) {
+            $resultado['aviso'] = $aviso;
+        }
 
         $cuitMaestro = (string) ($proveedor->nroinscripcion ?? '');
         if ($cuitMaestro !== ''
@@ -369,13 +374,14 @@ final class PrecargaProveedorResolucionSupport
      *   proveedor_id: int,
      *   codigo: string,
      *   nombre: string,
+     *   aviso?: string,
      *   cuit_corregido?: string,
      *   cuit_leido?: string
      * }
      */
     public function resolverProveedorPorCuit(string $cuit): array
     {
-        $hallado = $this->buscarProveedorHabilitado($cuit);
+        $hallado = $this->buscarProveedorPermitido($cuit);
         if ($hallado !== null) {
             return $hallado;
         }
@@ -383,7 +389,7 @@ final class PrecargaProveedorResolucionSupport
         if (! PrecargaProveedorCuitCoincidenciaSupport::digitoVerificadorValido($cuit)) {
             $corregido = PrecargaProveedorCuitCoincidenciaSupport::corregirDigitoVerificador($cuit);
             if ($corregido !== null) {
-                $hallado = $this->buscarProveedorHabilitado($corregido);
+                $hallado = $this->buscarProveedorPermitido($corregido);
                 if ($hallado !== null) {
                     $hallado['cuit_corregido'] = $corregido;
                     $hallado['cuit_leido'] = $this->formatearCuit11($cuit);
@@ -393,30 +399,56 @@ final class PrecargaProveedorResolucionSupport
             }
         }
 
+        if ($this->existeProveedorSuspendidoBloqueado($cuit)) {
+            throw new RuntimeException(ProveedorSuspendidoOperacionSupport::mensajeBloqueo());
+        }
+
         throw new RuntimeException('No hay proveedor activo o regularizado para CUIT «'.$cuit.'»');
     }
 
-    public function assertProveedorHabilitado(object $proveedor): void
+    /**
+     * @return string|null Aviso si se permite cargar suspendido (severidad avisar)
+     */
+    public function assertProveedorHabilitado(object $proveedor): ?string
     {
-        if (! $this->proveedorEstaHabilitado($proveedor)) {
-            throw new RuntimeException(
-                'Proveedor «'.($proveedor->nombre ?? $proveedor->id).'» no está activo ni regularizado'
-            );
+        if ($this->proveedorEstaHabilitadoOperacion($proveedor)) {
+            return null;
         }
+
+        if ($this->proveedorEstaSuspendido($proveedor)) {
+            if (ProveedorSuspendidoOperacionSupport::bloquea()) {
+                throw new RuntimeException(ProveedorSuspendidoOperacionSupport::mensajeBloqueo());
+            }
+
+            return ProveedorSuspendidoOperacionSupport::mensajeAviso();
+        }
+
+        throw new RuntimeException(
+            'Proveedor «'.($proveedor->nombre ?? $proveedor->id).'» no está activo ni regularizado'
+        );
     }
 
-    private function proveedorEstaHabilitado(object $proveedor): bool
+    private function proveedorEstaHabilitadoOperacion(object $proveedor): bool
     {
-        return \App\Models\Compras\Proveedor::estaHabilitadoParaOperacion(
+        return Proveedor::estaHabilitadoParaOperacion(
             (string) ($proveedor->estado ?? '')
         );
     }
 
-    /**
-     * @return array{proveedor_id: int, codigo: string, nombre: string}|null
-     */
-    private function buscarProveedorHabilitado(string $cuit): ?array
+    private function proveedorEstaSuspendido(object $proveedor): bool
     {
+        return trim((string) ($proveedor->estado ?? '')) === ProveedorSuspendidoOperacionSupport::ESTADO_SUSPENDIDO;
+    }
+
+    /**
+     * Prefiere Activo/Regularizado; si la severidad es avisar, acepta Suspendido.
+     *
+     * @return array{proveedor_id: int, codigo: string, nombre: string, aviso?: string}|null
+     */
+    private function buscarProveedorPermitido(string $cuit): ?array
+    {
+        $suspendidoCandidato = null;
+
         foreach ($this->variantesDocumento($cuit) as $documento) {
             $proveedores = $this->proveedorRepository->findPorDocumento($documento);
             if (! $proveedores || $proveedores->isEmpty()) {
@@ -424,17 +456,53 @@ final class PrecargaProveedorResolucionSupport
             }
 
             foreach ($proveedores as $proveedor) {
-                if ($this->proveedorEstaHabilitado($proveedor)) {
+                if ($this->proveedorEstaHabilitadoOperacion($proveedor)) {
                     return [
                         'proveedor_id' => (int) $proveedor->id,
                         'codigo' => (string) $proveedor->codigo,
                         'nombre' => (string) $proveedor->nombre,
                     ];
                 }
+                if ($suspendidoCandidato === null
+                    && $this->proveedorEstaSuspendido($proveedor)
+                    && ProveedorSuspendidoOperacionSupport::permiteCargaConAviso()
+                ) {
+                    $suspendidoCandidato = $proveedor;
+                }
             }
         }
 
-        return null;
+        if ($suspendidoCandidato === null) {
+            return null;
+        }
+
+        return [
+            'proveedor_id' => (int) $suspendidoCandidato->id,
+            'codigo' => (string) $suspendidoCandidato->codigo,
+            'nombre' => (string) $suspendidoCandidato->nombre,
+            'aviso' => ProveedorSuspendidoOperacionSupport::mensajeAviso(),
+        ];
+    }
+
+    private function existeProveedorSuspendidoBloqueado(string $cuit): bool
+    {
+        if (! ProveedorSuspendidoOperacionSupport::bloquea()) {
+            return false;
+        }
+
+        foreach ($this->variantesDocumento($cuit) as $documento) {
+            $proveedores = $this->proveedorRepository->findPorDocumento($documento);
+            if (! $proveedores || $proveedores->isEmpty()) {
+                continue;
+            }
+            foreach ($proveedores as $proveedor) {
+                if ($this->proveedorEstaSuspendido($proveedor)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function formatearCuit11(string $cuit): string

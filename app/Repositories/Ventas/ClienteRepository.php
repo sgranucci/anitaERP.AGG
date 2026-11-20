@@ -36,6 +36,7 @@ use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
+use App\Support\Ventas\ClienteAnitaColisionSupport;
 use App\Support\Ventas\ClienteCodigoSecuenciaSupport;
 use App\Support\Ventas\ClienteCodigoEmpleadoBierzoSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
@@ -2410,8 +2411,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 		return $this->apiCallAnitaEscritura($apiAnita, $data, 'climae emite_nc');
 	}
 
-	// Devuelve ultimo codigo de clientes + 1 para agregar nuevos en Anita
-
+	/**
+	 * Siguiente código de cliente para el alta.
+	 * Bierzo/Interforming: numerador CLI Anita.
+	 * AGG: serie ERP###.
+	 * Ferli y demás: max(ERP, climae) + primer libre (no alcanza con Anita solo:
+	 * si anita_sync_cliente_write está apagado el max de climae no avanza y se repetía el código).
+	 */
 	private function ultimoCodigo(&$codigo) {
 		if (ClienteAnitaNumeracionSupport::estaHabilitada()) {
 			$numero = ClienteAnitaNumeracionSupport::asignarCodigoClienteLibre();
@@ -2420,24 +2426,16 @@ class ClienteRepository implements ClienteRepositoryInterface
 			return;
 		}
 
-        $apiAnita = new ApiAnita();
-		if (config('app.empresa') == 'AGG')
-        	$data = array( 'acc' => 'list', 
-				'tabla' => $this->tableAnita[0], 
+		if (config('app.empresa') == 'AGG') {
+			$apiAnita = new ApiAnita();
+			$data = [
+				'acc' => 'list',
+				'tabla' => $this->tableAnita[0],
 				'sistema' => 'ventas',
 				'campos' => " max(clim_cliente) as $this->keyFieldAnita ",
-				'whereArmado' => " WHERE clim_cliente[1,3] = 'ERP' " 
-				);
-		else
-        	$data = array( 'acc' => 'list', 
-				'tabla' => $this->tableAnita[0], 
-				'sistema' => 'ventas',
-				'campos' => " max(clim_cliente) as $this->keyFieldAnita "
-				);		
-				
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-		if (config('app.empresa') == 'AGG') {
+				'whereArmado' => " WHERE clim_cliente[1,3] = 'ERP' ",
+			];
+			$dataAnita = json_decode($apiAnita->apiCall($data));
 			$rawAnita = '';
 			if (is_array($dataAnita) && isset($dataAnita[0]->{$this->keyFieldAnita})) {
 				$rawAnita = (string) $dataAnita[0]->{$this->keyFieldAnita};
@@ -2450,16 +2448,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 			return;
 		}
 
-		if ($dataAnita[0]->{$this->keyFieldAnita} != '')
-		{
-			$numero = filter_var($dataAnita[0]->{$this->keyFieldAnita}, FILTER_SANITIZE_NUMBER_INT);
-			$numero = $numero + 1;
-			$codigo = str_pad($numero, 6, "0", STR_PAD_LEFT);
-		}
-		else
-		{
-			$codigo = "000001";
-		}
+		$maxAnita = ClienteAnitaColisionSupport::maxCodigoClimae();
+		$maxErp = ClienteAnitaColisionSupport::maxCodigoClienteErp();
+		$desde = max($maxAnita, $maxErp) + 1;
+		$numero = ClienteAnitaColisionSupport::primerCodigoDisponible($desde);
+		$codigo = ClienteAnitaNumeracionSupport::formatearCodigoErp($numero);
 	}
 
 	private function setCamposAnita($request, &$cuentacontable, &$condicioniva, &$condicioniibb, &$codigotransporte,
