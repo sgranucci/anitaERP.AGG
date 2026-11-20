@@ -22,7 +22,10 @@ use Illuminate\Support\Facades\DB;
  * abierto en esa misma cuenta: el conjunto tampoco se mueve.
  *
  * Clientes: facturas/NC/ND abiertas y créditos que no son COA. Entran las
- * cuentas de rubro Activo del cliente, excepto medios de cobro (`cuentacaja`).
+ * cuentas de rubro Activo del cliente, excepto medios de cobro (`cuentacaja`)
+ * y créditos intercompany (nombre de cuenta con «INTERCO»: Kandiko, Rebisco,
+ * Biyemas). Esas cuentas reciben transferencias bancarias sin CC y no deben
+ * mover el delta conjunto.
  *
  * Anticipos: solo deuda de COA imputada a `cliente.ANTICIPO_DE_CLIENTES` y el
  * mayor de esa cuenta. Sin cuenta configurada, la COA sigue en deudores.
@@ -316,8 +319,11 @@ final class ClienteDeudaMayorDeltaSupport
     /**
      * Cuentas de rubro Activo asignadas en el maestro de clientes.
      *
-     * Se excluyen las que también son medio de cobro (`cuentacaja.cuentacontable_id`):
-     * L-PAGO NUBE, L-MERCADOLIBRE, L-VISA, etc.
+     * Se excluyen:
+     * - medios de cobro (`cuentacaja.cuentacontable_id`): L-PAGO NUBE, etc.
+     * - créditos intercompany (nombre con «INTERCO»): A00008 Kandiko /
+     *   116010001, A00007 Rebisco / 116010002, A00030 Biyemas / 116010003.
+     *   Las trf banco→interco no pasan por CC y no deben alertar el conjunto.
      *
      * @return array<int, true>
      */
@@ -341,6 +347,7 @@ final class ClienteDeudaMayorDeltaSupport
             ->join('rubrocontable as r', 'r.id', '=', 'c.rubrocontable_id')
             ->whereNull('cl.deleted_at')
             ->whereRaw(SqlDialectSupport::lower('r.nombre').' = ?', ['activo'])
+            ->whereRaw(SqlDialectSupport::lower('c.nombre').' not like ?', ['%interco%'])
             ->when($idsMedio !== [], static fn ($q) => $q->whereNotIn('c.id', $idsMedio))
             ->distinct()
             ->pluck('c.id');
