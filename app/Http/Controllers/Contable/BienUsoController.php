@@ -479,6 +479,10 @@ class BienUsoController extends Controller
         $consulta = trim((string) $request->input('consulta', ''));
         $query = BienUso::query()->select('id', 'codigo_bien', 'codigo_inventario', 'descripcion', 'hostname', 'estado');
         BienUsoVisibilidadSupport::aplicarScope($query);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
         if ($consulta !== '') {
             $query->where(function ($q) use ($consulta) {
                 $q->where('codigo_bien', 'LIKE', '%'.$consulta.'%')
@@ -527,6 +531,10 @@ class BienUsoController extends Controller
         }
         $query = BienUso::query();
         BienUsoVisibilidadSupport::aplicarScope($query);
+        $empresaId = (int) $request->query('empresa_id', 0);
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
         $row = $query->where(function ($q) use ($valor) {
             $q->where('codigo_bien', $valor)->orWhere('codigo_inventario', $valor);
         })->first(['id', 'codigo_bien', 'codigo_inventario', 'descripcion', 'hostname']);
@@ -544,7 +552,15 @@ class BienUsoController extends Controller
 
     private function assertPuedeConsultarBienUso(): void
     {
-        foreach (['listar-bien-uso', 'crear-bien-uso', 'editar-bien-uso', 'actualizar-bien-uso'] as $permiso) {
+        foreach ([
+            'listar-bien-uso',
+            'crear-bien-uso',
+            'editar-bien-uso',
+            'actualizar-bien-uso',
+            'listar-bien-uso-asiento',
+            'ejecutar-bien-uso-asiento',
+            'listar-bien-uso-revaluo',
+        ] as $permiso) {
             if (can($permiso, false)) {
                 return;
             }

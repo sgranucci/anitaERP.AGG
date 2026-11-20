@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Contable;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contable\BienUso;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\BienUsoAsientoService;
 use Illuminate\Http\Request;
@@ -42,17 +43,52 @@ class BienUsoAsientoController extends Controller
             }
         }
 
+        $empresaIdFiltro = (int) ($filtros['empresa_id'] ?? 0);
+
         return view('contable.bien_uso_asiento.index', [
             'filtros' => $filtros,
             'empresa_query' => $empresaQuery,
             'preview' => $preview,
             'consultado' => $consultado,
             'error' => $error,
+            'bienDesde' => $this->etiquetaBienPorCodigo($filtros['codigo_bien_desde'] ?? null, $empresaIdFiltro),
+            'bienHasta' => $this->etiquetaBienPorCodigo($filtros['codigo_bien_hasta'] ?? null, $empresaIdFiltro),
             'tipos' => [
                 BienUsoAsientoService::TIPO_AMORTIZACION => 'Amortización',
                 BienUsoAsientoService::TIPO_REVALUO => 'Revalúo contable',
             ],
         ]);
+    }
+
+    /**
+     * @return array{id: int, codigo: string, descripcion: string}|null
+     */
+    private function etiquetaBienPorCodigo(int|string|null $codigo, int $empresaId): ?array
+    {
+        if ($codigo === null || $codigo === '') {
+            return null;
+        }
+        $codigoStr = (string) $codigo;
+        $q = BienUso::query()->where(function ($w) use ($codigoStr) {
+            $w->where('codigo_bien', $codigoStr)->orWhere('codigo_inventario', $codigoStr);
+        });
+        if ($empresaId > 0) {
+            $q->where('empresa_id', $empresaId);
+        }
+        $row = $q->first(['id', 'codigo_bien', 'codigo_inventario', 'descripcion', 'hostname']);
+        if (! $row) {
+            return [
+                'id' => 0,
+                'codigo' => $codigoStr,
+                'descripcion' => '',
+            ];
+        }
+
+        return [
+            'id' => (int) $row->id,
+            'codigo' => (string) ($row->codigo_bien ?? $row->codigo_inventario ?? $codigoStr),
+            'descripcion' => (string) ($row->descripcion ?: ($row->hostname ?: '')),
+        ];
     }
 
     public function confirmar(Request $request)

@@ -1,6 +1,14 @@
 (function () {
     var ptrId, ptrCodigo, ptrDesc;
 
+    function empresaIdFormulario() {
+        var $emp = $('#empresa_id');
+        if (!$emp.length) {
+            return '';
+        }
+        return String($emp.val() || '').trim();
+    }
+
     function actualizarLink($ctx, id) {
         var $link = $ctx.find('.btn-link-editar-bien-uso');
         if (!$link.length) return;
@@ -12,6 +20,12 @@
         }
     }
 
+    function limpiar($ctx) {
+        $ctx.find('.bien_uso_id').val('').trigger('change');
+        $ctx.find('.descripcionbienuso').val('');
+        actualizarLink($ctx, 0);
+    }
+
     function aplicar($ctx, data) {
         if (!$ctx.length || !data) return;
         $ctx.find('.bien_uso_id').val(data.id || '').trigger('change');
@@ -21,12 +35,17 @@
     }
 
     function buscar(consulta) {
+        var data = { consulta: consulta || '' };
+        var empresaId = empresaIdFormulario();
+        if (empresaId) {
+            data.empresa_id = empresaId;
+        }
         $.ajax({
             url: carpetaBase + '/contable/bien-uso/consulta',
             type: 'POST',
             dataType: 'json',
             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
-            data: { consulta: consulta || '' },
+            data: data,
         }).done(function (r) {
             $('#datosbienuso').html((r && r.data) ? r.data : '<tr><td colspan="4">Sin resultados</td></tr>');
         }).fail(function () {
@@ -38,17 +57,25 @@
         var cod = (codigo || '').trim();
         var $ctx = $input.closest('.tm-bien-uso-campo');
         if (!cod) {
-            $ctx.find('.bien_uso_id').val('');
-            $ctx.find('.descripcionbienuso').val('');
-            actualizarLink($ctx, 0);
+            limpiar($ctx);
+            $input.removeData('valorInvalido');
             if (onDone) onDone(null);
             return;
         }
-        $.getJSON(carpetaBase + '/contable/bien-uso/resolver', { valor: cod })
+        if ($input.data('valorInvalido') === cod) {
+            if (onDone) onDone(null);
+            return;
+        }
+        var params = { valor: cod };
+        var empresaId = empresaIdFormulario();
+        if (empresaId) {
+            params.empresa_id = empresaId;
+        }
+        $.getJSON(carpetaBase + '/contable/bien-uso/resolver', params)
             .done(function (data) {
                 if (!data || !data.ok) {
-                    alert((data && data.mensaje) || 'Bien de uso no encontrado');
-                    $input.data('valorInvalido', cod).trigger('focus');
+                    $input.data('valorInvalido', cod);
+                    limpiar($ctx);
                     if (onDone) onDone(null);
                     return;
                 }
@@ -56,9 +83,27 @@
                 if (onDone) onDone(data);
             })
             .fail(function () {
-                alert('Error al resolver bien de uso');
+                $input.data('valorInvalido', cod);
+                limpiar($ctx);
                 if (onDone) onDone(null);
             });
+    }
+
+    function avanzarDesdeCodigo($input) {
+        var sig = $input.attr('data-siguiente') || '';
+        if (sig && $(sig).length) {
+            $(sig).trigger('focus');
+            return;
+        }
+        var $next = $input.closest('.form-group').nextAll('.form-group').find('input:visible:not([readonly]), select:visible').first();
+        if ($next.length) {
+            $next.trigger('focus');
+            return;
+        }
+        var $btn = $input.closest('form').find('button[type=submit], input[type=submit]').filter(':visible').first();
+        if ($btn.length) {
+            $btn.trigger('focus');
+        }
     }
 
     window.activa_eventos_consultabienuso = function () {
@@ -98,14 +143,23 @@
                 descripcion: $tr.find('.descripcion').text().trim(),
             };
             if (ptrId) ptrId.val(data.id).trigger('change');
-            if (ptrCodigo) ptrCodigo.val(data.codigo);
+            if (ptrCodigo) ptrCodigo.val(data.codigo).removeData('valorInvalido');
             if (ptrDesc) ptrDesc.val(data.descripcion);
             actualizarLink(ptrId ? ptrId.closest('.tm-bien-uso-campo') : $(), data.id);
             $('#consultabienusoModal').modal('hide');
+            if (ptrCodigo && ptrCodigo.length) {
+                setTimeout(function () {
+                    avanzarDesdeCodigo(ptrCodigo);
+                }, 0);
+            }
         });
 
         $(document).off('mousedown.bubien', '.consultabienuso').on('mousedown.bubien', '.consultabienuso', function () {
             $(this).closest('.tm-bien-uso-campo').find('.codigobienuso').data('abriendoModal', true);
+        });
+
+        $(document).off('input.bubien', '.tm-bien-uso-campo .codigobienuso').on('input.bubien', '.tm-bien-uso-campo .codigobienuso', function () {
+            $(this).removeData('valorInvalido');
         });
 
         $(document).off('blur.bubien', '.tm-bien-uso-campo .codigobienuso').on('blur.bubien', '.tm-bien-uso-campo .codigobienuso', function () {
@@ -117,19 +171,17 @@
         });
 
         $(document).off('keydown.bubienCod', '.tm-bien-uso-campo .codigobienuso').on('keydown.bubienCod', '.tm-bien-uso-campo .codigobienuso', function (e) {
-            if (e.key === 'F1') {
+            if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
                 e.preventDefault();
+                e.stopPropagation();
                 $(this).closest('.tm-bien-uso-campo').find('.consultabienuso').trigger('click');
                 return;
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                var $input = $(this);
-                resolver($input.val(), $input, function (data) {
-                    if (!data) return;
-                    var $next = $input.closest('.form-group').nextAll('.form-group').find('input:visible, select:visible').first();
-                    if ($next.length) $next.trigger('focus');
-                });
+                e.stopPropagation();
+                // Enter avanza siempre; el blur resuelve en silencio.
+                avanzarDesdeCodigo($(this));
             }
         });
     };

@@ -21,7 +21,7 @@
             <div class="card-header">
                 <h3 class="card-title">Asiento de amortizaciones / revalúo (Anita p-asibie)</h3>
             </div>
-            <form method="get" action="{{ route('bien_uso_asiento') }}" id="form-bien-uso-asiento" class="mb-0">
+            <form method="get" action="{{ route('bien_uso_asiento') }}" id="form-bien-uso-asiento" class="mb-0" data-enter-campos="1">
                 <input type="hidden" name="consultar" value="1">
                 <div class="card-body">
                     @php $colLabel = 'col-lg-2 control-label text-right pr-2'; $colInput = 'col-lg-4'; @endphp
@@ -29,7 +29,7 @@
                     <div class="form-group row">
                         <label for="empresa_id" class="{{ $colLabel }} requerido">Empresa</label>
                         <div class="{{ $colInput }}">
-                            @include('includes.form-empresa-asignada', [
+                            @include('includes.form-empresa-asignada-control', [
                                 'empresa_query' => $empresa_query,
                                 'empresa_id' => $filtros['empresa_id'] ?? null,
                                 'solo_lectura' => false,
@@ -58,18 +58,32 @@
                         </div>
                     </div>
 
-                    <div class="form-group row">
-                        <label for="codigo_bien_desde" class="{{ $colLabel }}">Bien desde</label>
-                        <div class="col-lg-2">
-                            <input type="number" name="codigo_bien_desde" class="form-control"
-                                   value="{{ $filtros['codigo_bien_desde'] ?? '' }}">
-                        </div>
-                        <label for="codigo_bien_hasta" class="col-lg-2 control-label text-right pr-2">hasta</label>
-                        <div class="col-lg-2">
-                            <input type="number" name="codigo_bien_hasta" class="form-control"
-                                   value="{{ $filtros['codigo_bien_hasta'] ?? '' }}">
-                        </div>
-                    </div>
+                    @include('contable.partials.campo_consulta_bien_uso', [
+                        'prefix' => 'desde',
+                        'label' => 'Bien desde',
+                        'inputId' => 'bien_uso_desde_id',
+                        'codigoInputName' => 'codigo_bien_desde',
+                        'bienId' => $bienDesde['id'] ?? '',
+                        'codigo' => $bienDesde['codigo'] ?? ($filtros['codigo_bien_desde'] ?? ''),
+                        'descripcion' => $bienDesde['descripcion'] ?? '',
+                        'siguiente' => '#bien_uso_hasta_id_codigo',
+                        'col_label' => $colLabel,
+                        'col_input' => 'col-lg-10',
+                        'ayuda' => 'Vacío = desde el primero. F1 / lupa consulta; Enter pasa a «hasta».',
+                    ])
+                    @include('contable.partials.campo_consulta_bien_uso', [
+                        'prefix' => 'hasta',
+                        'label' => 'Bien hasta',
+                        'inputId' => 'bien_uso_hasta_id',
+                        'codigoInputName' => 'codigo_bien_hasta',
+                        'bienId' => $bienHasta['id'] ?? '',
+                        'codigo' => $bienHasta['codigo'] ?? ($filtros['codigo_bien_hasta'] ?? ''),
+                        'descripcion' => $bienHasta['descripcion'] ?? '',
+                        'siguiente' => '#btn-previsualizar-bien-uso-asiento',
+                        'col_label' => $colLabel,
+                        'col_input' => 'col-lg-10',
+                        'ayuda' => 'Vacío = hasta el último.',
+                    ])
 
                     <p class="small text-muted">
                         Amortización usa la cuenta global <strong>Gasto de amortizaciones</strong>
@@ -77,41 +91,85 @@
                         con «Grabar» para alimentar amortizaciones / revalúos del ejercicio.
                     </p>
 
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary" id="btn-previsualizar-bien-uso-asiento">
                         <i class="fa fa-search"></i> Previsualizar
                     </button>
                 </div>
             </form>
 
+            @include('includes.contable.modalconsultabienuso')
+
             @if (!empty($consultado) && $preview)
+                @php
+                    $cantDebe = collect($preview['lineas'])->where('d_h', 'D')->count();
+                    $cantHaber = collect($preview['lineas'])->where('d_h', 'H')->count();
+                    $totalDebeTxt = number_format($preview['total_debe'], 2, ',', '.');
+                    $totalHaberTxt = number_format($preview['total_haber'], 2, ',', '.');
+                @endphp
                 <div class="card-body border-top">
                     <p class="mb-2">
                         Bienes procesados: <strong>{{ $preview['bienes_procesados'] }}</strong>
-                        · Debe {{ number_format($preview['total_debe'], 2, ',', '.') }}
-                        · Haber {{ number_format($preview['total_haber'], 2, ',', '.') }}
+                        · Líneas {{ count($preview['lineas']) }}
+                        ({{ $cantDebe }} Debe / {{ $cantHaber }} Haber)
+                        <span class="text-muted small ml-1">
+                            · Totales Debe {{ $totalDebeTxt }} / Haber {{ $totalHaberTxt }}
+                        </span>
                     </p>
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered">
-                            <thead style="background:#85C1E9;color:#17202A;">
-                                <tr>
-                                    <th>Cuenta ID</th>
+                        <table class="table table-sm table-bordered mb-0" style="max-width:1100px;table-layout:fixed;">
+                            <thead>
+                                <tr style="background:#85C1E9;color:#17202A;">
+                                    <th style="width:7.5rem;">Código</th>
+                                    <th style="width:14rem;">Cuenta</th>
                                     <th>C. costo</th>
-                                    <th>D/H</th>
-                                    <th class="text-right">Importe</th>
+                                    <th class="text-right" style="width:8.5rem;">Debe</th>
+                                    <th class="text-right" style="width:8.5rem;">Haber</th>
+                                </tr>
+                                <tr class="small" style="background:#EAF2F8;color:#5D6D7E;">
+                                    <th colspan="3" class="text-right font-weight-normal py-1">Totales</th>
+                                    <th class="text-right font-weight-normal py-1">{{ $totalDebeTxt }}</th>
+                                    <th class="text-right font-weight-normal py-1">{{ $totalHaberTxt }}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse ($preview['lineas'] as $lin)
                                     <tr>
-                                        <td>{{ $lin['cuentacontable_id'] }}</td>
-                                        <td>{{ $lin['centrocosto_id'] ?? '—' }}</td>
-                                        <td>{{ $lin['d_h'] }}</td>
-                                        <td class="text-right">{{ number_format($lin['importe'], 2, ',', '.') }}</td>
+                                        <td>{{ $lin['codigo_cuenta'] ?? $lin['cuentacontable_id'] }}</td>
+                                        <td>{{ $lin['nombre_cuenta'] ?? '—' }}</td>
+                                        <td>
+                                            @if (!empty($lin['codigo_centrocosto']))
+                                                {{ $lin['codigo_centrocosto'] }}
+                                                @if (!empty($lin['nombre_centrocosto']))
+                                                    <span class="text-muted">{{ $lin['nombre_centrocosto'] }}</span>
+                                                @endif
+                                            @else
+                                                —
+                                            @endif
+                                        </td>
+                                        <td class="text-right">
+                                            @if (($lin['d_h'] ?? '') === 'D')
+                                                {{ number_format($lin['importe'], 2, ',', '.') }}
+                                            @endif
+                                        </td>
+                                        <td class="text-right">
+                                            @if (($lin['d_h'] ?? '') === 'H')
+                                                {{ number_format($lin['importe'], 2, ',', '.') }}
+                                            @endif
+                                        </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="4" class="text-muted">Sin líneas.</td></tr>
+                                    <tr><td colspan="5" class="text-muted">Sin líneas.</td></tr>
                                 @endforelse
                             </tbody>
+                            @if (count($preview['lineas']) > 0)
+                                <tfoot>
+                                    <tr style="background:#D6EAF8;color:#17202A;font-weight:600;">
+                                        <td colspan="3" class="text-right">Totales</td>
+                                        <td class="text-right">{{ $totalDebeTxt }}</td>
+                                        <td class="text-right">{{ $totalHaberTxt }}</td>
+                                    </tr>
+                                </tfoot>
+                            @endif
                         </table>
                     </div>
                     @if (can('ejecutar-bien-uso-asiento', false) && count($preview['lineas']) > 0)
@@ -133,6 +191,7 @@
         </div>
     </div>
 </div>
+<script src="{{ asset('assets/pages/scripts/contable/bien_uso/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/bien_uso/consulta.js')) }}"></script>
 <script>
 (function () {
     var form = document.getElementById('form-bien-uso-asiento');
@@ -146,6 +205,9 @@
     window.addEventListener('pageshow', function () {
         if (overlay) { overlay.classList.add('d-none'); overlay.style.display = ''; }
     });
+    if (typeof activa_eventos_consultabienuso === 'function') {
+        activa_eventos_consultabienuso();
+    }
 })();
 </script>
 @endsection

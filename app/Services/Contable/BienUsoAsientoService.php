@@ -8,13 +8,14 @@ use App\Models\Contable\Asiento;
 use App\Models\Contable\BienUso;
 use App\Models\Contable\BienUsoAmortizacion;
 use App\Models\Contable\BienUsoRevaluo;
+use App\Models\Contable\Centrocosto;
+use App\Models\Contable\Cuentacontable;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use Carbon\Carbon;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use RuntimeException;
@@ -53,7 +54,17 @@ final class BienUsoAsientoService
      *     centrocosto_id?: int|null,
      * }  $filtros
      * @return array{
-     *     lineas: list<array{cuentacontable_id: int, centrocosto_id: int|null, monto: float, d_h: string, codigo_cuenta?: string, nombre_cuenta?: string}>,
+     *     lineas: list<array{
+     *         cuentacontable_id: int,
+     *         centrocosto_id: int|null,
+     *         monto: float,
+     *         d_h: string,
+     *         importe: float,
+     *         codigo_cuenta?: string,
+     *         nombre_cuenta?: string,
+     *         codigo_centrocosto?: string|null,
+     *         nombre_centrocosto?: string|null
+     *     }>,
      *     total_debe: float,
      *     total_haber: float,
      *     bienes_procesados: int,
@@ -143,6 +154,8 @@ final class BienUsoAsientoService
         usort($lineas, static fn ($a, $b) => [$a['d_h'] === 'H' ? 1 : 0, $a['cuentacontable_id']]
             <=> [$b['d_h'] === 'H' ? 1 : 0, $b['cuentacontable_id']]);
 
+        $lineas = $this->enriquecerLineasPreview($lineas);
+
         return [
             'lineas' => $lineas,
             'total_debe' => round($totalDebe, 2),
@@ -155,6 +168,58 @@ final class BienUsoAsientoService
                 'fecha_asiento' => $filtros['fecha_asiento'] ?? null,
             ],
         ];
+    }
+
+    /**
+     * Agrega código/nombre de cuenta y centro de costo para la grilla de preview.
+     *
+     * @param  list<array{cuentacontable_id: int, centrocosto_id: int|null, monto: float, d_h: string, importe: float}>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function enriquecerLineasPreview(array $lineas): array
+    {
+        if ($lineas === []) {
+            return $lineas;
+        }
+
+        $cuentaIds = [];
+        $ccostoIds = [];
+        foreach ($lineas as $lin) {
+            $cuentaIds[(int) $lin['cuentacontable_id']] = true;
+            $ccId = (int) ($lin['centrocosto_id'] ?? 0);
+            if ($ccId > 0) {
+                $ccostoIds[$ccId] = true;
+            }
+        }
+
+        $cuentas = Cuentacontable::query()
+            ->whereIn('id', array_keys($cuentaIds))
+            ->get(['id', 'codigo', 'nombre'])
+            ->keyBy('id');
+        $centros = $ccostoIds === []
+            ? collect()
+            : Centrocosto::query()
+                ->whereIn('id', array_keys($ccostoIds))
+                ->get(['id', 'codigo', 'nombre'])
+                ->keyBy('id');
+
+        foreach ($lineas as &$lin) {
+            $cta = $cuentas->get((int) $lin['cuentacontable_id']);
+            $lin['codigo_cuenta'] = $cta ? (string) $cta->codigo : (string) $lin['cuentacontable_id'];
+            $lin['nombre_cuenta'] = $cta ? (string) $cta->nombre : '';
+            $ccId = (int) ($lin['centrocosto_id'] ?? 0);
+            if ($ccId > 0) {
+                $cc = $centros->get($ccId);
+                $lin['codigo_centrocosto'] = $cc ? (string) $cc->codigo : (string) $ccId;
+                $lin['nombre_centrocosto'] = $cc ? (string) $cc->nombre : null;
+            } else {
+                $lin['codigo_centrocosto'] = null;
+                $lin['nombre_centrocosto'] = null;
+            }
+        }
+        unset($lin);
+
+        return $lineas;
     }
 
     /**
