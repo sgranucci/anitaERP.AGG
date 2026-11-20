@@ -6,9 +6,11 @@ return [
     | Auditor diario deuda vs ficha CC clientes (ventas:auditar-deuda-ficha-cliente).
     | Un mail por empresa; el asunto lleva el nombre de la empresa.
     | Sin diferencias: mail verde «todo cuadrado». Con diferencias: detalle cliente a cliente.
-    | Además guarda el delta conjunto = deudores (Activo, sin medios de cobro) +
-    | anticipos COA (`cliente.ANTICIPO_DE_CLIENTES`) y avisa si esa suma cambia.
+    | Además guarda el delta conjunto = deudores (Activo, sin medios de cobro ni
+    | créditos INTERCO Kandiko/Rebisco/Biyemas) + anticipos COA
+    | (`cliente.ANTICIPO_DE_CLIENTES`) y avisa si esa suma cambia.
     | Un pago de más (COA) no mueve el conjunto: baja en una cuenta y sube en la otra.
+    | Una trf banco→crédito intercompany tampoco: esa cuenta queda fuera del delta.
     | No graba ajustes: solo informa. La verdad operativa es la deuda.
     | empresas vacío = todas. En Crown: solo la empresa 1.
     */
