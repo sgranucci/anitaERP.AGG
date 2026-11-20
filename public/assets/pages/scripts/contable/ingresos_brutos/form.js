@@ -101,12 +101,78 @@
         aplicarFisco();
     }
 
+    function syncExportControlPeriodo(activo) {
+        document.querySelectorAll('a[href*="listar_ingresos_brutos"], a[href*="exportar_ingresos_brutos"]').forEach(function (link) {
+            try {
+                var url = new URL(link.href, window.location.origin);
+                if (activo) {
+                    url.searchParams.set('control_periodo', '1');
+                } else {
+                    url.searchParams.delete('control_periodo');
+                }
+                link.href = url.pathname + url.search + url.hash;
+            } catch (e) {
+                // ignore malformed href
+            }
+        });
+    }
+
+    function setControlPeriodoVisible(activo) {
+        document.querySelectorAll('.iibb-fila-control-periodo').forEach(function (tr) {
+            tr.classList.toggle('d-none', !activo);
+        });
+        document.querySelectorAll('.iibb-ayuda-control-periodo').forEach(function (el) {
+            el.classList.toggle('d-none', !activo);
+        });
+
+        var btn = document.getElementById('iibb-btn-control-periodo');
+        if (btn) {
+            btn.classList.toggle('btn-warning', activo);
+            btn.classList.toggle('btn-outline-warning', !activo);
+            btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
+        }
+
+        var chk = document.getElementById('control_periodo');
+        if (chk) {
+            chk.checked = !!activo;
+        }
+
+        syncExportControlPeriodo(activo);
+    }
+
     $(function () {
         actualizarFechasDesdeLiquidacion();
         aplicarFisco();
         $('#periodo_mes_num, #periodo_anio, #liquidacion').on('change', actualizarFechasDesdeLiquidacion);
         $('#tipo').on('change', aplicarFisco);
         $('#empresa_id').on('change', refrescarTipos);
+
+        function syncCheckboxControlPeriodoConConciliar() {
+            var conciliar = document.getElementById('conciliar_contable');
+            var control = document.getElementById('control_periodo');
+            if (!conciliar || !control) {
+                return;
+            }
+            control.disabled = !conciliar.checked;
+            if (!conciliar.checked) {
+                control.checked = false;
+            }
+        }
+
+        syncCheckboxControlPeriodoConConciliar();
+        $('#conciliar_contable').on('change', syncCheckboxControlPeriodoConConciliar);
+
+        $(document).on('click', '#iibb-btn-control-periodo', function (e) {
+            e.preventDefault();
+            var pressed = this.getAttribute('aria-pressed') === 'true';
+            setControlPeriodoVisible(!pressed);
+        });
+
+        $('#control_periodo').on('change', function () {
+            if (document.querySelector('.iibb-fila-control-periodo')) {
+                setControlPeriodoVisible(this.checked);
+            }
+        });
 
         var overlay = document.getElementById('ingresos-brutos-procesando-overlay');
 

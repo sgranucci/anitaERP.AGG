@@ -166,6 +166,167 @@
             }
         });
 
+        function fmtImporte(n) {
+            var v = Number(n || 0);
+            return v.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function armarHiddenFiltros(filtros) {
+            var $box = $('#canon-sp-filtros-hidden').empty();
+            Object.keys(filtros || {}).forEach(function (key) {
+                $box.append($('<input>', {
+                    type: 'hidden',
+                    name: key,
+                    value: filtros[key]
+                }));
+            });
+        }
+
+        function pintarAsiento(lineas) {
+            var $tb = $('#canon-sp-asiento').empty();
+            var totD = 0;
+            var totH = 0;
+            (lineas || []).forEach(function (l) {
+                var debe = l.debe != null ? Number(l.debe) : null;
+                var haber = l.haber != null ? Number(l.haber) : null;
+                if (debe != null) {
+                    totD += debe;
+                }
+                if (haber != null) {
+                    totH += haber;
+                }
+                $tb.append(
+                    $('<tr>')
+                        .append($('<td>').text(l.cuenta || ''))
+                        .append($('<td class="text-left">').text(l.centrocosto || ''))
+                        .append($('<td class="text-center">').text(l.dh || ''))
+                        .append($('<td class="text-right">').text(debe != null ? fmtImporte(debe) : ''))
+                        .append($('<td class="text-right">').text(haber != null ? fmtImporte(haber) : ''))
+                );
+            });
+            $tb.append(
+                $('<tr>')
+                    .append($('<th>').text('Totales'))
+                    .append($('<th>'))
+                    .append($('<th>'))
+                    .append($('<th class="text-right">').text(fmtImporte(totD)))
+                    .append($('<th class="text-right">').text(fmtImporte(totH)))
+            );
+        }
+
+        function actualizarBotonConfirmar() {
+            var ok = true;
+            if (!$('#canon-sp-vencimiento').val()) {
+                ok = false;
+            }
+            if (!$('#canon-sp-aviso-duplicado').hasClass('d-none') && !$('#canon-sp-generar-igual').is(':checked')) {
+                ok = false;
+            }
+            if (!$('#canon-sp-aviso-dias').hasClass('d-none') && !$('#canon-sp-confirmo-dias').is(':checked')) {
+                ok = false;
+            }
+            $('#canon-sp-btn-confirmar').prop('disabled', !ok);
+        }
+
+        function abrirModalSolicitud() {
+            var cfg = window.CANON_MUNICIPAL || {};
+            if (!cfg.urlPreviewSolicitud) {
+                return;
+            }
+            syncPeriodoFromSelects();
+            var params = $.extend({}, cfg.filtrosQuery || {}, {
+                empresa_id: $('#empresa_id').val(),
+                periodo: $('#periodo').val(),
+                liquidacion: $('#liquidacion').val(),
+                fecha_desde: $('#fecha_desde').val(),
+                fecha_hasta: $('#fecha_hasta').val(),
+                periodicidad: $('#periodicidad').val()
+            });
+
+            var $modal = $('#modal-canon-solicitudpago');
+            $('#canon-sp-loading').removeClass('d-none');
+            $('#canon-sp-contenido, #canon-sp-error').addClass('d-none');
+            $('#canon-sp-btn-confirmar').prop('disabled', true);
+            $('#canon-sp-generar-igual, #canon-sp-confirmo-dias').prop('checked', false);
+            $('#canon-sp-vencimiento').val('');
+            $('#canon-sp-observacion').val('');
+            $modal.modal('show');
+
+            $.getJSON(cfg.urlPreviewSolicitud, params)
+                .done(function (data) {
+                    $('#canon-sp-loading').addClass('d-none');
+                    if (data.error || !data.puede_generar) {
+                        $('#canon-sp-error').removeClass('d-none').text(data.error || 'No se puede generar.');
+                        return;
+                    }
+                    $('#modal-canon-solicitudpago-titulo').text(data.titulo || 'Generar solicitud de pago');
+                    $('#canon-sp-empresa').val(data.empresa_label || '');
+                    $('#canon-sp-fecha').val(data.fecha || '');
+                    $('#canon-sp-proveedor').val(data.proveedor_label || '');
+                    $('#canon-sp-sector').val(data.sector_label || '');
+                    $('#canon-sp-concepto').val(data.concepto_label || '');
+                    $('#canon-sp-formapago').val(data.formapago_label || '');
+                    $('#canon-sp-moneda').val(data.moneda_label || '');
+                    $('#canon-sp-monto').val(data.monto_fmt || '');
+                    $('#canon-sp-detalle').val(data.detalle || '');
+                    $('#canon-sp-pdf-nombre').text(data.nombre_pdf || '');
+                    $('#canon-sp-pdf-ver').attr('href', data.url_nota || '#');
+                    pintarAsiento(data.asiento || []);
+                    armarHiddenFiltros(data.filtros || params);
+
+                    if (data.duplicado) {
+                        var msgDup = data.duplicado.mensaje || '';
+                        if (data.duplicado.url) {
+                            msgDup = msgDup.replace(
+                                '#' + data.duplicado.codigo,
+                                '<a href="' + data.duplicado.url + '" target="_blank" rel="noopener">#' + data.duplicado.codigo + '</a>'
+                            );
+                        }
+                        $('#canon-sp-aviso-duplicado-msg').html('⚠ ' + msgDup);
+                        $('#canon-sp-aviso-duplicado').removeClass('d-none');
+                    } else {
+                        $('#canon-sp-aviso-duplicado').addClass('d-none');
+                    }
+
+                    if (data.dias_sin_venta) {
+                        $('#canon-sp-aviso-dias-msg').text('⚠ ' + (data.dias_sin_venta.mensaje || ''));
+                        $('#canon-sp-aviso-dias').removeClass('d-none');
+                    } else {
+                        $('#canon-sp-aviso-dias').addClass('d-none');
+                    }
+
+                    $('#canon-sp-contenido').removeClass('d-none');
+                    actualizarBotonConfirmar();
+                    setTimeout(function () {
+                        $('#canon-sp-vencimiento').trigger('focus');
+                    }, 300);
+                })
+                .fail(function (xhr) {
+                    $('#canon-sp-loading').addClass('d-none');
+                    var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'No se pudo cargar la vista previa.';
+                    $('#canon-sp-error').removeClass('d-none').text(msg);
+                });
+        }
+
+        $('#btn-generar-solicitud-canon').on('click', function () {
+            abrirModalSolicitud();
+        });
+
+        $('#canon-sp-vencimiento, #canon-sp-generar-igual, #canon-sp-confirmo-dias').on('change input', actualizarBotonConfirmar);
+
+        $('#form-canon-solicitudpago').on('submit', function () {
+            actualizarBotonConfirmar();
+            if ($('#canon-sp-btn-confirmar').prop('disabled')) {
+                return false;
+            }
+            mostrarOverlay(
+                'Generando solicitud de pago…',
+                'Recalcula el canon, adjunta la nota y envía a aprobación. No cierre la página.'
+            );
+            $('#canon-sp-btn-confirmar').prop('disabled', true);
+            return true;
+        });
+
         window.addEventListener('pageshow', ocultarOverlay);
     });
 })(jQuery);

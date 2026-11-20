@@ -4,6 +4,7 @@
     $conciliacion = $conciliacion ?? [];
     $esExcel = ! empty($esExcel);
     $mostrarConciliacion = ! empty($conciliacion['habilitada']) && ! empty($conciliacion['items']);
+    $mostrarControlPeriodo = ! empty($conciliacion['control_periodo']);
     $fmtMontoExcel = \App\Support\Export\ExcelFormatoNumero::formateadorMonto(
         \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal()
     );
@@ -12,7 +13,7 @@
 @if ($mostrarConciliacion)
     @if ($esExcel)
         <tr>
-            <td colspan="7"><strong>Conciliación IIBB vs mayor contable</strong></td>
+            <td colspan="6"><strong>Conciliación IIBB vs mayor contable</strong></td>
         </tr>
         <tr>
             <td><strong>Cód.</strong></td>
@@ -20,39 +21,44 @@
             <td><strong>Total IIBB</strong></td>
             <td><strong>Total mayor</strong></td>
             <td><strong>Diferencia</strong></td>
-            <td><strong>Saldo ejerc.</strong></td>
-            <td><strong>Dif. vs saldo</strong></td>
+            <td><strong>Estado</strong></td>
         </tr>
         @foreach ($conciliacion['items'] as $item)
             @php
                 $totalIibb = $item['total_iibb'] ?? $item['total_sicore'] ?? 0;
-                $difSaldo = $item['diferencia_iibb_saldo'] ?? $item['diferencia_sicore_saldo'] ?? 0;
             @endphp
             <tr>
                 <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
-                <td>{{ $item['nombre'] ?? '' }}</td>
+                <td>{{ $item['nombre'] ?? '' }} (saldo ejerc.)</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($totalIibb) }}</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['total_mayor'] ?? 0) }}</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['diferencia'] ?? 0) }}</td>
-                <td style="text-align:right;">{{ $fmtMontoExcel($item['saldo_ejercicio'] ?? 0) }}</td>
-                <td style="text-align:right;">{{ $fmtMontoExcel($difSaldo) }}</td>
+                <td>{{ ! empty($item['cuadra']) ? 'OK' : 'Diferencia' }}</td>
             </tr>
+            @if ($mostrarControlPeriodo)
+                <tr>
+                    <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
+                    <td>{{ $item['nombre'] ?? '' }} (control período / ret. emitidas)</td>
+                    <td style="text-align:right;">{{ $fmtMontoExcel($totalIibb) }}</td>
+                    <td style="text-align:right;">{{ $fmtMontoExcel($item['total_mayor_periodo'] ?? 0) }}</td>
+                    <td style="text-align:right;">{{ $fmtMontoExcel($item['diferencia_periodo'] ?? 0) }}</td>
+                    <td>{{ ! empty($item['cuadra_periodo']) ? 'OK' : 'Diferencia' }}</td>
+                </tr>
+            @endif
         @endforeach
         <tr>
-            <td colspan="7"><strong>Ingresos Brutos a presentar — detalle</strong></td>
+            <td colspan="6"><strong>Ingresos Brutos a presentar — detalle</strong></td>
         </tr>
     @else
         <h3 style="font-size:10px;margin:8px 0 4px;">Conciliación IIBB vs mayor contable</h3>
         <table class="data tabla-conciliacion" style="margin-bottom:10px;">
             <colgroup>
-                <col style="width:5%;">
-                <col style="width:28%;">
-                <col style="width:12%;">
-                <col style="width:12%;">
-                <col style="width:10%;">
                 <col style="width:8%;">
+                <col style="width:32%;">
+                <col style="width:16%;">
+                <col style="width:16%;">
+                <col style="width:16%;">
                 <col style="width:12%;">
-                <col style="width:13%;">
             </colgroup>
             <thead>
                 <tr>
@@ -62,42 +68,43 @@
                     <th class="num">Total mayor</th>
                     <th class="num">Dif.</th>
                     <th>Estado</th>
-                    <th class="num">Saldo ejerc.</th>
-                    <th class="num">Dif. vs saldo</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($conciliacion['items'] as $item)
                     @php
                         $totalIibb = $item['total_iibb'] ?? $item['total_sicore'] ?? 0;
-                        $difSaldo = $item['diferencia_iibb_saldo'] ?? $item['diferencia_sicore_saldo'] ?? 0;
                     @endphp
                     <tr>
                         <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
-                        <td>
-                            {{ $item['nombre'] ?? '' }}
-                            <div style="font-size:6.5px;color:#555;">
-                                Reg. {{ $item['registros'] ?? 0 }}
-                                @if (! empty($item['cuadra_saldo']))
-                                    · saldo OK
-                                @else
-                                    · saldo dif.
-                                @endif
-                            </div>
-                        </td>
+                        <td>{{ $item['nombre'] ?? '' }} (saldo ejerc.)</td>
                         <td class="num">{{ number_format((float) $totalIibb, 2, ',', '.') }}</td>
                         <td class="num">{{ number_format((float) ($item['total_mayor'] ?? 0), 2, ',', '.') }}</td>
                         <td class="num">{{ number_format((float) ($item['diferencia'] ?? 0), 2, ',', '.') }}</td>
                         <td>
                             @if (! empty($item['cuadra']))
-                                Cuadra
+                                OK
                             @else
                                 Dif.
                             @endif
                         </td>
-                        <td class="num">{{ number_format((float) ($item['saldo_ejercicio'] ?? 0), 2, ',', '.') }}</td>
-                        <td class="num">{{ number_format((float) $difSaldo, 2, ',', '.') }}</td>
                     </tr>
+                    @if ($mostrarControlPeriodo)
+                        <tr>
+                            <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
+                            <td>{{ $item['nombre'] ?? '' }} (control período / ret. emitidas)</td>
+                            <td class="num">{{ number_format((float) $totalIibb, 2, ',', '.') }}</td>
+                            <td class="num">{{ number_format((float) ($item['total_mayor_periodo'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="num">{{ number_format((float) ($item['diferencia_periodo'] ?? 0), 2, ',', '.') }}</td>
+                            <td>
+                                @if (! empty($item['cuadra_periodo']))
+                                    OK
+                                @else
+                                    Dif.
+                                @endif
+                            </td>
+                        </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

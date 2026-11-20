@@ -10,6 +10,8 @@ use App\Repositories\Compras\RetenciongananciaRepositoryInterface;
 use App\Repositories\Compras\RetencionivaRepositoryInterface;
 use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
+use App\Support\Compras\PagoproveedorImputacionApSupport;
+use App\Support\Contable\Sicore\SicoreBaseCalculoExportSupport;
 use App\Support\Contable\Sicore\SicoreCompraConcmovAnitaSupport;
 use App\Support\Contable\Sicore\SicoreConfigCuentaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -51,11 +53,16 @@ final class SicoreComprasDatosService
     {
         $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'G');
         $anita = SicoreErpComplementoSupport::descartarSinBaseCubiertos(
-            $this->registrosRetmovPeriodoAnita($empresaId, $fechaDesde, $fechaHasta, $config),
+            $this->registrosRetmovPeriodoAnita($empresaId, $fechaDesde, $fechaHasta, $config, $erp),
             $erp,
         );
+        $anita = SicoreErpComplementoSupport::soloNuevos($anita, $erp);
 
-        return array_merge($erp, SicoreErpComplementoSupport::soloNuevos($anita, $erp));
+        return array_map(static function (array $reg): array {
+            unset($reg['_neto_pago_sicore']);
+
+            return $reg;
+        }, array_merge($erp, $anita));
     }
 
     /**
@@ -80,9 +87,9 @@ final class SicoreComprasDatosService
             ->whereHas('pagoproveedores', function ($q) use ($empresaId, $fechaDesde, $fechaHasta) {
                 $q->where('empresa_id', $empresaId)
                     ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
-                    ->where('estado', 'CONFIRMADA');
+                    ->whereIn('estado', PagoproveedorImputacionApSupport::ESTADOS_ACTIVOS);
             })
-            ->with(['pagoproveedores.proveedores'])
+            ->with(['pagoproveedores.proveedores', 'pagoproveedores.pagoproveedor_origen'])
             ->get();
 
         if ($filas->isEmpty()) {
@@ -121,9 +128,25 @@ final class SicoreComprasDatosService
             $codigoProv = (string) ($prov->codigo ?? '');
             $razon = $nombreIntegrante !== '' ? $nombreIntegrante : (string) ($prov->nombre ?? '');
             // Crédito / anulación de retención proveedores → NC (3); retención → OP (6).
-            $codComp = $importe < 0
+            $esNc = $importe < 0 || ! empty($det['devolucion']);
+            $codComp = $esNc
                 ? SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO
                 : SicoreFormatoV8Support::COD_COMP_ORDEN_PAGO;
+
+            $baseCalculo = $tipoRetencion === 'G'
+                ? SicoreBaseCalculoExportSupport::baseDesdeRetencionErp(
+                    $importe,
+                    (float) $ret->base_calculo,
+                    $det,
+                )
+                : abs((float) $ret->base_calculo);
+
+            $nroCert = (int) preg_replace('/\D+/', '', (string) ($ret->nro_certificado ?? '0'));
+            if ($esNc) {
+                $nroOpOriginal = (int) ($pago->pagoproveedor_origen?->numerotransaccion
+                    ?: $pago->numerotransaccion);
+                $nroCert = SicoreBaseCalculoExportSupport::nroCertificadoNc($nroCert, $nroOpOriginal);
+            }
 
             $out[] = [
                 'origen' => $tipoRetencion === 'I' ? 'compras_iva_erp' : 'compras_ganancias_erp',
@@ -135,7 +158,7 @@ final class SicoreComprasDatosService
                 'fecha_comp' => $pago->fecha?->format('Y-m-d') ?? '',
                 'nro_comp' => (int) $pago->numerotransaccion,
                 'importe_comp' => abs((float) $pago->monto),
-                'base_calculo' => abs((float) $ret->base_calculo),
+                'base_calculo' => $baseCalculo,
                 'fecha_retencion' => $pago->fecha?->format('Y-m-d') ?? '',
                 'cod_condicion' => 1,
                 'importe' => $importe,
@@ -143,10 +166,12 @@ final class SicoreComprasDatosService
                 'fecha_boletin' => '',
                 'cod_documento' => 80,
                 'nro_documento' => $cuit,
-                'nro_cert' => (int) preg_replace('/\D+/', '', (string) ($ret->nro_certificado ?? '0')),
+                'nro_cert' => $nroCert,
                 'codigo_proveedor' => $codigoProv,
                 'razon_social' => substr($razon, 0, 30),
                 'referencia' => 'Ret.ERP '.$codigoProv.' '.$pago->etiquetaComprobante(),
+                // Semilla de acumulación para Ret.GC Anita (B.2); el formateador lo ignora.
+                '_neto_pago_sicore' => round((float) ($det['neto_pago'] ?? 0), 2),
             ];
         }
 
@@ -157,10 +182,16 @@ final class SicoreComprasDatosService
      * retmov del período que todavía no está en el ERP.
      * La fecha es retv_fecha: el asiento de esas OP no está en anitaERP.
      *
+     * @param  list<array<string, mixed>>  $erpSeed  Retenciones ERP del mismo período (semilla acum. B.2).
      * @return list<array<string, mixed>>
      */
-    private function registrosRetmovPeriodoAnita(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
-    {
+    private function registrosRetmovPeriodoAnita(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        Sicore_Config $config,
+        array $erpSeed = [],
+    ): array {
         $filas = $this->listarRetmovPeriodo($empresaId, $fechaDesde, $fechaHasta);
         if ($filas === []) {
             return [];
@@ -171,7 +202,7 @@ final class SicoreComprasDatosService
             $filas,
         ));
 
-        $regimenPorCodigo = $this->mapaRegimenGanancias();
+        $paramPorCodigo = $this->mapaParamGanancias();
         $out = [];
         $vistos = [];
 
@@ -196,7 +227,8 @@ final class SicoreComprasDatosService
             }
 
             $codRet = (int) ($row['retv_codigo_ret'] ?? 0);
-            $regimen = (int) ($config->codigo_regimen ?? ($regimenPorCodigo[$codRet] ?? 999));
+            $param = $paramPorCodigo[$codRet] ?? ['regimen' => 999, 'monto_excedente' => 0.0, 'forma' => 'N'];
+            $regimen = (int) ($config->codigo_regimen ?? $param['regimen']);
             $signo = strncmp((string) ($row['retv_tipo'] ?? ''), 'AOP', 3) === 0 ? -1.0 : 1.0;
             $retencion = round((float) ($row['retv_retencion'] ?? 0) * $signo, 2);
             if (abs($retencion) < 0.001) {
@@ -204,9 +236,18 @@ final class SicoreComprasDatosService
             }
 
             $pagoActual = round((float) ($row['retv_pago_actual'] ?? 0) * $signo, 2);
-            $base = $signo < 0 ? abs($retencion) : abs($pagoActual);
-            $esDevolucion = strncmp((string) ($row['retv_tipo'] ?? ''), 'AOP', 3) === 0;
+            $esDevolucion = $signo < 0;
             $fechaIso = $this->anitaAFechaIso((int) ($row['retv_fecha'] ?? 0));
+            $nroComp = (int) ($row['retv_nro'] ?? 0);
+            $nroCert = (int) ($row['retv_nro_retencion'] ?? 0);
+            if ($esDevolucion) {
+                // A.1: base = retención devuelta. A.3 plan B: certificado original o nro OP.
+                $base = abs($retencion);
+                $nroCert = SicoreBaseCalculoExportSupport::nroCertificadoNc($nroCert, $nroComp);
+            } else {
+                // B.2 se aplica después, con acumulación del mes (semilla ERP + orden fecha).
+                $base = abs($pagoActual);
+            }
 
             $out[] = [
                 'origen' => 'compras_ganancias',
@@ -218,7 +259,7 @@ final class SicoreComprasDatosService
                     ? SicoreFormatoV8Support::COD_COMP_NOTA_CREDITO
                     : SicoreFormatoV8Support::COD_COMP_ORDEN_PAGO,
                 'fecha_comp' => $fechaIso,
-                'nro_comp' => (int) ($row['retv_nro'] ?? 0),
+                'nro_comp' => $nroComp,
                 'importe_comp' => abs($pagoActual),
                 'base_calculo' => abs($base),
                 'fecha_retencion' => $fechaIso,
@@ -228,14 +269,114 @@ final class SicoreComprasDatosService
                 'fecha_boletin' => '',
                 'cod_documento' => 80,
                 'nro_documento' => SicoreFormatoV8Support::normalizarCuit($proveedor['cuit']),
-                'nro_cert' => (int) ($row['retv_nro_retencion'] ?? 0),
+                'nro_cert' => $nroCert,
                 'codigo_proveedor' => $proveedor['codigo_proveedor'],
                 'razon_social' => substr($proveedor['nombre'], 0, 30),
                 'referencia' => 'Ret.GC '.$proveedor['codigo_proveedor'],
+                '_cod_ret_anita' => $codRet,
+                '_bruto_anita' => abs($pagoActual),
             ];
         }
 
-        return $out;
+        return $this->aplicarBasesRetGcAnita($out, $erpSeed, $paramPorCodigo);
+    }
+
+    /**
+     * B.2: reemplaza la base bruta de Ret.GC por neto − MNI − ya sujeto del mes.
+     *
+     * @param  list<array<string, mixed>>  $anita
+     * @param  list<array<string, mixed>>  $erpSeed
+     * @param  array<int, array{regimen: int, monto_excedente: float, forma: string}>  $paramPorCodigo
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarBasesRetGcAnita(array $anita, array $erpSeed, array $paramPorCodigo): array
+    {
+        if ($anita === []) {
+            return [];
+        }
+
+        /** @var list<array{clave: string, fecha: string, nro: int, neto: float}> $semillas */
+        $semillas = [];
+        foreach ($erpSeed as $reg) {
+            if (SicoreFormatoV8Support::esDevolucion($reg)) {
+                continue;
+            }
+            $neto = round((float) ($reg['_neto_pago_sicore'] ?? 0), 2);
+            if ($neto <= 0.0005) {
+                continue;
+            }
+            $semillas[] = [
+                'clave' => SicoreBaseCalculoExportSupport::claveAcumMes(
+                    (string) ($reg['nro_documento'] ?? ''),
+                    (int) ($reg['cod_regimen'] ?? 0),
+                    (string) ($reg['fecha_retencion'] ?? ''),
+                ),
+                'fecha' => (string) ($reg['fecha_retencion'] ?? ''),
+                'nro' => (int) ($reg['nro_comp'] ?? 0),
+                'neto' => $neto,
+            ];
+        }
+
+        usort($anita, static function (array $a, array $b): int {
+            $fa = (string) ($a['fecha_retencion'] ?? '');
+            $fb = (string) ($b['fecha_retencion'] ?? '');
+            if ($fa !== $fb) {
+                return $fa <=> $fb;
+            }
+
+            return ((int) ($a['nro_comp'] ?? 0)) <=> ((int) ($b['nro_comp'] ?? 0));
+        });
+
+        /** @var array<string, float> $netoAnitaYa */
+        $netoAnitaYa = [];
+
+        foreach ($anita as &$reg) {
+            if (SicoreFormatoV8Support::esDevolucion($reg)) {
+                unset($reg['_cod_ret_anita'], $reg['_bruto_anita']);
+                continue;
+            }
+
+            $codRet = (int) ($reg['_cod_ret_anita'] ?? 0);
+            $param = $paramPorCodigo[$codRet] ?? ['monto_excedente' => 0.0, 'forma' => 'N'];
+            $forma = strtoupper(trim((string) ($param['forma'] ?? 'N')));
+            $restaExcedente = $forma !== 'E';
+            $fecha = (string) ($reg['fecha_retencion'] ?? '');
+            $nro = (int) ($reg['nro_comp'] ?? 0);
+            $clave = SicoreBaseCalculoExportSupport::claveAcumMes(
+                (string) ($reg['nro_documento'] ?? ''),
+                (int) ($reg['cod_regimen'] ?? 0),
+                $fecha,
+            );
+
+            $netoPrevio = round((float) ($netoAnitaYa[$clave] ?? 0), 2);
+            foreach ($semillas as $semilla) {
+                if ($semilla['clave'] !== $clave) {
+                    continue;
+                }
+                if ($semilla['fecha'] < $fecha
+                    || ($semilla['fecha'] === $fecha && $semilla['nro'] < $nro)) {
+                    $netoPrevio = round($netoPrevio + $semilla['neto'], 2);
+                }
+            }
+
+            $netoAcum = [$clave => $netoPrevio];
+            $bruto = (float) ($reg['_bruto_anita'] ?? $reg['importe_comp'] ?? 0);
+            $reg['base_calculo'] = SicoreBaseCalculoExportSupport::baseDesdeBrutoAnita(
+                $bruto,
+                (float) ($param['monto_excedente'] ?? 0),
+                $restaExcedente,
+                $clave,
+                $netoAcum,
+            );
+            $netoAnitaYa[$clave] = round(
+                (float) ($netoAnitaYa[$clave] ?? 0) + SicoreBaseCalculoExportSupport::netoSinIvaDesdeBruto($bruto),
+                2,
+            );
+            unset($reg['_cod_ret_anita'], $reg['_bruto_anita']);
+        }
+        unset($reg);
+
+        return $anita;
     }
 
     /**
@@ -1124,11 +1265,29 @@ final class SicoreComprasDatosService
     private function mapaRegimenGanancias(): array
     {
         $map = [];
+        foreach ($this->mapaParamGanancias() as $cod => $param) {
+            $map[$cod] = (int) $param['regimen'];
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<int, array{regimen: int, monto_excedente: float, forma: string}>
+     */
+    private function mapaParamGanancias(): array
+    {
+        $map = [];
         foreach ($this->retenciongananciaRepository->all() as $ret) {
             $cod = (int) $ret->codigo;
-            if ($cod > 0) {
-                $map[$cod] = (int) $ret->regimen;
+            if ($cod <= 0) {
+                continue;
             }
+            $map[$cod] = [
+                'regimen' => (int) $ret->regimen,
+                'monto_excedente' => (float) ($ret->montoexcedente ?? 0),
+                'forma' => strtoupper(trim((string) ($ret->formacalculo ?? 'N'))),
+            ];
         }
 
         return $map;

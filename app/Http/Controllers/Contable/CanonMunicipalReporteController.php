@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Contable;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contable\Canon_Municipal_Config;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CanonMunicipal\CanonMunicipalReporteService;
+use App\Services\Contable\CanonMunicipal\CanonMunicipalSolicitudpagoService;
 use App\Support\Contable\CanonMunicipal\CanonMunicipalCalendarioSupport;
 use App\Support\Contable\CanonMunicipal\CanonMunicipalFichaSupport;
 use App\Support\Contable\CanonMunicipal\CanonMunicipalListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class CanonMunicipalReporteController extends Controller
 {
@@ -19,6 +22,7 @@ class CanonMunicipalReporteController extends Controller
 
     public function __construct(
         private readonly CanonMunicipalReporteService $reporteService,
+        private readonly CanonMunicipalSolicitudpagoService $solicitudpagoService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -87,6 +91,21 @@ class CanonMunicipalReporteController extends Controller
             (string) ($filtros['periodo'] ?? date('Ym')),
         );
 
+        $configSolicitudCompleta = false;
+        $mensajeConfigSolicitud = null;
+        if ($consultado && $resultado && empty($resultado['mensaje_config'])) {
+            $empresaIdCfg = (int) ($filtros['empresa_id'] ?? 0);
+            $cfgSp = Canon_Municipal_Config::query()
+                ->where('empresa_id', $empresaIdCfg)
+                ->where('activo', true)
+                ->first();
+            $configSolicitudCompleta = $cfgSp !== null && $cfgSp->configCompletaParaSolicitud();
+            if (! $configSolicitudCompleta) {
+                $nombreEmp = (string) ($resultado['ficha']['nombre'] ?? 'la empresa');
+                $mensajeConfigSolicitud = 'Falta configurar el canon de '.$nombreEmp;
+            }
+        }
+
         return view('contable.canon_municipal.index', [
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
@@ -96,7 +115,112 @@ class CanonMunicipalReporteController extends Controller
             'consultado' => $consultado,
             'resultado' => $resultado,
             'periodo_texto' => CanonMunicipalListadoFiltros::formatearPeriodoTexto($filtros),
+            'config_solicitud_completa' => $configSolicitudCompleta,
+            'mensaje_config_solicitud' => $mensajeConfigSolicitud,
         ]);
+    }
+
+    public function previewSolicitudPago(Request $request)
+    {
+        if (! can('exportar-canon-municipal', false) || ! can('crear-solicitud-pago', false)) {
+            return response()->json(['error' => 'Sin permiso.'], 403);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        try {
+            $filtros = $this->resolverFiltrosCanon($request);
+            $preview = $this->solicitudpagoService->preview($filtros);
+
+            return response()->json($preview);
+        } catch (RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage(), 'puede_generar' => false], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => 'No se pudo armar la vista previa.', 'puede_generar' => false], 500);
+        }
+    }
+
+    public function generarSolicitudPago(Request $request)
+    {
+        can('exportar-canon-municipal');
+        if (! can('crear-solicitud-pago', false)) {
+            can('crear-solicitud-pago');
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $validated = $request->validate([
+            'empresa_id' => ['required', 'integer'],
+            'periodo' => ['required', 'string'],
+            'liquidacion' => ['required', 'integer', 'min:1'],
+            'fecha_vencimiento' => ['required', 'string'],
+            'observacion' => ['nullable', 'string', 'max:160'],
+            'generar_igual' => ['nullable', 'boolean'],
+            'confirmo_dias' => ['nullable', 'boolean'],
+        ], [], [
+            'fecha_vencimiento' => 'vencimiento',
+        ]);
+
+        $filtros = $this->resolverFiltrosCanon($request);
+        $redirectQuery = array_merge(
+            CanonMunicipalListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1]
+        );
+
+        try {
+            $resultado = $this->solicitudpagoService->confirmar(
+                $filtros,
+                (string) $validated['fecha_vencimiento'],
+                isset($validated['observacion']) ? (string) $validated['observacion'] : null,
+                $request->boolean('generar_igual'),
+                $request->boolean('confirmo_dias'),
+            );
+            $codigo = (int) $resultado['codigo'];
+
+            return redirect()
+                ->route('canon_municipal', $redirectQuery)
+                ->with(
+                    'mensaje',
+                    'Solicitud de pago #'.$codigo.' generada, con la nota adjunta y enviada a aprobación'
+                );
+        } catch (RuntimeException $e) {
+            return redirect()
+                ->route('canon_municipal', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('canon_municipal', $redirectQuery)
+                ->with('mensaje_error', 'No se pudo generar la solicitud de pago.');
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosCanon(Request $request): array
+    {
+        $mapaConfig = CanonMunicipalFichaSupport::mapaEmpresasActivas();
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $periodicidad = $mapaConfig[$empresaId]['periodicidad'] ?? 'semanal';
+        $filtros = CanonMunicipalListadoFiltros::resolverDesdeRequest($request, $periodicidad);
+        if ($empresaId > 0 && isset($mapaConfig[$empresaId])) {
+            $filtros['periodicidad'] = $periodicidad;
+            [$desde, $hasta] = CanonMunicipalCalendarioSupport::resolverRango(
+                $periodicidad,
+                (string) $filtros['periodo'],
+                (int) $filtros['liquidacion'],
+            );
+            $filtros['fecha_desde'] = $desde;
+            $filtros['fecha_hasta'] = $hasta;
+        }
+
+        return $filtros;
     }
 
     public function exportarNota(Request $request)

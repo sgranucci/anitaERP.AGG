@@ -9,11 +9,14 @@ use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
+use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 
 /**
- * Conciliación IIBB vs mayor: suma del período vs col. P (saldo ejerc. Anita)
- * al último movimiento ≤ fecha_hasta de la quincena/mes elegida.
+ * Conciliación IIBB vs mayor Anita:
+ * 1) saldo de ejercicio (col. P) al cierre del rango;
+ * 2) control del período: solo movimientos comparables del rango
+ *    (retenciones emitidas / anuladas / devoluciones), sin pagos ARBA/DDJJ.
  */
 final class IngresosBrutosConciliacionContableService
 {
@@ -35,6 +38,11 @@ final class IngresosBrutosConciliacionContableService
         }
 
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        if ($desde === '') {
+            $desde = $hasta;
+        }
+        $mostrarControlPeriodo = ! empty($filtros['control_periodo']);
 
         $cuentasDetalle = $config->cuentas
             ->where('empresa_id', $empresaId)
@@ -53,18 +61,66 @@ final class IngresosBrutosConciliacionContableService
         )), 2);
 
         $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
+        $codigos = $this->saldoEjercicioSupport->codigosNumericos($cuentasDetalle);
 
-        // Col. P del mayor Anita: saldo de ejercicio al último movimiento ≤ fecha_hasta.
+        // Precarga col. P + líneas del período en un solo mayor Anita.
+        $this->saldoEjercicioSupport->precargar(
+            $empresaId,
+            $hasta,
+            $codigos,
+            MayorFuenteConsultaSupport::MODO_ANITA,
+            $desde,
+        );
+
         $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
             $empresaId,
             $hasta,
             $cuentasDetalle,
             $cuentaInversa,
             MayorFuenteConsultaSupport::MODO_ANITA,
+            $desde,
         );
+
+        $lineasPeriodo = $this->saldoEjercicioSupport->lineasPeriodo(
+            $empresaId,
+            $desde,
+            $hasta,
+            $codigos,
+            MayorFuenteConsultaSupport::MODO_ANITA,
+        );
+        $particion = SicoreMayorComparableSupport::particionar($lineasPeriodo);
+
+        $totalMayorPeriodo = round(array_sum(array_map(
+            static fn (array $m) => SicoreConciliacionAuditoriaSupport::importeLineaMayorFirmado($m),
+            $particion['comparables'],
+        )), 2);
 
         $tolerancia = IngresosBrutosFormatoArbaSupport::tolerancia();
         $dif = round($totalIibb - $totalMayor, 2);
+        $difPeriodo = round($totalIibb - $totalMayorPeriodo, 2);
+
+        $auditoria = $cuentasDetalle === []
+            ? null
+            : SicoreConciliacionAuditoriaSupport::auditarOperaciones(
+                $registros,
+                $particion['comparables'],
+                $cuentaInversa,
+                $tolerancia,
+            );
+
+        $excluidosDetalle = array_map(static function (array $m): array {
+            return [
+                'fecha' => (string) ($m['fecha'] ?? ''),
+                'asiento' => $m['asiento_id'] ?? $m['numeroasiento'] ?? null,
+                'detalle' => (string) ($m['detalle'] ?? ''),
+                'importe' => SicoreConciliacionAuditoriaSupport::importeLineaMayorFirmado($m),
+                'motivo' => (string) ($m['motivo_exclusion'] ?? ''),
+            ];
+        }, $particion['excluidos']);
+        $excluidosNeto = round(array_sum(array_map(
+            static fn (array $e) => (float) ($e['importe'] ?? 0),
+            $excluidosDetalle,
+        )), 2);
 
         return [
             'habilitada' => true,
@@ -80,10 +136,20 @@ final class IngresosBrutosConciliacionContableService
                 'total_mayor' => $totalMayor,
                 'diferencia' => $dif,
                 'cuadra' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $totalMayor),
+                'total_mayor_periodo' => $totalMayorPeriodo,
+                'diferencia_periodo' => $difPeriodo,
+                'cuadra_periodo' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $totalMayorPeriodo),
                 'registros' => count($registros),
                 'tolerancia' => $tolerancia,
+                'auditoria' => $auditoria,
+                'mayor_excluidos' => count($particion['excluidos']),
+                'mayor_excluidos_neto' => $excluidosNeto,
+                'mayor_excluidos_detalle' => $excluidosDetalle,
             ]],
             'tolerancia' => $tolerancia,
+            'control_periodo' => $mostrarControlPeriodo,
+            'periodo_desde' => $desde,
+            'periodo_hasta' => $hasta,
             'saldo_ejercicio_desde' => self::ymdAIso(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD),
             'saldo_ejercicio_hasta' => $hasta,
         ];

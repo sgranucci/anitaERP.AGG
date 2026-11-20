@@ -165,6 +165,13 @@
                                     Conciliar contra mayor contable (cuentas configuradas)
                                 </label>
                             </div>
+                            <div class="custom-control custom-checkbox mt-1">
+                                <input type="checkbox" class="custom-control-input" name="control_periodo" id="control_periodo" value="1"
+                                    @checked(! empty($filtros['control_periodo']))>
+                                <label class="custom-control-label" for="control_periodo">
+                                    Control del período (IIBB vs movimientos del mayor, sin saldo de ejercicio)
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>

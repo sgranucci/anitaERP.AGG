@@ -136,6 +136,28 @@
                             <i class="fa fa-ban"></i> Nota bloqueada
                         </button>
                     @endif
+                    @php
+                        $puedeCrearSp = can('crear-solicitud-pago', false) && can('exportar-canon-municipal', false);
+                        $cuadraCanon = $consultado && ! empty($resultado['puede_emitir_nota']);
+                        $cfgSpOk = ! empty($config_solicitud_completa);
+                    @endphp
+                    @if ($consultado && $puedeCrearSp && empty($resultado['mensaje_config']))
+                        @if ($cuadraCanon && $cfgSpOk)
+                            <button type="button" class="btn btn-primary" id="btn-generar-solicitud-canon"
+                                    style="background:#6f42c1;border-color:#6f42c1;">
+                                <i class="fa fa-plus"></i> Generar solicitud de pago
+                            </button>
+                        @elseif (! $cuadraCanon)
+                            <button type="button" class="btn btn-secondary" disabled title="El cruce no cuadra">
+                                <i class="fa fa-ban"></i> Generar solicitud de pago
+                            </button>
+                        @else
+                            <button type="button" class="btn btn-secondary" disabled
+                                    title="{{ $mensaje_config_solicitud ?? 'Falta configurar el canon' }}">
+                                <i class="fa fa-ban"></i> Generar solicitud de pago
+                            </button>
+                        @endif
+                    @endif
                 </div>
             </form>
         </div>
@@ -175,6 +197,8 @@
         @endif
     </div>
 </div>
+
+@include('contable.canon_municipal.partials.modal_solicitudpago')
 @endsection
 
 @section('scripts')
@@ -185,6 +209,10 @@
 window.CANON_MUNICIPAL = {
     mapaConfig: @json($mapaConfigJs),
     urlLiquidaciones: @json(route('canon_municipal_liquidaciones')),
+    urlPreviewSolicitud: @json(route('preview_canon_municipal_solicitudpago')),
+    urlGenerarSolicitud: @json(route('generar_canon_municipal_solicitudpago')),
+    csrfToken: @json(csrf_token()),
+    filtrosQuery: @json($filtrosQuery ?? []),
     liquidacionActual: {{ (int) ($filtros['liquidacion'] ?? 1) }}
 };
 </script>

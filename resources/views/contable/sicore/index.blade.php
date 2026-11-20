@@ -113,8 +113,8 @@
                         </a>
                         <button type="button"
                             class="btn btn-warning js-sicore-liquidacion-abrir"
-                            title="Cuadro de liquidación + listados Compras y Sueldos (PDF combinado)">
-                            <i class="fa fa-file-pdf"></i> Liquidación completa
+                            title="1Q o DJ: PDF + TXT compras y sueldos en un ZIP">
+                            <i class="fa fa-file-archive"></i> Liquidación completa
                         </button>
                     @endif
                 </div>
@@ -126,7 +126,7 @@
             'tituloId' => 'sicore-liquidacion-titulo',
             'subtituloId' => 'sicore-liquidacion-subtitulo',
             'titulo' => 'Generando liquidación SICORE…',
-            'subtitulo' => 'Puede demorar. Esta pantalla sigue usable; el PDF se descarga al terminar.',
+            'subtitulo' => 'Puede demorar. Esta pantalla sigue usable; el ZIP (PDF + TXT) se descarga al terminar.',
         ])
 
         {{-- Iframe oculto: la descarga no navega la pantalla original ni deja el overlay pegado. --}}
@@ -137,29 +137,22 @@
             $criterioPantalla = (string) ($filtros['criterio'] ?? 'compras');
             $desdePantalla = (string) ($filtros['fecha_desde'] ?? '');
             $hastaPantalla = (string) ($filtros['fecha_hasta'] ?? '');
-            $esSueldosPantalla = $criterioPantalla === 'sueldos';
-            $esComprasPantalla = in_array($criterioPantalla, ['compras', 'ventas'], true);
-            if ($esSueldosPantalla) {
-                $defSueldos = [$desdePantalla, $hastaPantalla];
-                $defCompras = \App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport::rangoMismoMes(
-                    $desdePantalla !== '' ? $desdePantalla : date('Y-m-d')
-                );
-            } else {
-                $defCompras = [$desdePantalla, $hastaPantalla];
-                $defSueldos = \App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport::rangoMismoMes(
-                    $desdePantalla !== '' ? $desdePantalla : date('Y-m-d')
-                );
-            }
+            $refMesLiq = $desdePantalla !== '' ? $desdePantalla : date('Y-m-d');
+            $def1q = \App\Support\Contable\Sicore\SicoreLiquidacionTipoSupport::sugerirRangos('1q', $refMesLiq);
+            $defDj = \App\Support\Contable\Sicore\SicoreLiquidacionTipoSupport::sugerirRangos('dj', $refMesLiq);
         @endphp
 
         <div class="modal fade" id="modal-sicore-liquidacion" tabindex="-1" role="dialog"
-             aria-labelledby="modal-sicore-liquidacion-titulo" aria-hidden="true">
+             aria-labelledby="modal-sicore-liquidacion-titulo" aria-hidden="true"
+             data-ref-mes="{{ $refMesLiq }}"
+             data-rangos-1q="{{ e(json_encode($def1q)) }}"
+             data-rangos-dj="{{ e(json_encode($defDj)) }}">
             <div class="modal-dialog modal-lg" role="document">
                 <form method="get" action="{{ route('liquidacion_sicore') }}" id="form-sicore-liquidacion"
-                      class="modal-content" target="sicore_liq_dl" rel="noopener">
+                      class="modal-content" target="sicore_liq_dl" rel="noopener" data-enter-campos="1">
                     <div class="modal-header bg-warning">
                         <h5 class="modal-title" id="modal-sicore-liquidacion-titulo">
-                            Liquidación SICORE — rangos
+                            Liquidación completa SICORE
                         </h5>
                         <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
                             <span aria-hidden="true">&times;</span>
@@ -167,10 +160,8 @@
                     </div>
                     <div class="modal-body">
                         <p class="small text-muted mb-3">
-                            La liquidación une <strong>Compras (217/767)</strong> y
-                            <strong>Sueldos 4ta categoría (787)</strong>, que suelen tener períodos distintos.
-                            Se toma lo ya consultado en pantalla y se pide confirmar el rango que falta.
-                            Al generar, el PDF se descarga sin bloquear esta pantalla.
+                            Elige <strong>1ra quincena</strong> (VEP a cuenta) o <strong>DJ mensual</strong>.
+                            Descarga un ZIP con el PDF, el TXT de compras y el TXT de sueldos (787).
                         </p>
                         <input type="hidden" name="empresa_id" value="{{ (int) ($filtros['empresa_id'] ?? 0) }}">
                         <input type="hidden" name="criterio" value="{{ $criterioPantalla }}">
@@ -183,84 +174,142 @@
                             <input type="hidden" name="control_periodo" value="1">
                         @endif
 
+                        <div class="form-group mb-3">
+                            <label class="d-block font-weight-bold">Tipo de liquidación</label>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="tipo_liq_1q" name="tipo_liquidacion" value="1q"
+                                    class="custom-control-input js-sicore-tipo-liq" checked>
+                                <label class="custom-control-label" for="tipo_liq_1q">1ra quincena — pago a cuenta</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="tipo_liq_dj" name="tipo_liquidacion" value="dj"
+                                    class="custom-control-input js-sicore-tipo-liq">
+                                <label class="custom-control-label" for="tipo_liq_dj">DJ mensual</label>
+                            </div>
+                        </div>
+
                         <div class="card card-outline card-secondary mb-3">
                             <div class="card-header py-2">
                                 <strong>Compras</strong>
                                 <span class="text-muted small">(códigos 217 y 767)</span>
-                                @if ($esComprasPantalla)
-                                    <span class="badge badge-info ml-1">desde pantalla</span>
-                                @else
-                                    <span class="badge badge-warning ml-1">completar</span>
-                                @endif
                             </div>
                             <div class="card-body py-2">
                                 <div class="form-row">
                                     <div class="form-group col-md-6 mb-2">
                                         <label for="compras_fecha_desde">Desde</label>
                                         <input type="date" class="form-control" name="compras_fecha_desde"
-                                            id="compras_fecha_desde" required
-                                            value="{{ $defCompras[0] }}"
-                                            @if ($esComprasPantalla) readonly @endif>
+                                            id="compras_fecha_desde" required value="{{ $def1q['compras_desde'] }}">
                                     </div>
                                     <div class="form-group col-md-6 mb-2">
                                         <label for="compras_fecha_hasta">Hasta</label>
                                         <input type="date" class="form-control" name="compras_fecha_hasta"
-                                            id="compras_fecha_hasta" required
-                                            value="{{ $defCompras[1] }}"
-                                            @if ($esComprasPantalla) readonly @endif>
+                                            id="compras_fecha_hasta" required value="{{ $def1q['compras_hasta'] }}">
                                     </div>
                                 </div>
+                                <p class="small text-muted mb-0 js-sicore-hint-compras">
+                                    1Q: del 01 al 15 · DJ: mes completo (editable).
+                                </p>
                             </div>
                         </div>
 
-                        <div class="card card-outline card-secondary mb-0">
+                        <div class="card card-outline card-secondary mb-3">
                             <div class="card-header py-2">
                                 <strong>Sueldos — 4ta categoría</strong>
                                 <span class="text-muted small">(código 787)</span>
-                                @if ($esSueldosPantalla)
-                                    <span class="badge badge-info ml-1">desde pantalla</span>
-                                @else
-                                    <span class="badge badge-warning ml-1">completar</span>
-                                @endif
                             </div>
                             <div class="card-body py-2">
                                 <div class="form-row">
                                     <div class="form-group col-md-6 mb-2">
                                         <label for="sueldos_fecha_desde">Desde</label>
                                         <input type="date" class="form-control" name="sueldos_fecha_desde"
-                                            id="sueldos_fecha_desde" required
-                                            value="{{ $defSueldos[0] }}"
-                                            @if ($esSueldosPantalla) readonly @endif>
+                                            id="sueldos_fecha_desde" required value="{{ $def1q['sueldos_desde'] }}">
                                     </div>
                                     <div class="form-group col-md-6 mb-2">
                                         <label for="sueldos_fecha_hasta">Hasta</label>
                                         <input type="date" class="form-control" name="sueldos_fecha_hasta"
-                                            id="sueldos_fecha_hasta" required
-                                            value="{{ $defSueldos[1] }}"
-                                            @if ($esSueldosPantalla) readonly @endif>
+                                            id="sueldos_fecha_hasta" required value="{{ $def1q['sueldos_hasta'] }}">
                                     </div>
                                 </div>
-                                @if (! $esSueldosPantalla)
-                                    <p class="small text-muted mb-0">
-                                        Sugerido: mismo mes calendario del &laquo;desde&raquo; de Compras (editable).
-                                    </p>
-                                @else
-                                    <p class="small text-muted mb-0">
-                                        Sugerido para Compras: mismo mes calendario del &laquo;desde&raquo; de Sueldos (editable).
-                                    </p>
-                                @endif
+                                <p class="small text-muted mb-0">
+                                    Desde: mes anterior. Hasta: a mano (fecha de retención 4ta en el TXT SIAP).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="card card-outline card-secondary mb-0" id="sicore-saf-panel">
+                            <div class="card-header py-2">
+                                <strong>Saldo a favor e ingresos a cuenta</strong>
+                                <span class="badge badge-secondary ml-1 js-sicore-saf-badge">solo DJ</span>
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered mb-2">
+                                        <thead style="background:#85C1E9;color:#17202A;">
+                                            <tr>
+                                                <th>Código</th>
+                                                <th class="text-right">Saldo a favor período anterior</th>
+                                                <th>Ingresos a cuenta — fecha</th>
+                                                <th class="text-right">Ingresos a cuenta — importe</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (['217', '767', '787'] as $codSaf)
+                                                <tr>
+                                                    <td class="align-middle">{{ $codSaf }}</td>
+                                                    <td>
+                                                        <input type="number" step="0.01" min="0"
+                                                            class="form-control form-control-sm text-right js-sicore-saf"
+                                                            name="saf[{{ $codSaf }}]" value="0"
+                                                            disabled>
+                                                    </td>
+                                                    <td>
+                                                        <input type="date"
+                                                            class="form-control form-control-sm js-sicore-ing-fecha"
+                                                            name="ingreso_fecha[{{ $codSaf }}]"
+                                                            disabled>
+                                                    </td>
+                                                    <td>
+                                                        <input type="number" step="0.01" min="0"
+                                                            class="form-control form-control-sm text-right js-sicore-ing-imp"
+                                                            name="ingreso_importe[{{ $codSaf }}]" value="0"
+                                                            disabled>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="small text-muted mb-0 js-sicore-saf-ayuda">
+                                    En 1ra quincena estos campos quedan deshabilitados. En DJ: un ingreso a cuenta por código (VEP de la 1Q); si hay importe, la fecha es obligatoria.
+                                </p>
                             </div>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                        @if (can('crear-solicitud-pago', false))
+                            <button type="button" class="btn btn-success js-sicore-solicitudpago-abrir"
+                                title="Arma la solicitud de pago a ARCA con el cuadro de esta liquidación">
+                                <i class="fa fa-file-invoice-dollar"></i> Generar solicitud de pago
+                            </button>
+                        @endif
                         <button type="submit" class="btn btn-warning js-sicore-liquidacion-generar">
-                            <i class="fa fa-file-pdf"></i> Generar PDF combinado
+                            <i class="fa fa-file-archive"></i> Generar liquidación (ZIP)
                         </button>
                     </div>
                 </form>
             </div>
         </div>
+
+        @include('contable.sicore.partials.modal_solicitudpago')
+
+        @include('includes.proceso_overlay_aviso', [
+            'overlayId' => 'sicore-solicitudpago-overlay',
+            'tituloId' => 'sicore-solicitudpago-titulo',
+            'subtituloId' => 'sicore-solicitudpago-subtitulo',
+            'titulo' => 'Generando solicitud de pago SICORE…',
+            'subtitulo' => 'Recalcula la liquidación, adjunta el PDF y envía a aprobación. No cierre la página.',
+        ])
 
         @if ($consultado && $resultado)
             @if (can('exportar-sicore', false))
@@ -346,5 +395,12 @@
 @endsection
 
 @section('scripts')
+<script>
+window.SICORE = {
+    urlPreviewSolicitud: @json(route('preview_sicore_solicitudpago')),
+    urlGenerarSolicitud: @json(route('generar_sicore_solicitudpago')),
+    puedeCrearSolicitud: @json(can('crear-solicitud-pago', false)),
+};
+</script>
 <script src="{{ asset('assets/pages/scripts/contable/sicore/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/sicore/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection

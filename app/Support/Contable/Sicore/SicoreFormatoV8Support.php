@@ -51,8 +51,9 @@ final class SicoreFormatoV8Support
         $importeRet = self::montoDecimal((float) ($reg['importe'] ?? 0), 14);
         $porcExcl = self::montoDecimal((float) ($reg['porc_excl'] ?? 0), 6);
 
+        // cod_comp con cero a la izquierda (diseño de registro: "03", no " 3").
         return sprintf(
-            '%2d%10s%16d%16s%04d%03d%1d%14s%10s%02d %14s%6s%10s%2d%20s%14d',
+            '%02d%10s%16d%16s%04d%03d%1d%14s%10s%02d %14s%6s%10s%2d%20s%14d',
             (int) ($reg['cod_comp'] ?? self::COD_COMP_ORDEN_PAGO),
             $fechaComp,
             (int) ($reg['nro_comp'] ?? 0),

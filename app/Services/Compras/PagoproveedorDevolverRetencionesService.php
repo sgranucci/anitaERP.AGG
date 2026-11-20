@@ -225,7 +225,8 @@ final class PagoproveedorDevolverRetencionesService
                     'provincia_id' => $origenRet->provincia_id,
                     'codigo_regimen' => $origenRet->codigo_regimen,
                     'codigo_retencion' => $origenRet->codigo_retencion,
-                    'base_calculo' => abs((float) $origenRet->base_calculo),
+                    // SICORE NC (A.1): base = retención devuelta, no la base de la operación original.
+                    'base_calculo' => abs($importe),
                     'alicuota' => (float) $origenRet->alicuota,
                     'importe' => -abs($importe),
                     'nro_certificado' => $origenRet->nro_certificado,

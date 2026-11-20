@@ -31,3 +31,8 @@
         </div>
     </div>
 @endsection
+
+@section('scripts')
+@include('contable.canon_municipal_config.partials.scripts_form')
+@endsection
+

@@ -76,6 +76,7 @@ final class IngresosBrutosListadoFiltros
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
             'conciliar_contable' => $request->boolean('conciliar_contable', true),
+            'control_periodo' => $request->boolean('control_periodo', false),
         ];
     }
 
@@ -198,6 +199,9 @@ final class IngresosBrutosListadoFiltros
         ];
         if (! empty($filtros['conciliar_contable'])) {
             $out['conciliar_contable'] = 1;
+        }
+        if (! empty($filtros['control_periodo'])) {
+            $out['control_periodo'] = 1;
         }
 
         return $out;

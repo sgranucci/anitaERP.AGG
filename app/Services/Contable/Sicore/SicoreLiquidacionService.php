@@ -9,9 +9,11 @@ use App\Support\Contable\Sicore\SicoreCriteriosSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
 use App\Support\Contable\Sicore\SicoreLiquidacionCuadroSupport;
 use App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport;
+use App\Support\Contable\Sicore\SicoreLiquidacionTipoSupport;
 use Illuminate\Support\Facades\View;
 use Jurosh\PDFMerge\PDFMerger;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use ZipArchive;
 
 final class SicoreLiquidacionService
 {
@@ -20,18 +22,15 @@ final class SicoreLiquidacionService
     ) {}
 
     /**
-     * Arma liquidación quincenal + PDF combinado (liquidación + compras + sueldos).
-     *
-     * Rangos:
-     * - compras: fecha_desde/fecha_hasta o compras_fecha_*
-     * - sueldos: sueldos_fecha_* (obligatorio vía modal; fallback mes anterior)
+     * Calcula el cuadro 1Q/DJ (sin generar archivos). Usado por liquidación ZIP y por solicitud de pago.
      *
      * @param  array<string, mixed>  $filtros
-     * @return array{ruta_pdf: string, ruta_xlsx: string, nombre_pdf: string, valores: array, autocontrol: array, periodo: string, empresa: string, desde_cache_compras: bool, desde_cache_sueldos: bool}
+     * @return array<string, mixed>
      */
-    public function generarCompleta(array $filtros): array
+    public function calcularCuadro(array $filtros): array
     {
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $tipo = SicoreLiquidacionTipoSupport::normalizarTipo((string) ($filtros['tipo_liquidacion'] ?? ''));
         $rangos = SicoreLiquidacionQuincenasSupport::resolverRangosLiquidacion($filtros);
         $comprasDesde = $rangos['compras_desde'];
         $comprasHasta = $rangos['compras_hasta'];
@@ -44,6 +43,8 @@ final class SicoreLiquidacionService
                 'Empresa y rangos de Compras y Sueldos (4ta categoría) son obligatorios para la liquidación.'
             );
         }
+
+        $safIng = SicoreLiquidacionTipoSupport::parsearSafIngresos($tipo, $filtros);
 
         $filtrosCompras = array_merge($filtros, [
             'criterio' => SicoreCriteriosSupport::COMPRAS,
@@ -68,11 +69,27 @@ final class SicoreLiquidacionService
         $part217 = SicoreLiquidacionQuincenasSupport::repartirCodigo($regsCompras, SicoreLiquidacionQuincenasSupport::CODIGO_GANANCIAS);
         $part787 = SicoreLiquidacionQuincenasSupport::repartirCodigo($regsSueldos, SicoreLiquidacionQuincenasSupport::CODIGO_SUELDOS);
 
+        $porCodigo = [
+            '767' => $part767,
+            '217' => $part217,
+            '787' => $part787,
+        ];
         $valores = [
             '767' => [$part767['q1'], $part767['q2']],
             '217' => [$part217['q1'], $part217['q2']],
             '787' => [$part787['q1'], $part787['q2']],
         ];
+
+        $cuadro = SicoreLiquidacionTipoSupport::armarCuadro(
+            $tipo,
+            $porCodigo,
+            $safIng['saf'],
+            $safIng['ingresos'],
+            $comprasDesde,
+            $comprasHasta,
+            $sueldosDesde,
+            $sueldosHasta,
+        );
 
         $autocontrol = $this->autocontrol(
             [
@@ -84,8 +101,59 @@ final class SicoreLiquidacionService
 
         $empresa = Empresa::query()->find($empresaId);
         $empresaLabel = $this->etiquetaEmpresa($empresa);
-        $periodoLabel = SicoreLiquidacionQuincenasSupport::etiquetaPeriodo($comprasDesde, $comprasHasta);
-        $estructura = SicoreLiquidacionCuadroSupport::armarEstructura($valores);
+        $empresaCorta = SicoreLiquidacionTipoSupport::empresaCorta((string) ($empresa->nombre ?? ''));
+        $periodoLabel = $this->etiquetaPeriodoTipo($tipo, $comprasDesde, $comprasHasta, $sueldosDesde, $sueldosHasta);
+
+        return [
+            'empresa_id' => $empresaId,
+            'empresa' => $empresa,
+            'empresa_label' => $empresaLabel,
+            'empresa_corta' => $empresaCorta,
+            'tipo' => $tipo,
+            'compras_desde' => $comprasDesde,
+            'compras_hasta' => $comprasHasta,
+            'sueldos_desde' => $sueldosDesde,
+            'sueldos_hasta' => $sueldosHasta,
+            'valores' => $valores,
+            'cuadro' => $cuadro,
+            'saldo_pagar' => $cuadro['saldo_pagar'] ?? [],
+            'total_a_pagar' => (float) ($cuadro['total_a_pagar'] ?? 0),
+            'autocontrol' => $autocontrol,
+            'periodo' => $periodoLabel,
+            'res_compras' => $resCompras,
+            'res_sueldos' => $resSueldos,
+            'regs_compras' => $regsCompras,
+            'regs_sueldos' => $regsSueldos,
+        ];
+    }
+
+    /**
+     * Liquidación 1Q / DJ: PDF combinado + TXT compras/sueldos en un ZIP.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function generarCompleta(array $filtros): array
+    {
+        $calc = $this->calcularCuadro($filtros);
+        $empresaId = (int) $calc['empresa_id'];
+        $tipo = (string) $calc['tipo'];
+        $comprasDesde = (string) $calc['compras_desde'];
+        $comprasHasta = (string) $calc['compras_hasta'];
+        $sueldosDesde = (string) $calc['sueldos_desde'];
+        $sueldosHasta = (string) $calc['sueldos_hasta'];
+        $valores = $calc['valores'];
+        $cuadro = $calc['cuadro'];
+        $autocontrol = $calc['autocontrol'];
+        $empresa = $calc['empresa'];
+        $empresaLabel = (string) $calc['empresa_label'];
+        $empresaCorta = (string) $calc['empresa_corta'];
+        $periodoLabel = (string) $calc['periodo'];
+        $resCompras = $calc['res_compras'];
+        $resSueldos = $calc['res_sueldos'];
+        $regsCompras = $calc['regs_compras'];
+        $regsSueldos = $calc['regs_sueldos'];
+        $estructuraLegacy = SicoreLiquidacionCuadroSupport::armarEstructura($valores);
 
         $dir = storage_path('pdf/listados/sicore_liquidacion');
         if (! is_dir($dir)) {
@@ -97,12 +165,20 @@ final class SicoreLiquidacionService
         $rutaLiqPdf = $dir.'/'.$base.'_liquidacion.pdf';
         $rutaComprasPdf = $dir.'/'.$base.'_compras.pdf';
         $rutaSueldosPdf = $dir.'/'.$base.'_sueldos.pdf';
-        $rutaFinal = $dir.'/'.$base.'_completa.pdf';
+        $rutaFinalPdf = $dir.'/'.$base.'_completa.pdf';
+        $rutaZip = $dir.'/'.$base.'.zip';
 
         $wb = SicoreLiquidacionCuadroSupport::buildWorkbook($empresaLabel, $periodoLabel, $valores);
         (new Xlsx($wb))->save($rutaXlsx);
 
-        $this->guardarPdfLiquidacion($rutaLiqPdf, $empresaLabel, $periodoLabel, $estructura, $autocontrol);
+        $this->guardarPdfLiquidacion(
+            $rutaLiqPdf,
+            $empresaLabel,
+            $periodoLabel,
+            $cuadro,
+            $estructuraLegacy,
+            $autocontrol,
+        );
         $this->guardarPdfListado(
             $rutaComprasPdf,
             $resCompras,
@@ -122,12 +198,19 @@ final class SicoreLiquidacionService
             true,
         );
 
-        // jurosh/pdf-merge default = vertical: si se fuerza P sobre listados legal landscape, corta el borde derecho.
         $merger = new PDFMerger;
         $merger->addPDF($rutaLiqPdf, 'all', 'vertical');
         $merger->addPDF($rutaComprasPdf, 'all', 'horizontal');
         $merger->addPDF($rutaSueldosPdf, 'all', 'horizontal');
-        $merger->merge('file', $rutaFinal);
+        $merger->merge('file', $rutaFinalPdf);
+
+        $txtCompras = (string) ($resCompras['archivo_v8'] ?? SicoreFormatoV8Support::generarArchivo($regsCompras));
+        $txtSueldos = (string) ($resSueldos['archivo_v8'] ?? SicoreFormatoV8Support::generarArchivo($regsSueldos));
+        $this->empaquetarZip($rutaZip, [
+            'liquidacion_sicore.pdf' => $rutaFinalPdf,
+            'csicore.dat' => $txtCompras,
+            'ssicore.dat' => $txtSueldos,
+        ]);
 
         foreach ([$rutaLiqPdf, $rutaComprasPdf, $rutaSueldosPdf] as $tmp) {
             if (is_file($tmp)) {
@@ -135,11 +218,18 @@ final class SicoreLiquidacionService
             }
         }
 
+        $nombreZip = SicoreLiquidacionTipoSupport::nombreZip($empresaCorta, $tipo, $comprasDesde);
+
         return [
-            'ruta_pdf' => $rutaFinal,
+            'ruta_zip' => $rutaZip,
+            'nombre_zip' => $nombreZip,
+            'ruta_pdf' => $rutaFinalPdf,
             'ruta_xlsx' => $rutaXlsx,
             'nombre_pdf' => 'SICORE - Liquidacion completa.pdf',
             'valores' => $valores,
+            'cuadro' => $cuadro,
+            'saldo_pagar' => $cuadro['saldo_pagar'] ?? [],
+            'tipo' => $tipo,
             'autocontrol' => $autocontrol,
             'periodo' => $periodoLabel,
             'empresa' => $empresaLabel,
@@ -150,6 +240,28 @@ final class SicoreLiquidacionService
             'sueldos_desde' => $sueldosDesde,
             'sueldos_hasta' => $sueldosHasta,
         ];
+    }
+
+    /**
+     * @param  array<string, string>  $archivos  nombre en zip => ruta archivo o contenido string
+     */
+    private function empaquetarZip(string $rutaZip, array $archivos): void
+    {
+        if (! class_exists(ZipArchive::class)) {
+            throw new \RuntimeException('ZipArchive no está disponible en este servidor.');
+        }
+        $zip = new ZipArchive;
+        if ($zip->open($rutaZip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('No se pudo crear el ZIP de liquidación SICORE.');
+        }
+        foreach ($archivos as $nombre => $origen) {
+            if (is_file($origen)) {
+                $zip->addFile($origen, $nombre);
+            } else {
+                $zip->addFromString($nombre, (string) $origen);
+            }
+        }
+        $zip->close();
     }
 
     /**
@@ -215,21 +327,46 @@ final class SicoreLiquidacionService
         return $nombre;
     }
 
+    private function etiquetaPeriodoTipo(
+        string $tipo,
+        string $comprasDesde,
+        string $comprasHasta,
+        string $sueldosDesde,
+        string $sueldosHasta,
+    ): string {
+        $base = SicoreLiquidacionQuincenasSupport::etiquetaPeriodo($comprasDesde, $comprasHasta);
+        $sueldosLabel = '';
+        try {
+            $sueldosLabel = \Carbon\Carbon::parse($sueldosDesde !== '' ? $sueldosDesde : $sueldosHasta)->format('m/Y');
+        } catch (\Throwable) {
+            $sueldosLabel = $sueldosDesde;
+        }
+
+        if (SicoreLiquidacionTipoSupport::esDj($tipo)) {
+            return $base.'  ·  DJ mensual (sueldos '.$sueldosLabel.')';
+        }
+
+        return $base.'  ·  Pago a cuenta (sueldos '.$sueldosLabel.')';
+    }
+
     /**
-     * @param  array<string, mixed>  $estructura
+     * @param  array<string, mixed>  $cuadro
+     * @param  array<string, mixed>  $estructuraLegacy
      * @param  array<string, mixed>  $autocontrol
      */
     private function guardarPdfLiquidacion(
         string $ruta,
         string $empresaLabel,
         string $periodoLabel,
-        array $estructura,
+        array $cuadro,
+        array $estructuraLegacy,
         array $autocontrol,
     ): void {
         $html = View::make('contable.sicore.liquidacion', [
             'empresaLabel' => $empresaLabel,
             'periodoLabel' => $periodoLabel,
-            'estructura' => $estructura,
+            'cuadro' => $cuadro,
+            'estructura' => $estructuraLegacy,
             'autocontrol' => $autocontrol,
         ])->render();
         $pdf = \App::make('dompdf.wrapper');

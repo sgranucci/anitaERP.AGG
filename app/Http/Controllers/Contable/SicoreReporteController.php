@@ -9,12 +9,15 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\Sicore\SicoreLiquidacionService;
 use App\Services\Contable\Sicore\SicoreReporteService;
+use App\Services\Contable\Sicore\SicoreSolicitudpagoService;
 use App\Support\Contable\Sicore\SicoreCriteriosSupport;
 use App\Support\Contable\Sicore\SicoreListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Response;
+use RuntimeException;
 
 class SicoreReporteController extends Controller
 {
@@ -23,6 +26,7 @@ class SicoreReporteController extends Controller
     public function __construct(
         private readonly SicoreReporteService $reporteService,
         private readonly SicoreLiquidacionService $liquidacionService,
+        private readonly SicoreSolicitudpagoService $solicitudpagoService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -177,8 +181,8 @@ class SicoreReporteController extends Controller
     }
 
     /**
-     * Liquidación quincenal: cuadro + PDF combinado (liquidación + compras + sueldos).
-     * Rangos: compras_fecha_* y sueldos_fecha_* (el modal completa el que falta).
+     * Liquidación 1Q / DJ: ZIP con PDF + TXT compras + TXT sueldos.
+     * Rangos, tipo y SAF/ingresos a cuenta vienen del modal.
      */
     public function liquidacion(Request $request)
     {
@@ -187,12 +191,7 @@ class SicoreReporteController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = SicoreListadoFiltros::resolverDesdeRequest($request);
-        $filtros['compras_fecha_desde'] = (string) $request->input('compras_fecha_desde', '');
-        $filtros['compras_fecha_hasta'] = (string) $request->input('compras_fecha_hasta', '');
-        $filtros['sueldos_fecha_desde'] = (string) $request->input('sueldos_fecha_desde', '');
-        $filtros['sueldos_fecha_hasta'] = (string) $request->input('sueldos_fecha_hasta', '');
-
+        $filtros = $this->resolverFiltrosLiquidacion($request);
         $rangos = \App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport::resolverRangosLiquidacion($filtros);
         if ((int) ($filtros['empresa_id'] ?? 0) <= 0
             || $rangos['compras_desde'] === '' || $rangos['compras_hasta'] === ''
@@ -202,13 +201,6 @@ class SicoreReporteController extends Controller
                 'Indique empresa y los rangos de Compras y Sueldos (4ta categoría) para la liquidación.',
             );
         }
-
-        $filtros['compras_fecha_desde'] = $rangos['compras_desde'];
-        $filtros['compras_fecha_hasta'] = $rangos['compras_hasta'];
-        $filtros['sueldos_fecha_desde'] = $rangos['sueldos_desde'];
-        $filtros['sueldos_fecha_hasta'] = $rangos['sueldos_hasta'];
-        $filtros['fecha_desde'] = $rangos['compras_desde'];
-        $filtros['fecha_hasta'] = $rangos['compras_hasta'];
 
         try {
             $resultado = $this->liquidacionService->generarCompleta($filtros);
@@ -224,18 +216,152 @@ class SicoreReporteController extends Controller
             );
         }
 
-        $rutaPdf = (string) ($resultado['ruta_pdf'] ?? '');
-        if ($rutaPdf === '' || ! is_file($rutaPdf)) {
+        $rutaZip = (string) ($resultado['ruta_zip'] ?? '');
+        if ($rutaZip === '' || ! is_file($rutaZip)) {
             return $this->respuestaLiquidacionEnIframe(
                 route('sicore'),
-                'La liquidación no generó el PDF combinado.',
+                'La liquidación no generó el ZIP (PDF + TXT).',
             );
         }
 
-        return response()->download(
-            $rutaPdf,
-            (string) ($resultado['nombre_pdf'] ?? 'SICORE - Liquidacion completa.pdf'),
+        $respuesta = response()->download(
+            $rutaZip,
+            (string) ($resultado['nombre_zip'] ?? 'SICORE_liquidacion.zip'),
         )->deleteFileAfterSend(true);
+
+        $rutaPdf = (string) ($resultado['ruta_pdf'] ?? '');
+        $rutaXlsx = (string) ($resultado['ruta_xlsx'] ?? '');
+        register_shutdown_function(static function () use ($rutaPdf, $rutaXlsx): void {
+            foreach ([$rutaPdf, $rutaXlsx] as $tmp) {
+                if ($tmp !== '' && is_file($tmp)) {
+                    @unlink($tmp);
+                }
+            }
+        });
+
+        return $respuesta;
+    }
+
+    public function previewSolicitudPago(Request $request)
+    {
+        if (! can('exportar-sicore', false) || ! can('crear-solicitud-pago', false)) {
+            return response()->json(['error' => 'Sin permiso.', 'puede_generar' => false], 403);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        try {
+            $filtros = $this->resolverFiltrosLiquidacion($request);
+            $preview = $this->solicitudpagoService->preview($filtros);
+
+            return response()->json($preview);
+        } catch (RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage(), 'puede_generar' => false], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => 'No se pudo armar la vista previa.', 'puede_generar' => false], 500);
+        }
+    }
+
+    public function generarSolicitudPago(Request $request)
+    {
+        can('exportar-sicore');
+        if (! can('crear-solicitud-pago', false)) {
+            can('crear-solicitud-pago');
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $validated = $request->validate([
+            'empresa_id' => ['required', 'integer'],
+            'tipo_liquidacion' => ['required', 'string'],
+            'fecha_vencimiento' => ['required', 'string'],
+            'observacion' => ['nullable', 'string', 'max:160'],
+            'generar_igual' => ['nullable'],
+            'adjuntos.*' => ['nullable', 'file', 'max:10240'],
+        ], [], [
+            'fecha_vencimiento' => 'vencimiento',
+        ]);
+
+        $filtros = $this->resolverFiltrosLiquidacion($request);
+        $redirectQuery = array_merge(
+            SicoreListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1]
+        );
+
+        $adjuntos = [];
+        foreach ((array) $request->file('adjuntos', []) as $file) {
+            if ($file instanceof UploadedFile) {
+                $adjuntos[] = $file;
+            }
+        }
+
+        try {
+            $resultado = $this->solicitudpagoService->confirmar(
+                $filtros,
+                (string) $validated['fecha_vencimiento'],
+                isset($validated['observacion']) ? (string) $validated['observacion'] : null,
+                $request->boolean('generar_igual'),
+                $adjuntos,
+            );
+            $codigo = (int) $resultado['codigo'];
+
+            return redirect()
+                ->route('sicore', $redirectQuery)
+                ->with(
+                    'mensaje',
+                    'Solicitud de pago #'.$codigo.' generada (liquidación SICORE adjunta) y enviada a aprobación.'
+                );
+        } catch (RuntimeException $e) {
+            return redirect()
+                ->route('sicore', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('sicore', $redirectQuery)
+                ->with('mensaje_error', 'No se pudo generar la solicitud de pago SICORE.');
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosLiquidacion(Request $request): array
+    {
+        $filtros = SicoreListadoFiltros::resolverDesdeRequest($request);
+        $filtros['tipo_liquidacion'] = \App\Support\Contable\Sicore\SicoreLiquidacionTipoSupport::normalizarTipo(
+            (string) $request->input('tipo_liquidacion', '')
+        );
+        $filtros['compras_fecha_desde'] = (string) $request->input('compras_fecha_desde', '');
+        $filtros['compras_fecha_hasta'] = (string) $request->input('compras_fecha_hasta', '');
+        $filtros['sueldos_fecha_desde'] = (string) $request->input('sueldos_fecha_desde', '');
+        $filtros['sueldos_fecha_hasta'] = (string) $request->input('sueldos_fecha_hasta', '');
+        $filtros['saf'] = (array) $request->input('saf', []);
+        $filtros['ingreso_fecha'] = (array) $request->input('ingreso_fecha', []);
+        $filtros['ingreso_importe'] = (array) $request->input('ingreso_importe', []);
+
+        $rangos = \App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport::resolverRangosLiquidacion($filtros);
+        if ($rangos['compras_desde'] !== '') {
+            $filtros['compras_fecha_desde'] = $rangos['compras_desde'];
+            $filtros['fecha_desde'] = $rangos['compras_desde'];
+        }
+        if ($rangos['compras_hasta'] !== '') {
+            $filtros['compras_fecha_hasta'] = $rangos['compras_hasta'];
+            $filtros['fecha_hasta'] = $rangos['compras_hasta'];
+        }
+        if ($rangos['sueldos_desde'] !== '') {
+            $filtros['sueldos_fecha_desde'] = $rangos['sueldos_desde'];
+        }
+        if ($rangos['sueldos_hasta'] !== '') {
+            $filtros['sueldos_fecha_hasta'] = $rangos['sueldos_hasta'];
+        }
+
+        return $filtros;
     }
 
     /**

@@ -1479,6 +1479,8 @@ Route::get('contable/sicore', 'Contable\SicoreReporteController@index')->name('s
 Route::get('contable/exportar-sicore', 'Contable\SicoreReporteController@exportar')->name('exportar_sicore');
 Route::get('contable/listar-sicore/{formato?}', 'Contable\SicoreReporteController@listar')->name('listar_sicore');
 Route::get('contable/liquidacion-sicore', 'Contable\SicoreReporteController@liquidacion')->name('liquidacion_sicore');
+Route::get('contable/sicore/solicitud-pago/preview', 'Contable\SicoreReporteController@previewSolicitudPago')->name('preview_sicore_solicitudpago');
+Route::post('contable/sicore/solicitud-pago', 'Contable\SicoreReporteController@generarSolicitudPago')->name('generar_sicore_solicitudpago');
 
 Route::get('contable/sifere', 'Contable\PercepcionSufridaController@sifere')->name('sifere');
 Route::get('contable/exportar-sifere', 'Contable\PercepcionSufridaController@exportarSifere')->name('exportar_sifere');
@@ -1514,6 +1516,8 @@ Route::delete('contable/suss-config/{id}', 'Contable\SussConfigController@elimin
 
 Route::get('contable/canon-municipal', 'Contable\CanonMunicipalReporteController@index')->name('canon_municipal');
 Route::get('contable/canon-municipal/liquidaciones', 'Contable\CanonMunicipalReporteController@liquidaciones')->name('canon_municipal_liquidaciones');
+Route::get('contable/canon-municipal/solicitud-pago/preview', 'Contable\CanonMunicipalReporteController@previewSolicitudPago')->name('preview_canon_municipal_solicitudpago');
+Route::post('contable/canon-municipal/solicitud-pago', 'Contable\CanonMunicipalReporteController@generarSolicitudPago')->name('generar_canon_municipal_solicitudpago');
 Route::get('contable/exportar-canon-municipal-nota', 'Contable\CanonMunicipalReporteController@exportarNota')->name('exportar_canon_municipal_nota');
 Route::get('contable/listar-canon-municipal/{formato?}', 'Contable\CanonMunicipalReporteController@listar')->name('listar_canon_municipal');
 
