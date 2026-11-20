@@ -11,6 +11,7 @@ use Throwable;
 /**
  * Replica venta + vencae + ctamov en Anita en cola (pedido / remito / mostrador, El Bierzo).
  * Antes de grabar inspecciona archivos: si está completo no escribe; si falta alguno, solo esos.
+ * Si compaux/stkmov existen pero no cierran renglones/kilos del ERP, los borra y regraba.
  */
 final class PedidoFacturaAnitaDeferEjecucionService
 {
@@ -50,6 +51,7 @@ final class PedidoFacturaAnitaDeferEjecucionService
             Log::info('pedido.anita.archivos.completo', [
                 'venta_id' => $ventaId,
                 'presentes' => $inspeccion['presentes'],
+                'detalle' => $inspeccion['detalle'] ?? [],
             ]);
             $this->regrabacion()->marcarOk($ventaId);
 
@@ -57,6 +59,7 @@ final class PedidoFacturaAnitaDeferEjecucionService
         }
 
         $faltantes = $inspeccion['faltantes'];
+        $parciales = is_array($inspeccion['parciales'] ?? null) ? $inspeccion['parciales'] : [];
         $path = PedidoFacturaAnitaArchivosSupport::pathSistema($anitaPendiente);
         $this->facturacionService->prepararGrabacionPedidoAnitaDiferida($path, []);
 
@@ -64,6 +67,17 @@ final class PedidoFacturaAnitaDeferEjecucionService
             $faltantesVenta = array_values(array_diff($faltantes, ['vencae', 'ctamov']));
             if ($faltantesVenta !== [] && is_array($anitaPendiente)) {
                 try {
+                    if ($parciales !== []) {
+                        Log::warning('pedido.anita.detalle_parcial', [
+                            'venta_id' => $ventaId,
+                            'parciales' => $parciales,
+                            'detalle' => $inspeccion['detalle'] ?? [],
+                        ]);
+                        PedidoFacturaAnitaArchivosSupport::borrarTablasDetalleParcial(
+                            $anitaPendiente,
+                            $parciales,
+                        );
+                    }
                     $this->facturacionService->ejecutarAnitaPendientePedidoBierzo(
                         $anitaPendiente,
                         $inspeccion['presentes'],
@@ -72,6 +86,7 @@ final class PedidoFacturaAnitaDeferEjecucionService
                     Log::error('pedido.anita.defer.venta_fallo', [
                         'venta_id' => $ventaId,
                         'faltantes' => $faltantesVenta,
+                        'parciales' => $parciales,
                         'msg' => $e->getMessage(),
                     ]);
                     $this->regrabacion()->marcarError($ventaId, $e->getMessage());

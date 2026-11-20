@@ -12,8 +12,11 @@ final class ComprobanteImpresionReglaClave
 
     public const PROVINCIA_ENTREGA = 'PROVINCIA_ENTREGA';
 
+    public const VENDEDOR = 'VENDEDOR';
+
     /** @var array<string, int> */
     public const PRECEDENCIA = [
+        self::VENDEDOR => 50,
         self::PROVINCIA_ENTREGA => 40,
         self::TRANSPORTE => 30,
         self::EMPRESA => 20,
@@ -28,6 +31,7 @@ final class ComprobanteImpresionReglaClave
             self::EMPRESA => 'Empresa (solo si el programa es de todas)',
             self::TRANSPORTE => 'Transporte / reparto',
             self::PROVINCIA_ENTREGA => 'Provincia de entrega',
+            self::VENDEDOR => 'Vendedor',
         ];
     }
 }

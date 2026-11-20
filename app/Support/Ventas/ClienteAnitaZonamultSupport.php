@@ -204,18 +204,19 @@ final class ClienteAnitaZonamultSupport
         try {
             $api = new ApiAnita;
             $sistema = (string) config('cliente_anita.sistema', 'ventas');
+            // Bierzo Informix: zonamult NO tiene zonm_nombre (error 217). Solo codigo + jurisdicción.
             $intentos = [
                 [
                     'acc' => 'list',
                     'sistema' => $sistema,
                     'tabla' => 'zonamult',
-                    'campos' => 'zonm_codigo,zonm_nombre,zonm_codjur',
+                    'campos' => 'zonm_codigo,zonm_codjur',
                 ],
                 [
                     'acc' => 'list',
                     'sistema' => $sistema,
                     'tabla' => 'zonamult',
-                    'campos' => 'zonm_codigo,zonm_nombre,zonm_codjur',
+                    'campos' => 'zonm_codigo,zonm_codjur',
                     'whereArmado' => ' WHERE zonm_codigo > 0 ',
                 ],
             ];

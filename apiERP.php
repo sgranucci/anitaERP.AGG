@@ -36,6 +36,43 @@ $data['orderBy'] 	 = (array_key_exists('orderBy', $data) ? " ORDER BY ".$data['o
 $data['groupBy'] 	 = (array_key_exists('groupBy', $data) ? " GROUP BY ".$data['groupBy'] : "");
 $data['valores'] 	 = (array_key_exists('valores', $data) ? $data['valores'] : "");
 
+// Defensa: UPDATE/DELETE sin WHERE de clave (incidente 20/nov/2026 ven_impuesto1).
+$acc_safe = isset($data['acc']) ? strtolower(trim($data['acc'])) : '';
+if (($acc_safe == 'update' || $acc_safe == 'delete')
+	&& empty($data['permitir_escritura_masiva'])) {
+	$where_safe = isset($data['whereArmado']) ? trim($data['whereArmado']) : '';
+	$tabla_safe = isset($data['tabla']) ? strtolower(trim($data['tabla'])) : '';
+	$err_where = '';
+	if ($where_safe === '') {
+		$err_where = 'UPDATE/DELETE Anita sin whereArmado: prohibido';
+	} elseif (! preg_match('/\bwhere\b/i', $where_safe)) {
+		$err_where = 'UPDATE/DELETE Anita: whereArmado debe incluir WHERE';
+	} else {
+		$sin_triv = preg_replace('/\bwhere\s+1\s*=\s*1\s*(and\s+)?/i', 'WHERE ', $where_safe);
+		$sin_triv = trim($sin_triv);
+		if ($sin_triv === '' || preg_match('/^\s*where\s*$/i', $sin_triv)) {
+			$err_where = 'UPDATE/DELETE Anita: whereArmado solo WHERE 1=1';
+		} elseif (! preg_match('/\b[a-z_][a-z0-9_]*\s*=\s*(\'[^\']*\'|\d+)/i', $sin_triv)) {
+			$err_where = 'UPDATE/DELETE Anita: whereArmado sin predicado col=valor';
+		}
+	}
+	$tablas_pk = array('venta','vengrav','vencae','venibr','comprob','compaux','climov','stkmov','subdiario','subhist');
+	if ($err_where === '' && in_array($tabla_safe, $tablas_pk)) {
+		$ok_pk = preg_match('/\b\w*_tipo\s*=/i', $where_safe)
+			&& preg_match('/\b\w*_letra\s*=/i', $where_safe)
+			&& preg_match('/\b\w*_sucursal\s*=/i', $where_safe)
+			&& preg_match('/\b\w*_(nro|nro_fact)\s*=/i', $where_safe);
+		if (! $ok_pk) {
+			$err_where = 'UPDATE/DELETE Anita en '.$tabla_safe.': falta tipo+letra+sucursal+nro';
+		}
+	}
+	if ($err_where !== '') {
+		header('Content-Type: application/json; charset=utf-8');
+		echo json_encode(array('Error' => $err_where));
+		exit;
+	}
+}
+
 switch ($data['acc']){
     case 'list':
 		$sql = "UNLOAD TO '".$_nombre_ret."' DELIMITER '|' SELECT ".$data['campos']." FROM ".$data['tabla']." ".$data['whereArmado']." ".$data['groupBy']." ".$data['orderBy'];

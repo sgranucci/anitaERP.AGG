@@ -33,13 +33,13 @@
             }
             var fecha = $.trim($('#import_anita_fecha_entrega').val() || '');
             var reparto = $.trim($('#import_anita_filtro_reparto').val() || '');
-            var msg = 'Se importarán y PISARÁN en ERP los pedidos Anita con entrega ' + fecha;
+            var msg = 'Se importarán desde Anita los pedidos con entrega ' + fecha;
             if (reparto !== '') {
                 msg += ' y repartos ' + reparto;
             } else {
                 msg += ' (todos los repartos)';
             }
-            msg += ', incluidos los ya facturados/transferidos/anulados. Las FAC previas se desvinculan (no se borran) para poder re-facturar. ¿Continuar?';
+            msg += '. Se crean faltantes y se actualizan pendientes; los ya facturados/transferidos/anulados no se tocan. ¿Continuar?';
             if (!window.confirm(msg)) {
                 e.preventDefault();
                 return;

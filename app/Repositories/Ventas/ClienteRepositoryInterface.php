@@ -13,6 +13,13 @@ interface ClienteRepositoryInterface extends RepositoryInterface
     public function actualizarDistribuidorIdDesdeAnita(): array;
     public function actualizarCobradorIdDesdeAnita(): array;
     public function actualizarCoeficienteIdDesdeAnita(bool $persistir = false): array;
+
+    /**
+     * Alinea cliente.estado con clim_estado_cli de Anita (Anita manda; no escribe Informix).
+     *
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_cliente:int, errores:list<string>, ejemplos:list<array<string, mixed>>, por_cambio:array<string, int>}
+     */
+    public function actualizarEstadoDesdeAnita(bool $persistir = false): array;
     public function previewInsertClimaeSqlPorCodigo(string $codigo): string;
     public function updateEmiteNc($id);
     public function findPorCodigo($codigo);

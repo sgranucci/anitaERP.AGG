@@ -26,7 +26,7 @@ class PedidoQueryFerli
         ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '2400');
 
-        return $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')
+        return $this->model->with('clientes:id,codigo,nombre,estado,tiposuspension_id,leyenda')->with('mventas:id,nombre')
                                 ->orderBy('id','desc')
                                 ->with('pedido_combinaciones')
                                 ->get();
@@ -41,9 +41,13 @@ class PedidoQueryFerli
                                 'pedido.fecha as fecha',
                                 'cliente.nombre as nombrecliente',
                                 'pedido.codigo as codigo',
-                                'pedido.estadopedido as estado')
+                                'pedido.estadopedido as estado',
+                                'pedido.cliente_id as cliente_id')
                                 ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
                                 ->with('pedido_combinaciones')
+                                ->with(['clientes' => static function ($clientes): void {
+                                    $clientes->select('id', 'codigo', 'nombre', 'estado', 'tiposuspension_id', 'leyenda');
+                                }])
                                 ->where('cliente.nombre', 'like', '%'.$busqueda.'%')
                                 ->orwhere('pedido.fecha', $busqueda)
                                 ->orwhere('pedido.id', $busqueda)
@@ -64,9 +68,13 @@ class PedidoQueryFerli
                                 'pedido.fecha as fecha',
                                 'cliente.nombre as nombrecliente',
                                 'pedido.codigo as codigo',
-                                'pedido.estadopedido as estado')
+                                'pedido.estadopedido as estado',
+                                'pedido.cliente_id as cliente_id')
                                 ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
                                 ->with('pedido_combinaciones')
+                                ->with(['clientes' => static function ($clientes): void {
+                                    $clientes->select('id', 'codigo', 'nombre', 'estado', 'tiposuspension_id', 'leyenda');
+                                }])
                                 ->where('cliente.nombre', 'like', '%'.$busqueda.'%')
                                 ->orwhere('pedido.fecha', $busqueda)
                                 ->orwhere('pedido.id', $busqueda)

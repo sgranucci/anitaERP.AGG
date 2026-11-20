@@ -57,13 +57,15 @@
             id = $row.find('.transporte_id').val();
         } else if (clave === 'PROVINCIA_ENTREGA') {
             id = $row.find('.provincia_id').val();
+        } else if (clave === 'VENDEDOR') {
+            id = $row.find('.vendedor_id').val();
         }
         $row.find('.regla-valor-id').val(id || '');
     }
 
     function limpiarValorRegla($row) {
-        $row.find('.empresa_id, .transporte_id, .provincia_id, .regla-valor-id').val('');
-        $row.find('.codigoempresa, .nombreempresa, .codigotransporte, .nombretransporte, .codigoprovincia, .nombreprovincia').val('');
+        $row.find('.empresa_id, .transporte_id, .provincia_id, .vendedor_id, .regla-valor-id').val('');
+        $row.find('.codigoempresa, .nombreempresa, .codigotransporte, .nombretransporte, .codigoprovincia, .nombreprovincia, .codigovendedor, .nombrevendedor').val('');
     }
 
     function filtrarValorRegla($row) {
@@ -72,11 +74,18 @@
         $row.find('.regla-valor-empresa').toggle(clave === 'EMPRESA');
         $row.find('.regla-valor-transporte').toggle(clave === 'TRANSPORTE');
         $row.find('.regla-valor-provincia').toggle(clave === 'PROVINCIA_ENTREGA');
+        $row.find('.regla-valor-vendedor').toggle(clave === 'VENDEDOR');
         if (clave === 'DEFAULT') {
             limpiarValorRegla($row);
         } else {
             syncValorRegla($row);
         }
+    }
+
+    function syncTodasLasReglas() {
+        $('#tabla-reglas tr.fila-regla').each(function () {
+            syncValorRegla($(this));
+        });
     }
 
     function aplicarEmpresa($ctx, data) {
@@ -179,7 +188,55 @@
         if (typeof activa_eventos_consultaprovincia === 'function') {
             activa_eventos_consultaprovincia();
         }
+        if (typeof activa_eventos_consultavendedor === 'function') {
+            activa_eventos_consultavendedor();
+        }
         activaConsultaEmpresaPrograma();
+        activaConsultaVendedorPrograma();
+    }
+
+    function activaConsultaVendedorPrograma() {
+        window.onVendedorElegidoEnConsulta = function (data) {
+            if (typeof ptrVendedor_id === 'undefined' || !ptrVendedor_id || !ptrVendedor_id.length) {
+                return false;
+            }
+            var $ctx = ptrVendedor_id.closest('.tm-vendedor-campo');
+            if (!$ctx.length || !$ctx.closest('#tabla-reglas').length) {
+                return false;
+            }
+            $ctx.find('.vendedor_id').val(data && data.id ? data.id : '');
+            $ctx.find('.codigovendedor').val(data && data.codigo ? data.codigo : '');
+            $ctx.find('.nombrevendedor').val(data && data.nombre ? data.nombre : '');
+            syncValorRegla($ctx.closest('tr'));
+            return true;
+        };
+
+        $(document).off('keydown.progVendF1').on('keydown.progVendF1', '#tabla-reglas .codigovendedor', function (e) {
+            if (e.key !== 'F1' && e.keyCode !== 112) {
+                return;
+            }
+            e.preventDefault();
+            $(this).closest('.tm-vendedor-campo').find('.consultavendedor').trigger('click');
+        });
+
+        $(document).off('keydown.progVendEnter').on('keydown.progVendEnter', '#tabla-reglas .codigovendedor', function (e) {
+            if (e.key !== 'Enter' && e.keyCode !== 13) {
+                return;
+            }
+            e.preventDefault();
+            $(this).trigger('change');
+            var $row = $(this).closest('tr');
+            setTimeout(function () {
+                syncValorRegla($row);
+            }, 200);
+        });
+
+        $(document).off('change.progVendSync', '#tabla-reglas .codigovendedor').on('change.progVendSync', '#tabla-reglas .codigovendedor', function () {
+            var $row = $(this).closest('tr');
+            setTimeout(function () {
+                syncValorRegla($row);
+            }, 200);
+        });
     }
 
     function reindexFormularios() {
@@ -461,12 +518,12 @@
             filtrarValorRegla($row);
         });
 
-        $(document).on('click', '.eligeconsultatransporte, .eligeconsultaprovincia', function () {
-            setTimeout(function () {
-                $('#tabla-reglas tr.fila-regla').each(function () {
-                    syncValorRegla($(this));
-                });
-            }, 0);
+        $(document).on('click', '.eligeconsultatransporte, .eligeconsultaprovincia, .eligeconsultavendedor', function () {
+            setTimeout(syncTodasLasReglas, 0);
+        });
+
+        $('#form-general').on('submit', function () {
+            syncTodasLasReglas();
         });
 
         activaConsultasRegla();

@@ -48,4 +48,66 @@ class PedidoFacturaAnitaArchivosSupportTest extends TestCase
             PedidoFacturaAnitaArchivosSupport::resolverPathSistema(null, '00001', $division),
         );
     }
+
+    public function test_expectativa_detalle_cuenta_renglones_y_kilos_del_payload(): void
+    {
+        $esperado = PedidoFacturaAnitaArchivosSupport::expectativaDetalleDesdePayload([
+            'data_factura' => [
+                ['sku' => '117', 'articulo_id' => 20, 'cantidad' => 2.1, 'pieza' => 1, 'caja' => 0.1],
+                ['sku' => '150', 'articulo_id' => 133, 'cantidad' => 2.9, 'pieza' => 1, 'caja' => 0.2],
+                ['sku' => '234', 'articulo_id' => 271, 'cantidad' => 1.8, 'pieza' => 2, 'caja' => 0.1],
+                ['sku' => '331', 'articulo_id' => 150, 'cantidad' => 4.0, 'pieza' => 1, 'caja' => 0.2],
+                ['sku' => '430', 'articulo_id' => 59, 'cantidad' => 6.2, 'pieza' => 1, 'caja' => 0.3],
+                ['sku' => 'texto', 'articulo_id' => null, 'cantidad' => 0, 'pieza' => 0, 'caja' => 0],
+            ],
+        ]);
+
+        $this->assertSame(5, $esperado['compaux_lineas']);
+        $this->assertSame(5, $esperado['stkmov_lineas']);
+        $this->assertEqualsWithDelta(17.0, $esperado['compaux_kilos'], 0.0001);
+        $this->assertEqualsWithDelta(17.0, $esperado['stkmov_kilos'], 0.0001);
+    }
+
+    public function test_expectativa_detalle_omite_texto_en_stkmov_y_lineas_en_cero(): void
+    {
+        $esperado = PedidoFacturaAnitaArchivosSupport::expectativaDetalleDesdePayload([
+            'data_factura' => [
+                ['sku' => '117', 'articulo_id' => 20, 'cantidad' => 2.1, 'pieza' => 1, 'caja' => 0],
+                ['sku' => 'texto', 'articulo_id' => 0, 'cantidad' => 1.0, 'pieza' => 0, 'caja' => 0],
+                ['sku' => '999', 'articulo_id' => 1, 'cantidad' => 0, 'pieza' => 0, 'caja' => 0],
+            ],
+        ]);
+
+        $this->assertSame(2, $esperado['compaux_lineas']);
+        $this->assertEqualsWithDelta(3.1, $esperado['compaux_kilos'], 0.0001);
+        $this->assertSame(1, $esperado['stkmov_lineas']);
+        $this->assertEqualsWithDelta(2.1, $esperado['stkmov_kilos'], 0.0001);
+    }
+
+    public function test_lectura_detalle_corrupta_detecta_csv_ajeno_del_bridge(): void
+    {
+        $esperado = ['lineas' => 5, 'kilos' => 17.0];
+        $skus = ['117', '150', '234', '331', '430'];
+
+        $this->assertTrue(PedidoFacturaAnitaArchivosSupport::lecturaDetalleCorrupta(
+            ['lineas' => 28, 'kilos' => 0.0, 'skus' => ['999']],
+            $esperado,
+            $skus,
+        ));
+        $this->assertTrue(PedidoFacturaAnitaArchivosSupport::lecturaDetalleCorrupta(
+            ['lineas' => 5, 'kilos' => 0.0, 'skus' => $skus],
+            $esperado,
+            $skus,
+        ));
+        $this->assertFalse(PedidoFacturaAnitaArchivosSupport::lecturaDetalleCorrupta(
+            ['lineas' => 2, 'kilos' => 5.0, 'skus' => ['117', '150']],
+            $esperado,
+            $skus,
+        ));
+        $this->assertFalse(PedidoFacturaAnitaArchivosSupport::lecturaDetalleCorrupta(
+            ['lineas' => 5, 'kilos' => 17.0, 'skus' => $skus],
+            $esperado,
+            $skus,
+        ));
+    }
 }

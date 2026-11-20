@@ -9,6 +9,7 @@ use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Salida;
 use App\Models\Ventas\ComprobanteImpresionPrograma;
 use App\Models\Ventas\Transporte;
+use App\Models\Ventas\Vendedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\ComprobanteImpresionProgramaRepositoryInterface;
 use App\Support\Listado\QueryRetornoListado;
@@ -140,7 +141,8 @@ class ProgramaImpresionController extends Controller
             'empresas' => $this->empresaRepository->allFiltrado(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'transportes' => Transporte::query()->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
-            'provincias' => Provincia::query()->orderBy('nombre')->get(['id', 'nombre']),
+            'provincias' => Provincia::query()->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
+            'vendedores' => Vendedor::query()->orderBy('nombre')->get(['id', 'codigo', 'nombre']),
         ];
     }
 }

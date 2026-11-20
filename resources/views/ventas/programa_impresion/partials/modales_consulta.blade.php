@@ -1,5 +1,6 @@
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.configuracion.modalconsultaprovincia')
+@include('includes.ventas.modalconsultavendedor')
 
 <div class="modal fade" id="programa-consulta-empresa-modal" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">

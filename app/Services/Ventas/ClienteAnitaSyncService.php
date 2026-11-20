@@ -93,6 +93,17 @@ class ClienteAnitaSyncService
     }
 
     /**
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_cliente:int, errores:list<string>, ejemplos:list<array<string, mixed>>, por_cambio:array<string, int>}
+     */
+    public function actualizarEstadoDesdeAnita(bool $persistir = false): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        return $this->clienteRepository->actualizarEstadoDesdeAnita($persistir);
+    }
+
+    /**
      * @return list<object>
      */
     public function listarDesdeAnita(): array

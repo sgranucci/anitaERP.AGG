@@ -75,6 +75,8 @@ final class PedidoFacturaAnitaRegrabacionService
             'completo' => (bool) ($inspeccion['completo'] ?? false),
             'presentes' => $inspeccion['presentes'] ?? [],
             'faltantes' => $inspeccion['faltantes'] ?? [],
+            'parciales' => $inspeccion['parciales'] ?? [],
+            'detalle' => $inspeccion['detalle'] ?? [],
             'error' => $inspeccion['error'] ?? null,
             'inspeccionado_at' => now()->toDateTimeString(),
         ];
@@ -266,6 +268,22 @@ final class PedidoFacturaAnitaRegrabacionService
         }
         if ($inspeccion['vacio'] ?? false) {
             return 'Anita vacía: '.implode(', ', $inspeccion['esperados'] ?? []);
+        }
+
+        $parciales = is_array($inspeccion['parciales'] ?? null) ? $inspeccion['parciales'] : [];
+        if ($parciales !== []) {
+            $detalle = is_array($inspeccion['detalle']['anita'] ?? null)
+                ? $inspeccion['detalle']['anita']
+                : [];
+            $partes = [];
+            foreach ($parciales as $tabla) {
+                $desfasaje = is_array($detalle[$tabla] ?? null)
+                    ? (string) ($detalle[$tabla]['desfasaje'] ?? '')
+                    : '';
+                $partes[] = $desfasaje !== '' ? $tabla.': '.$desfasaje : $tabla;
+            }
+
+            return 'Detalle incompleto en Anita ('.implode('; ', $partes).')';
         }
 
         $faltantes = $inspeccion['faltantes'] ?? [];

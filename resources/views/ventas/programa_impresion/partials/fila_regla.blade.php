@@ -6,6 +6,7 @@
     $empresaSel = ($clave === 'EMPRESA' && $valorId) ? collect($empresas ?? [])->firstWhere('id', $valorId) : null;
     $transporteSel = ($clave === 'TRANSPORTE' && $valorId) ? collect($transportes ?? [])->firstWhere('id', $valorId) : null;
     $provinciaSel = ($clave === 'PROVINCIA_ENTREGA' && $valorId) ? collect($provincias ?? [])->firstWhere('id', $valorId) : null;
+    $vendedorSel = ($clave === 'VENDEDOR' && $valorId) ? collect($vendedores ?? [])->firstWhere('id', $valorId) : null;
 @endphp
 <tr class="fila-regla" data-ri="{{ $ri }}">
     <td style="width: 220px;">
@@ -55,6 +56,18 @@
                        placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;" title="C&oacute;digo. F1 = consulta, Enter = resolver">
                 <input type="text" class="form-control form-control-sm nombreprovincia text-truncate" value="{{ $provinciaSel->nombre ?? '' }}"
                        placeholder="Provincia" readonly>
+            </div>
+        </div>
+        <div class="tm-vendedor-campo regla-valor-box regla-valor-vendedor" @if ($clave !== 'VENDEDOR') style="display:none;" @endif>
+            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                <input type="hidden" class="vendedor_id" value="{{ $vendedorSel->id ?? '' }}">
+                <button type="button" title="Consulta vendedores (F1)" class="btn-accion-tabla consultavendedor tooltipsC flex-shrink-0">
+                    <i class="fa fa-search text-primary"></i>
+                </button>
+                <input type="text" class="form-control form-control-sm codigovendedor" value="{{ $vendedorSel->codigo ?? '' }}"
+                       placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;" title="C&oacute;digo. F1 = consulta, Enter = resolver">
+                <input type="text" class="form-control form-control-sm nombrevendedor text-truncate" value="{{ $vendedorSel->nombre ?? '' }}"
+                       placeholder="Vendedor" readonly>
             </div>
         </div>
     </td>

@@ -35,6 +35,14 @@ final class PedidoInterformingFacturacionSupport
             return false;
         }
 
+        $cliente = $pedido->clientes ?? null;
+        if ($cliente && ! ClientePoliticaComercialSupport::permite(
+            $cliente,
+            ClientePoliticaComercialSupport::OP_FACTURA
+        )) {
+            return false;
+        }
+
         foreach ($pedido->pedido_articulos ?? [] as $item) {
             if (self::esItemFacturable($item) && self::cantidadFacturable($item) > 0) {
                 return true;
@@ -42,6 +50,55 @@ final class PedidoInterformingFacturacionSupport
         }
 
         return false;
+    }
+
+    /**
+     * Aviso cuando el pedido tendría cantidad facturable pero la política del cliente corta.
+     */
+    public static function avisoNoFacturablePorPolitica($pedido): ?string
+    {
+        if (! PedidoInterformingSupport::esInterforming()) {
+            return null;
+        }
+
+        if (! can('crear-factura', false) && ! can('editar-pedidos', false)) {
+            return null;
+        }
+
+        if (! is_object($pedido)) {
+            return null;
+        }
+
+        if (PedidoEstadosInterforming::esCabeceraNoFacturable(
+            $pedido->estadopedido ?? null,
+            $pedido->estado ?? null
+        )) {
+            return null;
+        }
+
+        $tieneCantidad = false;
+        foreach ($pedido->pedido_articulos ?? [] as $item) {
+            if (self::esItemFacturable($item) && self::cantidadFacturable($item) > 0) {
+                $tieneCantidad = true;
+                break;
+            }
+        }
+        if (! $tieneCantidad) {
+            return null;
+        }
+
+        $cliente = $pedido->clientes ?? null;
+        if ($cliente && ! ClientePoliticaComercialSupport::permite(
+            $cliente,
+            ClientePoliticaComercialSupport::OP_FACTURA
+        )) {
+            return ClientePoliticaComercialSupport::mensaje(
+                $cliente,
+                ClientePoliticaComercialSupport::OP_FACTURA
+            );
+        }
+
+        return null;
     }
 
     /**

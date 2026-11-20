@@ -317,6 +317,9 @@
                                                 <td>
                                                     @if (!empty($remito['ya_enviado']))
                                                         <span class="badge badge-secondary">Ya emitido</span>
+                                                        @if (($remito['ya_enviado_motivo'] ?? '') === 'factura')
+                                                            <div class="small text-muted">Misma factura</div>
+                                                        @endif
                                                         @if (!empty($remito['cot_previo']))
                                                             <div class="small">COT {{ $remito['cot_previo'] }}</div>
                                                         @endif

@@ -14,7 +14,7 @@ use App\Models\Ventas\Venta;
 final class ComprobanteImpresionResolverSupport
 {
     /**
-     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}
+     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int, vendedor_id: ?int}
      */
     public static function contextoDesdeVenta(Venta $venta): array
     {
@@ -24,12 +24,13 @@ final class ComprobanteImpresionResolverSupport
         $provinciaId = self::provinciaEntregaId(
             $venta->cliente_entrega_id ? (int) $venta->cliente_entrega_id : null
         );
+        $vendedorId = $venta->vendedor_id ? (int) $venta->vendedor_id : null;
 
-        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId);
+        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId, $vendedorId);
     }
 
     /**
-     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}
+     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int, vendedor_id: ?int}
      */
     public static function contextoDesdePedido(Pedido $pedido): array
     {
@@ -39,12 +40,13 @@ final class ComprobanteImpresionResolverSupport
         $provinciaId = self::provinciaEntregaId(
             $pedido->cliente_entrega_id ? (int) $pedido->cliente_entrega_id : null
         );
+        $vendedorId = $pedido->vendedor_id ? (int) $pedido->vendedor_id : null;
 
-        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId);
+        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId, $vendedorId);
     }
 
     /**
-     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}
+     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int, vendedor_id: ?int}
      */
     public static function contextoDesdeRemito(Remito $remito): array
     {
@@ -54,14 +56,15 @@ final class ComprobanteImpresionResolverSupport
         $provinciaId = self::provinciaEntregaId(
             $remito->cliente_entrega_id ? (int) $remito->cliente_entrega_id : null
         );
+        $vendedorId = $remito->vendedor_id ? (int) $remito->vendedor_id : null;
 
-        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId);
+        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId, $vendedorId);
     }
 
     /**
-     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}
+     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int, vendedor_id: ?int}
      */
-    public static function resolver(?int $empresaId, ?int $transporteId, ?int $provinciaEntregaId): array
+    public static function resolver(?int $empresaId, ?int $transporteId, ?int $provinciaEntregaId, ?int $vendedorId = null): array
     {
         $reglas = ComprobanteImpresionRegla::query()
             ->with('programa.formularios.copias.salida')
@@ -71,6 +74,7 @@ final class ComprobanteImpresionResolverSupport
             ->values();
 
         $candidatos = [
+            [ComprobanteImpresionReglaClave::VENDEDOR, $vendedorId],
             [ComprobanteImpresionReglaClave::PROVINCIA_ENTREGA, $provinciaEntregaId],
             [ComprobanteImpresionReglaClave::TRANSPORTE, $transporteId],
             [ComprobanteImpresionReglaClave::EMPRESA, $empresaId],
@@ -101,6 +105,7 @@ final class ComprobanteImpresionResolverSupport
                     'empresa_id' => $empresaId,
                     'transporte_id' => $transporteId,
                     'provincia_entrega_id' => $provinciaEntregaId,
+                    'vendedor_id' => $vendedorId,
                 ];
             }
         }
@@ -135,6 +140,7 @@ final class ComprobanteImpresionResolverSupport
             'empresa_id' => $empresaId,
             'transporte_id' => $transporteId,
             'provincia_entrega_id' => $provinciaEntregaId,
+            'vendedor_id' => $vendedorId,
         ];
     }
 

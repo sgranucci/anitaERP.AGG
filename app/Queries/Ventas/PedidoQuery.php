@@ -87,6 +87,9 @@ class PedidoQuery implements PedidoQueryInterface
         $query = $this->aplicarOrdenIndexPorReparto(
             $this->queryPedidoIndexFiltros($filtros)
                 ->with('pedido_articulos')
+                ->with(['clientes' => static function ($clientes): void {
+                    $clientes->select('id', 'codigo', 'nombre', 'estado', 'tiposuspension_id', 'leyenda');
+                }])
                 ->with(['ventas' => static function ($ventas): void {
                     $ventas->select('id', 'pedido_id', 'codigo', 'puntoventa_id');
                 }])

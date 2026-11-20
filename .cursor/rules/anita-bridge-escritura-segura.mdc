@@ -1,0 +1,64 @@
+---
+description: Anita bridge — UPDATE/DELETE solo con WHERE de clave; nunca masivo; agente no escribe sin OK
+alwaysApply: true
+---
+
+# Anita bridge: escritura segura (Informix)
+
+Incidente 20/nov/2026 (El Bierzo): un `UPDATE venta SET ven_impuesto1 = …` **sin WHERE de clave** (o demasiado amplio) pisó `ven_impuesto1` en casi todo el archivo (`289672.54` = IVA de FAC A-10-7451). Totales/gravado seguían bien; `vengrav` conservó el IVA real. Las FAC nuevas desde ~7498 ya graban cabecera correcta; el histórico quedó corrupto en cabecera.
+
+Complementa `base-datos-no-escribir-sin-preguntar.mdc` y `comandos-actualizacion-dry-run-obligatorio.mdc`. El bridge es **otra base de producción** (Informix), no solo MySQL.
+
+## Prohibido (agente y código nuevo)
+
+```php
+// ❌ UPDATE/DELETE sin whereArmado, vacío, o solo WHERE 1=1
+'acc' => 'update', 'tabla' => 'venta', 'valores' => " ven_impuesto1='…' ", 'whereArmado' => ''
+'whereArmado' => ' WHERE 1=1 '
+
+// ❌ WHERE que no identifica el comprobante (actualiza miles)
+'whereArmado' => " WHERE ven_tipo='FAC' "
+'whereArmado' => " WHERE ven_fecha='20261119' "
+
+// ❌ Tinker / script que escribe en Anita “para probar” o “alinear”
+php artisan tinker --execute="(new ApiAnita)->apiCallEscritura([...'update'...])"
+```
+
+## Obligatorio en UPDATE/DELETE
+
+1. **`whereArmado` con predicados de clave** que identifiquen **una** fila (o un conjunto mínimo y explícito).
+2. Tablas de comprobante (`venta`, `vengrav`, `vencae`, `comprob`, `climov`, `compaux`, `stkmov`, `venibr`, …): **tipo + letra + sucursal + número** (nombres `ven_*` / `veng_*` / `cliv_*` / etc.).
+3. **Antes de ejecutar** (agente): `acc=list` / `COUNT` con el **mismo WHERE** → mostrar filas que se tocarían → **preguntar y esperar OK**. Silencio ≠ autorización.
+4. Si el COUNT da **más de 5** filas: no ejecutar; mostrar el número y pedir OK explícito al alcance (“sí, actualizá esas N”).
+5. Código: usar `ApiAnita::apiCallEscritura` (no `apiCall` crudo para escritura). El bridge **rechaza** UPDATE/DELETE inseguros (`assertWhereArmadoEscrituraSeguro`).
+
+## Correcto
+
+```php
+'acc' => 'update',
+'tabla' => 'venta',
+'valores' => " ven_impuesto1='1454418.61' ",
+'whereArmado' => " WHERE ven_tipo='FAC' AND ven_letra='A' AND ven_sucursal='10' AND ven_nro='7452' ",
+```
+
+## INSERT
+
+- Una fila por llamada; valores de **esa** operación (IVA/gravado desde conceptos / `vengrav` / ERP de ese comprobante).
+- No reutilizar un `$dataCAE` / importe de otra factura en un loop sin recalcular.
+
+## Lectura vs escritura
+
+- `acc=list` / `customSql` de solo lectura: OK sin preguntar.
+- Cualquier `insert` / `update` / `delete` desde consola, tinker o comando: **dry-run + OK del operador** (igual que MySQL).
+
+## Reparaciones masivas
+
+No “UPDATE venta SET ven_impuesto1 = (SELECT …)” a ciegas. Plan: dry-run por comprobante (cabecera vs `vengrav`/ERP) → mostrar N afectados → OK → aplicar **de a uno** (PK completa) o lote chico con flag explícito de masivo **y** tope.
+
+## Comprobación rápida
+
+```bash
+rg "acc'\s*=>\s*'update'|acc\"\s*=>\s*\"update" app --glob '*.php' -l
+rg "whereArmado'\s*=>\s*''|whereArmado\"\s*=>\s*\"\"|WHERE 1=1" app --glob '*.php'
+php -l app/ApiAnita.php
+```

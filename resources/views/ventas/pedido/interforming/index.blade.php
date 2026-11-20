@@ -231,6 +231,10 @@ Pedidos Interforming
                                             <a href="#" class="btn-accion-tabla tooltipsC btn-facturar-pedido-index" data-pedido-id="{{ $pedido->id }}" title="Facturar">
                                                 <i class="fas fa-file-invoice text-success"></i>
                                             </a>
+                                        @elseif (!empty($puedeFacturarIndex) && ($avisoFacturar = PedidoInterformingFacturacionSupport::avisoNoFacturablePorPolitica($pedido)))
+                                            <span class="btn-accion-tabla tooltipsC text-muted" title="{{ $avisoFacturar }}">
+                                                <i class="fas fa-file-invoice text-warning"></i>
+                                            </span>
                                         @endif
                                         @if (can('editar-pedidos', false))
                                             <a href="{{ route('editar_pedido', ['id' => $pedido->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">

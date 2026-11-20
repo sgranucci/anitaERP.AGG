@@ -15,7 +15,10 @@
         <td>{{ $pedido->clientes->codigo ?? '' }}</td>
         @break
     @case ('cliente')
-        <td>{{ $pedido->clientes->codigo ?? '' }} — {{ $pedido->clientes->nombre ?? '' }}</td>
+        <td>
+            {{ $pedido->clientes->codigo ?? '' }} — {{ $pedido->clientes->nombre ?? '' }}
+            @include('ventas.pedido.partials.cliente_politica_badge', ['pedido' => $pedido])
+        </td>
         @break
     @case ('orden_compra')
         <td>{{ $pedido->orden_compra }}</td>

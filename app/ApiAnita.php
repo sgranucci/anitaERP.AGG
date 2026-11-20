@@ -187,14 +187,20 @@ class ApiAnita
             }
 
             $trimIntento = trim((string) $response);
+            // Reintentar con el body crudo: parsearRespuestaLista a veces pierde
+            // "failed to open stream" / Permission denied (warnings PHP + []) y el
+            // error_lectura queda genérico ("no parseable") → sin reintento el numerador REM falla.
             if (
                 $esLectura
                 && $intento < $maxIntentos
                 && $httpCode < 400
                 && $response !== false
                 && $trimIntento !== ''
-                && self::esErrorCsvUnloadFaltante(
-                    self::parsearRespuestaLista($trimIntento)['error_lectura']
+                && (
+                    self::esErrorCsvUnloadFaltante(
+                        self::parsearRespuestaLista($trimIntento)['error_lectura']
+                    )
+                    || self::esErrorCsvUnloadFaltante($trimIntento)
                 )
             ) {
                 Log::warning('anita_bridge.list_csv_faltante_reintento', [
@@ -307,7 +313,8 @@ class ApiAnita
     }
 
     /**
-     * true si el bridge no llegó a generar/abrir el CSV del UNLOAD (colisión de cmd_sql o SQL fallido).
+     * true si el bridge no llegó a generar/abrir el CSV del UNLOAD
+     * (colisión de cmd_sql, Permission denied al crear .sql, o SQL fallido).
      */
     public static function esErrorCsvUnloadFaltante(?string $mensaje): bool
     {
@@ -318,10 +325,12 @@ class ApiAnita
         $m = $mensaje;
 
         return stripos($m, 'failed to open stream') !== false
+            || stripos($m, 'Permission denied') !== false
             || stripos($m, 'UNLOAD no generó el archivo CSV') !== false
             || stripos($m, 'not a valid stream resource') !== false
             || stripos($m, 'INFORMIXSERVER value is not listed') !== false
-            || (stripos($m, 'fopen(') !== false && stripos($m, '.csv') !== false);
+            || (stripos($m, 'fopen(') !== false && stripos($m, '.csv') !== false)
+            || (stripos($m, 'fopen(') !== false && stripos($m, '.sql') !== false);
     }
 
     /**
@@ -461,6 +470,11 @@ class ApiAnita
         }
 
         if ($limpia === '' && preg_match('/\b(?:Warning|Notice|Fatal error|Parse error)\b/i', $trim)) {
+            // Conservar keywords de fopen/permiso para que el reintento de list los detecte.
+            if (self::esErrorCsvUnloadFaltante($trim)) {
+                return $trim;
+            }
+
             return 'Advertencia PHP en bridge Anita (actualice apiERP.php en el servidor)';
         }
 
@@ -486,6 +500,23 @@ class ApiAnita
             $tabla = $payload['tabla'] ?? 'sql';
             $acc = $payload['acc'] ?? '';
             $contexto = trim($tabla.' '.$acc);
+        }
+
+        $errWhere = self::mensajeWhereArmadoInseguro(
+            (string) ($payload['acc'] ?? ''),
+            (string) ($payload['tabla'] ?? ''),
+            (string) ($payload['whereArmado'] ?? ''),
+            ! empty($payload['permitir_escritura_masiva']),
+        );
+        if ($errWhere !== null) {
+            Log::error($logEvento, [
+                'contexto' => $contexto,
+                'tabla' => $payload['tabla'] ?? null,
+                'acc' => $payload['acc'] ?? null,
+                'mensaje' => $errWhere,
+                'whereArmado' => $payload['whereArmado'] ?? null,
+            ]);
+            throw new \RuntimeException('Error al grabar en Anita ('.$contexto.'): '.$errWhere);
         }
 
         $raw = (string) $this->apiCall($payload);
@@ -542,16 +573,27 @@ class ApiAnita
             return ['filas' => [], 'error_lectura' => null];
         }
 
+        // Warnings PHP (fopen cmd_sql) antes del JSON: si el SQL no corrió, no tratar como lista vacía.
+        if (self::esErrorCsvUnloadFaltante($trim)) {
+            return ['filas' => [], 'error_lectura' => $trim];
+        }
+
         $err = self::extraerMensajeError($trim);
         if ($err !== null) {
             return ['filas' => [], 'error_lectura' => $err];
         }
 
-        if (preg_match('/(\[[\s\S]*\])\s*$/', $trim, $m)) {
-            $trim = $m[1];
+        // Limpiar warnings y tomar el JSON final. No usar regex guloso sobre '[':
+        // el texto "[function.fopen]" del Warning se come hasta el [] y rompe el parseo.
+        $limpia = trim(self::limpiarRespuestaBridgeEscritura($trim));
+        if ($limpia === '' || $limpia === '[]') {
+            return ['filas' => [], 'error_lectura' => null];
+        }
+        if (preg_match('/(\[[\s\S]*\])\s*$/', $limpia, $m)) {
+            $limpia = $m[1];
         }
 
-        $decoded = json_decode($trim, false);
+        $decoded = json_decode($limpia, false);
         if ($decoded === null) {
             return ['filas' => [], 'error_lectura' => 'Respuesta Anita no parseable como JSON'];
         }
@@ -595,6 +637,71 @@ class ApiAnita
         return $tipo === 'HTTP';
     }
 
+    /**
+     * Tablas de comprobante: UPDATE/DELETE exige tipo+letra+sucursal+número.
+     * Incidente 20/nov/2026: UPDATE venta.ven_impuesto1 sin WHERE de clave.
+     *
+     * @var list<string>
+     */
+    private const TABLAS_COMPROBANTE_PK = [
+        'venta', 'vengrav', 'vencae', 'venibr', 'comprob', 'compaux',
+        'climov', 'stkmov', 'subdiario', 'subhist',
+    ];
+
+    /**
+     * Rechaza UPDATE/DELETE que puedan barrer la tabla Informix.
+     * Devuelve mensaje de error o null si el WHERE es aceptable.
+     */
+    public static function mensajeWhereArmadoInseguro(
+        string $acc,
+        string $tabla,
+        string $whereArmado,
+        bool $permitirEscrituraMasiva = false,
+    ): ?string {
+        $acc = strtolower(trim($acc));
+        if ($acc !== 'update' && $acc !== 'delete') {
+            return null;
+        }
+
+        if ($permitirEscrituraMasiva) {
+            return null;
+        }
+
+        $where = trim($whereArmado);
+        if ($where === '') {
+            return 'UPDATE/DELETE Anita sin whereArmado: prohibido (riesgo de tabla completa)';
+        }
+
+        if (! preg_match('/\bwhere\b/i', $where)) {
+            return 'UPDATE/DELETE Anita: whereArmado debe incluir WHERE';
+        }
+
+        // Quitar ruido WHERE 1=1 … AND … y exigir al menos un col = literal.
+        $sinTrivial = preg_replace('/\bwhere\s+1\s*=\s*1\s*(and\s+)?/i', 'WHERE ', $where) ?? $where;
+        $sinTrivial = trim($sinTrivial);
+        if ($sinTrivial === '' || preg_match('/^\s*where\s*$/i', $sinTrivial)) {
+            return 'UPDATE/DELETE Anita: whereArmado solo con WHERE 1=1 (sin clave)';
+        }
+
+        if (! preg_match('/\b[a-z_][a-z0-9_]*\s*=\s*(?:\'[^\']*\'|\d+)/i', $sinTrivial)) {
+            return 'UPDATE/DELETE Anita: whereArmado sin predicado col=valor';
+        }
+
+        $tablaNorm = strtolower(trim($tabla));
+        if (in_array($tablaNorm, self::TABLAS_COMPROBANTE_PK, true)) {
+            $tieneTipo = (bool) preg_match('/\b\w*_tipo\s*=/i', $where);
+            $tieneLetra = (bool) preg_match('/\b\w*_letra\s*=/i', $where);
+            $tieneSucursal = (bool) preg_match('/\b\w*_sucursal\s*=/i', $where);
+            $tieneNro = (bool) preg_match('/\b\w*_(?:nro|nro_fact)\s*=/i', $where);
+            if (! ($tieneTipo && $tieneLetra && $tieneSucursal && $tieneNro)) {
+                return 'UPDATE/DELETE Anita en '.$tablaNorm
+                    .': whereArmado debe incluir tipo+letra+sucursal+nro (PK de comprobante)';
+            }
+        }
+
+        return null;
+    }
+
     public function apiCall($data)
     {
         // dd('anita.bridge'.env('ANITA_BRIDGE_TYPE'));
@@ -604,6 +711,26 @@ class ApiAnita
         $t0 = $timingActivo ? microtime(true) : null;
 
         try {
+            $accGuard = strtolower(trim((string) ($data['acc'] ?? '')));
+            if ($accGuard === 'update' || $accGuard === 'delete') {
+                $errWhere = self::mensajeWhereArmadoInseguro(
+                    $accGuard,
+                    (string) ($data['tabla'] ?? ''),
+                    (string) ($data['whereArmado'] ?? ''),
+                    ! empty($data['permitir_escritura_masiva']),
+                );
+                if ($errWhere !== null) {
+                    Log::error('anita_bridge.escritura_where_inseguro', [
+                        'acc' => $accGuard,
+                        'tabla' => $data['tabla'] ?? null,
+                        'whereArmado' => $data['whereArmado'] ?? null,
+                        'mensaje' => $errWhere,
+                    ]);
+
+                    return json_encode(['Error' => $errWhere]);
+                }
+            }
+
             if ($this->usaBridgeHttp()) {
                 return $this->apiCallHttp($data);
             }

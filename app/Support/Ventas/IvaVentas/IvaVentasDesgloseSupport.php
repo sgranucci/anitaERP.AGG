@@ -109,6 +109,29 @@ final class IvaVentasDesgloseSupport
     }
 
     /**
+     * Suma IVA liquidado desde conceptos de pie (excluye Percepcion IVA / PNC).
+     * Usar al grabar ven_impuesto1 / comp_iva: no confiar en data_cae.iva si vino contaminado.
+     *
+     * @param  list<array{concepto?: string, importe?: float|int|string}>  $conceptos
+     */
+    public static function importeIvaLiquidadoDesdeConceptos(array $conceptos): float
+    {
+        $iva = 0.0;
+        foreach ($conceptos as $concepto) {
+            if (! is_array($concepto)) {
+                continue;
+            }
+            $nombre = (string) ($concepto['concepto'] ?? '');
+            if (! self::esConceptoIvaLiquidado($nombre)) {
+                continue;
+            }
+            $iva += (float) ($concepto['importe'] ?? 0);
+        }
+
+        return round($iva, 2);
+    }
+
+    /**
      * @return array{
      *   no_gravado: float,
      *   exento: float,

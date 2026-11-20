@@ -98,6 +98,7 @@ class ComprobanteImpresionSesionService
                 'empresa_id' => null,
                 'transporte_id' => null,
                 'provincia_entrega_id' => null,
+                'vendedor_id' => null,
             ],
             $pack,
             'COT',
@@ -1012,6 +1013,7 @@ class ComprobanteImpresionSesionService
             'empresa_id' => $contexto['empresa_id'] ?? null,
             'transporte_id' => $contexto['transporte_id'] ?? null,
             'provincia_entrega_id' => $contexto['provincia_entrega_id'] ?? null,
+            'vendedor_id' => $contexto['vendedor_id'] ?? null,
             'programa' => $programa ? [
                 'id' => $programa->id,
                 'codigo' => $programa->codigo,

@@ -7,6 +7,8 @@ alwaysApply: true
 
 Este entorno es **producción** (`anitaERP`). El agente puede **consultar** (SELECT, `count()`, `explain`) sin permiso. **No** puede persistir nada hasta que el operador lo autorice en el chat.
 
+Incluye **Informix vía Anita bridge** (`ApiAnita` insert/update/delete): misma regla de OK explícito. Ver `anita-bridge-escritura-segura.mdc` (WHERE de clave obligatorio; incidente 20/nov/2026 `ven_impuesto1`).
+
 Incidente 1/sep/2026: el pedido «confirmar cierre de módulos al 31/8/2026 contables» se interpretó como ejecutar. Un tinker registró 3 `contable_periodo_cierre` (`mod_contable` al 31/08) sin POST a la pantalla y sin pregunta previa. Complementa `comandos-actualizacion-dry-run-obligatorio.mdc` y `produccion-bd-y-tests.mdc`.
 
 ## Obligatorio antes de cualquier escritura

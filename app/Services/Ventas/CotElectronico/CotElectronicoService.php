@@ -4,6 +4,7 @@ namespace App\Services\Ventas\CotElectronico;
 
 use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\CotSesionEnvio;
+use App\Support\Ventas\CotFacturaEmitidaSupport;
 use App\Support\Ventas\CotImporteRemitoSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
@@ -81,6 +82,15 @@ class CotElectronicoService
             return [
                 'ok' => false,
                 'mensaje' => 'No hay remitos seleccionados para procesar.',
+                'resultados' => [],
+            ];
+        }
+
+        $bloqueoFactura = $this->validarFacturasSinCotDuplicado($remitos);
+        if ($bloqueoFactura !== null) {
+            return [
+                'ok' => false,
+                'mensaje' => $bloqueoFactura,
                 'resultados' => [],
             ];
         }
@@ -359,6 +369,8 @@ class CotElectronicoService
         array $archivo,
         array $detalle,
     ): CotRemitoEnvio {
+        $identidad = CotFacturaEmitidaSupport::identidadDesdeFila($fila);
+
         return CotRemitoEnvio::query()->create([
             'cot_sesion_envio_id' => $sesion->id,
             'tipo' => (string) ($fila['tipo'] ?? 'REM'),
@@ -367,6 +379,10 @@ class CotElectronicoService
             'numero_remito' => (int) ($fila['numero_remito'] ?? 0),
             'fecha_remito' => (string) ($fila['fecha_remito'] ?? now()->toDateString()),
             'venta_id' => (int) ($fila['venta_id'] ?? 0) ?: null,
+            'factura_tipo' => $identidad['tipo'] ?? null,
+            'factura_letra' => $identidad['letra'] ?? null,
+            'factura_sucursal' => $identidad['sucursal'] ?? null,
+            'factura_numero' => $identidad['numero'] ?? null,
             'transporte_id' => (int) ($fila['transporte_id'] ?? 0) ?: null,
             'cliente_id' => (int) ($fila['cliente_id'] ?? 0) ?: null,
             'cliente_nombre' => trim((string) ($fila['cliente_nombre'] ?? '')),
@@ -378,6 +394,93 @@ class CotElectronicoService
             'error' => $detalle['error'] ?? null,
             'usuario_id' => Auth::id(),
         ]);
+    }
+
+    /**
+     * No permite dos COT de la misma factura en el lote ni contra envíos exitosos previos.
+     *
+     * @param  list<array<string, mixed>>  $remitos
+     */
+    private function validarFacturasSinCotDuplicado(array $remitos): ?string
+    {
+        $vistasEnLote = [];
+        $duplicadasEnLote = [];
+        $ventaIds = [];
+        $clavesFactura = [];
+
+        foreach ($remitos as $fila) {
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
+            if ($ventaId > 0) {
+                $ventaIds[] = $ventaId;
+            }
+
+            $clave = CotFacturaEmitidaSupport::claveDesdeFila($fila);
+            if ($clave === '') {
+                continue;
+            }
+            $clavesFactura[] = $clave;
+            $etiqueta = CotFacturaEmitidaSupport::etiqueta(
+                CotFacturaEmitidaSupport::identidadDesdeFila($fila) ?? [
+                    'tipo' => 'FAC',
+                    'letra' => 'A',
+                    'sucursal' => 0,
+                    'numero' => 0,
+                ]
+            );
+            $remitoNro = (int) ($fila['numero_remito'] ?? 0);
+
+            if (isset($vistasEnLote[$clave])) {
+                $duplicadasEnLote[] = $etiqueta.' (remitos '
+                    .$vistasEnLote[$clave]
+                    .' y '
+                    .$remitoNro
+                    .')';
+            } else {
+                $vistasEnLote[$clave] = $remitoNro;
+            }
+        }
+
+        if ($duplicadasEnLote !== []) {
+            return 'No se genera el COT: la misma factura está más de una vez en la selección '
+                .'(remito regenerado u origen Anita + ERP). Facturas: '
+                .implode('; ', $duplicadasEnLote)
+                .'. Desmarcá el remito duplicado o volvé a consultar.';
+        }
+
+        $previosPorVenta = CotRemitoEnvio::ultimosExitososPorVentaId($ventaIds);
+        $previosPorFactura = CotRemitoEnvio::ultimosExitososPorClaveFactura($clavesFactura);
+        $yaEmitidas = [];
+
+        foreach ($remitos as $fila) {
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
+            $envio = $ventaId > 0 ? $previosPorVenta->get($ventaId) : null;
+            $clave = CotFacturaEmitidaSupport::claveDesdeFila($fila);
+            if ($envio === null && $clave !== '') {
+                $envio = $previosPorFactura->get($clave);
+            }
+            if ($envio === null) {
+                continue;
+            }
+
+            $identidad = CotFacturaEmitidaSupport::identidadDesdeFila($fila);
+            $etiqueta = $identidad !== null
+                ? CotFacturaEmitidaSupport::etiqueta($identidad)
+                : ('venta #'.$ventaId);
+            $yaEmitidas[] = $etiqueta
+                .' (COT '
+                .trim((string) $envio->cot)
+                .', remito '
+                .(int) $envio->numero_remito
+                .')';
+        }
+
+        if ($yaEmitidas === []) {
+            return null;
+        }
+
+        return 'No se genera el COT: esas facturas ya tienen COT emitido. '
+            .implode('; ', array_values(array_unique($yaEmitidas)))
+            .'. No se permite un segundo COT de la misma factura.';
     }
 
     /** @param  array<string, mixed>  $fila */

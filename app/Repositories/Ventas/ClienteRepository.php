@@ -566,6 +566,123 @@ class ClienteRepository implements ClienteRepositoryInterface
      *   ejemplos:list<array{codigo:string, clim_coef:string, coeficiente_id_erp:?int, coeficiente_id_anita:?int}>
      * }
      */
+    /**
+     * Alinea cliente.estado con clim_estado_cli (Anita → ERP). Dry-run si $persistir = false.
+     *
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_cliente:int, errores:list<string>, ejemplos:list<array<string, mixed>>, por_cambio:array<string, int>}
+     */
+    public function actualizarEstadoDesdeAnita(bool $persistir = false): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $ret = [
+            'en_anita' => 0,
+            'actualizados' => 0,
+            'omitidos' => 0,
+            'sin_cliente' => 0,
+            'errores' => [],
+            'ejemplos' => [],
+            'por_cambio' => [],
+        ];
+
+        $api = new ApiAnita();
+        $payload = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[0],
+            'campos' => $this->keyFieldAnita.', clim_nombre, clim_estado_cli',
+            'sistema' => 'ventas',
+        ];
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($payload));
+        if ($parsed['error_lectura'] !== null) {
+            throw new \RuntimeException($parsed['error_lectura']);
+        }
+
+        /** @var array<string, Cliente> $porCodigo */
+        $porCodigo = [];
+        foreach ($this->model->newQuery()->get(['id', 'codigo', 'nombre', 'estado', 'tiposuspension_id']) as $cliente) {
+            foreach ($this->variantesCodigoCliente((string) $cliente->codigo) as $variante) {
+                $porCodigo[$variante] = $cliente;
+            }
+            $norm = $this->normalizarCodigoCliente((string) $cliente->codigo);
+            if ($norm !== '') {
+                $porCodigo[$norm] = $cliente;
+            }
+        }
+
+        $etiquetas = Cliente::$enumEstado;
+        $yaProcesados = [];
+
+        foreach ($parsed['filas'] as $row) {
+            $ret['en_anita']++;
+            $codigo = trim((string) ($row->{$this->keyFieldAnita} ?? ''));
+            if ($codigo === '') {
+                $ret['omitidos']++;
+
+                continue;
+            }
+
+            try {
+                $cliente = null;
+                foreach ($this->variantesCodigoCliente($codigo) as $variante) {
+                    if (isset($porCodigo[$variante])) {
+                        $cliente = $porCodigo[$variante];
+                        break;
+                    }
+                }
+                if ($cliente === null) {
+                    $ret['sin_cliente']++;
+
+                    continue;
+                }
+
+                $clienteId = (int) $cliente->id;
+                if (isset($yaProcesados[$clienteId])) {
+                    $ret['omitidos']++;
+
+                    continue;
+                }
+                $yaProcesados[$clienteId] = true;
+
+                $estadoAnita = $this->mapEstadoClienteDesdeAnita($row->clim_estado_cli ?? null);
+                $estadoErp = (string) ($cliente->estado ?? Cliente::ESTADO_ACTIVO);
+                if ($estadoErp === $estadoAnita) {
+                    $ret['omitidos']++;
+
+                    continue;
+                }
+
+                $claveCambio = $estadoErp.'→'.$estadoAnita;
+                $ret['por_cambio'][$claveCambio] = (int) ($ret['por_cambio'][$claveCambio] ?? 0) + 1;
+
+                if (count($ret['ejemplos']) < 40) {
+                    $ret['ejemplos'][] = [
+                        'codigo' => (string) $cliente->codigo,
+                        'nombre' => mb_substr(trim((string) ($cliente->nombre ?? $row->clim_nombre ?? '')), 0, 40),
+                        'estado_erp' => $estadoErp,
+                        'etiqueta_erp' => $etiquetas[$estadoErp] ?? $estadoErp,
+                        'estado_anita' => $estadoAnita,
+                        'etiqueta_anita' => $etiquetas[$estadoAnita] ?? $estadoAnita,
+                        'anita_raw' => (string) ($row->clim_estado_cli ?? ''),
+                    ];
+                }
+
+                if ($persistir) {
+                    $cliente->estado = $estadoAnita;
+                    if ($estadoAnita === Cliente::ESTADO_REGULARIZADO) {
+                        $cliente->tiposuspension_id = null;
+                    }
+                    $cliente->save();
+                }
+                $ret['actualizados']++;
+            } catch (\Throwable $e) {
+                $ret['errores'][] = "Cliente Anita {$this->keyFieldAnita}={$codigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
+    }
+
     public function actualizarCoeficienteIdDesdeAnita(bool $persistir = false): array
     {
         ini_set('memory_limit', '-1');

@@ -11,6 +11,7 @@ use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\CotGuiaRepository;
+use App\Support\Ventas\CotFacturaEmitidaSupport;
 use App\Support\Ventas\CotGuiaFacturaIdentidadSupport;
 use App\Support\Ventas\CotGuiaSuburbanoSupport;
 use App\Support\Ventas\CotImporteRemitoSupport;
@@ -430,11 +431,22 @@ class CotGuiaService
             );
         }
 
+        $identidadFactura = CotGuiaFacturaIdentidadSupport::normalizar(
+            $tipoFactura,
+            $letraFactura,
+            $sucursalFactura,
+            $numeroFactura,
+        );
+        if (CotFacturaEmitidaSupport::clave($identidadFactura) === '') {
+            $identidadFactura = null;
+        }
+
         $fila = CotImporteRemitoSupport::aplicarAFila([
             'clave' => implode('|', ['REM', 'R', 1, $numeroRemito]),
             'origen' => 'cot_guia',
             'remito_id' => ((int) ($datos['remito_id'] ?? 0)) ?: null,
             'venta_id' => ((int) ($linea->venta_id ?: ($datos['venta_id'] ?? 0))) ?: null,
+            'factura_identidad' => $identidadFactura,
             'anita' => [
                 'fuente' => 'guia',
                 'tipo' => $tipoFactura,

@@ -98,6 +98,7 @@ function eliminarPedido(event) {
         						</td>
         						<td>
             						<b>{{ $pedido['nombrecliente'] ?? '' }}</b>
+                                    @include('ventas.pedido.partials.cliente_politica_badge', ['pedido' => $pedido])
         						</td>
         						<td>
             						{{ $pedido['nombremarca'] ?? '' }}

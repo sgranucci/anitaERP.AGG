@@ -60,41 +60,123 @@ final class PedidoListadoSupport
      */
     public static function puedeFacturarDesdeIndex($pedido): bool
     {
+        return self::diagnosticoFacturarDesdeIndex($pedido)['puede'];
+    }
+
+    /**
+     * Por qué no se puede facturar desde el index (solo si el pedido está listo salvo política u otro corte claro).
+     */
+    public static function avisoNoFacturableDesdeIndex($pedido): ?string
+    {
+        $diag = self::diagnosticoFacturarDesdeIndex($pedido);
+        if ($diag['puede']) {
+            return null;
+        }
+
+        return $diag['aviso'];
+    }
+
+    /**
+     * Badge de política comercial del cliente para el listado (null si NORMAL).
+     *
+     * @return array{etiqueta: string, clase: string, titulo: string}|null
+     */
+    public static function badgePoliticaCliente($pedido): ?array
+    {
+        $cliente = self::clienteDelPedido($pedido);
+        if ($cliente === null) {
+            return null;
+        }
+
+        $payload = ClientePoliticaComercialSupport::payload($cliente);
+        $politica = (string) ($payload['politica'] ?? ClientePoliticaComercialSupport::NORMAL);
+        if ($politica === ClientePoliticaComercialSupport::NORMAL) {
+            return null;
+        }
+
+        $etiqueta = (string) ($payload['etiqueta'] ?? $politica);
+        $titulo = trim((string) ($payload['banner'] ?? $etiqueta));
+        $msgFactura = trim((string) ($payload['mensajes'][ClientePoliticaComercialSupport::OP_FACTURA] ?? ''));
+        if ($msgFactura !== '') {
+            $titulo = $msgFactura;
+        }
+
+        $clase = match ($politica) {
+            ClientePoliticaComercialSupport::BLOQUEADO => 'badge-danger',
+            ClientePoliticaComercialSupport::MOROSO => 'badge-warning',
+            ClientePoliticaComercialSupport::PROFORMA => 'badge-info',
+            default => 'badge-secondary',
+        };
+
+        return [
+            'etiqueta' => $etiqueta,
+            'clase' => $clase,
+            'titulo' => $titulo !== '' ? $titulo : $etiqueta,
+        ];
+    }
+
+    /**
+     * @return array{puede: bool, aviso: ?string}
+     */
+    private static function diagnosticoFacturarDesdeIndex($pedido): array
+    {
         if (! self::usuarioPuedeFacturarPedido()) {
-            return false;
+            return ['puede' => false, 'aviso' => null];
         }
 
         $etiqueta = trim((string) ($pedido->estadopedido ?? $pedido->estado ?? $pedido['estado'] ?? ''));
         $estadoErp = (string) ($pedido->estado_erp ?? '');
 
         if ($etiqueta !== 'Pendiente') {
-            return false;
+            return ['puede' => false, 'aviso' => null];
         }
         if (PedidoEstadoErpSupport::esTransferido($estadoErp !== '' ? $estadoErp : null, $etiqueta)) {
-            return false;
+            return ['puede' => false, 'aviso' => null];
         }
         if (ClienteDespachoSupport::esPedidoDespacho((int) ($pedido->cliente_id ?? 0))) {
-            return false;
+            return ['puede' => false, 'aviso' => null];
         }
 
-        $clientePedido = $pedido->clientes ?? null;
-        if ($clientePedido && ! ClientePoliticaComercialSupport::permite(
-            $clientePedido,
-            ClientePoliticaComercialSupport::OP_FACTURA
-        )) {
-            return false;
-        }
-
+        $tienePesada = false;
         foreach ($pedido->pedido_articulos ?? [] as $item) {
             if (! PedidoEstadoErpSupport::esItemPendienteFacturable($item->estado ?? null)) {
                 continue;
             }
             if ((float) ($item->pesada ?? 0) > 0) {
-                return true;
+                $tienePesada = true;
+                break;
             }
         }
 
-        return false;
+        if (! $tienePesada) {
+            return ['puede' => false, 'aviso' => null];
+        }
+
+        $clientePedido = self::clienteDelPedido($pedido);
+        if ($clientePedido && ! ClientePoliticaComercialSupport::permite(
+            $clientePedido,
+            ClientePoliticaComercialSupport::OP_FACTURA
+        )) {
+            return [
+                'puede' => false,
+                'aviso' => ClientePoliticaComercialSupport::mensaje(
+                    $clientePedido,
+                    ClientePoliticaComercialSupport::OP_FACTURA
+                ),
+            ];
+        }
+
+        return ['puede' => true, 'aviso' => null];
+    }
+
+    private static function clienteDelPedido($pedido): ?\App\Models\Ventas\Cliente
+    {
+        $cliente = $pedido->clientes ?? null;
+        if ($cliente instanceof \App\Models\Ventas\Cliente) {
+            return $cliente;
+        }
+
+        return null;
     }
 
     /**

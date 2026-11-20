@@ -189,6 +189,7 @@ use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
 use App\Support\Ventas\FacturaLineaPrecioImpresionSupport;
 use App\Support\Ventas\FacturacionAnitaGrabacionSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Exception;
@@ -6328,6 +6329,7 @@ class FacturacionService
 				$totalImpuestoInterno += $concepto['importe'];
 			}
 		}
+		$this->alinearIvaCabeceraAnitaDesdeConceptos($dataCAE, $conceptostotales, $venta);
 
 		$vendedor = $this->codigoVendedorAnitaParaGraba($venta, $cliente);
 		$cobrador = $this->codigoCobradorAnitaParaGraba($cliente);
@@ -6421,7 +6423,7 @@ class FacturacionService
 
 		$filasVengrav = [];
 		foreach ($conceptostotales as $concepto) {
-			if (strpos($concepto['concepto'], 'Iva') === false) {
+			if (! IvaVentasDesgloseSupport::esConceptoIvaLiquidado((string) ($concepto['concepto'] ?? ''))) {
 				continue;
 			}
 			$filasVengrav[] = [
@@ -6847,6 +6849,29 @@ class FacturacionService
 		}
 	}
 
+	/**
+	 * ven_impuesto1 / comp_iva: siempre desde conceptos de IVA liquidado.
+	 * Un data_cae.iva contaminado (p. ej. stripos «Iva» + «Percepcion IVA») no debe ir a Anita.
+	 *
+	 * @param  array<string, mixed>  $dataCAE
+	 * @param  list<array<string, mixed>>  $conceptostotales
+	 * @param  array<string, mixed>  $venta
+	 */
+	private function alinearIvaCabeceraAnitaDesdeConceptos(array &$dataCAE, array $conceptostotales, array $venta): void
+	{
+		$ivaLiquidado = IvaVentasDesgloseSupport::importeIvaLiquidadoDesdeConceptos($conceptostotales);
+		$ivaPayload = round((float) ($dataCAE['iva'] ?? 0), 2);
+		if (abs($ivaPayload - $ivaLiquidado) >= 0.02) {
+			Log::warning('facturacion.anita.iva_cabecera_corregido', [
+				'codigo' => (string) ($venta['codigo'] ?? ''),
+				'numero' => $venta['numerocomprobante'] ?? null,
+				'iva_payload' => $ivaPayload,
+				'iva_conceptos' => $ivaLiquidado,
+			]);
+		}
+		$dataCAE['iva'] = $ivaLiquidado;
+	}
+
 	private function grabaAnitaBody($puntoventa, $letra, $puntoventaremito, $numeroremito, $venta, 
 								$dataCAE, $conceptostotales, $cuentacorriente, $datatalle, $signo, 
 								$codigoTipoTransaccion, $pedido_id,
@@ -6924,6 +6949,7 @@ class FacturacionService
 			if (strpos($concepto['concepto'], 'Impuesto Interno') !== false)
 				$totalImpuestoInterno += $concepto['importe'];
 		}
+		$this->alinearIvaCabeceraAnitaDesdeConceptos($dataCAE, $conceptostotales, $venta);
 		// Lee comisiones
 		$vendedor = $this->codigoVendedorAnitaParaGraba($venta, $cliente);
 		$cobrador = $this->codigoCobradorAnitaParaGraba($cliente);
@@ -7201,7 +7227,7 @@ class FacturacionService
 			if ($this->debeOmitirTablaAnita('vengrav')) {
 				break;
 			}
-			if (strpos($concepto['concepto'], 'Iva') === false) {
+			if (! IvaVentasDesgloseSupport::esConceptoIvaLiquidado((string) ($concepto['concepto'] ?? ''))) {
 				continue;
 			}
 

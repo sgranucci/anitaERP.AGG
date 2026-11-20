@@ -86,6 +86,21 @@ class ValidacionProgramaImpresion extends FormRequest
             if ($empresaId > 0 && ! app(EmpresaRepositoryInterface::class)->empresaIdPermitida($empresaId)) {
                 $validator->errors()->add('empresa_id', 'No tiene asignada esa empresa.');
             }
+            foreach ($this->input('reglas', []) as $idx => $fila) {
+                if (! is_array($fila)) {
+                    continue;
+                }
+                $clave = (string) ($fila['clave'] ?? '');
+                if ($clave === '' || $clave === ComprobanteImpresionReglaClave::DEFAULT) {
+                    continue;
+                }
+                if ((int) ($fila['valor_id'] ?? 0) <= 0) {
+                    $validator->errors()->add(
+                        'reglas.'.$idx.'.valor_id',
+                        'La regla «'.(ComprobanteImpresionReglaClave::etiquetas()[$clave] ?? $clave).'» necesita un valor.'
+                    );
+                }
+            }
             if (! $this->boolean('plan_con_envios')) {
                 return;
             }

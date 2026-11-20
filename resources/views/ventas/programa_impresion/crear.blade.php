@@ -11,6 +11,7 @@
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/transporte/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/vendedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/programa_impresion/form.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/programa_impresion/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 

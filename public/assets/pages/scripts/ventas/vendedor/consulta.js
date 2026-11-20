@@ -24,6 +24,8 @@ function aplicarVendedorEnContexto($ctx, data) {
         $ctx.find('.codigovendedor').val(data.codigo);
         $ctx.find('.nombrevendedor').val(data.nombre);
         actualizarLinkEditarVendedor($ctx, data.id);
+        // Con contexto de fila (varios campos en la misma pantalla) no pisar el primero.
+        return;
     }
 
     $('#vendedor_id').val(data.id);
@@ -38,6 +40,7 @@ function limpiarVendedorEnContexto($ctx) {
         $ctx.find('.codigovendedor').val('');
         $ctx.find('.nombrevendedor').val('');
         actualizarLinkEditarVendedor($ctx, 0);
+        return;
     }
 
     $('#vendedor_id').val('');
@@ -125,13 +128,11 @@ function activa_eventos_consultavendedor()
         }
 
         if (ptrVendedor_id && ptrVendedor_id.length) {
-            ptrVendedor_id.val(data.id);
-            ptrCodigoVendedor_id.val(data.codigo);
-            ptrNombreVendedor.val(data.nombre);
-            actualizarLinkEditarVendedor(ptrVendedor_id.closest('.tm-vendedor-campo'), data.id);
+            var $ctxElegido = ptrVendedor_id.closest('.tm-vendedor-campo');
+            aplicarVendedorEnContexto($ctxElegido.length ? $ctxElegido : null, data);
+        } else {
+            aplicarVendedorEnContexto($('.tm-vendedor-campo').first(), data);
         }
-
-        aplicarVendedorEnContexto($('.tm-vendedor-campo').first(), data);
         $('#consultavendedorModal').modal('hide');
     });
 

@@ -139,7 +139,10 @@ function eliminarPedido(event) {
                                 <td class="text-nowrap">{{ PedidoListadoSupport::codigoParaListado($pedido) }}</td>
                                 <td>{{ date('d-m-Y', strtotime($pedido['fecha'] ?? '')) }}</td>
                                 <td>{{ date('d-m-Y', strtotime($pedido['fechaentrega'] ?? '')) }}</td>
-                                <td><b>{{ $pedido['nombrecliente'] ?? '' }}</b></td>
+                                <td>
+                                    <b>{{ $pedido['nombrecliente'] ?? '' }}</b>
+                                    @include('ventas.pedido.partials.cliente_politica_badge', ['pedido' => $pedido])
+                                </td>
                                 <td>{{ PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
                                 <td>{{ PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
                                 <td>{{ PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
@@ -183,6 +186,11 @@ function eliminarPedido(event) {
                                            data-pedido-id="{{ $pedido['id'] }}">
                                             <i class="fas fa-file-invoice text-success"></i>
                                         </a>
+                                    @elseif ($avisoFacturar = PedidoListadoSupport::avisoNoFacturableDesdeIndex($pedido))
+                                        <span class="btn-accion-tabla tooltipsC text-muted"
+                                              title="{{ $avisoFacturar }}">
+                                            <i class="fas fa-file-invoice text-warning"></i>
+                                        </span>
                                     @endif
                                     @foreach (PedidoListadoSupport::ventasVisiblesParaIndex($pedido) as $ventaPedido)
                                         <a href="{{ route('lista_una_factura', array_filter(['id' => $ventaPedido->id, 'retorno' => $retornoImpresionPath])) }}"

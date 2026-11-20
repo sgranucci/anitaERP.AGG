@@ -389,33 +389,78 @@ class VentaRepository implements VentaRepositoryInterface
 
         // El Bierzo + Anita: reservar acá (avance síncrono). Con réplica diferida el
         // numeraAnita de grabaAnita corre después y dejaba N facturas con el mismo remito.
+        // Reintenta ante fallos transitorios del bridge (Permission denied/cmd_sql,
+        // lectura vacía de numerador bajo carga concurrente con la cola diferida).
         if (EntornoEmpresaSupport::esElBierzo()) {
-            try {
-                PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
-                $reservado = $this->numeraAnita((string) $tipo, (string) $letra, (string) $sucursal);
-                PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
-                if (! is_int($reservado) || $reservado <= 0) {
+            $maxIntentos = max(5, (int) config('anita.bridge_csv_faltante_reintentos', 3));
+            $ultimoError = null;
+            PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
+            for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+                try {
+                    $reservado = $this->numeraAnita((string) $tipo, (string) $letra, (string) $sucursal);
+                    if (is_int($reservado) && $reservado > 0) {
+                        if ($intento > 1) {
+                            Log::info('ventas.remito.numerador_anita_ok_reintento', [
+                                'tipo' => $tipo,
+                                'letra' => $letra,
+                                'sucursal' => $sucursal,
+                                'numero' => $reservado,
+                                'intento' => $intento,
+                            ]);
+                        }
+                        PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+
+                        return $reservado;
+                    }
+
+                    $ultimoError = is_string($reservado) ? $reservado : 'reserva_invalida';
+                    $reintentar = $intento < $maxIntentos
+                        && $this->esErrorNumeradorAnitaReintentable($ultimoError);
                     Log::error('ventas.remito.numerador_anita_reserva_fallida', [
                         'tipo' => $tipo,
                         'letra' => $letra,
                         'sucursal' => $sucursal,
                         'resultado' => $reservado,
+                        'intento' => $intento,
+                        'reintenta' => $reintentar,
                     ]);
+                    if ($reintentar) {
+                        usleep(300000 * $intento);
+                        continue;
+                    }
+                    break;
+                } catch (\Throwable $e) {
+                    $ultimoError = $e->getMessage();
+                    $reintentar = $intento < $maxIntentos
+                        && $this->esErrorNumeradorAnitaReintentable($ultimoError);
+                    Log::error('ventas.remito.numerador_anita_no_disponible', [
+                        'tipo' => $tipo,
+                        'letra' => $letra,
+                        'sucursal' => $sucursal,
+                        'error' => $ultimoError,
+                        'intento' => $intento,
+                        'reintenta' => $reintentar,
+                    ]);
+                    if ($reintentar) {
+                        usleep(300000 * $intento);
+                        continue;
+                    }
+
+                    PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
 
                     return 'error';
                 }
-
-                return $reservado;
-            } catch (\Throwable $e) {
-                Log::error('ventas.remito.numerador_anita_no_disponible', [
-                    'tipo' => $tipo,
-                    'letra' => $letra,
-                    'sucursal' => $sucursal,
-                    'error' => $e->getMessage(),
-                ]);
-
-                return 'error';
             }
+            PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+            Log::error('ventas.remito.numerador_anita_agotado', [
+                'tipo' => $tipo,
+                'letra' => $letra,
+                'sucursal' => $sucursal,
+                'error' => $ultimoError,
+                'intentos' => $maxIntentos,
+            ]);
+
+            return 'error';
         }
 
         // Lee numerador desde anita
@@ -487,6 +532,12 @@ class VentaRepository implements VentaRepositoryInterface
 
         $filaCompe = ApiAnita::primeraFilaLista((string) $rawCompe);
         if ($filaCompe === null || ! isset($filaCompe->compe_numero)) {
+            // Vacío bajo carga del bridge: reintentable. Sin fila real de compemis también.
+            $trimCompe = trim((string) $rawCompe);
+            if ($trimCompe === '' || $trimCompe === '[]') {
+                return 'Error al leer compemis: respuesta vacia del bridge';
+            }
+
             return 0;
         }
 
@@ -513,7 +564,8 @@ class VentaRepository implements VentaRepositoryInterface
 
         $filaNumerador = ApiAnita::primeraFilaLista((string) $rawNumerador);
         if ($filaNumerador === null || ! isset($filaNumerador->num_ult_numero)) {
-            return 'Error al actualizar numerador';
+            // Antes decía "actualizar": era lectura vacía (carrera bridge / cmd_sql).
+            return 'Error al leer numerador: respuesta vacia del bridge';
         }
 
         $numero = (int) $filaNumerador->num_ult_numero + 1;
@@ -528,13 +580,44 @@ class VentaRepository implements VentaRepositoryInterface
         if (isset($path_sistema)) {
             $data['path_sistema'] = $path_sistema;
         }
-        $numerador = $apiAnita->apiCallEscritura($data);
-
-        if (ApiAnita::extraerMensajeError($numerador) !== null) {
-            return 'Error al actualizar numerador';
-        }
+        // exigirFilasAfectadas: [] / 0 rows bajo carga no se toma como OK silencioso.
+        $apiAnita->apiCallEscritura(
+            $data,
+            'numerador update',
+            'facturacion.anita_bridge.fallo',
+            true,
+        );
 
         return $numero;
+    }
+
+    /**
+     * Fallos del bridge al reservar remito que conviene reintentar (carga concurrente,
+     * cmd_sql Permission denied, list vacío). No reintenta ausencia real de compemis (0).
+     */
+    private function esErrorNumeradorAnitaReintentable(?string $mensaje): bool
+    {
+        if ($mensaje === null || trim($mensaje) === '') {
+            return false;
+        }
+
+        if (ApiAnita::esErrorCsvUnloadFaltante($mensaje) || ApiAnita::esErrorCurlTransitorio($mensaje)) {
+            return true;
+        }
+
+        $m = mb_strtolower($mensaje);
+
+        return str_contains($m, 'error al actualizar numerador')
+            || str_contains($m, 'error al leer numerador')
+            || str_contains($m, 'error al leer compemis')
+            || str_contains($m, 'respuesta vacia')
+            || str_contains($m, 'respuesta vacía')
+            || str_contains($m, 'sin respuesta del bridge')
+            || str_contains($m, 'respuesta vacía del bridge')
+            || str_contains($m, 'advertencia php en bridge')
+            || str_contains($m, 'error al grabar en anita')
+            || str_contains($m, '0 filas afectadas')
+            || str_contains($m, 'sin confirmación de filas afectadas');
     }
 
     /**

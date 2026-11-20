@@ -10,6 +10,7 @@ use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\Remito;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ArbaCotProvinciaSupport;
+use App\Support\Ventas\CotFacturaEmitidaSupport;
 use App\Support\Ventas\CotGuiaFacturaIdentidadSupport;
 use App\Support\Ventas\CotImporteRemitoSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
@@ -76,7 +77,9 @@ class CotRemitoConsultaService
         $erp = $this->listarDesdeRemitoErp($fecha, $transporteIds, $repartosPorId);
 
         // Físico primero: pendmae > ERP > factura Anita (sucursal 1 no debe tapar REM R 99 N).
+        // Luego una sola fila por factura (ERP gana si el remito se regeneró).
         $filas = $this->fusionarRemitosSinDuplicar([$pendmae, $erp, $comprob]);
+        $filas = $this->fusionarPorFactura($filas);
         $filas = $this->aplicarImportesVentaAnita($filas);
         $filas = $this->completarImportesDesdeVentaErp($filas);
         $filas = $this->marcarEnviosPrevios($filas);
@@ -306,11 +309,22 @@ class CotRemitoConsultaService
             'factura_anita' => $importeVentaAnita,
         ]);
 
+        $identidadFactura = CotGuiaFacturaIdentidadSupport::normalizar(
+            trim((string) ($row->comp_tipo ?? '')),
+            trim((string) ($row->comp_letra ?? '')),
+            (int) ($row->comp_sucursal ?? 0),
+            (int) ($row->comp_nro_fact ?? 0),
+        );
+        if (CotFacturaEmitidaSupport::clave($identidadFactura) === '') {
+            $identidadFactura = null;
+        }
+
         return CotImporteRemitoSupport::aplicarAFila([
             'clave' => $this->claveRemito('REM', 'R', $sucursal, $numeroRemito),
             'origen' => 'anita_comprob',
             'remito_id' => null,
             'venta_id' => null,
+            'factura_identidad' => $identidadFactura,
             'anita' => [
                 'fuente' => 'comprob',
                 'tipo' => trim((string) ($row->comp_tipo ?? '')),
@@ -327,12 +341,14 @@ class CotRemitoConsultaService
             'fecha_remito' => $fechaRemito->format('Y-m-d'),
             'fecha_factura' => $fechaRemito->format('d/m/Y'),
             'desde_factura' => true,
-            'factura_codigo' => trim((string) ($row->comp_tipo ?? ''))
-                .trim((string) ($row->comp_letra ?? ''))
-                .'-'
-                .str_pad((string) (int) ($row->comp_sucursal ?? 0), 5, '0', STR_PAD_LEFT)
-                .'-'
-                .str_pad((string) (int) ($row->comp_nro_fact ?? 0), 8, '0', STR_PAD_LEFT),
+            'factura_codigo' => $identidadFactura !== null
+                ? CotFacturaEmitidaSupport::etiqueta($identidadFactura)
+                : (trim((string) ($row->comp_tipo ?? ''))
+                    .trim((string) ($row->comp_letra ?? ''))
+                    .'-'
+                    .str_pad((string) (int) ($row->comp_sucursal ?? 0), 5, '0', STR_PAD_LEFT)
+                    .'-'
+                    .str_pad((string) (int) ($row->comp_nro_fact ?? 0), 8, '0', STR_PAD_LEFT)),
             'cliente_codigo' => (string) ($cliente->codigo ?? ltrim($codigoClienteAnita, '0')),
             'cliente_nombre' => trim((string) ($cliente->nombre ?? $codigoClienteAnita)),
             'transporte_id' => (int) ($reparto['transporte_id'] ?? 0) ?: null,
@@ -404,6 +420,7 @@ class CotRemitoConsultaService
             'origen' => 'anita_pendmae',
             'remito_id' => null,
             'venta_id' => null,
+            'factura_identidad' => null,
             'anita' => [
                 'fuente' => 'pendmae',
                 'tipo' => trim((string) ($row->penm_tipo ?? 'REM')),
@@ -475,19 +492,14 @@ class CotRemitoConsultaService
         ];
         $facturaCodigo = $identidadFactura === null
             ? ''
-            : sprintf(
-                '%s %s-%04d-%08d',
-                $identidadFactura['tipo'],
-                $identidadFactura['letra'],
-                $identidadFactura['sucursal'],
-                $identidadFactura['numero']
-            );
+            : CotFacturaEmitidaSupport::etiqueta($identidadFactura);
 
         return CotImporteRemitoSupport::aplicarAFila([
             'clave' => $this->claveRemito('REM', 'R', $sucursal, $numeroRemito),
             'origen' => 'erp',
             'remito_id' => (int) $remito->id,
             'venta_id' => (int) ($remito->venta_id ?? 0) ?: null,
+            'factura_identidad' => $identidadFactura,
             'anita' => $anita,
             'cliente_id' => (int) ($cliente->id ?? 0) ?: null,
             'tipo' => 'REM',
@@ -744,7 +756,7 @@ class CotRemitoConsultaService
     }
 
     /**
-     * Contrasta la grilla contra cot_remito_envio (persistencia por remito).
+     * Contrasta la grilla contra cot_remito_envio (por remito, venta o factura).
      * Si ya hay COT exitoso, la fila queda emitida y no se puede volver a presentar.
      *
      * @param  list<array<string, mixed>>  $filas
@@ -753,20 +765,50 @@ class CotRemitoConsultaService
     private function marcarEnviosPrevios(array $filas): array
     {
         $numeros = [];
+        $ventaIds = [];
+        $clavesFactura = [];
         foreach ($filas as $fila) {
             $numero = (int) ($fila['numero_remito'] ?? 0);
             if ($numero > 0) {
                 $numeros[] = $numero;
             }
+            $ventaId = (int) ($fila['venta_id'] ?? 0);
+            if ($ventaId > 0) {
+                $ventaIds[] = $ventaId;
+            }
+            $claveFactura = CotFacturaEmitidaSupport::claveDesdeFila($fila);
+            if ($claveFactura !== '') {
+                $clavesFactura[] = $claveFactura;
+            }
         }
 
-        $envios = CotRemitoEnvio::ultimosExitososPorClave($numeros);
+        $enviosPorRemito = CotRemitoEnvio::ultimosExitososPorClave($numeros);
+        $enviosPorVenta = CotRemitoEnvio::ultimosExitososPorVentaId($ventaIds);
+        $enviosPorFactura = CotRemitoEnvio::ultimosExitososPorClaveFactura($clavesFactura);
 
         foreach ($filas as $i => $fila) {
             $clave = $this->claveLogicaRemito($fila);
-            $envio = $clave !== '' ? $envios->get($clave) : null;
+            $envio = $clave !== '' ? $enviosPorRemito->get($clave) : null;
+            $motivo = $envio !== null ? 'remito' : null;
+
+            if ($envio === null) {
+                $ventaId = (int) ($fila['venta_id'] ?? 0);
+                if ($ventaId > 0) {
+                    $envio = $enviosPorVenta->get($ventaId);
+                    $motivo = $envio !== null ? 'factura' : null;
+                }
+            }
+
+            if ($envio === null) {
+                $claveFactura = CotFacturaEmitidaSupport::claveDesdeFila($fila);
+                if ($claveFactura !== '') {
+                    $envio = $enviosPorFactura->get($claveFactura);
+                    $motivo = $envio !== null ? 'factura' : null;
+                }
+            }
 
             $filas[$i]['ya_enviado'] = $envio !== null;
+            $filas[$i]['ya_enviado_motivo'] = $motivo;
             $filas[$i]['cot_previo'] = $envio?->cot;
             $filas[$i]['nro_unico_previo'] = $envio?->nro_unico;
             $filas[$i]['sesion_previa_id'] = $envio?->cot_sesion_envio_id;
@@ -801,6 +843,42 @@ class CotRemitoConsultaService
         }
 
         return $filas;
+    }
+
+    /**
+     * Una sola fila por factura: si Anita dejó un remito viejo y el ERP regeneró otro, gana el ERP.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarPorFactura(array $filas): array
+    {
+        $mejorPorFactura = [];
+        $sinFactura = [];
+
+        foreach ($filas as $fila) {
+            $claveFactura = CotFacturaEmitidaSupport::claveDesdeFila($fila);
+            if ($claveFactura === '') {
+                $sinFactura[] = $fila;
+
+                continue;
+            }
+
+            if (! isset($mejorPorFactura[$claveFactura])) {
+                $mejorPorFactura[$claveFactura] = $fila;
+
+                continue;
+            }
+
+            $actual = $mejorPorFactura[$claveFactura];
+            if (CotFacturaEmitidaSupport::prioridadOrigen($fila)
+                < CotFacturaEmitidaSupport::prioridadOrigen($actual)
+            ) {
+                $mejorPorFactura[$claveFactura] = $fila;
+            }
+        }
+
+        return array_values(array_merge(array_values($mejorPorFactura), $sinFactura));
     }
 
     /**

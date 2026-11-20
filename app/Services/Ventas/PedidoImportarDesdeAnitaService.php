@@ -129,7 +129,7 @@ class PedidoImportarDesdeAnitaService
     /**
      * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
      * @param  bool  $soloNuevos  Si true, no pisa cabeceras; crea faltantes y trae pesada solo si el ERP no la tiene.
-     * @param  bool  $forzarPisar  Si true (botón index), pisa cabecera/líneas aunque el pedido esté facturado/transferido/anulado.
+     * @param  bool  $forzarPisar  Si true, pisa cabecera/líneas aunque el pedido esté facturado/transferido/anulado (no usar desde el index).
      * @return array{
      *   creados: int,
      *   actualizados: int,

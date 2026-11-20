@@ -243,7 +243,11 @@ class VendedorController extends Controller
             && ! can('listar-factura', false)
             && ! can('generar-nota-de-credito', false)
             && ! can('listar-analisis-entregas', false)
-            && ! can('listar-pedidos', false)) {
+            && ! can('listar-pedidos', false)
+            && ! can('listar-programa-impresion', false)
+            && ! can('crear-programa-impresion', false)
+            && ! can('editar-programa-impresion', false)
+            && ! can('actualizar-programa-impresion', false)) {
             abort(403);
         }
 
