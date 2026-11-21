@@ -165,8 +165,8 @@
 @if ($alertaFicha)
     <h3 style="margin:18px 0 6px 0;">Diferencias proveedor por proveedor</h3>
     <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
-        Revisar motivos posibles: aplicaciones posteriores al corte, importes multi-moneda,
-        renglones de ficha sin deuda abierta, o ajustes previos.
+        Revisar motivos posibles: importes multi-moneda, renglones de ficha sin deuda abierta,
+        o ajustes previos. Las aplicaciones posteriores al corte ya no bajan la deuda.
     </p>
     <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#f5b7b1; color:#17202A;">
