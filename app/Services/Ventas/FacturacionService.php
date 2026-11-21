@@ -5694,6 +5694,27 @@ class FacturacionService
 							'cliente_cuentacorriente_aplicado_id' => $cliente_cuentacorriente->id // Apunta a nota de credito que aplica
 						];
 						$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
+
+						// ND/DIM/NER contra NC: deshacer apps NCP→FAC que la ND acaba de anular en ficha.
+						if ($signo > 0 && $venta_id > 0) {
+							$ventaOrigenCc = $this->ventaRepository->find($venta_id);
+							$tipoOrigenCc = $ventaOrigenCc?->tipotransacciones;
+							if ($tipoOrigenCc && $tipoOrigenCc->esNotaCredito()) {
+								$borradas = NotaDebitoReversionNotaCreditoSupport::desaplicarNcDeFacturas(
+									(int) $ccOrigen->id,
+									(int) $cliente_cuentacorriente->id
+								);
+								if ($borradas > 0) {
+									Log::info('facturacion.nd_reversion_desaplica_nc_fac', [
+										'venta_nd_id' => (int) $vta->id,
+										'venta_nc_id' => (int) $venta_id,
+										'cc_nc_id' => (int) $ccOrigen->id,
+										'cc_nd_id' => (int) $cliente_cuentacorriente->id,
+										'apps_borradas' => $borradas,
+									]);
+								}
+							}
+						}
 					}
 				}
 			}

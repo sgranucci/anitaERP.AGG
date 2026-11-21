@@ -29,34 +29,31 @@ class ProveedorCuentacorrienteDeudaFichaAuditorMail extends Mailable
         $fecha = (string) ($this->informe['fecha_fmt'] ?? $this->informe['fecha'] ?? '');
         $alertaFicha = ! empty($this->informe['alerta_ficha']);
         $alertaDelta = ! empty($this->informe['alerta_delta']);
+        $alertaIe = ! empty($this->informe['alerta_ie']);
         $variacion = $this->informe['delta_mayor']['variacion_conjunto'] ?? null;
         $variacionTxt = $variacion === null
             ? 'base'
             : number_format((float) $variacion, 2, ',', '.');
         $cantidad = (int) ($this->informe['grupos_total'] ?? count($this->informe['grupos'] ?? []));
+        $ieCantidad = (int) ($this->informe['ie_cuentas_controladas_total'] ?? 0);
 
         // Nombre de empresa primero: en la bandeja se distinguen aunque el resto del asunto se vea igual.
-        if ($alertaFicha && $alertaDelta) {
+        $partesAlerta = [];
+        if ($alertaFicha) {
+            $partesAlerta[] = 'ficha '.$cantidad;
+        }
+        if ($alertaDelta) {
+            $partesAlerta[] = 'delta '.$variacionTxt;
+        }
+        if ($alertaIe) {
+            $partesAlerta[] = 'I/E '.$ieCantidad;
+        }
+        if ($partesAlerta !== []) {
             $asunto = sprintf(
-                '%s — Deuda vs ficha y delta conjunto — %s — ALERTA (ficha %d, delta %s)',
+                '%s — Deuda vs ficha / delta / I/E — %s — ALERTA (%s)',
                 $empresa,
                 $fecha,
-                $cantidad,
-                $variacionTxt
-            );
-        } elseif ($alertaDelta) {
-            $asunto = sprintf(
-                '%s — Delta proveedores + anticipos — %s — ALERTA (%s)',
-                $empresa,
-                $fecha,
-                $variacionTxt
-            );
-        } elseif ($alertaFicha) {
-            $asunto = sprintf(
-                '%s — Deuda vs ficha proveedores — %s — ALERTA (%d)',
-                $empresa,
-                $fecha,
-                $cantidad
+                implode(', ', $partesAlerta)
             );
         } else {
             $asunto = sprintf(

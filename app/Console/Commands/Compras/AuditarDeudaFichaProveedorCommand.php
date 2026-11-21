@@ -69,18 +69,20 @@ class AuditarDeudaFichaProveedorCommand extends Command
                 : (abs((float) $variacion) >= (float) ($delta['tolerancia'] ?? 1)
                     ? number_format((float) $variacion, 2, ',', '.')
                     : 'estable');
+            $ieN = (int) ($empresa['ie_cuentas_controladas_total'] ?? 0);
             $filas[] = [
                 $empresa['empresa_id'],
                 $empresa['empresa_nombre'],
                 ! empty($empresa['requiere_alerta']) ? 'ALERTA' : 'OK',
                 (string) ($empresa['grupos_total'] ?? 0),
                 $estadoDelta,
+                $ieN > 0 ? (string) $ieN : '—',
                 ! empty($empresa['mail_enviado'])
                     ? ('sí → '.$empresa['mail_destino'])
                     : (! empty($empresa['mail_error']) ? 'error: '.$empresa['mail_error'] : 'no'),
             ];
         }
-        $this->table(['Empresa', 'Nombre', 'Estado', 'Dif. ficha', 'Delta conjunto', 'Mail'], $filas);
+        $this->table(['Empresa', 'Nombre', 'Estado', 'Dif. ficha', 'Delta conjunto', 'I/E ctrl', 'Mail'], $filas);
 
         $this->info(sprintf(
             'Mails enviados: %d · omitidos: %d',

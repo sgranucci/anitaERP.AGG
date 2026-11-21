@@ -6,6 +6,21 @@ Empresa **1 — C.Ferli SA** · expresión **origen** · tabla `proveedor_deuda_
 El número que se controla es el **delta conjunto** = delta proveedores + delta anticipos  
 (`mayor − deuda` por cuenta, en pesos, signo del mayor).
 
+### I/E sobre cuentas controladas (desde 21/11/2026)
+
+Los asientos de **ingresos/egresos** (`asiento.caja_movimiento_id`) **no entran** en el mayor del delta.  
+Si imputan una cuenta controlada (p. ej. `211100002 PROVEEDORES DEL EXTERIOR`) se listan en el mail como aviso aparte para administración. No disparan el salto del conjunto.
+
+---
+
+## Alerta 21/11/2026 — I/E OPP (Adriana) no deben mover el conjunto
+
+Ficha deuda vs ficha: **cuadrada** (0). Mail en rojo solo por delta conjunto (+131.177.197,28), todo en **211100002**.
+
+Origen: 4 I/E tipo OPP (cm 110944–110947 / nros 46430–46433), usuario **adriana**, 20/11 ~17:05–17:17, medio cuentacaja `2000 PROVEEDORES DEL EXTERIOR`, **sin** `pagoproveedor_id` ni renglón de CC. Asientos 185956–185959 (Haber exterior + Debe cuero/plantillas/mercadería).
+
+Con el filtro de I/E: esos movimientos **salen del delta** y figuran en la sección «Ingresos / egresos sobre cuentas controladas».
+
 ---
 
 ## Base vigente (aceptada)

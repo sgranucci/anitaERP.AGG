@@ -20,6 +20,8 @@ use Throwable;
  * Cada cuenta se guarda por día. El mail avisa si se movió la suma de los dos
  * deltas. Una aplicación no la mueve: debita una cuenta y acredita la otra.
  * Anticipos solo mira OPA (sin factura anticipada / recepción: van a otro auditor).
+ * Los I/E (`caja_movimiento`) no entran en el delta; si tocan una cuenta
+ * controlada se listan aparte para avisar a administración.
  * No graba ajustes de ficha. La deuda es la verdad.
  */
 final class ProveedorCuentacorrienteDeudaFichaAuditorService
@@ -85,6 +87,8 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
             $resumen = $informe['resumen'] ?? [];
             $delta = $this->deltaMayor->controlar((int) $empresa->id, $fecha, $toleranciaDelta);
             $conjuntoMovio = ! empty($delta['conjunto_movio']);
+            $alertaIe = ! empty($delta['ie_alerta']);
+            $ieFilas = array_values($delta['ie_cuentas_controladas'] ?? []);
             $paquete = [
                 'fecha' => $fecha,
                 'fecha_fmt' => Carbon::parse($fecha)->format('d/m/Y'),
@@ -92,25 +96,31 @@ final class ProveedorCuentacorrienteDeudaFichaAuditorService
                 'empresa_id' => (int) $empresa->id,
                 'empresa_nombre' => trim((string) $empresa->nombre),
                 'tolerancia' => $tolerancia,
-                'requiere_alerta' => $hayDiferencia || $conjuntoMovio,
+                'requiere_alerta' => $hayDiferencia || $conjuntoMovio || $alertaIe,
                 'alerta_ficha' => $hayDiferencia,
                 'alerta_delta' => $conjuntoMovio,
+                'alerta_ie' => $alertaIe,
                 'alerta_anticipos' => false,
                 'resumen' => $resumen,
                 'grupos' => array_slice($grupos, 0, $limite),
                 'grupos_total' => count($grupos),
                 'grupos_truncados' => max(0, count($grupos) - $limite),
+                'ie_cuentas_controladas' => array_slice($ieFilas, 0, $limite),
+                'ie_cuentas_controladas_total' => (int) ($delta['ie_cuentas_controladas_total'] ?? count($ieFilas)),
+                'ie_cuentas_controladas_truncadas' => max(0, count($ieFilas) - $limite),
+                'ie_suma_efecto_mayor' => (float) ($delta['ie_suma_efecto_mayor'] ?? 0),
                 'delta_mayor' => $delta,
                 'mail_enviado' => false,
                 'mail_destino' => null,
                 'mail_error' => null,
             ];
 
-            if ($hayDiferencia || $conjuntoMovio) {
+            if ($hayDiferencia || $conjuntoMovio || $alertaIe) {
                 $salida['requiere_alerta'] = true;
             }
 
-            if ($enviarMail && ($hayDiferencia || $mailSiempre)) {
+            $enviarPorAlerta = $hayDiferencia || $conjuntoMovio || $alertaIe;
+            if ($enviarMail && ($enviarPorAlerta || $mailSiempre)) {
                 $paquete = array_merge($paquete, $this->enviarMail($paquete, $config));
                 if (! empty($paquete['mail_enviado'])) {
                     $salida['mails_enviados']++;

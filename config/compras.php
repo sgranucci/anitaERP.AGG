@@ -134,6 +134,8 @@ return [
     | Además guarda el delta mayor − deuda (proveedores + OPA en anticipos) y avisa
     | si ese delta cambia de un día al otro. Factura anticipada / recepción van al
     | auditor factura_anticipada_recepcion_auditor.
+    | Los asientos de ingresos/egresos (caja_movimiento_id) no entran en el mayor
+    | del delta; si tocan una cuenta controlada se listan aparte en el mail.
     | No graba ajustes de ficha: solo informa. La verdad operativa es la deuda.
     | Solo las empresas de COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS (default 1, 2 y 3).
     */
