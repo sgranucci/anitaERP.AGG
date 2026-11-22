@@ -9,6 +9,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
@@ -255,7 +256,11 @@ final class ProveedorDeudaMayorDeltaSupport
         array &$filasAnticipo,
     ): array {
         $meta = ['incluido' => false, 'error' => null, 'diferencias' => 0];
-        if (! filter_var(config('compras.deuda_ficha_auditor.incluir_mayor_anita', true), FILTER_VALIDATE_BOOLEAN)) {
+        // Solo El Bierzo: en AGG/Ferli/Crown/etc. el mayor contable es el del ERP.
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            return $meta;
+        }
+        if (! filter_var(config('compras.deuda_ficha_auditor.incluir_mayor_anita', false), FILTER_VALIDATE_BOOLEAN)) {
             return $meta;
         }
 
