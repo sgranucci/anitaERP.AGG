@@ -2,9 +2,11 @@
     $alerta = ! empty($informe['requiere_alerta']);
     $alertaFicha = ! empty($informe['alerta_ficha']);
     $alertaDelta = ! empty($informe['alerta_delta']);
+    $alertaIe = ! empty($informe['alerta_ie']);
     $delta = $informe['delta_mayor'] ?? [];
     $cuentasDelta = $delta['cuentas'] ?? [];
     $cuentasAnticipo = $delta['anticipos'] ?? [];
+    $ieFilas = $informe['ie_cuentas_controladas'] ?? [];
     $empresa = trim((string) ($informe['empresa_nombre'] ?? ''));
     $fecha = (string) ($informe['fecha_fmt'] ?? $informe['fecha'] ?? '');
     $expresion = (string) ($informe['expresion'] ?? 'origen');
@@ -27,12 +29,20 @@
 <div style="background:{{ $bannerBg }}; border:2px solid {{ $bannerBorder }}; color:{{ $bannerText }}; padding:14px 16px; border-radius:6px; margin-bottom:18px;">
     <div style="font-size:20px; font-weight:700; margin:0 0 4px 0;">{{ $empresa }}</div>
     <div style="font-size:15px; margin:0;">
-        @if ($alertaFicha && $alertaDelta)
-            ALERTA — la ficha no cuadra y el delta conjunto se movió al {{ $fecha }}
-        @elseif ($alertaDelta)
-            ALERTA — el delta de proveedores + anticipos se movió al {{ $fecha }}
-        @elseif ($alertaFicha)
-            ALERTA — hay diferencias deuda vs ficha al {{ $fecha }}
+        @php
+            $msgs = [];
+            if ($alertaFicha) {
+                $msgs[] = 'la ficha no cuadra';
+            }
+            if ($alertaDelta) {
+                $msgs[] = 'el delta conjunto se movió';
+            }
+            if ($alertaIe) {
+                $msgs[] = 'hay I/E sobre cuentas controladas';
+            }
+        @endphp
+        @if ($msgs !== [])
+            ALERTA — {{ implode(' y ', $msgs) }} al {{ $fecha }}
         @else
             @if (! empty($delta['hay_base_anterior']))
                 OK — ficha cuadrada y delta conjunto estable al {{ $fecha }}
@@ -49,6 +59,7 @@
     · Expresión <strong>{{ $expresion }}</strong>
     · La deuda es la verdad: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar.
     Aplicar una OPA a una factura debita una cuenta y acredita la otra por el mismo importe: el delta conjunto no se mueve.
+    Los <strong>ingresos/egresos</strong> no entran en el delta; si imputan una cuenta controlada (p. ej. proveedores del exterior) se listan abajo.
     Facturas anticipadas y recepciones no entran acá: las controla
     <code>compras:auditar-factura-anticipada-recepcion</code>.
 </p>
@@ -89,7 +100,7 @@
     Suma del delta de proveedores y el de anticipos (OPA). Es el número que se controla.
     Una aplicación puede mover una cuenta y compensarla en la otra.
     @if (! empty($delta['hay_base_anterior']))
-        Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? $delta['fecha_anterior'] }}.
+        Avisa si la variación pasa de {{ $fmt($delta['tolerancia'] ?? 1) }} respecto del {{ $delta['fecha_anterior_fmt'] ?? ($delta['fecha_anterior'] ?? '') }}.
     @else
         Primera medición: el conjunto queda como base.
     @endif
@@ -154,8 +165,8 @@
 @if ($alertaFicha)
     <h3 style="margin:18px 0 6px 0;">Diferencias proveedor por proveedor</h3>
     <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
-        Revisar motivos posibles: aplicaciones posteriores al corte, importes multi-moneda,
-        renglones de ficha sin deuda abierta, o ajustes previos.
+        Revisar motivos posibles: importes multi-moneda, renglones de ficha sin deuda abierta,
+        o ajustes previos. Las aplicaciones posteriores al corte ya no bajan la deuda.
     </p>
     <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#f5b7b1; color:#17202A;">
@@ -212,11 +223,59 @@
     $mayorAnitaIncluido = ! empty($delta['mayor_anita_incluido']);
     $mayorAnitaError = trim((string) ($delta['mayor_anita_error'] ?? ''));
 @endphp
+<h3 style="margin:22px 0 6px 0;">Ingresos / egresos sobre cuentas controladas</h3>
+<p style="margin:0 0 8px 0; color:#555; font-size:13px;">
+    Asientos de I/E (<code>caja_movimiento</code>) que tocaron una cuenta del control
+    (proveedores / anticipos) desde el último snapshot. No entran en el delta conjunto;
+    se avisan para que administración revise (p. ej. OPP por I/E contra proveedores del exterior).
+</p>
+@if ($ieFilas === [])
+    <p style="margin:0; padding:12px; background:#d5f5e3; border:1px solid #1e8449; color:#145a32; border-radius:4px;">
+        No hay I/E nuevos sobre cuentas controladas.
+    </p>
+@else
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#f5b7b1; color:#17202A;">
+            <th align="left">Fecha</th>
+            <th align="left">I/E</th>
+            <th align="left">Tipo</th>
+            <th align="left">Cuenta</th>
+            <th align="left">Proveedor</th>
+            <th align="left">Usuario</th>
+            <th align="left">Detalle</th>
+            <th align="right">Efecto mayor</th>
+        </tr>
+        @foreach ($ieFilas as $ie)
+            <tr>
+                <td>{{ $ie['fecha_fmt'] ?? $ie['fecha'] ?? '' }}</td>
+                <td>{{ $ie['numerotransaccion'] ?? '' }} (#{{ $ie['caja_movimiento_id'] ?? '' }})</td>
+                <td>{{ $ie['tipo'] ?? '' }}</td>
+                <td>{{ $ie['cuenta_codigo'] ?? '' }} {{ $ie['cuenta_nombre'] ?? '' }}</td>
+                <td>{{ trim(($ie['proveedor_codigo'] ?? '').' '.($ie['proveedor_nombre'] ?? '')) }}</td>
+                <td>{{ $ie['usuario'] ?? '' }}</td>
+                <td>{{ $ie['detalle'] ?? '' }}</td>
+                <td align="right"><strong>{{ $fmt($ie['efecto_mayor'] ?? 0) }}</strong></td>
+            </tr>
+        @endforeach
+    </table>
+    <p style="margin:8px 0 0 0; color:#7b241c; font-size:13px;">
+        {{ (int) ($informe['ie_cuentas_controladas_total'] ?? count($ieFilas)) }} movimiento(s)
+        · suma efecto mayor {{ $fmt($informe['ie_suma_efecto_mayor'] ?? 0) }}
+        (signo del mayor: negativo = débito).
+    </p>
+    @if ((int) ($informe['ie_cuentas_controladas_truncadas'] ?? 0) > 0)
+        <p style="margin:4px 0 0 0; color:#666; font-size:12px;">
+            Se omitieron {{ (int) $informe['ie_cuentas_controladas_truncadas'] }} fila(s) por límite de mail.
+        </p>
+    @endif
+@endif
+
 <h3 style="margin:22px 0 6px 0;">Delta de proveedores</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
     La deuda es una sola: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar que no están en anticipos.
     Entran las cuentas de rubro Pasivo del proveedor. Anticipos no entra en esta tabla.
+    El mayor del control excluye asientos de ingresos/egresos.
     El aviso no sale de una fila: sale de la suma con anticipos.
     @if ($mayorAnitaIncluido)
         Mayor Anita = subdiario + ctamov (neto Haber−Debe), contraste con el mayor ERP.

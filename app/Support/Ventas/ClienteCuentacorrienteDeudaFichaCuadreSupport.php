@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
  * Compara, al corte, la deuda abierta de clientes contra la ficha de cuenta corriente.
  * Mismas reglas de alcance que el reporte Deuda / ficha
  * ({@see ClienteCuentacorrienteDeudaAlcanceSupport}).
+ * Deuda: resta solo aplicaciones con fecha ≤ corte (un cobro futuro no baja hasta su día).
  *
  * Expresión origen: saldos en la moneda de cada movimiento.
  * Expresión pesos: cada movimiento × cotización histórica; dólares = pesos ÷ dólar
@@ -103,6 +104,7 @@ final class ClienteCuentacorrienteDeudaFichaCuadreSupport
                 DB::table('cliente_cuentacorriente_aplicacion')
                     ->select('cliente_cuentacorriente_id')
                     ->selectRaw('SUM(total) as aplicado')
+                    ->whereDate('fecha', '<=', $fechaCorte)
                     ->groupBy('cliente_cuentacorriente_id'),
                 'apl',
                 'apl.cliente_cuentacorriente_id',

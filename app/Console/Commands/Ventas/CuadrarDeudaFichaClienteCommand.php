@@ -49,7 +49,7 @@ class CuadrarDeudaFichaClienteCommand extends Command
             $ejecutar ? 'GRABA el ajuste en la ficha' : 'solo informe, no graba'
         ));
         $this->line('No usa Anita ni el bridge. El ajuste es un renglón en la cuenta corriente, con fecha de corte.');
-        $this->line('Las aplicaciones se toman completas, igual que el reporte: un cobro posterior al corte aplicado a una factura anterior baja esa deuda y no está en la ficha hasta el corte.');
+        $this->line('Las aplicaciones cuentan solo si su fecha es ≤ al corte: un cobro futuro no baja la deuda hasta ese día (entra junto con el crédito en ficha).');
 
         try {
             $informe = $cuadre->cuadrar(

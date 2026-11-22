@@ -31,6 +31,10 @@ use Throwable;
  * `pago.anticipo_proveedor`. El mayor de esa cuenta excluye facturas anticipadas
  * y recepciones: eso va al auditor aparte de factura anticipada vs recepción.
  * Sin cuenta de anticipos, la OPA sigue en proveedores.
+ *
+ * Ingresos/egresos (`asiento.caja_movimiento_id`): no entran en el mayor del
+ * delta. Si tocan una cuenta controlada se listan aparte para avisar a
+ * administración (no mueven el conjunto).
  */
 final class ProveedorDeudaMayorDeltaSupport
 {
@@ -81,7 +85,14 @@ final class ProveedorDeudaMayorDeltaSupport
      *   cuentas_sin_base: int,
      *   cuentas: list<array<string, mixed>>,
      *   cuentas_total: int,
-     *   anticipos: list<array<string, mixed>>
+     *   anticipos: list<array<string, mixed>>,
+     *   mayor_anita_incluido: bool,
+     *   mayor_anita_error: ?string,
+     *   diferencias_erp_anita: int,
+     *   ie_cuentas_controladas: list<array<string, mixed>>,
+     *   ie_cuentas_controladas_total: int,
+     *   ie_alerta: bool,
+     *   ie_suma_efecto_mayor: float
      * }
      */
     public function controlar(int $empresaId, string $fecha, float $tolerancia): array
@@ -91,6 +102,8 @@ final class ProveedorDeudaMayorDeltaSupport
         $hoy = $this->saldos($fecha)[$empresaId] ?? [];
         $fechaAnterior = $this->fechaAnterior($empresaId, $fecha);
         $anterior = $fechaAnterior === null ? [] : $this->filasGuardadas($empresaId, $fechaAnterior);
+        $deudaAnterior = $fechaAnterior === null ? [] : $this->deudasGuardadas($empresaId, $fechaAnterior);
+        $snapAnteriorAt = $fechaAnterior === null ? null : $this->momentoSnapshot($empresaId, $fechaAnterior);
         $cuentaAnticipoId = (int) ($this->cuentasAnticipoPorEmpresa()[$empresaId] ?? 0);
 
         $permitidas = $this->cuentasProveedor();
@@ -99,6 +112,24 @@ final class ProveedorDeudaMayorDeltaSupport
             static fn ($cuentaId): bool => isset($permitidas[(int) $cuentaId])
         ));
         $cuentas = $this->nombresCuenta($ids);
+        $noIeNuevos = $snapAnteriorAt === null
+            ? []
+            : $this->efectoMayorPorCuentaEmpresa(
+                $empresaId,
+                $ids,
+                soloOpaAnticipo: null,
+                soloCajaMovimiento: false,
+                creadoDesde: $snapAnteriorAt,
+            );
+        $ieAlAnterior = $snapAnteriorAt === null
+            ? []
+            : $this->efectoMayorPorCuentaEmpresa(
+                $empresaId,
+                $ids,
+                soloOpaAnticipo: null,
+                soloCajaMovimiento: true,
+                creadoHasta: $snapAnteriorAt,
+            );
         $filasProveedor = [];
         $filasAnticipo = [];
         $aGuardar = [];
@@ -110,7 +141,17 @@ final class ProveedorDeudaMayorDeltaSupport
             $mayor = round((float) ($hoy[$cuentaId]['mayor'] ?? 0), 2);
             $delta = round($mayor - $deuda, 2);
             $tenia = array_key_exists($cuentaId, $anterior);
-            $deltaAnterior = $tenia ? round((float) $anterior[$cuentaId], 2) : null;
+            // Mayor del control sin I/E. La base anterior se reconstruye con la misma
+            // fórmula (mayor hoy − no-IE nuevos − deuda guardada) para no saltar el
+            // día en que se dejó de incluir ingresos/egresos en el mayor.
+            $deltaAnterior = null;
+            if ($tenia) {
+                $mayorAlAnterior = round($mayor - (float) ($noIeNuevos[$cuentaId] ?? 0), 2);
+                $deudaAnt = array_key_exists($cuentaId, $deudaAnterior)
+                    ? round((float) $deudaAnterior[$cuentaId], 2)
+                    : round($mayorAlAnterior - (float) $anterior[$cuentaId] + (float) ($ieAlAnterior[$cuentaId] ?? 0), 2);
+                $deltaAnterior = round($mayorAlAnterior - $deudaAnt, 2);
+            }
             $variacion = $deltaAnterior === null ? null : round($delta - $deltaAnterior, 2);
             $movio = $variacion !== null && abs($variacion) >= $tolerancia;
             $esAnticipo = $cuentaAnticipoId > 0 && $cuentaId === $cuentaAnticipoId;
@@ -161,6 +202,13 @@ final class ProveedorDeudaMayorDeltaSupport
         $filasAnticipo = $this->ordenarPorVariacion($filasAnticipo);
         $conjunto = $this->deltaConjunto($filasProveedor, $filasAnticipo, $fechaAnterior !== null, $tolerancia);
         $anita = $this->enriquecerConMayorAnita($empresaId, $fecha, $tolerancia, $filasProveedor, $filasAnticipo);
+        $ie = $this->listarIngresosEgresosCuentasControladas(
+            $empresaId,
+            $ids,
+            $snapAnteriorAt,
+            $fecha,
+            $tolerancia,
+        );
 
         $this->guardar($empresaId, $fecha, $aGuardar);
 
@@ -185,6 +233,10 @@ final class ProveedorDeudaMayorDeltaSupport
             'mayor_anita_incluido' => $anita['incluido'],
             'mayor_anita_error' => $anita['error'],
             'diferencias_erp_anita' => $anita['diferencias'],
+            'ie_cuentas_controladas' => $ie['filas'],
+            'ie_cuentas_controladas_total' => $ie['total'],
+            'ie_alerta' => $ie['alerta'],
+            'ie_suma_efecto_mayor' => $ie['suma_efecto_mayor'],
         ];
     }
 
@@ -682,6 +734,8 @@ final class ProveedorDeudaMayorDeltaSupport
      * No corta por fecha: un asiento con fecha futura no hace saltar el delta el
      * día en que esa fecha llega. En cuentas de anticipos se excluyen facturas
      * anticipadas y recepciones (van al auditor de FA vs recepción).
+     * Los asientos de ingresos/egresos (`caja_movimiento_id`) no entran: se
+     * informan aparte si tocan una cuenta controlada.
      *
      * @param  array<int, true>  $cuentaIds
      * @return array<string, float>
@@ -705,16 +759,76 @@ final class ProveedorDeudaMayorDeltaSupport
             }
         }
 
-        return $this->sumarMayor($pasivoIds, false)
-            + $this->sumarMayor($anticipoIds, true);
+        return $this->sumarMayor($pasivoIds, false, false)
+            + $this->sumarMayor($anticipoIds, true, false);
+    }
+
+    /**
+     * @param  list<int>  $cuentaIds
+     * @param  bool|null  $soloCajaMovimiento  null = todos; true = solo I/E; false = sin I/E
+     * @return array<string, float>
+     */
+    private function sumarMayor(array $cuentaIds, bool $soloOpaAnticipo, ?bool $soloCajaMovimiento = false): array
+    {
+        return $this->sumarMayorFiltrado($cuentaIds, $soloOpaAnticipo, $soloCajaMovimiento);
+    }
+
+    /**
+     * Efecto en el mayor (signo del mayor) por cuenta, acotado a una empresa.
+     *
+     * @param  list<int>  $cuentaIds
+     * @return array<int, float> cuentacontable_id => efecto
+     */
+    private function efectoMayorPorCuentaEmpresa(
+        int $empresaId,
+        array $cuentaIds,
+        ?bool $soloOpaAnticipo,
+        ?bool $soloCajaMovimiento,
+        ?string $creadoDesde = null,
+        ?string $creadoHasta = null,
+    ): array {
+        $cuentaIds = array_values(array_filter(array_map('intval', $cuentaIds), static fn (int $id): bool => $id > 0));
+        if ($cuentaIds === [] || $empresaId <= 0) {
+            return [];
+        }
+
+        $anticipoId = (int) ($this->cuentasAnticipoPorEmpresa()[$empresaId] ?? 0);
+        $out = [];
+        foreach ($cuentaIds as $cuentaId) {
+            $esAnticipo = $anticipoId > 0 && $cuentaId === $anticipoId;
+            $filtroOpa = $soloOpaAnticipo;
+            if ($filtroOpa === null) {
+                $filtroOpa = $esAnticipo;
+            }
+            $parcial = $this->sumarMayorFiltrado(
+                [$cuentaId],
+                (bool) $filtroOpa,
+                $soloCajaMovimiento,
+                $empresaId,
+                $creadoDesde,
+                $creadoHasta,
+            );
+            $key = $empresaId.'|'.$cuentaId;
+            if (isset($parcial[$key])) {
+                $out[$cuentaId] = round((float) $parcial[$key], 2);
+            }
+        }
+
+        return $out;
     }
 
     /**
      * @param  list<int>  $cuentaIds
      * @return array<string, float>
      */
-    private function sumarMayor(array $cuentaIds, bool $soloOpaAnticipo): array
-    {
+    private function sumarMayorFiltrado(
+        array $cuentaIds,
+        bool $soloOpaAnticipo,
+        ?bool $soloCajaMovimiento,
+        ?int $empresaId = null,
+        ?string $creadoDesde = null,
+        ?string $creadoHasta = null,
+    ): array {
         $cuentaIds = array_values(array_filter(array_map('intval', $cuentaIds), static fn (int $id): bool => $id > 0));
         if ($cuentaIds === []) {
             return [];
@@ -728,10 +842,23 @@ final class ProveedorDeudaMayorDeltaSupport
                 $q->whereNull('a.estado_aprobacion')
                     ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
             });
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('a.empresa_id', $empresaId);
+        }
         if ($soloOpaAnticipo) {
-            // Solo OPP/OPA y aplicaciones: sin Debe de factura anticipada ni Haber de recepción.
             $query->whereNull('a.comprobante_proveedor_id')
                 ->whereNull('a.recepcionproveedor_id');
+        }
+        if ($soloCajaMovimiento === true) {
+            $query->whereNotNull('a.caja_movimiento_id');
+        } elseif ($soloCajaMovimiento === false) {
+            $query->whereNull('a.caja_movimiento_id');
+        }
+        if ($creadoDesde !== null && $creadoDesde !== '') {
+            $query->where('a.created_at', '>', $creadoDesde);
+        }
+        if ($creadoHasta !== null && $creadoHasta !== '') {
+            $query->where('a.created_at', '<=', $creadoHasta);
         }
         $filas = $query
             ->selectRaw('a.empresa_id, m.cuentacontable_id')
@@ -750,6 +877,126 @@ final class ProveedorDeudaMayorDeltaSupport
         }
 
         return $saldos;
+    }
+
+    /**
+     * I/E que tocaron cuentas controladas desde el snapshot anterior (o el día
+     * del corte si es la primera medición). No entran al delta; solo aviso.
+     *
+     * @param  list<int>  $cuentaIds
+     * @return array{
+     *   filas: list<array<string, mixed>>,
+     *   total: int,
+     *   alerta: bool,
+     *   suma_efecto_mayor: float
+     * }
+     */
+    private function listarIngresosEgresosCuentasControladas(
+        int $empresaId,
+        array $cuentaIds,
+        ?string $desdeCreatedAt,
+        string $fechaCorte,
+        float $tolerancia,
+    ): array {
+        $cuentaIds = array_values(array_filter(array_map('intval', $cuentaIds), static fn (int $id): bool => $id > 0));
+        if ($cuentaIds === [] || $empresaId <= 0) {
+            return ['filas' => [], 'total' => 0, 'alerta' => false, 'suma_efecto_mayor' => 0.0];
+        }
+
+        $monedaLocalId = ProveedorCuentacorrienteAplicacionLiquidacionSupport::monedaLocalId();
+        $query = DB::table('asiento_movimiento as m')
+            ->join('asiento as a', 'a.id', '=', 'm.asiento_id')
+            ->join('caja_movimiento as cm', 'cm.id', '=', 'a.caja_movimiento_id')
+            ->leftJoin('tipotransaccion_caja as t', 't.id', '=', 'cm.tipotransaccion_caja_id')
+            ->leftJoin('cuentacontable as c', 'c.id', '=', 'm.cuentacontable_id')
+            ->leftJoin('proveedor as p', 'p.id', '=', 'cm.proveedor_id')
+            ->leftJoin('usuario as u', 'u.id', '=', 'cm.usuario_id')
+            ->where('a.empresa_id', $empresaId)
+            ->whereIn('m.cuentacontable_id', $cuentaIds)
+            ->whereNotNull('a.caja_movimiento_id')
+            ->where(function ($q) {
+                $q->whereNull('a.estado_aprobacion')
+                    ->orWhere('a.estado_aprobacion', '!=', Asiento::ESTADO_APROBACION_RECHAZADO);
+            });
+        if ($desdeCreatedAt !== null && $desdeCreatedAt !== '') {
+            $query->where('a.created_at', '>', $desdeCreatedAt);
+        } else {
+            $query->whereDate('a.created_at', $fechaCorte);
+        }
+
+        $filasRaw = $query
+            ->orderBy('a.created_at')
+            ->orderBy('a.id')
+            ->get([
+                'a.id as asiento_id',
+                'a.fecha as asiento_fecha',
+                'a.numeroasiento',
+                'a.created_at as asiento_created_at',
+                'a.observacion as asiento_obs',
+                'a.anita_tipo',
+                'a.anita_nro',
+                'cm.id as caja_movimiento_id',
+                'cm.numerotransaccion',
+                'cm.fecha as caja_fecha',
+                'cm.detalle',
+                't.abreviatura as tipo_abreviatura',
+                't.nombre as tipo_nombre',
+                'm.cuentacontable_id',
+                'c.codigo as cuenta_codigo',
+                'c.nombre as cuenta_nombre',
+                'm.monto',
+                'm.moneda_id',
+                'm.cotizacion',
+                'p.codigo as proveedor_codigo',
+                'p.nombre as proveedor_nombre',
+                'u.usuario as usuario',
+            ]);
+
+        $filas = [];
+        $suma = 0.0;
+        foreach ($filasRaw as $fila) {
+            $cot = (float) ($fila->cotizacion ?? 0);
+            if ($cot == 0.0) {
+                $cot = 1.0;
+            }
+            $monedaId = (int) ($fila->moneda_id ?: $monedaLocalId);
+            $local = $monedaId > $monedaLocalId
+                ? ((float) $fila->monto * $cot)
+                : (float) $fila->monto;
+            $efecto = round(-1 * $local, 2);
+            if (abs($efecto) < 0.01) {
+                continue;
+            }
+            $suma += $efecto;
+            $filas[] = [
+                'asiento_id' => (int) $fila->asiento_id,
+                'caja_movimiento_id' => (int) $fila->caja_movimiento_id,
+                'numerotransaccion' => (string) ($fila->numerotransaccion ?? ''),
+                'fecha' => Carbon::parse((string) ($fila->caja_fecha ?? $fila->asiento_fecha))->toDateString(),
+                'fecha_fmt' => Carbon::parse((string) ($fila->caja_fecha ?? $fila->asiento_fecha))->format('d/m/Y'),
+                'tipo' => trim((string) ($fila->tipo_abreviatura ?: $fila->anita_tipo ?: '')),
+                'tipo_nombre' => trim((string) ($fila->tipo_nombre ?? '')),
+                'cuenta_codigo' => trim((string) ($fila->cuenta_codigo ?? '')),
+                'cuenta_nombre' => trim((string) ($fila->cuenta_nombre ?? '')),
+                'proveedor_codigo' => trim((string) ($fila->proveedor_codigo ?? '')),
+                'proveedor_nombre' => trim((string) ($fila->proveedor_nombre ?? '')),
+                'usuario' => trim((string) ($fila->usuario ?? '')),
+                'detalle' => trim((string) ($fila->detalle ?: $fila->asiento_obs ?: '')),
+                'monto_local' => round($local, 2),
+                'efecto_mayor' => $efecto,
+                'anita_nro' => $fila->anita_nro !== null ? (string) $fila->anita_nro : '',
+                'created_at' => (string) $fila->asiento_created_at,
+            ];
+        }
+
+        $suma = round($suma, 2);
+
+        return [
+            'filas' => $filas,
+            'total' => count($filas),
+            'alerta' => $filas !== [] && abs($suma) >= $tolerancia,
+            'suma_efecto_mayor' => $suma,
+        ];
     }
 
     private function fechaAnterior(int $empresaId, string $fecha): ?string
@@ -780,6 +1027,36 @@ final class ProveedorDeudaMayorDeltaSupport
         }
 
         return $out;
+    }
+
+    /**
+     * @return array<int, float>
+     */
+    private function deudasGuardadas(int $empresaId, string $fecha): array
+    {
+        $filas = DB::table(self::TABLA)
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha', $fecha)
+            ->get(['cuentacontable_id', 'deuda_local']);
+        $out = [];
+        foreach ($filas as $fila) {
+            $out[(int) $fila->cuentacontable_id] = (float) $fila->deuda_local;
+        }
+
+        return $out;
+    }
+
+    private function momentoSnapshot(int $empresaId, string $fecha): ?string
+    {
+        $valor = DB::table(self::TABLA)
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha', $fecha)
+            ->max('updated_at');
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+
+        return Carbon::parse((string) $valor)->format('Y-m-d H:i:s');
     }
 
     /**

@@ -6,6 +6,8 @@ namespace App\Support\Ventas;
 
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Models\Configuracion\Provincia;
+use App\Models\Ventas\Cliente_Cuentacorriente;
+use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
@@ -13,6 +15,7 @@ use App\Models\Ventas\Venta_Impuesto;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 
 /**
  * Nota de débito total que revierte una nota de crédito de facturación de mostrador.
@@ -467,6 +470,116 @@ final class NotaDebitoReversionNotaCreditoSupport
         }
 
         return (float) $valor;
+    }
+
+    /**
+     * Al emitir una ND (o DIM/NER) contra una NC ya aplicada a facturas, la ND
+     * se aplica a la NC pero las apps NCP→FAC quedaban huérfanas: la ficha
+     * anula NC+ND y la deuda seguía bajando las FAC (incidente Ferli 21/11/2026,
+     * Aguirre 2516, −277.756,06).
+     *
+     * Borra el par de aplicaciones entre la NC y cada factura (no toca la app
+     * ND↔NC ni cobranzas). Dispara audits vía Eloquent.
+     *
+     * @return int cantidad de filas de aplicación borradas
+     */
+    public static function desaplicarNcDeFacturas(int $ccNotaCreditoId, int $ccNotaDebitoIdExcluir = 0): int
+    {
+        if ($ccNotaCreditoId <= 0) {
+            return 0;
+        }
+
+        $apps = Cliente_Cuentacorriente_Aplicacion::query()
+            ->where(function ($q) use ($ccNotaCreditoId) {
+                $q->where('cliente_cuentacorriente_id', $ccNotaCreditoId)
+                    ->orWhere('cliente_cuentacorriente_aplicado_id', $ccNotaCreditoId);
+            })
+            ->where(function ($q) {
+                $q->whereNull('cobranza_id')->orWhere('cobranza_id', 0);
+            })
+            ->get();
+
+        if ($apps->isEmpty()) {
+            return 0;
+        }
+
+        $contraparteIds = [];
+        foreach ($apps as $app) {
+            $ccId = (int) $app->cliente_cuentacorriente_id;
+            $aplId = (int) ($app->cliente_cuentacorriente_aplicado_id ?? 0);
+            $otro = $ccId === $ccNotaCreditoId ? $aplId : $ccId;
+            if ($otro <= 0 || $otro === $ccNotaCreditoId || $otro === $ccNotaDebitoIdExcluir) {
+                continue;
+            }
+            $contraparteIds[$otro] = $otro;
+        }
+
+        if ($contraparteIds === []) {
+            return 0;
+        }
+
+        $prefijosFactura = [];
+        foreach (ClienteCuentacorrienteDeudaAlcanceSupport::PREFIJOS_VENTA as $prefijo) {
+            if ($prefijo === 'COA' || $prefijo === 'CIM' || $prefijo === 'DIM'
+                || str_starts_with($prefijo, 'NC') || str_starts_with($prefijo, 'ND')) {
+                continue;
+            }
+            $prefijosFactura[] = $prefijo;
+        }
+
+        $facIds = Cliente_Cuentacorriente::query()
+            ->whereIn('id', array_values($contraparteIds))
+            ->whereHas('ventas', function ($q) use ($prefijosFactura) {
+                $q->where(function ($q2) use ($prefijosFactura) {
+                    foreach ($prefijosFactura as $prefijo) {
+                        $q2->orWhere('codigo', 'like', $prefijo.'%');
+                    }
+                });
+            })
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if ($facIds === [] && $prefijosFactura === []) {
+            $facIds = Cliente_Cuentacorriente::query()
+                ->whereIn('id', array_values($contraparteIds))
+                ->where('total', '>', 0)
+                ->whereNotNull('venta_id')
+                ->whereDoesntHave('ventas.tipotransacciones', function ($q) {
+                    $q->where(function ($q2) {
+                        $q2->where('operacion', 'C')
+                            ->orWhere('abreviatura', 'like', 'ND%')
+                            ->orWhere('abreviatura', 'like', 'NC%');
+                    });
+                })
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+        }
+
+        if ($facIds === []) {
+            return 0;
+        }
+
+        $facSet = array_fill_keys($facIds, true);
+        $idsBorrar = [];
+        foreach ($apps as $app) {
+            $ccId = (int) $app->cliente_cuentacorriente_id;
+            $aplId = (int) ($app->cliente_cuentacorriente_aplicado_id ?? 0);
+            $otro = $ccId === $ccNotaCreditoId ? $aplId : $ccId;
+            if ($otro === $ccNotaDebitoIdExcluir || ! isset($facSet[$otro])) {
+                continue;
+            }
+            $idsBorrar[] = (int) $app->id;
+        }
+
+        if ($idsBorrar === []) {
+            return 0;
+        }
+
+        return EloquentAuditDeleteSupport::each(
+            Cliente_Cuentacorriente_Aplicacion::query()->whereIn('id', $idsBorrar)
+        );
     }
 
     /**

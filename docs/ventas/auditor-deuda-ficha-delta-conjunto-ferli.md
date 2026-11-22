@@ -12,16 +12,50 @@ El número que se controla es el **delta conjunto** = delta clientes + delta ant
 
 | Corte | Delta clientes | Delta anticipos | **Delta conjunto** |
 |---|---:|---:|---:|
-| **20/11/2026** | 991.663.983,89 | 11.080.968,32 | **1.002.744.952,21** |
+| **21/11/2026** | 973.070.034,89 | 29.674.917,32 | **1.002.744.952,21** |
+| 20/11/2026 | 991.663.983,89 | 11.080.968,32 | **1.002.744.952,21** |
 
-Detalle por cuenta al 20/11/2026:
+Detalle por cuenta al 21/11/2026 (post-saneamiento):
 
 | Cuenta | Deuda | Mayor | Delta |
 |---|---:|---:|---:|
-| 113100001 DEUDORES POR VENTAS | −990.822.802,48 | 841.181,41 | 991.663.983,89 |
-| 211100003 ANTICIPO CLIENTES | 19.107.407,07 | 30.188.375,39 | 11.080.968,32 |
+| 113100001 DEUDORES POR VENTAS | −991.889.634,75 | −18.819.599,86 | 973.070.034,89 |
+| 211100003 ANTICIPO CLIENTES | 2.694.898,33 | 32.369.815,65 | 29.674.917,32 |
 
 Si el conjunto no se mueve más de ±1,00, el mail queda en verde (ficha OK).
+
+---
+
+## Alerta 21/11/2026 — apps huérfanas NCP→FAC (Aguirre 2516)
+
+| | 20/11/2026 | 21/11 (antes) | 21/11 (después) |
+|---|---:|---:|---:|
+| Delta conjunto | 1.002.744.952,21 | 1.002.467.196,15 | **1.002.744.952,21** |
+| Variación | — | **−277.756,06** | **0,00** |
+| Ficha (dif. origen) | 0 | −277.756,06 (1 cliente) | **0** |
+
+### Causa
+
+Cliente **2516 AGUIRRE, DIEGO MIGUEL**. El 20/11 se emitieron NDP que revierten NCP ya aplicadas a FAC. La ND se aplicó solo a la NC; las apps NCP→FAC quedaron huérfanas. Ficha: NC+ND = 0. Deuda: las FAC seguían bajadas → hueco **277.756,06**.
+
+| NCP | NDP | Apps borradas | Importe |
+|---|---|---|---:|
+| 9478 | 959 | 73117 / 73118 | 103.599,85 |
+| 9488 | 960 | 73585 / 73586 | 64.893,21 |
+| 9489 | 961 | 73587 / 73588 | 26.353,80 |
+| 9490 | 962 | 73589 / 73590 | 26.281,20 |
+| 9491 | 963 | 73591 / 73592 | 56.628,00 |
+| **Total** | | 10 filas | **277.756,06** |
+
+### Acción
+
+1. **Datos:** borradas las 10 apps (consola; `AUDIT_CONSOLE=false` → sin fila en `audits`).
+2. **Código:** `NotaDebitoReversionNotaCreditoSupport::desaplicarNcDeFacturas` + llamada desde `FacturacionService` al emitir ND/DIM/NER contra NC.
+3. Auditor `--sin-mail` al 21/11: **OK**, delta conjunto estable vs 20/11.
+
+### Pendiente operativo (Mónica)
+
+Tras el saneamiento reaparecen saldos en FAC por esos importes. Hay **COA 77787** (−264.628,26) de la CIE 78062 para imputar. Ver informe del chat.
 
 ---
 

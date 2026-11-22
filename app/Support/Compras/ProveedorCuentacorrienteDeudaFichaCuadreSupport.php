@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Compara, al corte, la deuda abierta de proveedores contra la ficha de cuenta corriente.
- * Las dos lecturas son las del reporte Deuda / ficha: mismas filas, mismas aplicaciones
- * y la cotización grabada en el comprobante.
+ * Ficha: movimientos de CC con fecha ≤ corte. Deuda: esos comprobantes/OPA con saldo,
+ * restando solo aplicaciones con fecha ≤ corte (un pago futuro no baja la deuda hasta su día).
  *
  * Expresión origen: saldos en la moneda de cada movimiento (sin convertir).
  * Expresión pesos: cada movimiento × su cotización histórica; dólares = esos pesos ÷
@@ -101,6 +101,7 @@ final class ProveedorCuentacorrienteDeudaFichaCuadreSupport
                 DB::table('proveedor_cuentacorriente_aplicacion')
                     ->select('proveedor_cuentacorriente_id')
                     ->selectRaw('SUM(total) as aplicado')
+                    ->whereDate('fecha', '<=', $fechaCorte)
                     ->groupBy('proveedor_cuentacorriente_id'),
                 'apl',
                 'apl.proveedor_cuentacorriente_id',
