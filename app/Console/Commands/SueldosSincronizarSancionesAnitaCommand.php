@@ -171,7 +171,11 @@ class SueldosSincronizarSancionesAnitaCommand extends Command
     ): array
     {
         $r = $this->vacio();
-        $campos = 'emps_empresa,emps_legajo,emps_fecha,emps_sancion,emps_cant_dias,emps_cod_motivo,emps_importe,emps_fecha_recep,emps_nro_interno';
+        // El Bierzo (syscolumns): sin emps_fecha_recep ni emps_nro_interno; empsley no existe.
+        $esquemaMinimo = \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
+        $campos = $esquemaMinimo
+            ? 'emps_empresa,emps_legajo,emps_fecha,emps_sancion,emps_cant_dias,emps_cod_motivo,emps_importe'
+            : 'emps_empresa,emps_legajo,emps_fecha,emps_sancion,emps_cant_dias,emps_cod_motivo,emps_importe,emps_fecha_recep,emps_nro_interno';
         $filas = $this->listarAnita('empsanc', $campos, 'emps_empresa,emps_legajo,emps_fecha');
         if (isset($filas['error'])) {
             $r['errores'][] = 'empsanc: '.$filas['error'];
@@ -179,7 +183,7 @@ class SueldosSincronizarSancionesAnitaCommand extends Command
             return $r;
         }
 
-        $comentarios = $this->leerComentariosEmpsley();
+        $comentarios = $esquemaMinimo ? [] : $this->leerComentariosEmpsley();
         $tipos = Tipo_Sancion_Sueldos::query()->pluck('id', 'codigo')->all();
         $motivos = Motivo_Sancion_Sueldos::query()->pluck('id', 'codigo')->all();
         foreach ($codigosTipo as $codigo) {

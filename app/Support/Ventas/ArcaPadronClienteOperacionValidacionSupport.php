@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Valida padrón ARCA en operaciones de venta (pedido / factura clásica).
- * Solo se invoca desde el frontend vía ClienteController@validarPadronOperacion.
+ * Valida padrón ARCA en operaciones de venta (pedido / factura / cobranza).
+ * Frontend: ClienteController@validarPadronOperacion. Backend: CobranzaService (Anita cobro).
  * Clientes regularizados (estado R) pueden operar aunque el padrón muestre problemas.
  * Si el WS del padrón no responde, no bloquea: avisa y permite continuar (mismo criterio que WSAPOC).
  */

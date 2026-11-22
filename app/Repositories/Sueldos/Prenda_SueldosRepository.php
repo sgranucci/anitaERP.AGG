@@ -8,6 +8,7 @@ use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
 use App\Models\Sueldos\Prenda_Articulo_Sueldos;
 use App\Models\Sueldos\Prenda_Sueldos;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Sueldos\PrendaSueldosListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -212,12 +213,18 @@ class Prenda_SueldosRepository implements Prenda_SueldosRepositoryInterface
 
         $resultado = ['en_anita' => 0, 'importados' => 0, 'omitidos' => 0, 'variantes' => 0, 'errores' => []];
 
+        // El Bierzo (syscolumns): solo pren_prenda + pren_desc. Pedir extras rompe el UNLOAD.
+        $esquemaMinimo = EntornoEmpresaSupport::esElBierzo();
+        $campos = $esquemaMinimo
+            ? 'pren_prenda, pren_desc'
+            : 'pren_prenda, pren_desc, pren_porc_pedido, pren_marca, pren_seguridad';
+
         $api = new ApiAnita();
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => $this->tableAnita,
-            'campos' => 'pren_prenda, pren_desc, pren_porc_pedido, pren_marca, pren_seguridad',
+            'campos' => $campos,
             'orderBy' => 'pren_prenda',
         ]));
 
@@ -247,14 +254,16 @@ class Prenda_SueldosRepository implements Prenda_SueldosRepositoryInterface
             if ($desc === '') {
                 $desc = (string) $codigo;
             }
-            $marca = trim((string) ($row->pren_marca ?? ''));
-            $porc = $row->pren_porc_pedido ?? null;
+            $marca = $esquemaMinimo ? '' : trim((string) ($row->pren_marca ?? ''));
+            $porc = $esquemaMinimo ? null : ($row->pren_porc_pedido ?? null);
 
             $prenda = $this->model->create([
                 'codigo' => $codigo,
                 'descripcion' => $desc,
                 'marca' => $marca !== '' ? mb_substr($marca, 0, 30) : null,
-                'es_seguridad' => $this->esSeguridadAnita($row->pren_seguridad ?? null),
+                'es_seguridad' => $esquemaMinimo
+                    ? false
+                    : $this->esSeguridadAnita($row->pren_seguridad ?? null),
                 'porcentaje_pedido' => ($porc === '' || $porc === null) ? null : (float) $porc,
                 'activo' => true,
                 'orden' => 0,

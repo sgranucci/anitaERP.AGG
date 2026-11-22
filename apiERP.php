@@ -1,12 +1,17 @@
 <?php
-//header('Access-Control-Allow-Origin: *');
-//header('Content-Type: application/json; charset=utf8');
+// Bridge HTTP → Informix (sql). Corre en el servidor Anita con PHP viejo (5.3):
+// sin [], sin ??, sin random_bytes.
 
 ini_set('memory_limit', '512M');
 ini_set('display_errors', '0');
 
 include_once 'include/IFXConnection.php';
 $data = json_decode(file_get_contents('php://input'), true);
+if (! is_array($data) || empty($data['acc'])) {
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode(array('Error' => 'Bridge: payload JSON inválido o sin acc'));
+	exit;
+}
 
 if (array_key_exists('path_sistema', $data) && trim((string) $data['path_sistema']) !== '') {
 	$path_sistema = rtrim((string) $data['path_sistema'], '/');
@@ -16,11 +21,61 @@ if (array_key_exists('path_sistema', $data) && trim((string) $data['path_sistema
 	$path_sistema = '/usr2/bierzo';
 }
 $sistema = (array_key_exists('sistema', $data) ? $data['sistema'] : 'ventas');
-$proceso = getmypid();
-$ts = str_replace('.', '', sprintf('%.6F', microtime(true))).'_'.$proceso;
+$dir_trabajo = $path_sistema.'/'.$sistema;
 
-$_nombre_file = $path_sistema.'/'.$sistema.'/cmd_sql.'.$ts.'.sql';
-$_nombre_ret = $path_sistema.'/'.$sistema.'/cmd_sql.'.$ts.'-'.$data['acc'].'.csv';
+// Nombre único por request: dos requests concurrentes no pueden compartir el .sql
+// (con substr(microtime,0,8) el nombre se repetía durante 100 segundos y un request
+// ejecutaba el SQL de otro: inserts duplicados, errores cruzados, CSV faltantes).
+$_nombre_file = null;
+for ($i = 0; $i < 5 && $_nombre_file === null; $i++) {
+	$ts = str_replace('.', '', sprintf('%.6F', microtime(true))).'_'.getmypid().'_'.mt_rand(100000, 999999);
+	$candidato = $dir_trabajo.'/cmd_sql.'.$ts.'.sql';
+	$fp1 = @fopen($candidato, 'x');
+	if ($fp1 !== false) {
+		$_nombre_file = $candidato;
+	}
+}
+if ($_nombre_file === null) {
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode(array('Error' => 'Bridge: no se pudo crear el archivo SQL en '.$dir_trabajo.' (disco lleno o permisos)'));
+	exit;
+}
+$_nombre_ret = substr($_nombre_file, 0, -4).'-'.$data['acc'].'.csv';
+$_nombre_retorno = $_nombre_file.'.ret';
+
+// Borra los temporales de este request pase lo que pase (error fatal, corte del cliente).
+$GLOBALS['_bridge_temporales'] = array($_nombre_file, $_nombre_ret, $_nombre_retorno);
+register_shutdown_function('bridge_borrar_temporales');
+ignore_user_abort(true);
+
+function bridge_borrar_temporales()
+{
+	foreach ($GLOBALS['_bridge_temporales'] as $f) {
+		if (is_file($f)) {
+			@unlink($f);
+		}
+	}
+}
+
+// Restos de versiones anteriores o de procesos matados: 1 de cada 200 requests
+// barre cmd_sql.* con más de 2 horas.
+if (mt_rand(1, 200) === 1) {
+	$dh = @opendir($dir_trabajo);
+	if ($dh !== false) {
+		$limite = time() - 7200;
+		while (($nom = readdir($dh)) !== false) {
+			if (strpos($nom, 'cmd_sql.') !== 0) {
+				continue;
+			}
+			$full = $dir_trabajo.'/'.$nom;
+			$mt = @filemtime($full);
+			if ($mt !== false && $mt < $limite) {
+				@unlink($full);
+			}
+		}
+		closedir($dh);
+	}
+}
 
 if (array_key_exists('DB_NAME', $data)) {
 	putenv ("DBPATH="        . $data["IFX_DB_PATH"]);
@@ -37,11 +92,11 @@ $data['groupBy'] 	 = (array_key_exists('groupBy', $data) ? " GROUP BY ".$data['g
 $data['valores'] 	 = (array_key_exists('valores', $data) ? $data['valores'] : "");
 
 // Defensa: UPDATE/DELETE sin WHERE de clave (incidente 20/nov/2026 ven_impuesto1).
-$acc_safe = isset($data['acc']) ? strtolower(trim($data['acc'])) : '';
+$acc_safe = strtolower(trim($data['acc']));
 if (($acc_safe == 'update' || $acc_safe == 'delete')
 	&& empty($data['permitir_escritura_masiva'])) {
-	$where_safe = isset($data['whereArmado']) ? trim($data['whereArmado']) : '';
-	$tabla_safe = isset($data['tabla']) ? strtolower(trim($data['tabla'])) : '';
+	$where_safe = trim($data['whereArmado']);
+	$tabla_safe = strtolower(trim($data['tabla']));
 	$err_where = '';
 	if ($where_safe === '') {
 		$err_where = 'UPDATE/DELETE Anita sin whereArmado: prohibido';
@@ -89,11 +144,20 @@ switch ($data['acc']){
     case 'customSql':
 	    $sql = "UNLOAD TO '".$_nombre_ret."' DELIMITER '|' ".$data['customSql'];
 		break;
+	default:
+		fclose($fp1);
+		header('Content-Type: application/json; charset=utf-8');
+		echo json_encode(array('Error' => 'Bridge: acc desconocida '.$data['acc']));
+		exit;
 }
 
-$fp1 = fopen($_nombre_file, "w");
-fprintf($fp1, "%s", $sql);
+$escrito = fwrite($fp1, $sql);
 fclose($fp1);
+if ($escrito === false || $escrito < strlen($sql)) {
+	header('Content-Type: application/json; charset=utf-8');
+	echo json_encode(array('Error' => 'Bridge: no se pudo escribir el SQL completo (disco lleno)'));
+	exit;
+}
 
 $ifxServer = (! empty($data['IFX_SERVER']) ? trim($data['IFX_SERVER']) : 'bincadmin');
 // sql(1) usa sqlhosts de ESTE host. bi7ncadmin es el alias remoto del ERP (Informix 25596).
@@ -101,7 +165,7 @@ if ($ifxServer == 'bi7ncadmin') {
 	$ifxServer = 'bincadmin';
 }
 $_cmdd_pre = "export LD_ASSUME_KERNEL=2.4.19;export INFORMIXDIR=/home/informix;export LD_LIBRARY_PATH=:/home/informix/lib:/home/informix/lib/esql:/home/informix_esql/lib;export INFORMIXSERVER=";
-$_cmdd_post = ";cd ".$path_sistema."/".$sistema.";";
+$_cmdd_post = ";cd ".$dir_trabajo.";";
 
 $_cmd = $_cmdd_pre.$ifxServer.$_cmdd_post."sql ".$sistema." ".$_nombre_file." 2>&1";
 
@@ -121,16 +185,14 @@ if ($data['acc'] == "list" || $data['acc'] == "customSql") {
 		echo json_encode(array(
 			'Error' => 'UNLOAD no generó el archivo CSV (revisar permisos, ruta o SQL Informix).',
 			'csv_esperado' => $_nombre_ret,
-			'sql_file' => $_nombre_file,
 			'informix_server' => $ifxServer,
 			'informix_output' => trim((string) $arr),
 		));
-		@unlink($_nombre_file);
 		exit;
 	}
     $dataArr = array();
 	$archivo = fopen($_nombre_ret, 'r');
-	$camposArr = explode(',', (string) (isset($data['campos']) ? $data['campos'] : ''));
+	$camposArr = explode(',', (string) $data['campos']);
 	while ($linea = fgets($archivo)) {
 		$linea = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '#', $linea);
 		$registroAssoc = array();
@@ -145,23 +207,18 @@ if ($data['acc'] == "list" || $data['acc'] == "customSql") {
 					$value = $nombreAux[1];
 				}
 			}
-			$registroAssoc[trim($value)] = $lineaArr[$key];
+			$registroAssoc[trim($value)] = isset($lineaArr[$key]) ? $lineaArr[$key] : '';
 		}
 		$dataArr[] = $registroAssoc;
 	}
 	fclose($archivo);
-	@unlink($_nombre_ret);
-	@unlink($_nombre_file);
 	header('Content-Type: application/json; charset=utf-8');
 	echo json_encode($dataArr);
 }else{
-	$_nombre_retorno = $_nombre_file.".ret";
 	$hayErrorRet = false;
 	if (is_readable($_nombre_retorno)) {
 		$hayErrorRet = filesize($_nombre_retorno) > 0;
-		@unlink($_nombre_retorno);
 	}
-	@unlink($_nombre_file);
 	header('Content-Type: text/plain; charset=utf-8');
 	if ($hayErrorRet) {
 		echo "Error";
@@ -170,4 +227,3 @@ if ($data['acc'] == "list" || $data['acc'] == "customSql") {
 	}
 }
 ?>
-

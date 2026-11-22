@@ -6,6 +6,9 @@ use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
+use App\Models\Ventas\Venta;
+use App\Support\Configuracion\ParametroSistemaSupport;
+use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use InvalidArgumentException;
 
 final class CobranzaDescuentoConfigSupport
@@ -90,8 +93,53 @@ final class CobranzaDescuentoConfigSupport
         return $id > 0 && Actividad_Arca::query()->whereKey($id)->exists();
     }
 
-    public static function tipotransaccionNotaCreditoId(int $empresaId, ?string $letraFacturaOrigen = null): int
+    /**
+     * Anita cobro.c: si el cliente es régimen FCE y el dto ≥ limite_fce → NCL; si no → NCP.
+     * En ERP se toma la factura origen FCE (sin clim_regimen en cliente).
+     */
+    public static function correspondeNclPorFce(Venta $ventaOrigen, float $importeDescuento): bool
     {
+        if (! self::origenEsFacturaFce($ventaOrigen)) {
+            return false;
+        }
+
+        $tope = ParametroSistemaSupport::limiteFce();
+
+        return $tope > 0.0 && $importeDescuento >= $tope;
+    }
+
+    public static function origenEsFacturaFce(Venta $ventaOrigen): bool
+    {
+        if (ArcaFceNcMostradorSupport::facturaEsFce($ventaOrigen)) {
+            return true;
+        }
+
+        $tipoAfip = ArcaFceNcMostradorSupport::codigoAfipDesdeTipo($ventaOrigen->tipotransacciones ?? null);
+        if (ArcaFceNcMostradorSupport::esTipoFacturaFce($tipoAfip)) {
+            return true;
+        }
+
+        $abr = strtoupper(trim((string) (optional($ventaOrigen->tipotransacciones)->abreviatura ?? '')));
+
+        return $abr === 'FCE';
+    }
+
+    public static function tipotransaccionNotaCreditoId(
+        int $empresaId,
+        ?string $letraFacturaOrigen = null,
+        bool $usarNcl = false,
+    ): int {
+        if ($usarNcl) {
+            $ncl = self::tipoNclPorAbreviatura();
+            if ($ncl) {
+                return (int) $ncl->id;
+            }
+
+            throw new InvalidArgumentException(
+                'Corresponde NCL (descuento sobre FCE ≥ límite MiPyME) pero no hay tipo NCL activo (operación C, signo R).'
+            );
+        }
+
         $mapaLetra = config('cobranza.nc_tipotransaccion_por_letra', []);
         $letra = strtoupper(trim((string) $letraFacturaOrigen));
         if ($letra !== '' && isset($mapaLetra[$letra])) {
@@ -141,8 +189,18 @@ final class CobranzaDescuentoConfigSupport
 
     private static function tipoNcpPorAbreviatura(): ?Tipotransaccion
     {
+        return self::tipoNotaCreditoPorAbreviatura('NCP');
+    }
+
+    private static function tipoNclPorAbreviatura(): ?Tipotransaccion
+    {
+        return self::tipoNotaCreditoPorAbreviatura('NCL');
+    }
+
+    private static function tipoNotaCreditoPorAbreviatura(string $abreviatura): ?Tipotransaccion
+    {
         $tipo = Tipotransaccion::query()
-            ->where('abreviatura', 'NCP')
+            ->where('abreviatura', $abreviatura)
             ->where('operacion', 'C')
             ->where('estado', 'A')
             ->orderBy('id')

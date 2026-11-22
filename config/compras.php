@@ -155,6 +155,13 @@ return [
             static fn ($id) => (int) $id,
             explode(',', (string) env('COMPRAS_DEUDA_FICHA_AUDITOR_EMPRESAS', '1,2,3'))
         ), static fn (int $id) => $id > 0))),
+        // Contraste Mayor ERP vs Mayor Anita (subdiario+ctamov) en el mail del delta.
+        'incluir_mayor_anita' => filter_var(
+            env('COMPRAS_DEUDA_FICHA_AUDITOR_MAYOR_ANITA', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        // Desde qué fecha acumular el mayor Anita (el ERP no corta por fecha).
+        'mayor_anita_desde' => env('COMPRAS_DEUDA_FICHA_AUDITOR_MAYOR_ANITA_DESDE', '2000-01-01'),
     ],
 
     /*

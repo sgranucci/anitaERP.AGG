@@ -132,10 +132,13 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
         ini_set('max_execution_time', '600');
 
         $api = new ApiAnita();
-        // Crown: sueldos.agrupamiento no tiene agr_id_fallo. Pedirla desplaza el CSV.
-        $campos = EntornoEmpresaSupport::esCrown()
-            ? 'agr_agrupamiento, agr_desc, agr_variable1, agr_variable2, agr_variable3, agr_variable4'
-            : 'agr_agrupamiento, agr_desc, agr_id_fallo, agr_variable1, agr_variable2, agr_variable3, agr_variable4';
+        // Esquema Informix por cliente (syscolumns): El Bierzo solo código+desc;
+        // Crown no tiene agr_id_fallo; AGG/resto trae fallo + variables.
+        $campos = match (true) {
+            EntornoEmpresaSupport::esElBierzo() => 'agr_agrupamiento, agr_desc',
+            EntornoEmpresaSupport::esCrown() => 'agr_agrupamiento, agr_desc, agr_variable1, agr_variable2, agr_variable3, agr_variable4',
+            default => 'agr_agrupamiento, agr_desc, agr_id_fallo, agr_variable1, agr_variable2, agr_variable3, agr_variable4',
+        };
         $data = [
             'acc' => 'list',
             'sistema' => 'sueldos',
@@ -158,8 +161,10 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
             return $resultado;
         }
 
+        $esquemaMinimo = EntornoEmpresaSupport::esElBierzo();
+
         // El llenado inicial no debe generar registros de auditoría (solo audita el CRUD del ERP).
-        Agrupamiento_Sueldos::withoutAuditing(function () use ($parsed, &$resultado) {
+        Agrupamiento_Sueldos::withoutAuditing(function () use ($parsed, &$resultado, $esquemaMinimo) {
             foreach ($parsed['filas'] as $row) {
                 $resultado['en_anita']++;
                 $codigo = (int) ($row->agr_agrupamiento ?? 0);
@@ -175,11 +180,13 @@ class Agrupamiento_SueldosRepository implements Agrupamiento_SueldosRepositoryIn
 
                 $payload = [
                     'descripcion' => $descripcion,
-                    'fallo_tipo' => FalloCajaTipo::desdeCodigoAnita((int) ($row->agr_id_fallo ?? 0)),
-                    'variable1' => (float) ($row->agr_variable1 ?? 0),
-                    'variable2' => (float) ($row->agr_variable2 ?? 0),
-                    'variable3' => (float) ($row->agr_variable3 ?? 0),
-                    'variable4' => (float) ($row->agr_variable4 ?? 0),
+                    'fallo_tipo' => $esquemaMinimo
+                        ? null
+                        : FalloCajaTipo::desdeCodigoAnita((int) ($row->agr_id_fallo ?? 0)),
+                    'variable1' => $esquemaMinimo ? 0.0 : (float) ($row->agr_variable1 ?? 0),
+                    'variable2' => $esquemaMinimo ? 0.0 : (float) ($row->agr_variable2 ?? 0),
+                    'variable3' => $esquemaMinimo ? 0.0 : (float) ($row->agr_variable3 ?? 0),
+                    'variable4' => $esquemaMinimo ? 0.0 : (float) ($row->agr_variable4 ?? 0),
                 ];
 
                 $existente = $this->findPorCodigo($codigo);

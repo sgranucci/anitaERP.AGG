@@ -1,0 +1,25 @@
+---
+description: Tras deploy en otro host/empresa o aviso PHP CVE, correr scripts/check-php-security.sh
+alwaysApply: true
+---
+
+# Deploy: control PHP seguridad
+
+Tras **deploy o acceso a otro host/empresa** (AGG, Crown, Ferli, Interforming, El Bierzo, etc.), o si llega un aviso DigitalOcean / PHP CVE, correr el control en **ese** servidor — no asumir que el estado de El Bierzo aplica a todos.
+
+## Obligatorio
+
+```bash
+./scripts/check-php-security.sh
+```
+
+Mostrar el resumen (OK/WARN/FAIL) al operador. Doc: `docs/deploy/php-seguridad.md`.
+
+## No alcanza
+
+- Confiar solo en `php -v` (Ubuntu queda en `8.3.6` y backportea en el sufijo `.14`, etc.).
+- Dar por cubierto un cliente porque otro ya se parcheó.
+
+## Si FAIL
+
+Proponer `apt update` + upgrade de `phpX.Y*` y restart de FPM/Apache/nginx; **preguntar** antes de ejecutar (regla de escritura / cambios en prod). Mitigaciones temporales solo si no se puede actualizar ya — están en el doc.

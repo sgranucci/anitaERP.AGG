@@ -25,23 +25,62 @@ final class ModuloAvisoProgramadoDespachoSupport
 
     public static function entornoPermite(string $clave): bool
     {
-        $mapa = config('modulo_aviso.programados_entorno', []);
-        if (is_array($mapa) && isset($mapa[$clave])) {
-            $entorno = strtolower(trim((string) $mapa[$clave]));
-            $ok = match ($entorno) {
-                'agg' => EntornoEmpresaSupport::esAgg(),
-                'crown' => EntornoEmpresaSupport::esCrown(),
-                'ferli' => EntornoEmpresaSupport::esFerli(),
-                'elbierzo', 'el_bierzo' => EntornoEmpresaSupport::esElBierzo(),
-                'interforming' => EntornoEmpresaSupport::esInterforming(),
-                default => true,
-            };
-            if (! $ok) {
-                return false;
-            }
+        if (! self::entornoCatalogoPermite($clave)) {
+            return false;
         }
 
         return self::configPermite($clave);
+    }
+
+    /**
+     * Visibilidad en catálogo / Programador / preferencias: solo el gate de EMPRESA
+     * (programados_entorno). Sin entrada = visible en todos los clientes.
+     */
+    public static function entornoCatalogoPermite(string $clave): bool
+    {
+        $mapa = config('modulo_aviso.programados_entorno', []);
+        if (! is_array($mapa) || ! isset($mapa[$clave])) {
+            return true;
+        }
+
+        $entorno = strtolower(trim((string) $mapa[$clave]));
+
+        return match ($entorno) {
+            'agg' => EntornoEmpresaSupport::esAgg(),
+            'crown' => EntornoEmpresaSupport::esCrown(),
+            'ferli' => EntornoEmpresaSupport::esFerli(),
+            'elbierzo', 'el_bierzo' => EntornoEmpresaSupport::esElBierzo(),
+            'interforming' => EntornoEmpresaSupport::esInterforming(),
+            default => true,
+        };
+    }
+
+    /**
+     * @param  iterable<int, ModuloAvisoTipo>  $tipos
+     * @return \Illuminate\Support\Collection<int, ModuloAvisoTipo>
+     */
+    public static function filtrarTiposVisiblesEnCatalogo(iterable $tipos): \Illuminate\Support\Collection
+    {
+        return collect($tipos)->values()->filter(
+            static fn (ModuloAvisoTipo $t) => self::entornoCatalogoPermite($t->claveCompleta())
+        )->values();
+    }
+
+    /**
+     * @param  list<string>  $claves
+     * @return list<string>
+     */
+    public static function filtrarClavesVisiblesEnCatalogo(array $claves): array
+    {
+        $out = [];
+        foreach ($claves as $clave) {
+            $k = trim((string) $clave);
+            if ($k !== '' && self::entornoCatalogoPermite($k)) {
+                $out[] = $k;
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 
     /** Flags de negocio que el Kernel tenía en ->when(...). */

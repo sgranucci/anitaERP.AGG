@@ -11,7 +11,7 @@ use Throwable;
 /**
  * Replica venta + vencae + ctamov en Anita en cola (pedido / remito / mostrador, El Bierzo).
  * Antes de grabar inspecciona archivos: si está completo no escribe; si falta alguno, solo esos.
- * Si compaux/stkmov existen pero no cierran renglones/kilos del ERP, los borra y regraba.
+ * Si compaux/stkmov/climov existen pero no cierran (renglones/kilos o cuotas), los borra y regraba.
  */
 final class PedidoFacturaAnitaDeferEjecucionService
 {

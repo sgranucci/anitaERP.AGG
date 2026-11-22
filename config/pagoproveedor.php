@@ -135,6 +135,15 @@ return [
     'numeracion_lock_segundos' => (int) env('PAGOPROVEEDOR_NUMERACION_LOCK', 15),
 
     /*
+     * Texto default del correo OP al proveedor (Anita p-enviaop.c).
+     * Se precarga en el modal / envío masivo y se usa si el operador deja vacío.
+     * Configurar en PAGOPROVEEDOR_ENVIO_MENSAJE_DEFAULT (sin hardcode de mails en código).
+     */
+    'envio_proveedor' => [
+        'mensaje_default' => trim((string) env('PAGOPROVEEDOR_ENVIO_MENSAJE_DEFAULT', '')),
+    ],
+
+    /*
      * Certificados de retención (lee_num_tes / tctes):
      * - Mono (Ferli): tctes RGP/RIP/RSP/RTP → tctes_numero (310/317/312/311).
      * - MultiEmpresa AGG: t_comp G{n}/V{n}/S{n}/T{n} o mapa abajo.

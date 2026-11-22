@@ -799,7 +799,9 @@ class ClienteController extends Controller
     public function validarPadronOperacion(Request $request, $id): \Illuminate\Http\JsonResponse
     {
         if (! can('crear-pedidos', false) && ! can('actualizar-pedidos', false)
-            && ! can('crear-factura', false) && ! can('editar-factura', false)) {
+            && ! can('crear-factura', false) && ! can('editar-factura', false)
+            && ! can('crear-cobranza', false) && ! can('editar-cobranza', false)
+            && ! can('actualizar-cobranza', false)) {
             can('crear-pedidos');
         }
 
@@ -815,9 +817,14 @@ class ClienteController extends Controller
         $resultado = ArcaPadronClienteOperacionValidacionSupport::evaluarOperacion($cliente, $condicionivaId);
 
         if (! ($resultado['ok'] ?? false)) {
+            $motivo = (string) ($resultado['error'] ?? 'Problemas en ARCA: el cliente no cumple la validación del padrón.');
+            app(\App\Services\Ventas\ClienteRetenidoAfipAvisoService::class)->despachar((int) $id, [
+                'motivo' => $motivo,
+            ]);
+
             return response()->json([
                 'ok' => false,
-                'message' => $resultado['error'] ?? 'Problemas en ARCA: el cliente no cumple la validación del padrón.',
+                'message' => $motivo,
                 'validacion' => $resultado['validacion'] ?? null,
             ], 422);
         }
@@ -1014,6 +1021,10 @@ class ClienteController extends Controller
 
             return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }
+
+        $estadoNuevo = (string) (Cliente::query()->whereKey($id)->value('estado') ?? '');
+        app(\App\Services\Ventas\ClienteSuspensionAvisoService::class)
+            ->despacharSiPasoASuspendido((int) $id, $estadoActual, $estadoNuevo);
 
         $suitecrmAviso = $this->sincronizarSuitecrmCuentaTrasGrabado(Cliente::find($id));
 

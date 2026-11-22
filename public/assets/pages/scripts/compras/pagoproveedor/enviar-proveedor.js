@@ -186,6 +186,7 @@
             $('#op-envio-proveedor-form-wrap').removeClass('d-none');
             pintarHistorialEnvios(data.envios || []);
             $('#op_envio_proveedor_email').val(data.email || '');
+            $('#op_envio_proveedor_mensaje').val(data.mensaje_default || '');
             if (data.mensaje) {
                 $('#op-envio-proveedor-aviso').removeClass('d-none').text(data.mensaje);
             }

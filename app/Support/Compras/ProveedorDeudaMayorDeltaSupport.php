@@ -9,8 +9,12 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
+use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Delta conjunto de proveedores + anticipos, en pesos, signo del mayor
@@ -156,6 +160,7 @@ final class ProveedorDeudaMayorDeltaSupport
         $filasProveedor = $this->ordenarPorVariacion($filasProveedor);
         $filasAnticipo = $this->ordenarPorVariacion($filasAnticipo);
         $conjunto = $this->deltaConjunto($filasProveedor, $filasAnticipo, $fechaAnterior !== null, $tolerancia);
+        $anita = $this->enriquecerConMayorAnita($empresaId, $fecha, $tolerancia, $filasProveedor, $filasAnticipo);
 
         $this->guardar($empresaId, $fecha, $aGuardar);
 
@@ -177,7 +182,111 @@ final class ProveedorDeudaMayorDeltaSupport
             'cuentas' => $filasProveedor,
             'cuentas_total' => count($filasProveedor),
             'anticipos' => $filasAnticipo,
+            'mayor_anita_incluido' => $anita['incluido'],
+            'mayor_anita_error' => $anita['error'],
+            'diferencias_erp_anita' => $anita['diferencias'],
         ];
+    }
+
+    /**
+     * Suma neto_haber Anita (subdiario+ctamov) por cuenta y lo compara con el mayor ERP.
+     *
+     * @param  list<array<string, mixed>>  $filasProveedor
+     * @param  list<array<string, mixed>>  $filasAnticipo
+     * @return array{incluido: bool, error: ?string, diferencias: int}
+     */
+    private function enriquecerConMayorAnita(
+        int $empresaId,
+        string $fecha,
+        float $tolerancia,
+        array &$filasProveedor,
+        array &$filasAnticipo,
+    ): array {
+        $meta = ['incluido' => false, 'error' => null, 'diferencias' => 0];
+        if (! filter_var(config('compras.deuda_ficha_auditor.incluir_mayor_anita', true), FILTER_VALIDATE_BOOLEAN)) {
+            return $meta;
+        }
+
+        $codigoACuentaId = [];
+        foreach (array_merge($filasProveedor, $filasAnticipo) as $fila) {
+            $codigo = (int) preg_replace('/\D+/', '', (string) ($fila['codigo'] ?? ''));
+            $cuentaId = (int) ($fila['cuentacontable_id'] ?? 0);
+            if ($codigo > 0 && $cuentaId > 0) {
+                $codigoACuentaId[$codigo] = $cuentaId;
+            }
+        }
+        if ($codigoACuentaId === []) {
+            return $meta;
+        }
+
+        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
+        if ($empresaAnita <= 0) {
+            $meta['error'] = 'Sin código empresa Anita.';
+
+            return $meta;
+        }
+
+        $desde = Carbon::parse((string) config(
+            'compras.deuda_ficha_auditor.mayor_anita_desde',
+            '2000-01-01'
+        ))->toDateString();
+        $ymdDesde = (int) str_replace('-', '', $desde);
+        $ymdHasta = (int) str_replace('-', '', $fecha);
+
+        try {
+            $movs = app(AnitaMayorAnaliticoSupport::class)->listarMovimientosPeriodo(
+                $empresaAnita,
+                $ymdDesde,
+                $ymdHasta,
+                array_keys($codigoACuentaId),
+            );
+        } catch (Throwable $e) {
+            $meta['error'] = $e->getMessage();
+            Log::warning('deuda_ficha_auditor.mayor_anita_fallo', [
+                'empresa_id' => $empresaId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return $meta;
+        }
+
+        $porCuentaId = [];
+        foreach ($movs as $mov) {
+            $codigo = (int) ($mov['cuenta_codigo'] ?? 0);
+            $cuentaId = $codigoACuentaId[$codigo] ?? 0;
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $porCuentaId[$cuentaId] = ($porCuentaId[$cuentaId] ?? 0.0) + (float) ($mov['neto_haber'] ?? 0);
+        }
+
+        $diferencias = 0;
+        $aplicar = static function (array &$filas) use (&$diferencias, $porCuentaId, $tolerancia): void {
+            foreach ($filas as &$fila) {
+                $cuentaId = (int) ($fila['cuentacontable_id'] ?? 0);
+                $mayorAnita = round((float) ($porCuentaId[$cuentaId] ?? 0), 2);
+                $deuda = (float) ($fila['deuda'] ?? 0);
+                $mayorErp = (float) ($fila['mayor'] ?? 0);
+                $deltaAnita = round($mayorAnita - $deuda, 2);
+                $diffErpAnita = round($mayorErp - $mayorAnita, 2);
+                $difiere = abs($diffErpAnita) >= $tolerancia;
+                if ($difiere) {
+                    $diferencias++;
+                }
+                $fila['mayor_anita'] = $mayorAnita;
+                $fila['delta_anita'] = $deltaAnita;
+                $fila['diff_erp_anita'] = $diffErpAnita;
+                $fila['erp_anita_difiere'] = $difiere;
+            }
+            unset($fila);
+        };
+        $aplicar($filasProveedor);
+        $aplicar($filasAnticipo);
+
+        $meta['incluido'] = true;
+        $meta['diferencias'] = $diferencias;
+
+        return $meta;
     }
 
     /**

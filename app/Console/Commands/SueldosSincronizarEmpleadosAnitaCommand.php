@@ -20,7 +20,9 @@ class SueldosSincronizarEmpleadosAnitaCommand extends Command
     public function handle(Empleado_SueldosRepositoryInterface $repository): int
     {
         if (! $this->option('ejecutar')) {
-            $this->warn('No se escribió nada. Agregá --ejecutar para importar legajos faltantes y actualizar egreso, estado y datos organizativos de los existentes.');
+            $enErp = \App\Models\Sueldos\Empleado_Sueldos::query()->count();
+            $this->warn('Dry-run: no se escribió nada. Empleados en ERP: '.$enErp.'.');
+            $this->line('Agregá --ejecutar para importar legajos faltantes y actualizar egreso, estado y datos organizativos.');
 
             return self::SUCCESS;
         }

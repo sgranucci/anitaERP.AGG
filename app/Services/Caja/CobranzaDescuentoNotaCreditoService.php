@@ -6,6 +6,7 @@ use App\Models\Caja\Cobranza_Descuento;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
+use App\Services\Ventas\CobranzaNclDescuentoAvisoService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CobranzaDescuentoConfigSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
@@ -100,7 +101,8 @@ final class CobranzaDescuentoNotaCreditoService
         $puntoventaId = CobranzaDescuentoConfigSupport::puntoventaIdDesdeFactura(
             (int) ($ventaOrigen->puntoventa_id ?? 0)
         );
-        $tipoNcId = CobranzaDescuentoConfigSupport::tipotransaccionNotaCreditoId($empresaId, $letra);
+        $usarNcl = CobranzaDescuentoConfigSupport::correspondeNclPorFce($ventaOrigen, $importe);
+        $tipoNcId = CobranzaDescuentoConfigSupport::tipotransaccionNotaCreditoId($empresaId, $letra, $usarNcl);
         $articuloId = CobranzaDescuentoConfigSupport::articuloIdParaDescuento($empresaId);
 
         $emisionReferencia = $ventaOrigen->venta_emisiones
@@ -146,11 +148,17 @@ final class CobranzaDescuentoNotaCreditoService
             'impuesto_ids' => [$impuestoId],
             'incluyeimpuestos' => ['1'],
             NotaCreditoPercepcionIibbSupport::FLAG_NCP => true,
-            // NCP de descuento no devuelve mercadería. En Ferli el tipo tiene operación de stock Entrada.
+            // NCP/NCL de descuento no devuelve mercadería. En Ferli el tipo tiene operación de stock Entrada.
             'opciones_emision' => [
                 'omitir_movimiento_stock' => true,
             ],
         ];
+
+        // NCL (AFIP 203): asociación FCE obligatoria (obs. 209). venta_id del payload también asocia.
+        if ($usarNcl) {
+            $payload['fce_comprobante_referenciado'] = $referenciaCompro;
+            $payload['fce_anulacion'] = 'N';
+        }
 
         if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || trim((string) ($ventaOrigen->numerodocumento ?? '')) !== '') {
             $payload['venta_receptor'] = [
@@ -183,6 +191,10 @@ final class CobranzaDescuentoNotaCreditoService
             throw new Exception('La nota de crédito no generó movimiento en cuenta corriente.');
         }
 
+        if ($usarNcl) {
+            app(CobranzaNclDescuentoAvisoService::class)->despacharSiCorresponde($ventaNcId);
+        }
+
         return [
             'venta_origen_id' => $ventaOrigenId,
             'cliente_cuentacorriente_origen_id' => $clienteCuentacorrienteOrigenId,
@@ -195,6 +207,7 @@ final class CobranzaDescuentoNotaCreditoService
             'tipo' => $tipo,
             'valor' => $valor,
             'leyenda' => $leyendaManual !== '' ? $leyendaManual : null,
+            'abreviatura_nc' => $usarNcl ? 'NCL' : 'NCP',
         ];
     }
 

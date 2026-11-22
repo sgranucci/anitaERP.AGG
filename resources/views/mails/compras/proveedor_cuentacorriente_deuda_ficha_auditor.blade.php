@@ -208,13 +208,23 @@
     </p>
 @endif
 
+@php
+    $mayorAnitaIncluido = ! empty($delta['mayor_anita_incluido']);
+    $mayorAnitaError = trim((string) ($delta['mayor_anita_error'] ?? ''));
+@endphp
 <h3 style="margin:22px 0 6px 0;">Delta de proveedores</h3>
 <p style="margin:0 0 8px 0; color:#555; font-size:13px;">
     En pesos, con el mismo signo del mayor (negativo = débito). Delta = mayor − deuda.
     La deuda es una sola: facturas impagas, notas de crédito sin aplicar y OPA sin aplicar que no están en anticipos.
     Entran las cuentas de rubro Pasivo del proveedor. Anticipos no entra en esta tabla.
     El aviso no sale de una fila: sale de la suma con anticipos.
+    @if ($mayorAnitaIncluido)
+        Mayor Anita = subdiario + ctamov (neto Haber−Debe), contraste con el mayor ERP.
+    @endif
 </p>
+@if ($mayorAnitaError !== '')
+    <p style="margin:0 0 8px 0; color:#922b21; font-size:13px;">Mayor Anita no disponible: {{ $mayorAnitaError }}</p>
+@endif
 @if ($cuentasDelta === [])
     <p style="margin:0;">No hay saldo de deuda ni de mayor en cuentas de proveedores.</p>
 @else
@@ -222,20 +232,28 @@
         <tr style="background:#85C1E9; color:#17202A;">
             <th align="left">Cuenta</th>
             <th align="right">Deuda</th>
-            <th align="right">Mayor</th>
+            <th align="right">Mayor ERP</th>
+            @if ($mayorAnitaIncluido)
+                <th align="right">Mayor Anita</th>
+                <th align="right">ERP−Anita</th>
+            @endif
             <th align="right">Delta</th>
             <th align="right">Delta anterior</th>
             <th align="right">Variación</th>
         </tr>
         @foreach ($cuentasDelta as $c)
             <tr
-                @if (! empty($c['movio']))
+                @if (! empty($c['movio']) || ! empty($c['erp_anita_difiere']))
                     style="background:#fadbd8;"
                 @endif
             >
                 <td>{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</td>
                 <td align="right">{{ $fmt($c['deuda'] ?? 0) }}</td>
                 <td align="right">{{ $fmt($c['mayor'] ?? 0) }}</td>
+                @if ($mayorAnitaIncluido)
+                    <td align="right">{{ $fmt($c['mayor_anita'] ?? 0) }}</td>
+                    <td align="right"><strong>{{ $fmt($c['diff_erp_anita'] ?? 0) }}</strong></td>
+                @endif
                 <td align="right"><strong>{{ $fmt($c['delta'] ?? 0) }}</strong></td>
                 <td align="right">{{ $c['delta_anterior'] === null ? '—' : $fmt($c['delta_anterior']) }}</td>
                 <td align="right">
@@ -253,6 +271,11 @@
             {{ (int) ($delta['variaciones'] ?? 0) }} cuenta(s) de proveedores cambiaron su delta. El control es la suma con anticipos.
         </p>
     @endif
+    @if ($mayorAnitaIncluido && (int) ($delta['diferencias_erp_anita'] ?? 0) > 0)
+        <p style="margin:8px 0 0 0; color:#922b21; font-size:13px;">
+            {{ (int) $delta['diferencias_erp_anita'] }} cuenta(s) difieren entre mayor ERP y mayor Anita.
+        </p>
+    @endif
 @endif
 
 <h3 style="margin:22px 0 6px 0;">Anticipos a proveedores (solo OPA)</h3>
@@ -268,20 +291,28 @@
         <tr style="background:#85C1E9; color:#17202A;">
             <th align="left">Cuenta</th>
             <th align="right">OPA / OP adelantadas</th>
-            <th align="right">Mayor (sin FA/recep.)</th>
+            <th align="right">Mayor ERP</th>
+            @if ($mayorAnitaIncluido)
+                <th align="right">Mayor Anita</th>
+                <th align="right">ERP−Anita</th>
+            @endif
             <th align="right">Delta</th>
             <th align="right">Anterior</th>
             <th align="right">Variación</th>
         </tr>
         @foreach ($cuentasAnticipo as $c)
             <tr
-                @if (! empty($c['movio']))
+                @if (! empty($c['movio']) || ! empty($c['erp_anita_difiere']))
                     style="background:#fadbd8;"
                 @endif
             >
                 <td>{{ $c['codigo'] ?? '' }} {{ $c['nombre'] ?? '' }}</td>
                 <td align="right">{{ $fmt($c['opa'] ?? $c['deuda'] ?? 0) }}</td>
                 <td align="right">{{ $fmt($c['mayor'] ?? 0) }}</td>
+                @if ($mayorAnitaIncluido)
+                    <td align="right">{{ $fmt($c['mayor_anita'] ?? 0) }}</td>
+                    <td align="right"><strong>{{ $fmt($c['diff_erp_anita'] ?? 0) }}</strong></td>
+                @endif
                 <td align="right"><strong>{{ $fmt($c['delta'] ?? 0) }}</strong></td>
                 <td align="right">{{ $c['delta_anterior'] === null ? '—' : $fmt($c['delta_anterior']) }}</td>
                 <td align="right">

@@ -4,7 +4,9 @@ namespace App\Support\Ventas;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
+use App\Repositories\Ventas\VentaRepository;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Support\Facades\Log;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaNumeradorFiscalSupport;
 use InvalidArgumentException;
@@ -15,7 +17,9 @@ use InvalidArgumentException;
  * Cada serie es venta.codigo_afip + punto de venta. codigo_afip es el tipo AFIP
  * (1/2/3 factura-ND-NC A, 6/7/8 factura-ND-NC B, 11/12/13 letra C).
  *
- * - El Bierzo / Crown: reserva atómica en venta_serie_numerador.
+ * - El Bierzo: reserva en el numerador de Anita (misma serie que Anita sigue emitiendo);
+ *   venta_serie_numerador acompaña.
+ * - Crown: reserva atómica en venta_serie_numerador.
  * - Crown sin Anita nativo: siembra una vez desde Informix (cncadmin) + ERP.
  * - Crown con GASTRONOMIA_SINCRONIZAR_ANITA: refresca el piso desde Anita bridge
  *   (igual criterio AGG: último en venta Anita) antes de reservar.
@@ -80,6 +84,19 @@ final class CaeaEmisionNumeracionSupport
         // dos correlatividades (Rebisco PV 00030, sep/2026: NCB 54768/54769 con
         // último autorizado 25 y hueco en FAC 54768).
 
+        if (EntornoEmpresaSupport::esElBierzo() && self::esPuntoventaModoCaea($puntoventaId)) {
+            return self::reservarSiguienteNumeroAnitaElBierzo(
+                $puntoventaId,
+                $tipotransaccion,
+                $letraComprobante,
+                $codigoAfip,
+                $empresaId,
+                $ultimoErp,
+                $modoFacturacionCliente,
+                $totalComprobante,
+            );
+        }
+
         if (EntornoEmpresaSupport::esElBierzo() || EntornoEmpresaSupport::esCrown()) {
             $piso = self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip);
 
@@ -111,6 +128,84 @@ final class CaeaEmisionNumeracionSupport
         }
 
         return self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip) + 1;
+    }
+
+    private static function esPuntoventaModoCaea(int $puntoventaId): bool
+    {
+        return (string) (Puntoventa::query()->whereKey($puntoventaId)->value('modofacturacion') ?? '') === 'A';
+    }
+
+    /**
+     * El Bierzo: la sucursal CAEA (00005) es la misma serie ARCA que Anita sigue emitiendo
+     * (FAC A suc. 5 va por 360.000+). El número sale del numerador de Anita, que comparten
+     * los dos sistemas; venta_serie_numerador solo acompaña. 0 = no emitir.
+     */
+    private static function reservarSiguienteNumeroAnitaElBierzo(
+        int $puntoventaId,
+        Tipotransaccion $tipotransaccion,
+        string $letraComprobante,
+        int $codigoAfip,
+        ?int $empresaId,
+        int $ultimoErp,
+        ?string $modoFacturacionCliente,
+        ?float $totalComprobante,
+    ): int {
+        if (! FacturacionAnitaGrabacionSupport::habilitada()) {
+            FacturacionAnitaGrabacionSupport::logSiApagada();
+            Log::error('ventas.caea.numerador_bloqueado_anita_apagada', [
+                'puntoventa_id' => $puntoventaId,
+                'codigo_afip' => $codigoAfip,
+            ]);
+
+            return 0;
+        }
+
+        $sucursal = trim((string) (Puntoventa::query()->whereKey($puntoventaId)->value('codigo') ?? ''));
+        if ($sucursal === '') {
+            return 0;
+        }
+
+        $tipoAnita = self::tipoAnitaDesdeTipotransaccion(
+            $tipotransaccion,
+            $modoFacturacionCliente,
+            $totalComprobante,
+            $letraComprobante,
+        );
+
+        $numero = app(VentaRepository::class)->reservarNumeroAnitaConReintentos(
+            $tipoAnita,
+            strtoupper(trim($letraComprobante)),
+            $sucursal,
+            PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($sucursal),
+            'ventas.caea',
+        );
+        if (! is_int($numero) || $numero <= 0) {
+            return 0;
+        }
+
+        if ($numero <= $ultimoErp) {
+            Log::error('ventas.caea.numerador_anita_atras_del_erp', [
+                'puntoventa_id' => $puntoventaId,
+                'tipo_anita' => $tipoAnita,
+                'letra' => $letraComprobante,
+                'numero_anita' => $numero,
+                'ultimo_erp' => $ultimoErp,
+            ]);
+
+            return 0;
+        }
+
+        $erp = VentaNumeradorFiscalSupport::reservarSiguiente($puntoventaId, $codigoAfip, $empresaId, $numero - 1);
+        if ($erp !== $numero) {
+            Log::warning('ventas.caea.numerador_erp_desalineado', [
+                'puntoventa_id' => $puntoventaId,
+                'codigo_afip' => $codigoAfip,
+                'numero_anita' => $numero,
+                'numero_erp' => $erp,
+            ]);
+        }
+
+        return $numero;
     }
 
     /**
@@ -161,7 +256,9 @@ final class CaeaEmisionNumeracionSupport
         }
 
         if (! empty($payload['numerocomprobante_forzado'])) {
-            $payload['_omitir_numera_anita_fin'] = ! EntornoEmpresaSupport::esElBierzo();
+            // El número ya está fijado (reserva previa o reintento). Avanzar otra vez
+            // en Anita dejaría un hueco en la serie CAEA/compemis.
+            $payload['_omitir_numera_anita_fin'] = true;
 
             return null;
         }
@@ -198,9 +295,9 @@ final class CaeaEmisionNumeracionSupport
             }
 
             $payload['numerocomprobante_forzado'] = $numero;
-            // AGG/Crown CAEA: el ERP ya numeró; no tocar compemis.
-            // El Bierzo: Anita sigue vivo; numeraAnita al cierre mantiene el numerador.
-            $payload['_omitir_numera_anita_fin'] = ! EntornoEmpresaSupport::esElBierzo();
+            // AGG/Crown: el ERP ya numeró. El Bierzo: el número ya se reservó en el numerador Anita.
+            // Avanzarlo otra vez al grabar dejaría un hueco en la serie.
+            $payload['_omitir_numera_anita_fin'] = true;
         } finally {
             if (! $lockYaAdquirido) {
                 PuntoventaEmisionLock::liberar($lock);

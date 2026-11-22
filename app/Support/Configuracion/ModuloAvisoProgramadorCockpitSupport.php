@@ -36,7 +36,9 @@ final class ModuloAvisoProgramadorCockpitSupport
     ): array {
         $ahora = ($ahora ?? now())->copy()->timezone(self::TZ);
         $mapa = config('modulo_aviso.programados', []);
-        $claves = is_array($mapa) ? array_keys($mapa) : [];
+        $claves = ModuloAvisoProgramadoDespachoSupport::filtrarClavesVisiblesEnCatalogo(
+            is_array($mapa) ? array_keys($mapa) : []
+        );
 
         $tipos = self::tiposProgramables($claves);
         $feriados = ModuloAvisoProgramacionSupport::feriadosYmdEntre(

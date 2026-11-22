@@ -302,7 +302,7 @@
                         <div class="card-body border-top">
                             <div class="form-group mb-2">
                                 <label for="mensaje">Mensaje adicional <span class="text-muted">(opcional, va en todos los correos)</span></label>
-                                <textarea name="mensaje" id="mensaje" class="form-control" rows="2" maxlength="4000"></textarea>
+                                <textarea name="mensaje" id="mensaje" class="form-control" rows="2" maxlength="4000">{{ old('mensaje', \App\Support\Compras\PagoproveedorEnvioMensajeDefaultSupport::texto()) }}</textarea>
                             </div>
                             <button type="submit" class="btn btn-success">
                                 <i class="fa fa-envelope"></i> Enviar seleccionadas

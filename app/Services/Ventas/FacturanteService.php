@@ -529,8 +529,28 @@ class FacturanteService
 	private function grabaClimov($codigocliente, $fecha, $tipo, $letra, $puntoventa, $numerocomprobante, 
 								$total, $moneda_id)
 	{
-		// Graba climov
 		$apiAnita = new ApiAnita();
+
+		// Idempotente: no reinsertar si la cuota 1 ya está (reintentos / doble click).
+		$existentes = ApiAnita::decodificarListaFilas($apiAnita->apiCall([
+			'acc' => 'list',
+			'sistema' => 'ventas',
+			'tabla' => 'climov',
+			'campos' => 'cliv_nro,cliv_nro_cuota',
+			'whereArmado' => " WHERE cliv_tipo='".$tipo."' AND cliv_letra='".$letra."'"
+				." AND cliv_sucursal='".$puntoventa."' AND cliv_nro='".$numerocomprobante."'"
+				." AND cliv_nro_cuota=1 ",
+		]));
+		if ($existentes !== []) {
+			\Log::info('facturante.climov_ya_existe_omitido', [
+				'tipo' => $tipo,
+				'letra' => $letra,
+				'sucursal' => $puntoventa,
+				'nro' => $numerocomprobante,
+			]);
+
+			return;
+		}
 
 		$data = array( 	'tabla' => 'climov', 
 						'acc' => 'insert',
@@ -561,7 +581,7 @@ class FacturanteService
 							'".'I'."'
 						"
 				);
-		$climov = $apiAnita->apiCallEscritura($data);
+		$apiAnita->apiCallEscritura($data);
 
 	}	
 

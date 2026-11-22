@@ -13,6 +13,7 @@ use App\Support\Caja\InterbankingTransferenciaComprobanteSupport;
 use App\Support\Compras\CbuSupport;
 use App\Support\Compras\PagoproveedorArchivoSupport;
 use App\Support\Compras\PagoproveedorEnvioMasivoClasificacionSupport;
+use App\Support\Compras\PagoproveedorEnvioMensajeDefaultSupport;
 use App\Support\Mail\EmailsMultiplesSupport;
 use Auth;
 use Illuminate\Http\UploadedFile;
@@ -116,6 +117,7 @@ class PagoproveedorEnvioProveedorService
             'etiqueta_op' => $etiqueta,
             'estado' => (string) ($pago->estado ?? ''),
             'advertencia_estado' => self::advertenciaEstadoParaEnvio((string) ($pago->estado ?? '')),
+            'mensaje_default' => PagoproveedorEnvioMensajeDefaultSupport::texto(),
             'mensaje' => $sinEmailProveedor
                 ? 'El proveedor no tiene email configurado. Ingrese uno o más destinatarios.'
                 : null,
@@ -194,6 +196,7 @@ class PagoproveedorEnvioProveedorService
             if ($archivosNuevos !== []) {
                 $asociados = PagoproveedorArchivoSupport::guardarSubidos($pagoproveedorId, $archivosNuevos);
             }
+            $mensajeAdicional = PagoproveedorEnvioMensajeDefaultSupport::resolver($mensajeAdicional);
             $mailable = new PagoproveedorOrdenPago($pago, $mensajeAdicional);
             $mailable->incluyeComprobanteTransferencia = $adjuntosExtra !== [];
             $mailable->incluyeArchivosAdicionales = $asociados !== [];

@@ -7,6 +7,7 @@ use App\Models\Stock\Color;
 use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Prenda_Agrupamiento_Sueldos;
 use App\Models\Sueldos\Prenda_Sueldos;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Sync pull unilateral desde Anita (base sueldos) de la dotación por agrupamiento/sexo
@@ -25,13 +26,22 @@ class DotacionAgrupamientoAnitaSync
 
         $resultado = ['en_anita' => 0, 'importados' => 0, 'omitidos' => 0, 'sin_mapeo' => 0, 'errores' => []];
 
+        // El Bierzo (syscolumns): sin prxagr_sexo → dotación unisex; se replica en M y F.
+        $sinSexo = EntornoEmpresaSupport::esElBierzo();
+        $campos = $sinSexo
+            ? 'prxagr_cod_agrup, prxagr_orden, prxagr_prenda, prxagr_color, prxagr_lim_anual'
+            : 'prxagr_cod_agrup, prxagr_orden, prxagr_prenda, prxagr_color, prxagr_lim_anual, prxagr_sexo';
+        $orderBy = $sinSexo
+            ? 'prxagr_cod_agrup, prxagr_orden'
+            : 'prxagr_cod_agrup, prxagr_sexo, prxagr_orden';
+
         $api = new ApiAnita();
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => $this->tableAnita,
-            'campos' => 'prxagr_cod_agrup, prxagr_orden, prxagr_prenda, prxagr_color, prxagr_lim_anual, prxagr_sexo',
-            'orderBy' => 'prxagr_cod_agrup, prxagr_sexo, prxagr_orden',
+            'campos' => $campos,
+            'orderBy' => $orderBy,
         ]));
 
         if (! empty($parsed['error_lectura'])) {
@@ -54,32 +64,36 @@ class DotacionAgrupamientoAnitaSync
                 continue;
             }
 
-            $sexo = self::normalizarSexo($row->prxagr_sexo ?? null);
+            $sexos = $sinSexo
+                ? ['M', 'F']
+                : [self::normalizarSexo($row->prxagr_sexo ?? null)];
             $colorCod = (int) ($row->prxagr_color ?? 0);
             $colorId = $colorCod > 0 ? (int) ($mapaColor[$colorCod] ?? 0) : 0;
             $colorId = $colorId > 0 ? $colorId : null;
 
-            $existe = Prenda_Agrupamiento_Sueldos::query()
-                ->where('agrupamiento_id', $agrId)
-                ->where('sexo', $sexo)
-                ->where('prenda_id', $prendaId)
-                ->when($colorId === null, fn ($q) => $q->whereNull('color_id'))
-                ->when($colorId !== null, fn ($q) => $q->where('color_id', $colorId))
-                ->exists();
-            if ($existe) {
-                $resultado['omitidos']++;
-                continue;
-            }
+            foreach ($sexos as $sexo) {
+                $existe = Prenda_Agrupamiento_Sueldos::query()
+                    ->where('agrupamiento_id', $agrId)
+                    ->where('sexo', $sexo)
+                    ->where('prenda_id', $prendaId)
+                    ->when($colorId === null, fn ($q) => $q->whereNull('color_id'))
+                    ->when($colorId !== null, fn ($q) => $q->where('color_id', $colorId))
+                    ->exists();
+                if ($existe) {
+                    $resultado['omitidos']++;
+                    continue;
+                }
 
-            Prenda_Agrupamiento_Sueldos::create([
-                'agrupamiento_id' => $agrId,
-                'sexo' => $sexo,
-                'orden' => (int) ($row->prxagr_orden ?? 0),
-                'prenda_id' => $prendaId,
-                'color_id' => $colorId,
-                'limite_anual' => (float) ($row->prxagr_lim_anual ?? 0),
-            ]);
-            $resultado['importados']++;
+                Prenda_Agrupamiento_Sueldos::create([
+                    'agrupamiento_id' => $agrId,
+                    'sexo' => $sexo,
+                    'orden' => (int) ($row->prxagr_orden ?? 0),
+                    'prenda_id' => $prendaId,
+                    'color_id' => $colorId,
+                    'limite_anual' => (float) ($row->prxagr_lim_anual ?? 0),
+                ]);
+                $resultado['importados']++;
+            }
         }
 
         return $resultado;

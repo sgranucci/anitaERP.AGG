@@ -66,6 +66,7 @@ use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Mail\Compras\ProveedorProvisorio;
+use App\Support\Compras\ProveedorAltaMailSupport;
 use App\Exports\Compras\ProveedorExport;
 use App\Support\Compras\ProveedorListadoBancarioSupport;
 use App\Support\Compras\ProveedorListadoColumnas;
@@ -672,6 +673,7 @@ class ProveedorController extends Controller
      */
     public function guardar(ValidacionProveedor $request)
     {
+        $proveedor = null;
         DB::beginTransaction();
         try
         {
@@ -708,6 +710,11 @@ class ProveedorController extends Controller
             $receivers = config("proveedor.emailapruebaalta");
 
             Mail::to($receivers)->send(new ProveedorProvisorio($request));
+        }
+
+        // Anita a-promae envia_mail_alta (Bierzo: impuestos / habilitación)
+        if (isset($proveedor) && $proveedor) {
+            ProveedorAltaMailSupport::enviarSiCorresponde($proveedor);
         }
 
         return redirect()->route('proveedor', QueryRetornoListado::desdeRequest($request, ProveedorListadoFiltros::class))

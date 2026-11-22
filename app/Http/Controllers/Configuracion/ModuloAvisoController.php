@@ -38,7 +38,9 @@ class ModuloAvisoController extends Controller
 
         $soloProgramables = $request->boolean('solo_programables');
         $mapa = config('modulo_aviso.programados', []);
-        $clavesProgramables = is_array($mapa) ? array_keys($mapa) : [];
+        $clavesProgramables = ModuloAvisoProgramadoDespachoSupport::filtrarClavesVisiblesEnCatalogo(
+            is_array($mapa) ? array_keys($mapa) : []
+        );
 
         $query = ModuloAvisoTipo::query()
             ->withCount(['destinatarios as destinatarios_activos_count' => function ($q) {
@@ -60,7 +62,9 @@ class ModuloAvisoController extends Controller
             });
         }
 
-        $tipos = $query->get()->groupBy('modulo');
+        // Oculta tipos gated a otro EMPRESA (ej. kilos Bierzo en AGG).
+        $tipos = ModuloAvisoProgramadoDespachoSupport::filtrarTiposVisiblesEnCatalogo($query->get())
+            ->groupBy('modulo');
         $calModo = $request->input('cal_modo') === 'semana' ? 'semana' : 'mes';
         $calRef = trim((string) $request->input('cal_ref', ''));
         $cockpit = $soloProgramables
@@ -275,6 +279,10 @@ class ModuloAvisoController extends Controller
 
         $tipo = ModuloAvisoTipo::with(['destinatarios.usuarios', 'destinatarios.empresas', 'destinatarios.centrocostos'])
             ->findOrFail($id);
+
+        if (! ModuloAvisoProgramadoDespachoSupport::entornoCatalogoPermite($tipo->claveCompleta())) {
+            abort(404);
+        }
 
         $programable = $this->esProgramable($tipo);
         $logsRecientes = collect();

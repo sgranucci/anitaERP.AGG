@@ -5419,7 +5419,7 @@ class FacturacionService
 		$omitirNumeraAnitaFin = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_numera_anita_fin']);
 		$this->activarGrabacionAnitaVillafrancaSiSignoDivision((int) ($puntoventa->id ?? 0), $signo);
 		// CAE/WSFEX (C/E ARCA online): el número lo asigna ARCA; Anita no debe avanzar compemis.
-		// CAEA AGG: el ERP ya numeró. El Bierzo CAEA: Anita sigue vivo, numeraAnita al cierre.
+		// CAEA AGG: el ERP ya numeró. El Bierzo CAEA: el número ya se reservó en el numerador Anita.
 		if (
 			! $omitirNumeraAnitaFin
 			&& FacturacionCircuitoAfipSupport::esModoEmisionArcaOnline($puntoventa->modofacturacion ?? null)
@@ -7306,11 +7306,22 @@ class FacturacionService
 		}
 		
 		// Graba climov. Contado y factura eventual no abren cuenta corriente.
+		// Idempotente: regrabaciones / defer Bierzo no deben triplicar la misma cuota (incidente FAC A-10-7511).
 		$nroCuota = 0;
 		if ($omiteClimovAnita) {
 			$cuentacorriente = [];
 		}
 		$fechaVencimiento = 0;
+		$tipoClimov = substr((string) ($venta['codigo'] ?? ''), 0, 3);
+		$numeroClimov = $venta['numerocomprobante'] ?? null;
+		$graboClimov = false;
+		$cuotasClimovExistentes = [];
+		if ($cuentacorriente !== [] && $numeroClimov !== null && ! $this->debeOmitirTablaAnita('climov')) {
+			// Una sola lectura: en una factura nueva lo normal es vacío; la purga posterior cubre un vacío falso.
+			foreach ($this->listarClimovAnitaComprobante($tipoClimov, $letra, $puntoventa, $numeroClimov, 1) as $fila) {
+				$cuotasClimovExistentes[(int) ($fila->cliv_nro_cuota ?? 0)] = true;
+			}
+		}
 		foreach($cuentacorriente as $cuota)
 		{
 			$nroCuota++;
@@ -7346,6 +7357,18 @@ class FacturacionService
 			}
 			$fechaVencimiento = $cuota['fechavencimiento'];
 
+			if (isset($cuotasClimovExistentes[$nroCuota])) {
+				Log::info('facturacion.anita_bridge.climov_ya_existe_omitido', [
+					'tipo' => $tipoClimov,
+					'letra' => $letra,
+					'sucursal' => $puntoventa,
+					'nro' => $numeroClimov,
+					'cuota' => $nroCuota,
+				]);
+				$graboClimov = true;
+				continue;
+			}
+
 			$data = array( 	'tabla' => 'climov', 
 							'acc' => 'insert',
 							'campos' => ' 
@@ -7380,6 +7403,10 @@ class FacturacionService
 			if ($errClimov !== null) {
 				return $errClimov;
 			}
+			$graboClimov = true;
+		}
+		if ($graboClimov && $numeroClimov !== null && ! $this->debeOmitirTablaAnita('climov')) {
+			$this->purgarClimovAnitaDuplicadosCuota($tipoClimov, $letra, $puntoventa, $numeroClimov);
 		}
 	
 		$leyenda = str_replace(
@@ -8289,43 +8316,119 @@ class FacturacionService
 	 */
 	private function existeClimovAnita($tipo, $letra, $puntoventa, $numero): bool
 	{
-		try {
-			$apiAnita = new ApiAnita();
-			$data = [
-				'acc' => 'list',
-				'tabla' => 'climov',
-				'sistema' => 'ventas',
-				'campos' => 'cliv_nro',
-				'whereArmado' => " WHERE cliv_tipo = '".$tipo."' AND
-					cliv_letra = '".$letra."' AND
-					cliv_sucursal = '".$puntoventa."' AND
-					cliv_nro = '".$numero."' ",
-			];
-			$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
-			$rows = json_decode($apiAnita->apiCall($data));
-			if (! is_array($rows) && ! is_object($rows)) {
-				return false;
-			}
-			foreach ((array) $rows as $row) {
-				if (is_object($row) && isset($row->Error)) {
-					continue;
+		return $this->listarClimovAnitaComprobante($tipo, $letra, $puntoventa, $numero) !== [];
+	}
+
+	/**
+	 * Lectura climov del comprobante con reintentos (el bridge a veces responde vacío en falso).
+	 *
+	 * @return list<object>
+	 */
+	private function listarClimovAnitaComprobante($tipo, $letra, $puntoventa, $numero, int $intentos = 5): array
+	{
+		$mejor = [];
+		for ($i = 1; $i <= $intentos; $i++) {
+			try {
+				$apiAnita = new ApiAnita();
+				$data = [
+					'acc' => 'list',
+					'tabla' => 'climov',
+					'sistema' => 'ventas',
+					'campos' => 'rowid,cliv_cliente,cliv_nro,cliv_nro_cuota,cliv_monto',
+					'whereArmado' => " WHERE cliv_tipo = '".$tipo."' AND
+						cliv_letra = '".$letra."' AND
+						cliv_sucursal = '".$puntoventa."' AND
+						cliv_nro = '".$numero."' ",
+				];
+				$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
+				$filas = ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+				if (count($filas) > count($mejor)) {
+					$mejor = $filas;
 				}
-				$nro = is_object($row) ? ($row->cliv_nro ?? null) : ($row['cliv_nro'] ?? null);
-				if ((int) $nro === (int) $numero) {
-					return true;
+				if ($filas !== [] || $i === $intentos) {
+					return $mejor !== [] ? $mejor : $filas;
+				}
+			} catch (\Throwable $e) {
+				Log::warning('facturacion.anita_bridge.listar_climov.fallo', [
+					'tipo' => $tipo,
+					'letra' => $letra,
+					'sucursal' => $puntoventa,
+					'nro' => $numero,
+					'intento' => $i,
+					'msg' => $e->getMessage(),
+				]);
+				if ($i === $intentos) {
+					return $mejor;
 				}
 			}
-		} catch (\Throwable $e) {
-			Log::warning('facturacion.anita_bridge.existe_climov.fallo', [
+			usleep(150000);
+		}
+
+		return $mejor;
+	}
+
+	/**
+	 * Deja una sola fila climov por cliente + cuota + monto (borra las copias exactas por rowid).
+	 * Evita deuda inflada tras reintentos / defer que reinsertan la misma cuota.
+	 */
+	private function purgarClimovAnitaDuplicadosCuota($tipo, $letra, $puntoventa, $numero): void
+	{
+		$filas = $this->listarClimovAnitaComprobante($tipo, $letra, $puntoventa, $numero);
+		$porCuota = [];
+		foreach ($filas as $fila) {
+			$rowid = (int) ($fila->rowid ?? 0);
+			if ($rowid <= 0) {
+				continue;
+			}
+			$clave = trim((string) ($fila->cliv_cliente ?? ''))
+				.'|'.(int) ($fila->cliv_nro_cuota ?? 1)
+				.'|'.number_format((float) ($fila->cliv_monto ?? 0), 2, '.', '');
+			$porCuota[$clave][] = $rowid;
+		}
+
+		$borrados = 0;
+		foreach ($porCuota as $cuota => $rowids) {
+			sort($rowids);
+			array_shift($rowids);
+			foreach ($rowids as $rowid) {
+				$apiAnita = new ApiAnita();
+				$data = [
+					'acc' => 'delete',
+					'sistema' => 'ventas',
+					'tabla' => 'climov',
+					'whereArmado' => " WHERE cliv_tipo = '".$tipo."' AND
+						cliv_letra = '".$letra."' AND
+						cliv_sucursal = '".$puntoventa."' AND
+						cliv_nro = '".$numero."' AND
+						rowid = ".$rowid,
+				];
+				$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
+				try {
+					$apiAnita->apiCallEscritura($data, 'climov delete dup cuota '.$cuota.' rowid '.$rowid, 'facturacion.anita_bridge.fallo', true);
+					$borrados++;
+				} catch (\Throwable $e) {
+					Log::warning('facturacion.anita_bridge.climov_purge_fallo', [
+						'tipo' => $tipo,
+						'letra' => $letra,
+						'sucursal' => $puntoventa,
+						'nro' => $numero,
+						'cuota' => $cuota,
+						'rowid' => $rowid,
+						'msg' => $e->getMessage(),
+					]);
+				}
+			}
+		}
+
+		if ($borrados > 0) {
+			Log::warning('facturacion.anita_bridge.climov_duplicados_purgados', [
 				'tipo' => $tipo,
 				'letra' => $letra,
 				'sucursal' => $puntoventa,
 				'nro' => $numero,
-				'msg' => $e->getMessage(),
+				'borrados' => $borrados,
 			]);
 		}
-
-		return false;
 	}
 
 	/**
@@ -12017,14 +12120,26 @@ class FacturacionService
 										],
 										$venta_id);
 
-		if ($flGrabaCae && (int) $venta_id > 0 && ! $omitirEnvioMailAutomatico) {
+		if ($flGrabaCae && (int) $venta_id > 0) {
 			$ventaIdMail = (int) $venta_id;
-			\Illuminate\Support\Facades\DB::afterCommit(static function () use ($ventaIdMail) {
+			$omitirMailCliente = (bool) $omitirEnvioMailAutomatico;
+			\Illuminate\Support\Facades\DB::afterCommit(static function () use ($ventaIdMail, $omitirMailCliente) {
+				if (! $omitirMailCliente) {
+					try {
+						app(\App\Services\Ventas\FacturaMailEnvioService::class)
+							->enviarAutomaticoSiCorresponde($ventaIdMail);
+					} catch (\Throwable $e) {
+						\Illuminate\Support\Facades\Log::warning('factura.mail.auto_post_cae', [
+							'venta_id' => $ventaIdMail,
+							'error' => $e->getMessage(),
+						]);
+					}
+				}
 				try {
-					app(\App\Services\Ventas\FacturaMailEnvioService::class)
-						->enviarAutomaticoSiCorresponde($ventaIdMail);
+					app(\App\Services\Ventas\FceEmisionAvisoService::class)
+						->despacharSiCorresponde($ventaIdMail);
 				} catch (\Throwable $e) {
-					\Illuminate\Support\Facades\Log::warning('factura.mail.auto_post_cae', [
+					\Illuminate\Support\Facades\Log::warning('factura.fce_aviso_post_cae', [
 						'venta_id' => $ventaIdMail,
 						'error' => $e->getMessage(),
 					]);

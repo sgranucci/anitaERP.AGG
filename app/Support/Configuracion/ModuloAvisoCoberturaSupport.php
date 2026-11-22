@@ -5,6 +5,7 @@ namespace App\Support\Configuracion;
 use App\Models\Configuracion\ModuloAvisoEventoSuscripcion;
 use App\Models\Configuracion\ModuloAvisoTipo;
 use Illuminate\Support\Facades\Schema;
+use App\Support\Configuracion\ModuloAvisoProgramadoDespachoSupport;
 
 /**
  * Vista operativa: eventos del catálogo vs suscripciones vs emits conocidos en código.
@@ -101,15 +102,19 @@ final class ModuloAvisoCoberturaSupport
             return [];
         }
 
-        return ModuloAvisoTipo::query()
-            ->where('activo', true)
-            ->withCount(['destinatarios as destinatarios_activos_count' => function ($q) {
-                $q->where('activo', true);
-            }])
-            ->orderBy('modulo')
-            ->orderBy('codigo')
-            ->limit(max(1, $limite))
-            ->get()
+        return ModuloAvisoProgramadoDespachoSupport::filtrarTiposVisiblesEnCatalogo(
+            ModuloAvisoTipo::query()
+                ->where('activo', true)
+                ->withCount(['destinatarios as destinatarios_activos_count' => function ($q) {
+                    $q->where('activo', true);
+                }])
+                ->orderBy('modulo')
+                ->orderBy('codigo')
+                ->limit(max(1, $limite * 3))
+                ->get()
+        )
+            ->take(max(1, $limite))
+            ->values()
             ->map(fn (ModuloAvisoTipo $t) => [
                 'clave' => $t->modulo.'/'.$t->codigo,
                 'nombre' => (string) $t->nombre,

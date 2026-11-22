@@ -267,6 +267,29 @@ return [
     ],
 
     /*
+     * Envío diario del cierre de caja (Anita l-ciecaja.c -m).
+     * Comando: caja:enviar-cierre-caja-diario
+     * Destinatarios: CAJA_CIERRE_MAIL_EMAIL (coma). Vacío = no envía.
+     */
+    'cierre_caja_mail' => [
+        'habilitada' => filter_var(env('CAJA_CIERRE_MAIL_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('CAJA_CIERRE_MAIL_HORA', '18:30'),
+        'email' => env('CAJA_CIERRE_MAIL_EMAIL', ''),
+        // hoy = día del cron (como Anita); ayer = corrida matutina del día anterior
+        'fecha_relativa' => strtolower(trim((string) env('CAJA_CIERRE_MAIL_FECHA', 'hoy'))) === 'ayer'
+            ? 'ayer'
+            : 'hoy',
+        'formato' => strtoupper(trim((string) env('CAJA_CIERRE_MAIL_FORMATO', 'EXCEL'))) === 'PDF'
+            ? 'PDF'
+            : 'EXCEL',
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('CAJA_CIERRE_MAIL_EMPRESAS_IDS', '1'))
+        ))),
+        'incluir_sin_movimiento' => filter_var(env('CAJA_CIERRE_MAIL_INCLUIR_SIN_MOV', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /*
      * Flash Crown (directivos): cálculo online.
      * El informe se envía a mano desde la pantalla (no por cron).
      * Comandos: flash-crown:calcular-diario

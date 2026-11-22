@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Configuracion;
 
 use App\Http\Controllers\Controller;
 use App\Models\Configuracion\ModuloAvisoTipo;
+use App\Support\Configuracion\ModuloAvisoProgramadoDespachoSupport;
 use App\Support\Configuracion\UsuarioAvisoPreferenciaSupport;
 use Illuminate\Http\Request;
 
@@ -16,11 +17,13 @@ class MisPreferenciasAvisoController extends Controller
             abort(403);
         }
 
-        $tipos = ModuloAvisoTipo::query()
-            ->where('activo', true)
-            ->orderBy('modulo')
-            ->orderBy('nombre')
-            ->get();
+        $tipos = ModuloAvisoProgramadoDespachoSupport::filtrarTiposVisiblesEnCatalogo(
+            ModuloAvisoTipo::query()
+                ->where('activo', true)
+                ->orderBy('modulo')
+                ->orderBy('nombre')
+                ->get()
+        );
 
         return view('configuracion.mis_preferencias_aviso.editar', [
             'preferencias' => UsuarioAvisoPreferenciaSupport::mapaParaUsuario($usuarioId),

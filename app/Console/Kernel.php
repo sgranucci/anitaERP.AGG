@@ -558,6 +558,14 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/ingresoegreso-imputacion-schedule.log'))
             ->when(fn () => (bool) config('caja.ingresoegreso_imputacion_diaria.habilitada', true));
 
+        // Anita l-ciecaja -m: cierre de tesorería del día por mail
+        $schedule->command('caja:enviar-cierre-caja-diario')
+            ->dailyAt((string) config('caja.cierre_caja_mail.hora', '18:30'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/cierre-caja-mail-schedule.log'))
+            ->when(fn () => (bool) config('caja.cierre_caja_mail.habilitada', false));
+
         $schedule->command('rendicion-estacionamiento:auditoria-anita')
             ->dailyAt((string) config('rendicion_estacionamiento_anita.auditoria_diaria.hora', '07:30'))
             ->runInBackground()
@@ -744,6 +752,15 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esElBierzo()
                 && (bool) config('facturacion.ANITA_TRAS_RESPUESTA_PEDIDO', true)
                 && (bool) config('facturacion.ANITA_PEDIDO_REGRABAR_HABILITADO', true));
+
+        // El Bierzo: robot control Anita↔ERP de batch mails (kilos/NC/stkmov). Solo alerta interna.
+        $schedule->command('ventas:control-batch-mails-anita-erp')
+            ->dailyAt((string) config('pedido.batch_mails_anita_erp_control.hora', '23:30'))
+            ->runInBackground()
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/batch-mails-anita-erp-control.log'))
+            ->when(fn () => EntornoEmpresaSupport::esElBierzo()
+                && (bool) config('pedido.batch_mails_anita_erp_control.habilitado', true));
 
         // Flash AGG 14:30 de la jornada de ayer (cerrada). Omite empresa si un usuario ya la cargó.
         $schedule->command('flash:calcular-diario')

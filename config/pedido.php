@@ -14,6 +14,24 @@ $base = [
         'refresco_desde' => env('PEDIDO_IMPORTAR_ANITA_REFRESCO_DESDE', '05:00'),
         'refresco_hasta' => env('PEDIDO_IMPORTAR_ANITA_REFRESCO_HASTA', '18:00'),
     ],
+    // Reemplazo l-pedkilo -b: ventas:distribuir-kilos-pedidos-mail (Modulo Aviso programado)
+    'kilos_pedidos_mail' => [
+        'habilitado' => filter_var(env('PEDIDO_KILOS_PEDIDOS_MAIL_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+    // Reemplazo l-pedrem -b: ventas:distribuir-control-afip-pedidos-mail (sábados 18:00)
+    'control_afip_pedidos_mail' => [
+        'habilitado' => filter_var(env('PEDIDO_CONTROL_AFIP_PEDIDOS_MAIL_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+    // Reemplazo p-controlnc: ventas:distribuir-control-nc-descuento-mail (diario 23:00)
+    'control_nc_descuento_mail' => [
+        'habilitado' => filter_var(env('PEDIDO_CONTROL_NC_DESCUENTO_MAIL_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+    // Robot interno: control Anita↔ERP de batch mails (kilos / NC / stkmov). No va a socios.
+    'batch_mails_anita_erp_control' => [
+        'habilitado' => filter_var(env('PEDIDO_BATCH_MAILS_ANITA_ERP_CONTROL_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('PEDIDO_BATCH_MAILS_ANITA_ERP_CONTROL_HORA', '23:30'),
+        'email' => env('PEDIDO_BATCH_MAILS_ANITA_ERP_CONTROL_EMAIL', 'sergiogranucci@gmail.com'),
+    ],
 ];
 
 if (config('app.empresa') == 'EL BIERZO') {

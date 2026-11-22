@@ -10,6 +10,7 @@ use App\Models\Sueldos\Empleado_Leyenda_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Lsd_Empleado_Revista_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Sueldos\EmpleadoDomicilioVinculador;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Sueldos\EmpleadoEstados;
@@ -573,6 +574,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     /**
      * Columnas reales de la tabla Anita sueldos.empleado (verificadas contra el bridge).
      * El orden importa: el bridge legacy mapea el CSV por posición de esta lista.
+     * El Bierzo (syscolumns): no tiene emp_pais_nac.
      */
     private const CAMPOS_ANITA_EMPLEADO = 'emp_empresa, emp_legajo, emp_nombre, emp_domicilio, emp_localidad, '
         .'emp_nacionalidad, emp_documento, emp_fec_nac, emp_fec_ing, emp_fec_egr, emp_categoria, emp_sueldo, '
@@ -584,6 +586,24 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         .'emp_tipo_empresa, emp_regimen, emp_lugartrabajo, emp_cbu, emp_motivoegr, emp_entre_calles, '
         .'emp_cod_banco, emp_pais_nac, emp_grp1, emp_grp2, emp_grp3,'
         .'emp_actividad, emp_zonageo';
+
+    private const CAMPOS_ANITA_EMPLEADO_EL_BIERZO = 'emp_empresa, emp_legajo, emp_nombre, emp_domicilio, emp_localidad, '
+        .'emp_nacionalidad, emp_documento, emp_fec_nac, emp_fec_ing, emp_fec_egr, emp_categoria, emp_sueldo, '
+        .'emp_codigo_o_soc, emp_gremio, emp_men_quin, emp_antig_ant, emp_sexo, emp_est_civil, emp_flag_estado, '
+        .'emp_cta_bancaria, emp_centro_costos, emp_afil_jubil, emp_jornal_dia, emp_jornal_hora, emp_base4, '
+        .'emp_base5, emp_base6, emp_base7, emp_base8, emp_base9, emp_base10, emp_base11, emp_cod_agrup, '
+        .'emp_telefono, emp_contratado, emp_mo_dir_ind, emp_cod_postal, emp_codigo_afjp, emp_codigo_art, '
+        .'emp_situacion, emp_condicion, emp_modalidad, emp_provincia, emp_siniestrado, emp_marca_red, '
+        .'emp_tipo_empresa, emp_regimen, emp_lugartrabajo, emp_cbu, emp_motivoegr, emp_entre_calles, '
+        .'emp_cod_banco, emp_grp1, emp_grp2, emp_grp3,'
+        .'emp_actividad, emp_zonageo';
+
+    private function camposAnitaEmpleado(): string
+    {
+        return EntornoEmpresaSupport::esElBierzo()
+            ? self::CAMPOS_ANITA_EMPLEADO_EL_BIERZO
+            : self::CAMPOS_ANITA_EMPLEADO;
+    }
 
     /**
      * Sync desde Anita (sueldos.empleado + emping + empley).
@@ -628,7 +648,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         $api = new ApiAnita();
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list', 'sistema' => 'sueldos', 'tabla' => 'empleado',
-            'campos' => self::CAMPOS_ANITA_EMPLEADO, 'orderBy' => 'emp_empresa, emp_legajo',
+            'campos' => $this->camposAnitaEmpleado(), 'orderBy' => 'emp_empresa, emp_legajo',
         ]));
         if (! empty($parsed['error_lectura'])) {
             $res['errores'][] = 'Lectura empleado: '.$parsed['error_lectura'];
@@ -884,9 +904,18 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         $empresaIdPorCodigo = $empresaPorCodigo;
 
         $res['bases'] = $this->importarBasesInicial($meta, $idPorKey, $nombrebasePorCodigo, $now);
-        // Historia solo para legajos recién insertados (meta incluye preexistentes por las bases).
+        // Historia: recién insertados + existentes sin filas en empleado_ingreso_sueldos
+        // (cubre re-sync tras un fallo de lectura de emping, p.ej. esquema El Bierzo).
+        $keysHistoria = $seen;
+        $conIngreso = DB::table('empleado_ingreso_sueldos')->distinct()->pluck('empleado_id')
+            ->mapWithKeys(fn ($id) => [(int) $id => true])->all();
+        foreach ($idPorKey as $key => $empId) {
+            if (! isset($conIngreso[(int) $empId])) {
+                $keysHistoria[$key] = true;
+            }
+        }
         $res['historia'] = $this->importarEmpingInicial(
-            $api, $empresaIdPorCodigo, $idPorKey, $maps['motivoegreso_id'], $now, $meta, $seen
+            $api, $empresaIdPorCodigo, $idPorKey, $maps['motivoegreso_id'], $now, $meta, $keysHistoria
         );
         $res['leyendas'] = $this->importarEmpleyInicial($api, $empresaIdPorCodigo, $idPorKey, $now);
         $res['actualizados_cuenta'] = $this->sincronizarCuentaEmpresaDesdeAnita($empresaPorCodigo);
@@ -1057,9 +1086,13 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             return 0;
         }
 
+        // El Bierzo (syscolumns): sin empi_coment_baja.
+        $camposEmping = EntornoEmpresaSupport::esElBierzo()
+            ? 'empi_empresa, empi_legajo, empi_fecha_ing, empi_fecha_egr, empi_motivoegr'
+            : 'empi_empresa, empi_legajo, empi_fecha_ing, empi_fecha_egr, empi_motivoegr, empi_coment_baja';
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list', 'sistema' => 'sueldos', 'tabla' => 'emping',
-            'campos' => 'empi_empresa, empi_legajo, empi_fecha_ing, empi_fecha_egr, empi_motivoegr, empi_coment_baja',
+            'campos' => $camposEmping,
             'orderBy' => 'empi_empresa, empi_legajo, empi_fecha_ing',
         ]));
         if (! empty($parsed['error_lectura'])) {

@@ -15,7 +15,9 @@ use Illuminate\Console\Command;
  */
 class IndumentariaSyncCatalogosAnita extends Command
 {
-    protected $signature = 'indumentaria:sync-catalogos-anita {--solo-catalogos : Sincroniza únicamente color y talle}';
+    protected $signature = 'indumentaria:sync-catalogos-anita
+        {--solo-catalogos : Sincroniza únicamente color y talle}
+        {--dry-run : Solo estima; no escribe}';
 
     protected $description = 'Sincroniza indumentaria desde Anita: color, talle, prendas, variantes y dotación.';
 
@@ -25,6 +27,17 @@ class IndumentariaSyncCatalogosAnita extends Command
     ): int {
         @ini_set('memory_limit', '-1');
         @ini_set('max_execution_time', '0');
+
+        if ($this->option('dry-run')) {
+            $this->warn('Dry-run: no se escribe nada.');
+            $this->line('  ERP color='.Color::count().' talle='.Talle::count()
+                .' prenda='.\App\Models\Sueldos\Prenda_Sueldos::count()
+                .' variantes='.\App\Models\Sueldos\Prenda_Articulo_Sueldos::count()
+                .' dotación='.\App\Models\Sueldos\Prenda_Agrupamiento_Sueldos::count());
+            $this->line('  Corré sin --dry-run para importar faltantes desde Anita.');
+
+            return self::SUCCESS;
+        }
 
         $this->info('Sincronizando colores desde Anita...');
         $colores = (new Color)->sincronizarCatalogoAnita();

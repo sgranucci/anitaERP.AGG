@@ -53,6 +53,8 @@ use App\Models\Caja\Cobranza_Estado;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
+use App\Services\Ventas\ClienteRetenidoAfipAvisoService;
+use App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\NotaCreditoClienteAprobacionSupport;
 use Illuminate\Http\Request;
@@ -165,6 +167,7 @@ class CobranzaService
 				(string) ($data['fecha'] ?? date('Y-m-d')),
 				PeriodoContableCierreSupport::ALCANCE_COBRANZA
 			);
+			$this->assertPadronClienteCobranza($data);
 
 			// Crea estado
 			$data['fechas'][] = Carbon::now();
@@ -502,6 +505,7 @@ class CobranzaService
 				(string) ($data['fecha'] ?? date('Y-m-d')),
 				PeriodoContableCierreSupport::ALCANCE_COBRANZA
 			);
+			$this->assertPadronClienteCobranza($data);
 
 			// Crea estado
 			$data['fechas'][] = Carbon::now();
@@ -664,6 +668,36 @@ class CobranzaService
 		app(CobranzaPagoDeMasCoaService::class)->sincronizar($data, (int) $id);
 
 		$this->persistirDescuentosCobranza($id, $data);
+	}
+
+	/**
+	 * Anita controla_cliente_afip en cobro: bloquea y avisa al vendedor si el padrón no cuadra.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function assertPadronClienteCobranza(array $data): void
+	{
+		$clienteId = (int) ($data['cliente_id'] ?? 0);
+		if ($clienteId <= 0) {
+			return;
+		}
+
+		$cliente = Cliente::query()->find($clienteId);
+		if (! $cliente) {
+			return;
+		}
+
+		$resultado = ArcaPadronClienteOperacionValidacionSupport::evaluarOperacion($cliente);
+		if ($resultado['ok'] ?? false) {
+			return;
+		}
+
+		$motivo = (string) ($resultado['error'] ?? 'Problemas en ARCA: el cliente no cumple la validación del padrón.');
+		app(ClienteRetenidoAfipAvisoService::class)->despachar($clienteId, [
+			'motivo' => $motivo,
+		]);
+
+		throw new Exception($motivo);
 	}
 
 	/**

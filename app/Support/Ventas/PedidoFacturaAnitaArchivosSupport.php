@@ -12,6 +12,7 @@ use Illuminate\Support\Collection;
  * Estado de archivos Informix de una factura de pedido (El Bierzo).
  * Distingue Anita vacía vs. cabecera/detalle/CAE incompletos.
  * En compaux/stkmov no basta con “hay filas”: tiene que cerrar renglones y kilos del payload.
+ * En climov: una fila por cuota; más filas = deuda inflada (regrabación duplicó).
  */
 final class PedidoFacturaAnitaArchivosSupport
 {
@@ -244,7 +245,7 @@ final class PedidoFacturaAnitaArchivosSupport
     }
 
     /**
-     * Borra compaux/stkmov parciales antes de reinsertar (evita duplicar renglones).
+     * Borra compaux/stkmov/climov parciales antes de reinsertar (evita duplicar renglones / cuotas).
      *
      * @param  array<string, mixed>  $anitaPendiente
      * @param  list<string>  $tablas
@@ -257,11 +258,88 @@ final class PedidoFacturaAnitaArchivosSupport
         }
 
         foreach ($tablas as $tabla) {
+            if ($tabla === 'climov') {
+                self::purgarClimovCopiasExactas($clave);
+
+                continue;
+            }
             if ($tabla !== 'compaux' && $tabla !== 'stkmov') {
                 continue;
             }
             self::borrarTablaDetalle($tabla, $clave);
         }
+    }
+
+    /**
+     * climov no se borra entero: perdería cliv_t_cobrado de una cobranza ya aplicada.
+     * Solo quita las copias exactas (cliente + cuota + monto) y deja la de menor rowid.
+     *
+     * @param  array{tipo: string, tipo_venta: string, letra: string, sucursal: string, numero: string, path: ?string}  $clave
+     */
+    private static function purgarClimovCopiasExactas(array $clave): void
+    {
+        $where = self::whereTabla('climov', $clave);
+        if ($where === null) {
+            return;
+        }
+
+        foreach (self::gruposClimovCopiasExactas($clave) as $rowids) {
+            sort($rowids);
+            array_shift($rowids);
+            foreach ($rowids as $rowid) {
+                $data = [
+                    'acc' => 'delete',
+                    'sistema' => 'ventas',
+                    'tabla' => 'climov',
+                    'whereArmado' => $where.' AND rowid = '.(int) $rowid,
+                ];
+                if ($clave['path'] !== null) {
+                    $data['path_sistema'] = $clave['path'];
+                }
+                try {
+                    (new ApiAnita)->apiCallEscritura($data, 'climov delete copia rowid '.$rowid, 'pedido.anita.fallo', true);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('pedido.anita.climov_purge_fallo', [
+                        'clave' => $clave,
+                        'rowid' => $rowid,
+                        'msg' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+    }
+
+    /**
+     * Grupos de rowid de climov con más de una fila idéntica (cliente + cuota + monto).
+     *
+     * @param  array{tipo: string, tipo_venta: string, letra: string, sucursal: string, numero: string, path: ?string}  $clave
+     * @return array<string, list<int>>|null null si la lectura falló
+     */
+    private static function gruposClimovCopiasExactas(array $clave): ?array
+    {
+        $where = self::whereTabla('climov', $clave);
+        if ($where === null) {
+            return null;
+        }
+
+        $parsed = self::listarAnita('climov', 'rowid,cliv_cliente,cliv_nro_cuota,cliv_monto', $where, $clave['path']);
+        if ($parsed['error_lectura'] !== null) {
+            return null;
+        }
+
+        $grupos = [];
+        foreach ($parsed['filas'] as $fila) {
+            $rowid = (int) ($fila->rowid ?? 0);
+            if ($rowid <= 0) {
+                continue;
+            }
+            $k = trim((string) ($fila->cliv_cliente ?? ''))
+                .'|'.(int) ($fila->cliv_nro_cuota ?? 1)
+                .'|'.number_format((float) ($fila->cliv_monto ?? 0), 2, '.', '');
+            $grupos[$k][] = $rowid;
+        }
+
+        return array_filter($grupos, static fn (array $r): bool => count($r) > 1);
     }
 
     /**
@@ -486,6 +564,22 @@ final class PedidoFacturaAnitaArchivosSupport
             }
         }
 
+        // climov: solo cuenta como parcial si hay copias exactas de una cuota (deuda inflada).
+        // Menos filas que cuotas no se marca: un vacío falso del bridge no tiene que disparar escrituras.
+        if (in_array('climov', $presentes, true)) {
+            $grupos = self::gruposClimovCopiasExactas($clave);
+            if ($grupos !== null && $grupos !== []) {
+                $parciales[] = 'climov';
+                $detalle['anita']['climov'] = [
+                    'desfasaje' => sprintf(
+                        '%d cuota(s) con filas repetidas (%d filas de más)',
+                        count($grupos),
+                        array_sum(array_map(static fn (array $r): int => count($r) - 1, $grupos)),
+                    ),
+                ];
+            }
+        }
+
         return [
             'error' => null,
             'parciales' => $parciales,
@@ -690,12 +784,21 @@ final class PedidoFacturaAnitaArchivosSupport
             default => '*',
         };
 
-        $parsed = self::listarAnita($tabla, $campo, $where, $clave['path']);
-        if ($parsed['error_lectura'] !== null) {
-            return ['existe' => false, 'error' => $tabla.': '.$parsed['error_lectura']];
+        // El bridge a veces responde vacío aunque la fila exista: reintentar antes de declarar faltante.
+        for ($intento = 1; $intento <= 3; $intento++) {
+            $parsed = self::listarAnita($tabla, $campo, $where, $clave['path']);
+            if ($parsed['error_lectura'] !== null) {
+                return ['existe' => false, 'error' => $tabla.': '.$parsed['error_lectura']];
+            }
+            if ($parsed['filas'] !== []) {
+                return ['existe' => true, 'error' => null];
+            }
+            if ($intento < 3) {
+                usleep(200000);
+            }
         }
 
-        return ['existe' => $parsed['filas'] !== [], 'error' => null];
+        return ['existe' => false, 'error' => null];
     }
 
     /**

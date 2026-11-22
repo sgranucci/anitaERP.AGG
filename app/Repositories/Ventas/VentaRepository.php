@@ -18,6 +18,8 @@ use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Ventas\VentaImpuestoResolucionSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Auth;
 use App\ApiAnita;
 use Illuminate\Support\Facades\Log;
@@ -392,75 +394,7 @@ class VentaRepository implements VentaRepositoryInterface
         // Reintenta ante fallos transitorios del bridge (Permission denied/cmd_sql,
         // lectura vacía de numerador bajo carga concurrente con la cola diferida).
         if (EntornoEmpresaSupport::esElBierzo()) {
-            $maxIntentos = max(5, (int) config('anita.bridge_csv_faltante_reintentos', 3));
-            $ultimoError = null;
-            PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
-            for ($intento = 1; $intento <= $maxIntentos; $intento++) {
-                try {
-                    $reservado = $this->numeraAnita((string) $tipo, (string) $letra, (string) $sucursal);
-                    if (is_int($reservado) && $reservado > 0) {
-                        if ($intento > 1) {
-                            Log::info('ventas.remito.numerador_anita_ok_reintento', [
-                                'tipo' => $tipo,
-                                'letra' => $letra,
-                                'sucursal' => $sucursal,
-                                'numero' => $reservado,
-                                'intento' => $intento,
-                            ]);
-                        }
-                        PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
-
-                        return $reservado;
-                    }
-
-                    $ultimoError = is_string($reservado) ? $reservado : 'reserva_invalida';
-                    $reintentar = $intento < $maxIntentos
-                        && $this->esErrorNumeradorAnitaReintentable($ultimoError);
-                    Log::error('ventas.remito.numerador_anita_reserva_fallida', [
-                        'tipo' => $tipo,
-                        'letra' => $letra,
-                        'sucursal' => $sucursal,
-                        'resultado' => $reservado,
-                        'intento' => $intento,
-                        'reintenta' => $reintentar,
-                    ]);
-                    if ($reintentar) {
-                        usleep(300000 * $intento);
-                        continue;
-                    }
-                    break;
-                } catch (\Throwable $e) {
-                    $ultimoError = $e->getMessage();
-                    $reintentar = $intento < $maxIntentos
-                        && $this->esErrorNumeradorAnitaReintentable($ultimoError);
-                    Log::error('ventas.remito.numerador_anita_no_disponible', [
-                        'tipo' => $tipo,
-                        'letra' => $letra,
-                        'sucursal' => $sucursal,
-                        'error' => $ultimoError,
-                        'intento' => $intento,
-                        'reintenta' => $reintentar,
-                    ]);
-                    if ($reintentar) {
-                        usleep(300000 * $intento);
-                        continue;
-                    }
-
-                    PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
-
-                    return 'error';
-                }
-            }
-            PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
-            Log::error('ventas.remito.numerador_anita_agotado', [
-                'tipo' => $tipo,
-                'letra' => $letra,
-                'sucursal' => $sucursal,
-                'error' => $ultimoError,
-                'intentos' => $maxIntentos,
-            ]);
-
-            return 'error';
+            return $this->reservarNumeroAnitaConReintentos((string) $tipo, (string) $letra, (string) $sucursal, null, 'ventas.remito');
         }
 
         // Lee numerador desde anita
@@ -480,6 +414,89 @@ class VentaRepository implements VentaRepositoryInterface
         if ($fila !== null && isset($fila->ultnro)) {
             return (int) $fila->ultnro + 1;
         }
+
+        return 'error';
+    }
+
+    /**
+     * Reserva (lee + avanza) el numerador Anita de tipo + letra + sucursal, reintentando
+     * los fallos transitorios del bridge. Devuelve el número reservado o 'error'.
+     * Sin fila en compemis devuelve 'error': nunca se numera desde 1.
+     */
+    public function reservarNumeroAnitaConReintentos(
+        string $tipo,
+        string $letra,
+        string $sucursal,
+        ?string $path_sistema = null,
+        string $logPrefijo = 'ventas.remito',
+    ): int|string {
+            $maxIntentos = max(5, (int) config('anita.bridge_csv_faltante_reintentos', 3));
+            $ultimoError = null;
+            PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
+            for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+                try {
+                    $reservado = $this->numeraAnita($tipo, $letra, $sucursal, $path_sistema);
+                    if (is_int($reservado) && $reservado > 0) {
+                        if ($intento > 1) {
+                            Log::info($logPrefijo.'.numerador_anita_ok_reintento', [
+                                'tipo' => $tipo,
+                                'letra' => $letra,
+                                'sucursal' => $sucursal,
+                                'numero' => $reservado,
+                                'intento' => $intento,
+                            ]);
+                        }
+                        PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+
+                        return $reservado;
+                    }
+
+                    $ultimoError = is_string($reservado) ? $reservado : 'reserva_invalida';
+                    $reintentar = $intento < $maxIntentos
+                        && $this->esErrorNumeradorAnitaReintentable($ultimoError);
+                    Log::error($logPrefijo.'.numerador_anita_reserva_fallida', [
+                        'tipo' => $tipo,
+                        'letra' => $letra,
+                        'sucursal' => $sucursal,
+                        'resultado' => $reservado,
+                        'intento' => $intento,
+                        'reintenta' => $reintentar,
+                    ]);
+                    if ($reintentar) {
+                        usleep(300000 * $intento);
+                        continue;
+                    }
+                    break;
+                } catch (\Throwable $e) {
+                    $ultimoError = $e->getMessage();
+                    $reintentar = $intento < $maxIntentos
+                        && $this->esErrorNumeradorAnitaReintentable($ultimoError);
+                    Log::error($logPrefijo.'.numerador_anita_no_disponible', [
+                        'tipo' => $tipo,
+                        'letra' => $letra,
+                        'sucursal' => $sucursal,
+                        'error' => $ultimoError,
+                        'intento' => $intento,
+                        'reintenta' => $reintentar,
+                    ]);
+                    if ($reintentar) {
+                        usleep(300000 * $intento);
+                        continue;
+                    }
+
+                    PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+
+                    return 'error';
+                }
+            }
+        PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+        Log::error($logPrefijo.'.numerador_anita_agotado', [
+            'tipo' => $tipo,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'error' => $ultimoError,
+            'intentos' => $maxIntentos,
+        ]);
 
         return 'error';
     }
@@ -510,6 +527,24 @@ class VentaRepository implements VentaRepositoryInterface
     }
 
     public function numeraAnita($tipo, $letra, $sucursal, $path_sistema = null)
+    {
+        // Leer + incrementar el numerador no es atómico en Anita: sin este candado global,
+        // dos facturaciones de pedidos distintos pueden reservar el mismo número.
+        $clave = 'anita:numerador:'.md5(implode('|', [
+            (string) ($path_sistema ?? ''),
+            strtoupper(trim((string) $tipo)),
+            strtoupper(trim((string) $letra)),
+            (int) preg_replace('/\D+/', '', (string) $sucursal),
+        ]));
+
+        try {
+            return Cache::lock($clave, 30)->block(15, fn () => $this->numeraAnitaSinCandado($tipo, $letra, $sucursal, $path_sistema));
+        } catch (LockTimeoutException) {
+            return 'Error al leer numerador: otro proceso está numerando (reintentar)';
+        }
+    }
+
+    private function numeraAnitaSinCandado($tipo, $letra, $sucursal, $path_sistema = null)
     {
         // Lee numerador desde anita
 		$apiAnita = new ApiAnita();

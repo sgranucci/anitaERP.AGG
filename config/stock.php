@@ -242,4 +242,9 @@ return [
     'transferencia_despacho_tipotransaccion_stock_id' => env('STOCK_TRANSFERENCIA_DESPACHO_TIPOTRANSACCION_ID'),
     'transferencia_despacho_tipotransaccion_abreviatura' => env('STOCK_TRANSFERENCIA_DESPACHO_TIPOTRANSACCION_ABREVIATURA', 'TRA'),
 
+    // Reemplazo l-stkmovint -b: stock:distribuir-stkmov-int-mail (lun–vie 21:10)
+    'stkmov_int_mail' => [
+        'habilitado' => filter_var(env('STOCK_STKMOV_INT_MAIL_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
 ];
