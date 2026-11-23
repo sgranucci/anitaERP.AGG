@@ -1,9 +1,10 @@
 @php
     $esEdicion = isset($data);
     $puedeEditar = $puedeEditar ?? ($esEdicion ? can('actualizar-empleado-sueldos', false) : can('crear-empleado-sueldos', false));
-    $provinciaIdSel = old('provincia_id', $data->provincia_id ?? '');
-    $descProvincia = old('desc_provincia', $data->provincia ?? '');
+    $paisDom = isset($data) ? $data->pais : null;
+    $provDom = isset($data) ? $data->provinciaDomicilio : null;
     $locDom = isset($data) ? $data->localidadDomicilio : null;
+    $descProvincia = old('desc_provincia', optional($provDom)->nombre ?: ($data->provincia ?? ''));
 @endphp
 
 <div class="row">
@@ -209,52 +210,47 @@
     </div>
 </div>
 
-{{-- ===================== Domicilio (vinculado a maestros, como proveedores) ===================== --}}
+{{-- ===================== Domicilio (consulta modal: país / provincia / localidad) ===================== --}}
 <hr class="mt-2 mb-3">
 <h5 class="mb-3"><i class="fa fa-map-marker-alt text-muted"></i> Domicilio</h5>
 <div class="row">
-    <div class="col-md-3">
-        <div class="form-group">
-            <label for="pais_id">País</label>
-            <select name="pais_id" id="pais_id" class="form-control">
-                <option value="">-- Seleccionar --</option>
-                @foreach ($pais_query ?? [] as $pais)
-                    <option value="{{ $pais->id }}" {{ (int) old('pais_id', $data->pais_id ?? 0) === (int) $pais->id ? 'selected' : '' }}>{{ $pais->nombre }}</option>
-                @endforeach
-            </select>
-        </div>
+    <div class="col-lg-6">
+        @include('configuracion.partials.campo_consulta_pais', [
+            'prefix' => 'empleado_dom',
+            'inputName' => 'pais_id',
+            'inputId' => 'pais_id',
+            'paisId' => old('pais_id', optional($data ?? null)->pais_id ?? ''),
+            'codigo' => old('pais_codigo', optional($paisDom)->codigo ?? ''),
+            'nombre' => old('pais_nombre', optional($paisDom)->nombre ?? ''),
+            'col_label' => 'col-lg-4 control-label text-right pr-2',
+            'col_input' => 'col-lg-8',
+        ])
+        @include('configuracion.partials.campo_consulta_provincia', [
+            'provinciaId' => old('provincia_id', optional($data ?? null)->provincia_id ?? ''),
+            'codigo' => old('provincia_codigo', optional($provDom)->codigo ?? ''),
+            'nombre' => $descProvincia,
+            'jurisdiccion' => optional($provDom)->jurisdiccion ?? '',
+            'descName' => 'desc_provincia',
+            'mostrar_jurisdiccion' => false,
+            'col_label' => 'col-lg-4 control-label text-right pr-2',
+            'col_input' => 'col-lg-8',
+        ])
     </div>
-    <div class="col-md-3">
-        <div class="form-group">
-            <label for="provincia_id">Provincia</label>
-            <select name="provincia_id" id="provincia_id" class="form-control">
-                <option value="">-- Seleccionar --</option>
-                @foreach ($provincia_query ?? [] as $prov)
-                    <option value="{{ $prov->id }}" {{ (int) $provinciaIdSel === (int) $prov->id ? 'selected' : '' }}>{{ $prov->nombre }}</option>
-                @endforeach
-            </select>
-            <input type="hidden" id="desc_provincia" name="desc_provincia" value="{{ $descProvincia }}">
-        </div>
-    </div>
-    <div class="col-md-3" id="loc">
-        <div class="form-group">
-            <label>Localidad</label>
-            @include('configuracion.partials.campo_consulta_localidad', [
-                'layout' => 'inline',
-                'con_ids' => true,
-                'localidadId' => optional($data ?? null)->localidad_id ?? '',
-                'codigo' => optional($locDom)->codigo ?? '',
-                'nombre' => optional($locDom)->nombre ?: (optional($data ?? null)->localidad ?? ''),
-                'provinciaSource' => '#provincia_id',
-                'extra_class' => 'w-100',
-            ])
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="form-group">
-            <label for="codigo_postal">Código postal</label>
-            <input type="text" name="codigo_postal" id="codigo_postal" class="form-control" maxlength="12"
-                   value="{{ old('codigo_postal', $data->codigo_postal ?? '') }}" placeholder="Código Postal">
+    <div class="col-lg-6" id="loc">
+        @include('configuracion.partials.campo_consulta_localidad', [
+            'localidadId' => old('localidad_id', optional($data ?? null)->localidad_id ?? ''),
+            'codigo' => old('codigolocalidad', optional($locDom)->codigo ?? ''),
+            'nombre' => old('nombrelocalidad', optional($locDom)->nombre ?: (optional($data ?? null)->localidad ?? '')),
+            'provinciaSource' => '#provincia_id',
+            'col_label' => 'col-lg-4 control-label text-right pr-2',
+            'col_input' => 'col-lg-8',
+        ])
+        <div class="form-group row">
+            <label for="codigo_postal" class="col-lg-4 control-label text-right pr-2">C&oacute;digo postal</label>
+            <div class="col-lg-8">
+                <input type="text" name="codigo_postal" id="codigo_postal" class="form-control" maxlength="12"
+                       value="{{ old('codigo_postal', $data->codigo_postal ?? '') }}" placeholder="C&oacute;digo Postal">
+            </div>
         </div>
     </div>
 </div>

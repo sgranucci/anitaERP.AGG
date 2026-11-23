@@ -26,9 +26,23 @@
         setTimeout(function () { $box.alert('close'); }, 5000);
     }
 
+    function activarConsultasPanel() {
+        if (typeof window.activa_eventos_consultaprenda === 'function') {
+            window.activa_eventos_consultaprenda();
+        }
+        if (typeof window.activa_eventos_consultavarianteprenda === 'function') {
+            window.activa_eventos_consultavarianteprenda();
+        }
+        if (typeof window.activa_eventos_consultatalle === 'function') {
+            window.activa_eventos_consultatalle();
+        }
+    }
+
     function pintar(resp) {
         if (resp && resp.html) {
             host().html(resp.html);
+            prepararTablasLineas();
+            activarConsultasPanel();
         }
         aviso(resp && resp.mensaje ? resp.mensaje : null, resp && resp.mensaje_tipo === 'error' ? 'error' : 'ok');
     }
@@ -40,28 +54,62 @@
         }
         $.get(url).done(function (resp) {
             host().html(resp.html || '');
+            prepararTablasLineas();
+            activarConsultasPanel();
         }).fail(function () {
             host().html('<div class="alert alert-danger">No se pudo cargar el panel de indumentaria.</div>');
         });
     }
 
+    function escapar(txt) {
+        return $('<div>').text(txt == null ? '' : String(txt)).html();
+    }
+
+    function mostrarSaldo($tr) {
+        var $campo = $tr.find('.tm-variante-prenda-campo');
+        var $s = $tr.find('.linea-saldo');
+        var vid = String($campo.find('.prenda_articulo_id').val() || '');
+        var saldo = $campo.attr('data-saldo');
+        var art = $campo.attr('data-articulo');
+        if (!vid) {
+            $s.text('');
+            return;
+        }
+        if (art === '0' || art === '') {
+            $s.html('<span class="text-danger">Variante sin SKU de stock</span>');
+        } else if (saldo !== undefined && saldo !== '') {
+            $s.html('Saldo disponible: <strong>' + escapar(saldo) + '</strong>');
+        } else {
+            $s.text('');
+        }
+    }
+
     function nuevaLinea(tablaSelector) {
-        var prendasHtml = $('#tpl-prendas').html();
-        var $tr = $('<tr>' +
-            '<td><select class="form-control form-control-sm linea-prenda">' + prendasHtml + '</select></td>' +
-            '<td><select class="form-control form-control-sm linea-variante" disabled><option value="">— elija prenda —</option></select>' +
-            '<div class="linea-saldo small text-muted"></div></td>' +
-            '<td><input type="number" min="0.01" step="0.01" class="form-control form-control-sm linea-cantidad" value="1"></td>' +
-            '<td class="text-center"><button type="button" class="btn btn-xs btn-danger btn-quitar-linea"><i class="fa fa-trash"></i></button></td>' +
-            '</tr>');
+        var tpl = document.getElementById('tpl-linea-indumentaria-modal');
+        if (!tpl) {
+            return null;
+        }
+        var $tr = $(tpl.content.querySelector('tr').cloneNode(true));
         $(tablaSelector + ' tbody').append($tr);
+        return $tr;
+    }
+
+    function prepararTablasLineas() {
+        ['#tabla-entrega-lineas', '#tabla-solicitud-lineas'].forEach(function (sel) {
+            if (!$(sel).length) {
+                return;
+            }
+            if ($(sel + ' tbody tr').length === 0) {
+                nuevaLinea(sel);
+            }
+        });
     }
 
     function juntarLineas(tablaSelector) {
         var lineas = [];
         $(tablaSelector + ' tbody tr').each(function () {
-            var vid = $(this).find('.linea-variante').val();
-            var cant = $(this).find('.linea-cantidad').val();
+            var vid = $(this).find('.prenda_articulo_id').val();
+            var cant = parseFloat($(this).find('.linea-cantidad').val());
             if (vid && cant > 0) {
                 lineas.push({ prenda_articulo_id: vid, cantidad: cant });
             }
@@ -83,29 +131,6 @@
             .always(function () { $btn.prop('disabled', false); });
     }
 
-    function cargarVariantes($tr, prendaId) {
-        var base = panel().data('url-variantes');
-        var $var = $tr.find('.linea-variante');
-        var $saldo = $tr.find('.linea-saldo');
-        $var.prop('disabled', true).html('<option value="">Cargando…</option>');
-        $saldo.text('');
-        if (!prendaId) {
-            $var.html('<option value="">— elija prenda —</option>');
-            return;
-        }
-        $.get(base + '/' + prendaId + '/variantes').done(function (resp) {
-            var opts = '<option value="">— color / talle —</option>';
-            (resp.variantes || []).forEach(function (v) {
-                var saldoTxt = v.saldo === null ? '' : ' [saldo ' + v.saldo + ']';
-                var etq = (v.color || '') + ' ' + (v.talle || '') + ' · ' + (v.sku || 's/SKU') + saldoTxt;
-                opts += '<option value="' + v.id + '" data-saldo="' + (v.saldo === null ? '' : v.saldo) + '" data-art="' + v.articulo_id + '">' + etq + '</option>';
-            });
-            $var.html(opts).prop('disabled', false);
-        }).fail(function () {
-            $var.html('<option value="">Error al cargar</option>');
-        });
-    }
-
     $(document).on('shown.bs.tab', 'a[href="#tab-indumentaria"]', function () {
         if (!cargado) {
             cargado = true;
@@ -114,39 +139,56 @@
     });
 
     $(document).on('click', '#btn-agregar-linea-entrega', function () {
-        nuevaLinea('#tabla-entrega-lineas');
+        var $tr = nuevaLinea('#tabla-entrega-lineas');
+        if ($tr) {
+            $tr.find('.codigoprenda').trigger('focus');
+        }
     });
 
     $(document).on('click', '#btn-agregar-linea-solicitud', function () {
-        nuevaLinea('#tabla-solicitud-lineas');
-    });
-
-    $(document).on('click', '.btn-quitar-linea', function () {
-        $(this).closest('tr').remove();
-    });
-
-    $(document).on('change', '.linea-prenda', function () {
-        cargarVariantes($(this).closest('tr'), $(this).val());
-    });
-
-    $(document).on('change', '.linea-variante', function () {
-        var saldo = $(this).find('option:selected').data('saldo');
-        var art = $(this).find('option:selected').data('art');
-        var $s = $(this).closest('tr').find('.linea-saldo');
-        if (!art) {
-            $s.html('<span class="text-danger">Variante sin SKU</span>');
-        } else if (saldo !== '' && saldo !== undefined) {
-            $s.html('Saldo disponible: <strong>' + saldo + '</strong>');
-        } else {
-            $s.text('');
+        var $tr = nuevaLinea('#tabla-solicitud-lineas');
+        if ($tr) {
+            $tr.find('.codigoprenda').trigger('focus');
         }
+    });
+
+    $(document).on('click', '#indumentaria-panel .btn-quitar-linea', function () {
+        var $tr = $(this).closest('tr');
+        var $tbody = $tr.closest('tbody');
+        if ($tbody.find('tr').length <= 1) {
+            $tr.find('.prenda_id').val('');
+            $tr.find('.codigoprenda').val('');
+            $tr.find('.descripcionprenda').val('');
+            if (typeof window.limpiarVariantePrendaCampo === 'function') {
+                window.limpiarVariantePrendaCampo($tr.find('.tm-variante-prenda-campo'));
+            }
+            $tr.find('.linea-cantidad').val(1);
+            $tr.find('.linea-saldo').text('');
+            return;
+        }
+        $tr.remove();
+    });
+
+    $(document).on('prenda:seleccionada', '#indumentaria-panel .tm-prenda-campo', function (e, data) {
+        var $tr = $(this).closest('tr');
+        if (typeof window.limpiarVariantePrendaCampo === 'function') {
+            window.limpiarVariantePrendaCampo($tr.find('.tm-variante-prenda-campo'));
+        }
+        $tr.find('.linea-saldo').text('');
+        if (data && data.id) {
+            $tr.find('.codigovarianteprenda').trigger('focus');
+        }
+    });
+
+    $(document).on('variante:seleccionada', '#indumentaria-panel .tm-variante-prenda-campo', function () {
+        mostrarSaldo($(this).closest('tr'));
     });
 
     $(document).on('submit', '#form-entrega-indumentaria', function (e) {
         e.preventDefault();
         var lineas = juntarLineas('#tabla-entrega-lineas');
         if (lineas.length === 0) {
-            aviso('Agregue al menos una prenda con cantidad.', 'error');
+            aviso('Agregue al menos una prenda con variante y cantidad.', 'error');
             return;
         }
         var $btn = $(this).find('button[type="submit"]').prop('disabled', true);
@@ -164,7 +206,7 @@
         e.preventDefault();
         var lineas = juntarLineas('#tabla-solicitud-lineas');
         if (lineas.length === 0) {
-            aviso('Agregue al menos una prenda con cantidad.', 'error');
+            aviso('Agregue al menos una prenda con variante y cantidad.', 'error');
             return;
         }
         var $btn = $(this).find('button[type="submit"]').prop('disabled', true);
@@ -208,10 +250,10 @@
     $(document).on('submit', '#form-talles-indumentaria', function (e) {
         e.preventDefault();
         var talles = {};
-        $(this).find('select[name^="talles["]').each(function () {
-            var m = $(this).attr('name').match(/talles\[(\d+)\]/);
-            if (m) {
-                talles[m[1]] = $(this).val() || '';
+        $(this).find('.tm-talle-campo').each(function () {
+            var pid = String($(this).data('prenda-id') || '');
+            if (pid) {
+                talles[pid] = $(this).find('.talle_id').val() || '';
             }
         });
         $.ajax({ url: panel().data('url-talles'), type: 'POST', data: { _token: token(), talles: talles } })

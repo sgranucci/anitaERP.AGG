@@ -4,6 +4,8 @@ Bandeja de legajos
 @endsection
 
 @section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 <link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
 @include('includes.tabs-activas-estilos')
 <style>
@@ -566,6 +568,123 @@ Bandeja de legajos
         font-size: 0.72rem;
         text-decoration: underline;
     }
+    /* Select de vista: tamaño chico (no el ancho pill por defecto del workbench) */
+    .lw-workbench .lw-vista-select {
+        width: 9.5rem;
+        min-width: 9.5rem;
+        max-width: 11rem;
+        border-radius: 0.25rem;
+        padding-left: 0.4rem;
+        padding-right: 1.4rem;
+        font-size: 0.8125rem;
+    }
+    /* Un bloque: búsqueda rápida + chips originales + QBE colapsado */
+    .lw-workbench .lw-filtros-bloque {
+        background: #fff;
+        border-bottom: 1px solid #d6e0ea;
+    }
+    .lw-workbench .lw-filtros-bloque > .lw-filtros-busqueda {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    .lw-workbench .lw-busqueda-fila {
+        gap: 0.45rem 0.65rem;
+        width: 100%;
+    }
+    .lw-workbench .lw-busqueda-campo {
+        flex: 1 1 0;
+        min-width: 7rem;
+        margin-bottom: 0;
+    }
+    .lw-workbench .lw-busqueda-campo.lw-busqueda-texto {
+        flex: 2.2 1 0;
+        min-width: 12rem;
+    }
+    .lw-workbench .lw-busqueda-campo label {
+        display: block;
+        white-space: nowrap;
+    }
+    .lw-workbench .lw-busqueda-acciones {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 0.35rem;
+        padding-bottom: 1px;
+        margin-bottom: 0;
+        margin-left: auto;
+    }
+    .lw-workbench .lw-filtros-bloque > .oc-empresas {
+        border-bottom: 1px solid #eef2f6 !important;
+        background: #fff !important;
+        padding: 0.45rem 0.75rem !important;
+    }
+    .lw-workbench .lw-filtros-bloque > .lw-filtros-prefijados {
+        padding: 0.55rem 0.75rem 0.65rem;
+        border-bottom: 1px solid #eef2f6;
+        background: #fff;
+    }
+    .lw-workbench .lw-filtros-bloque > .lw-qbe {
+        border-bottom: 0;
+        background: #f4f8fb;
+        padding: 0.65rem 0.75rem 0.75rem;
+    }
+    .lw-workbench .lw-filtros-bloque > .lw-qbe.collapse:not(.show) {
+        display: none !important;
+    }
+    .lw-workbench #lw-toolbar-panel.collapse:not(.show) {
+        display: none !important;
+    }
+    /*
+     * Contener el overflow: sin esto, la tabla (width:max-content) ensancha el card
+     * y Acciones sticky queda fuera del viewport (parecía “por sacar Decisión”).
+     */
+    .bandeja-legajos-row,
+    .bandeja-legajos-row > [class*="col-"],
+    .lw-workbench.card {
+        max-width: 100%;
+        min-width: 0;
+    }
+    .lw-workbench .bandeja-grilla-ancha {
+        --tabla-ancha-der: 10.75rem;
+        max-width: 100%;
+        min-width: 0;
+        width: 100%;
+    }
+    .lw-workbench .bandeja-grilla-ancha .tabla-ancha-wrap {
+        max-width: 100%;
+        max-height: calc(100vh - 280px);
+        overflow-x: auto;
+    }
+    .lw-workbench .bandeja-grilla-ancha .bandeja-col-facturas {
+        white-space: normal;
+    }
+    .lw-workbench .bandeja-grilla-ancha th.lw-col-acciones,
+    .lw-workbench .bandeja-grilla-ancha td.lw-col-acciones {
+        white-space: normal;
+        vertical-align: middle;
+        text-align: center;
+        padding-left: 0.3rem;
+        padding-right: 0.3rem;
+    }
+    /* Dentro de la columna fija: wrap local (como cuando entraba con Decisión) */
+    .lw-workbench .bandeja-acciones {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.12rem;
+        max-width: 100%;
+    }
+    .lw-workbench .bandeja-acciones .btn {
+        margin: 0;
+        padding: 0.18rem 0.34rem;
+        font-size: 0.82rem;
+        line-height: 1.15;
+        min-width: 1.6rem;
+    }
+    .lw-workbench .bandeja-acciones .btn > .fa {
+        font-size: 0.95em;
+    }
 </style>
 @endsection
 
@@ -579,6 +698,25 @@ Bandeja de legajos
 <script>
     window.bandejaPuedeCorregirTipo = {{ (!empty($puede_cargar_cxp) || !empty($puede_asignar_com)) ? 'true' : 'false' }};
 </script>
+
+@php
+    $qbeGruposJs = public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js');
+    $ordenJs = public_path('assets/pages/scripts/listado/workbench-orden.js');
+    $agruparJs = public_path('assets/pages/scripts/listado/workbench-agrupar.js');
+    $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
+    $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
+    $workbenchJs = public_path('assets/pages/scripts/compras/legajo_bandeja/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
+@endphp
+<script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ file_exists($agruparJs) ? filemtime($agruparJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/compras/legajo_bandeja/workbench.js') }}?v={{ file_exists($workbenchJs) ? filemtime($workbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/compras/legajo_bandeja/bandeja.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/legajo_bandeja/bandeja.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -595,6 +733,18 @@ Bandeja de legajos
     $atajo = $filtros['atajo'] ?? '';
     $esSectorCxp = OrdencompraSectorVisibilidadSupport::esUsuarioSectorCuentasAPagar();
     $limpiarUrl = route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryStringEmpresaYVista($filtros));
+    $camposOrdenablesThead = OrdencompraLegajoBandejaFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesThead
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('consultar_legajo_compra', $qsQuitarOrden);
+    $qbeActivo = \App\Support\Listado\ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? []);
+    // Siempre colapsado al cargar: no cambia la bandeja cotidiana; se abre con «Consulta avanzada».
+    $qbeAbierto = false;
     $qs = function (array $extra = []) use ($filtros) {
         return route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString(array_merge($filtros, $extra)));
     };
@@ -921,443 +1071,225 @@ Bandeja de legajos
 </div>
 @endif
 
-<div class="row">
+
+<div class="row bandeja-legajos-row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Bandeja de legajos</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+        <div class="card card-info lw-workbench shadow-sm">
+            <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Bandeja de legajos</h3>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.35rem;">
                     @include('includes.ayuda.boton-guia', [
                         'slug' => 'bandeja-legajos',
                         'titulo' => 'Guía: bandeja de legajos (COM y envío)',
-                        'clase' => 'btn btn-outline-light btn-sm mr-1',
+                        'clase' => 'btn btn-outline-light btn-sm',
                     ])
                     @if (can('listar-seguimiento-legajo-compra', false))
-                    <a href="{{ route('consultar_seguimiento_legajo_compra') }}" class="btn btn-outline-light btn-sm mr-1">
-                        <i class="fa fa-search"></i> Seguimiento
-                    </a>
+                        <a href="{{ route('consultar_seguimiento_legajo_compra') }}" class="btn btn-outline-light btn-sm">
+                            <i class="fa fa-search"></i> Seguimiento
+                        </a>
                     @endif
-                    <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-light btn-sm mr-1">
+                    <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-file-text-o"></i> Órdenes de compra
                     </a>
-                    @include('includes.listado.filtros_toolbar', [
-                        'formId' => 'form-filtros-legajo',
-                        'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? [])
-                            || !empty($filtros['nro_oc'])
-                            || !empty($filtros['nro_factura'])
-                            || !empty($filtros['nro_com'])
-                            || !empty($filtros['nro_op'])
-                            || !empty($atajo),
-                        'limpiarUrl' => $limpiarUrl,
-                        'placeholder' => 'Nº OC, proveedor, factura, COM u OP…',
-                        'mostrarCaja' => false,
-                        'toggleTarget' => '#panel-filtros-ordencompra',
-                        'toggleId' => 'btn-toggle-filtros-ordencompra',
-                        'inputId' => 'filtro_valor',
-                    ])
+                    <button type="button"
+                            class="btn btn-outline-light btn-sm collapsed"
+                            id="btn-lw-toolbar-toggle"
+                            data-toggle="collapse"
+                            data-target="#lw-toolbar-panel"
+                            aria-expanded="false"
+                            aria-controls="lw-toolbar-panel"
+                            title="Vistas guardadas, diseñar columnas y consulta QBE">
+                        <i class="fa fa-th-large"></i> Vista y diseño
+                        @if (($vistaActiva ?? null) || ($qbeActivo ?? false) || (($ordenActualThead ?? []) !== []))
+                            <span class="badge badge-warning ml-1" title="Hay vista, orden o QBE activo">●</span>
+                        @endif
+                    </button>
                 </div>
             </div>
-            <form method="get" action="{{ route('consultar_legajo_compra') }}" id="form-filtros-legajo" class="mb-0">
+            @if (! ($workbenchListo ?? false))
+                <div class="alert alert-warning lw-aviso-migracion mb-0">
+                    <strong>Migración pendiente.</strong>
+                    Para vistas y configuración de grilla hace falta la tabla <code>listado_vista</code>.
+                </div>
+            @endif
+            <form method="get" action="{{ route('consultar_legajo_compra') }}" id="form-filtros-legajo-bandeja" class="mb-0">
                 <input type="hidden" name="vista" value="{{ $vista }}">
                 <input type="hidden" name="tab" value="{{ $tab }}">
                 @if ($atajo !== '')
                     <input type="hidden" name="atajo" value="{{ $atajo }}">
                 @endif
-                @include('compras.ordencompra.partials.filtros_listado', ['limpiarUrl' => $limpiarUrl])
-                <div class="card-body py-2 border-bottom bg-light">
-                    <div class="form-row align-items-end">
-                        <div class="form-group col-md-3 col-sm-6 mb-2">
-                            <label class="small mb-1" for="filtro_valor">Proveedor o texto</label>
-                            <input type="text" name="filtro_valor" id="filtro_valor" class="form-control form-control-sm"
-                                   value="{{ $filtros['valor'] ?? '' }}" placeholder="Coca, Medife, Pan American…" autocomplete="off"
-                                   title="Busca en el nombre del proveedor y en el resto de los datos del legajo">
-                        </div>
-                        <div class="form-group col-md-2 col-sm-6 mb-2">
-                            <label class="small mb-1" for="nro_oc">Nº OC</label>
-                            <input type="text" name="nro_oc" id="nro_oc" class="form-control form-control-sm"
-                                   value="{{ $filtros['nro_oc'] ?? '' }}" placeholder="Orden de compra" autocomplete="off">
-                        </div>
-                        <div class="form-group col-md-2 col-sm-6 mb-2">
-                            <label class="small mb-1" for="nro_factura">Nº factura</label>
-                            <input type="text" name="nro_factura" id="nro_factura" class="form-control form-control-sm"
-                                   value="{{ $filtros['nro_factura'] ?? '' }}" placeholder="Número o dígitos" autocomplete="off">
-                        </div>
-                        <div class="form-group col-md-2 col-sm-6 mb-2">
-                            <label class="small mb-1" for="nro_com">Nº COM</label>
-                            <input type="text" name="nro_com" id="nro_com" class="form-control form-control-sm"
-                                   value="{{ $filtros['nro_com'] ?? '' }}" placeholder="Número o ID" autocomplete="off">
-                        </div>
-                        <div class="form-group col-md-3 col-sm-6 mb-2">
-                            <label class="small mb-1" for="nro_op">Nº orden de pago</label>
-                            <input type="text" name="nro_op" id="nro_op" class="form-control form-control-sm"
-                                   value="{{ $filtros['nro_op'] ?? '' }}" placeholder="Cuando el legajo está pago" autocomplete="off">
-                        </div>
-                        <div class="form-group col-md-3 col-sm-6 mb-2">
-                            <button type="submit" class="btn btn-primary btn-sm">
-                                <i class="fa fa-search"></i> Buscar
+                <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+                <input type="hidden" name="filtro_modo" id="filtro_modo" value="{{ $filtros['modo'] ?? 'todos' }}">
+                <input type="hidden" name="columnas" id="lw_columnas_csv" value="{{ implode(',', $columnasVisibles ?? []) }}">
+                @if (($filtros['empresa_scope'] ?? '') === 'todas')
+                    <input type="hidden" name="empresa_todas" value="1">
+                @elseif (! empty($filtros['empresa_id']))
+                    <input type="hidden" name="empresa_id" value="{{ $filtros['empresa_id'] }}">
+                @endif
+                @if (! empty($filtros['presupuesto']))
+                    <input type="hidden" name="presupuesto" value="{{ $filtros['presupuesto'] }}">
+                @endif
+                @if ($vistaActiva ?? null)
+                    <input type="hidden" name="vista_id" value="{{ $vistaActiva->id }}">
+                @elseif (! empty($filtros['vista_estandar']))
+                    <input type="hidden" name="vista_estandar" value="1">
+                @endif
+                {{-- Workbench (vista / diseñar / QBE / defaults): colapsado por defecto. --}}
+                <div class="collapse" id="lw-toolbar-panel">
+                    <div class="lw-toolbar">
+                        <div class="lw-toolbar-left">
+                            <select id="lw-vista-select" class="form-control form-control-sm lw-vista-select"
+                                    data-base-url="{{ route('consultar_legajo_compra') }}"
+                                    title="Vistas guardadas"
+                                    @if (! ($workbenchListo ?? false)) disabled @endif>
+                                <option value="">Vista estándar</option>
+                                @foreach (($vistasListado ?? []) as $vistaGuardada)
+                                    <option value="{{ $vistaGuardada->id }}" @if (($vistaActiva ?? null) && (int) $vistaActiva->id === (int) $vistaGuardada->id) selected @endif>
+                                        {{ $vistaGuardada->nombre }}
+                                        @if ($vistaGuardada->es_default) ★ @endif
+                                        @if ($vistaGuardada->compartida) (compartida) @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#modal-lw-grilla"
+                                    @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
+                                <i class="fa fa-th"></i> Diseñar vista
                             </button>
-                            <a href="{{ $limpiarUrl }}" class="btn btn-outline-secondary btn-sm">Limpiar</a>
+                            <button type="button"
+                                    class="btn btn-sm {{ ($qbeActivo ?? false) ? 'btn-info' : 'btn-outline-info' }} {{ ($qbeAbierto ?? false) ? '' : 'collapsed' }}"
+                                    data-toggle="collapse" data-target="#lw-qbe-panel"
+                                    aria-expanded="{{ ($qbeAbierto ?? false) ? 'true' : 'false' }}"
+                                    aria-controls="lw-qbe-panel"
+                                    title="{{ ($qbeActivo ?? false) ? 'Hay criterios QBE aplicados' : 'Abrir criterios QBE (filtros de arriba siguen visibles)' }}">
+                                <i class="fa fa-filter"></i> Consulta avanzada
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
+                                    @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
+                                <i class="fa fa-font"></i> Defaults instalación
+                            </button>
+                        </div>
+                        <div class="lw-toolbar-right">
+                            @if (($ordenActualThead ?? []) !== [])
+                                @php
+                                    $partesOrdenBarra = [];
+                                    foreach ($ordenActualThead as $criterioOrdenBarra) {
+                                        $campoOrdenBarra = (string) ($criterioOrdenBarra['campo'] ?? '');
+                                        $etiquetaOrdenBarra = ($etiquetasColumnas ?? [])[$campoOrdenBarra]
+                                            ?? ($camposOrdenablesThead[$campoOrdenBarra]['label'] ?? $campoOrdenBarra);
+                                        $flechaOrdenBarra = ($criterioOrdenBarra['dir'] ?? '') === 'desc' ? '↓' : '↑';
+                                        $partesOrdenBarra[] = trim($etiquetaOrdenBarra.' '.$flechaOrdenBarra);
+                                    }
+                                    $textoOrdenBarra = implode(' · ', $partesOrdenBarra);
+                                @endphp
+                                <span class="btn btn-sm btn-info lw-orden-recordado" title="Este orden queda recordado para su usuario">
+                                    <i class="fa fa-sort-amount-down"></i> {{ $textoOrdenBarra }}
+                                </span>
+                                <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary"
+                                   title="Olvida el orden elegido y vuelve al orden estándar de la bandeja">
+                                    <i class="fa fa-undo"></i> Orden estándar
+                                </a>
+                            @endif
                         </div>
                     </div>
+                </div>
+                {{-- Búsqueda rápida + empresa + chips originales + QBE (AND). --}}
+                <div class="lw-filtros-bloque">
+                    @include('compras.legajo_bandeja.partials.filtros_busqueda')
+                    @include('compras.ordencompra.partials.filtros_externos', [
+                        'rutaIndex' => 'consultar_legajo_compra',
+                        'filtros' => $filtros,
+                        'filtrosQuery' => $filtrosQuery ?? [],
+                        'empresa_query' => $empresa_query ?? collect(),
+                        'exportRuta' => 'listar_legajo_compra',
+                        'exportQueryparams' => $filtrosQuery ?? [],
+                    ])
+                    @include('compras.legajo_bandeja.partials.chips_circuito')
+                    @include('compras.legajo_bandeja.partials.workbench_qbe')
                 </div>
             </form>
-            @include('compras.ordencompra.partials.filtros_externos', [
-                'rutaIndex' => 'consultar_legajo_compra',
-                'filtros' => $filtros,
-                'filtrosQuery' => $filtrosQuery ?? [],
-                'empresa_query' => $empresa_query ?? collect(),
-                'exportRuta' => 'listar_legajo_compra',
-                'exportQueryparams' => $filtrosQuery ?? [],
-            ])
+            <div class="px-3 pt-2">
+                @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
+            </div>
             <div class="card-body py-2">
-                <p class="text-muted small mb-2">
+                <p class="text-muted small mb-1">
                     El legajo es la OC (sector, historia, factura y COM).
                     Compras envía; Cuentas a pagar carga la factura y envía a Pagos; Pagos ve solo lo que está en Pagos y archiva.
-                    <strong>Listo para cargar</strong> abre Cuentas a pagar y muestra las OC con al menos una factura aún pendiente (aunque otras de la misma OC ya estén cargadas).
-                    La columna Facturas muestra solo lo pendiente; las ya ingresadas en CxP se consultan con
-                    <strong>N ya en CxP</strong> o el ícono PDF (abre el legajo: facturas, COM y OC).
+                    <strong>Listo para cargar</strong> abre Cuentas a pagar con facturas pendientes.
                 </p>
-                @if (!empty($alcanceSector))
-                    <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
+                @if (! empty($alcanceSector))
+                    <p class="text-muted small mb-0">{{ $alcanceSector }}</p>
                 @endif
-                <div class="d-flex flex-wrap align-items-center">
-                    <div class="d-flex flex-wrap align-items-center mb-2">
-                        <span class="text-muted small mr-2 mb-0"><i class="fa fa-filter"></i> Estado:</span>
-                        <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Estado del legajo">
-                            @foreach ($vistas as $key => $label)
-                                <a href="{{ $qs(['vista' => $key]) }}"
-                                   class="btn {{ $vista === $key ? 'btn-primary' : 'btn-outline-primary' }}">{{ $label }}</a>
-                            @endforeach
-                        </div>
-                    </div>
-                    <div class="d-none d-md-block mx-3 mb-2 align-self-center" style="width:1px;height:28px;background:#dee2e6;"></div>
-                    <div class="d-flex flex-wrap align-items-center mb-2">
-                        <span class="text-muted small mr-2 mb-0"><i class="fa fa-cutlery"></i> Ámbito:</span>
-                        <div class="btn-group btn-group-sm" role="group" aria-label="Ámbito gastronomía">
-                            <a href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_TODOS]) }}"
-                               class="btn {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_TODOS ? 'btn-info' : 'btn-outline-info' }}">Todas</a>
-                            <a href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA]) }}"
-                               class="btn {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA ? 'btn-info' : 'btn-outline-info' }}">Gastronomía</a>
-                            <a href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_RESTO]) }}"
-                               class="btn {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_RESTO ? 'btn-info' : 'btn-outline-info' }}">Resto</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="d-flex flex-wrap align-items-center">
-                    <span class="text-muted small mr-2 mb-1">Atajos:</span>
-                    <div class="btn-group btn-group-sm flex-wrap mb-1" role="group" aria-label="Atajos de documentos">
-                        @foreach ($atajos as $key => $label)
-                            <a href="{{ $qsAtajo($key) }}"
-                               class="btn {{ $atajo === $key ? 'btn-secondary' : 'btn-outline-secondary' }}">{{ $label }}</a>
-                        @endforeach
-                    </div>
-                </div>
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover">
-                    <thead>
+            <div class="tabla-ancha-grilla bandeja-grilla-ancha" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap p-0">
+                <table class="table table-striped table-bordered table-hover tabla-ancha mb-0" id="tabla-paginada">
+                    <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
-                            <th>Id</th>
-                            <th>OC</th>
-                            <th>Fecha</th>
-                            <th>Empresa</th>
-                            <th>Proveedor</th>
-                            <th>Centro de costo</th>
-                            <th>Sector</th>
-                            <th>Días</th>
-                            <th>Paquete</th>
-                            <th class="bandeja-col-facturas">Facturas</th>
-                            @if ($vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES)
-                                <th>Decisión</th>
-                            @endif
-                            <th>Herramientas</th>
+                            @foreach (($columnasVisibles ?? []) as $keyColumna)
+                                @include('compras.legajo_bandeja.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'camposOrdenablesThead' => $camposOrdenablesThead,
+                                    'ordenActualThead' => $ordenActualThead,
+                                ])
+                            @endforeach
+                            <th class="lw-col-acciones col-fija-der-1 text-center" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($filas as $row)
-                            @php
-                                $nCargadasFac = (int) ($row['facturas_cargadas_count'] ?? 0);
-                                $hayFacPendiente = ! empty($row['facturas_legajo']);
-                                $puedeConsultarFacturas = ! empty($row['url_paquete'])
-                                    && ($hayFacPendiente || $nCargadasFac > 0 || ! empty($row['url_factura']));
-                            @endphp
-                            <tr>
-                                <td>{{ $row['id'] }}</td>
-                                <td>
-                                    <a href="{{ $row['url_oc'] }}" target="_blank" rel="noopener">{{ $row['numero'] }}</a>
-                                    @if (!empty($row['es_anticipada']))
-                                        <span class="badge badge-warning" title="Legajo anticipado (factura antes de recepción)">
-                                            <i class="fa fa-clock-o"></i> Anticipado
+                        @php
+                            $agruparActivo = \App\Support\Listado\ListadoAgrupacionSupport::normalizar(
+                                $filtros['agrupar'] ?? [],
+                                \App\Support\Compras\OrdencompraLegajoBandejaFiltros::camposOrdenables()
+                            );
+                            $filasVista = \App\Support\Listado\ListadoAgrupacionSupport::segmentar(
+                                $filas,
+                                $agruparActivo,
+                                static fn ($row, string $campo): string => \App\Support\Compras\OrdencompraLegajoBandejaListadoColumnas::valorCelda($row, $campo),
+                                $etiquetasColumnas ?? [],
+                                ! empty($cortes['por_clave']) ? $cortes['por_clave'] : null
+                            );
+                            $colspanGrilla = count($columnasVisibles ?? []) + 1;
+                        @endphp
+                        @forelse ($filasVista as $filaVista)
+                            @if (($filaVista['type'] ?? '') === 'header')
+                                <tr class="lw-group-header lw-group-nivel-{{ (int) ($filaVista['nivel'] ?? 0) }}">
+                                    <td colspan="{{ $colspanGrilla }}">
+                                        <i class="fa fa-folder-open-o"></i>
+                                        <strong>{{ $filaVista['label'] }}:</strong>
+                                        {{ $filaVista['valor'] !== '' ? $filaVista['valor'] : '(vacío)' }}
+                                        <span class="lw-group-count">
+                                            {{ number_format((int) ($filaVista['count'] ?? 0), 0, ',', '.') }}
                                         </span>
-                                    @endif
-                                    @if (!empty($row['es_gastronomia']))
-                                        <span class="badge badge-info">Gastro</span>
-                                    @endif
-                                </td>
-                                <td>{{ $row['fecha'] }}</td>
-                                <td><small>{{ $row['empresa'] }}</small></td>
-                                <td><small>{{ $row['proveedor'] }}</small></td>
-                                <td><small>{{ $row['centrocosto'] }}</small></td>
-                                <td><small>{{ $row['sector'] }}</small></td>
-                                <td>
-                                    @if ((int) $row['dias'] >= (int) ($dias_recordatorio ?? 3))
-                                        <span class="badge badge-warning" title="{{ $row['fecha_ubicacion'] }}">{{ $row['dias'] }}</span>
-                                    @else
-                                        <span title="{{ $row['fecha_ubicacion'] }}">{{ $row['dias'] }}</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    @if (!empty($row['paquete_ok']))
-                                        <span class="badge badge-success" title="{{ $row['paquete_titulo'] ?? '' }}">{{ $row['paquete_etiqueta'] ?? ((!empty($row['exige_com']) || !array_key_exists('exige_com', $row)) ? 'FC + COM' : 'FC (contrato sin COM)') }}</span>
-                                    @else
-                                        @if (!empty($row['tiene_factura']))
-                                            <span class="badge badge-secondary">FC</span>
-                                        @endif
-                                        @if (!empty($row['tiene_com']))
-                                            <span class="badge badge-secondary">COM</span>
-                                        @endif
-                                        @if (empty($row['tiene_factura']) && empty($row['tiene_com']))
-                                            <span class="text-muted">—</span>
-                                        @endif
-                                    @endif
-                                    @if (!empty($row['tiene_com_asignada']))
-                                        <span class="badge badge-primary" title="COM asignada a la factura">asignada</span>
-                                    @endif
-                                    @if (!empty($row['tiene_comprobante']))
-                                        <span class="badge badge-info" title="Todas las facturas y NC del legajo están en CxP">cargada</span>
-                                    @elseif (!empty($row['tiene_comprobante_parcial']))
-                                        <span class="badge badge-warning" title="Hay comprobantes en CxP, pero quedan documentos pendientes">parcial</span>
-                                    @endif
-                                    @if (!empty($row['tiene_pendiente_entrega']))
-                                        <span class="badge badge-secondary" title="Hay facturas retenidas hasta que llegue la mercadería">pend. entrega</span>
-                                    @endif
-                                    @if (!empty($row['tiene_pago']))
-                                        <span class="badge badge-success" title="Orden de pago">{{ !empty($row['etiqueta_pago']) ? $row['etiqueta_pago'] : 'OP' }}</span>
-                                    @endif
-                                </td>
-                                <td class="small bandeja-col-facturas">
-                                    @if ($hayFacPendiente)
-                                        @foreach ($row['facturas_legajo'] as $facLeg)
-                                            <div class="bandeja-fac-item">
-                                                @if (!empty($facLeg['url_pdf']))
-                                                    <a href="{{ $facLeg['url_pdf'] }}" class="text-primary" target="_blank" rel="noopener"
-                                                       title="Abrir PDF en pantalla completa">{{ $facLeg['numero'] ?? '' }}</a>
-                                                @else
-                                                    <span>{{ $facLeg['numero'] ?? '' }}</span>
-                                                @endif
-                                                @if (!empty($facLeg['estado']))
-                                                    @php
-                                                        $estadoFac = (string) ($facLeg['estado'] ?? '');
-                                                        if ($estadoFac === 'en_anita') {
-                                                            $badgeFac = 'badge-success';
-                                                            $textoFac = 'en Anita';
-                                                        } elseif ($estadoFac === 'pendiente_entrega') {
-                                                            $badgeFac = 'badge-secondary';
-                                                            $textoFac = 'pend. entrega';
-                                                        } else {
-                                                            $badgeFac = 'badge-warning';
-                                                            $textoFac = 'pendiente';
-                                                        }
-                                                    @endphp
-                                                    <span class="badge {{ $badgeFac }}">
-                                                        {{ $textoFac }}
-                                                    </span>
-                                                @endif
-                                                @if (!empty($facLeg['origen']))
-                                                    <span class="bandeja-fac-origen">{{ $facLeg['origen'] }}</span>
-                                                @endif
-                                            </div>
-                                        @endforeach
-                                    @endif
-                                    @if ($nCargadasFac > 0)
-                                        <div class="bandeja-fac-item">
-                                            <button type="button"
-                                                    class="btn btn-link bandeja-fac-consultar js-bandeja-ver-legajo"
-                                                    data-url-paquete="{{ $row['url_paquete'] }}"
-                                                    data-numero="{{ $row['numero'] }}"
-                                                    data-tab="facturas"
-                                                    title="Consultar el legajo (facturas, COM y OC)">
-                                                {{ $nCargadasFac }} ya en CxP
-                                            </button>
-                                        </div>
-                                    @elseif (! $hayFacPendiente)
-                                        <span class="text-muted">—</span>
-                                    @endif
-                                </td>
-                                @if ($vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES)
-                                    <td>
-                                        @if (($row['decision'] ?? '') === 'Aprobado')
-                                            <span class="badge badge-success">Aprobado</span>
-                                        @elseif (($row['decision'] ?? '') === 'Rechazado')
-                                            <span class="badge badge-danger">Rechazado</span>
-                                        @endif
-                                        @if (!empty($row['firmante']))
-                                            <div><small>{{ $row['firmante'] }}</small></div>
-                                        @endif
-                                        @if (!empty($row['fecha_decision']))
-                                            <div><small>{{ $row['fecha_decision'] }}</small></div>
-                                        @endif
-                                        @if (!empty($row['comentario_decision']))
-                                            <div><small class="text-muted">{{ $row['comentario_decision'] }}</small></div>
-                                        @endif
                                     </td>
-                                @endif
-                                <td class="text-nowrap">
-                                    @if (! $esSectorCxp)
-                                    <a href="{{ $row['url_oc'] }}" class="btn btn-xs btn-info" title="Ver orden de compra" target="_blank" rel="noopener">
-                                        <i class="fa fa-file-text-o"></i>
-                                    </a>
-                                    @endif
-                                    @if (!empty($puede_actualizar) && !empty($row['url_asignar_factura']))
-                                        <button type="button" class="btn btn-xs btn-outline-danger js-oc-asignar-factura"
-                                                data-url="{{ $row['url_asignar_factura'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                data-proveedor="{{ $row['proveedor'] }}"
-                                                data-moneda-id="{{ (int) ($row['moneda_sugerida_id'] ?? 1) }}"
-                                                title="Asignar PDF de factura al legajo">
-                                            <i class="fa fa-cloud-upload"></i>
-                                        </button>
-                                    @endif
-                                    @if ($puedeConsultarFacturas)
-                                        <button type="button" class="btn btn-xs btn-outline-danger js-bandeja-ver-legajo"
-                                                data-url-pdf="{{ $row['url_factura'] ?? '' }}"
-                                                data-url-paquete="{{ $row['url_paquete'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                data-tab="facturas"
-                                                title="Consultar facturas del legajo">
-                                            <i class="fa fa-file-pdf-o"></i>
-                                        </button>
-                                    @else
-                                        <button type="button" class="btn btn-xs btn-outline-secondary" disabled title="Sin PDF de factura">
-                                            <i class="fa fa-file-pdf-o"></i>
-                                        </button>
-                                    @endif
-                                    @if (! $esSectorCxp)
-                                    @if (!empty($row['tiene_com']))
-                                        <button type="button" class="btn btn-xs btn-outline-dark js-bandeja-ver-legajo"
-                                                data-url-pdf="{{ $row['url_com'] }}"
-                                                data-url-paquete="{{ $row['url_paquete'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                data-tab="coms"
-                                                title="Consultar COM del legajo">
-                                            <i class="fa fa-cubes"></i>
-                                        </button>
-                                    @else
-                                        <button type="button" class="btn btn-xs btn-outline-secondary" disabled title="Sin COM">
-                                            <i class="fa fa-cubes"></i>
-                                        </button>
-                                    @endif
-                                    @endif
-                                    <button type="button" class="btn btn-xs btn-outline-info js-bandeja-historia"
-                                            data-url="{{ $row['url_historia'] }}"
-                                            data-numero="{{ $row['numero'] }}"
-                                            title="Historia de asignación del legajo">
-                                        <i class="fa fa-history"></i>
-                                    </button>
-                                    <button type="button"
-                                            class="btn btn-xs js-bandeja-nota {{ !empty($row['tiene_nota']) ? 'btn-warning' : 'btn-outline-secondary' }}"
-                                            data-url="{{ $row['url_nota'] }}"
-                                            data-numero="{{ $row['numero'] }}"
-                                            data-nota="{{ $row['nota_legajo'] ?? '' }}"
-                                            title="{{ !empty($row['tiene_nota']) ? ('Nota: '.$row['nota_legajo']) : 'Agregar nota al legajo' }}">
-                                        <i class="fa fa-sticky-note{{ !empty($row['tiene_nota']) ? '' : '-o' }}"></i>
-                                    </button>
-                                    @if (! $esSectorCxp && !empty($puede_asignar_com) && !empty($row['tiene_factura']) && (!empty($row['tiene_com']) || !empty($row['tiene_pendiente_entrega'])))
-                                        <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-asignar-com"
-                                                data-url-asignar="{{ $row['url_asignar_com'] }}"
-                                                data-url-paquete="{{ $row['url_paquete'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                title="{{ !empty($row['tiene_pendiente_entrega']) && empty($row['tiene_com']) ? 'Gestionar facturas pendientes de entrega' : 'Asignar COM a la factura' }}">
-                                            <i class="fa fa-link"></i>
-                                        </button>
-                                    @endif
-                                    @if (!empty($puede_cargar_cxp) && !empty($row['url_cargar_cxp']))
-                                        <a href="{{ $row['url_cargar_cxp'] }}" class="btn btn-xs btn-primary"
-                                           title="Cargar {{ $row['siguiente_pendiente'] ?? 'comprobante' }} en Cuentas a pagar">
-                                            <i class="fa fa-plus"></i>
-                                        </a>
-                                    @endif
-                                    @if (! $esSectorCxp && !empty($puede_ver_comprobante) && !empty($row['url_comprobante']))
-                                        <a href="{{ $row['url_comprobante'] }}" class="btn btn-xs btn-outline-info" title="Ver comprobante cargado" target="_blank" rel="noopener">
-                                            <i class="fa fa-check-square-o"></i>
-                                        </a>
-                                    @endif
-                                    @if (!empty($puede_ver_pago) && !empty($row['url_pago']))
-                                        @if (!empty($row['url_paquete']))
-                                            <button type="button" class="btn btn-xs btn-outline-success js-bandeja-ver-legajo"
-                                                    data-url-paquete="{{ $row['url_paquete'] }}"
-                                                    data-numero="{{ $row['numero'] }}"
-                                                    data-tab="pagos"
-                                                    title="Ver pagos del legajo ({{ $row['etiqueta_pago'] ?? 'OP' }})">
-                                                <i class="fa fa-money"></i>
-                                            </button>
-                                        @else
-                                            <a href="{{ $row['url_pago'] }}" class="btn btn-xs btn-outline-success" title="Orden de pago {{ $row['etiqueta_pago'] ?? '' }}" target="_blank" rel="noopener">
-                                                <i class="fa fa-money"></i>
-                                            </a>
-                                        @endif
-                                    @endif
-                                    @if (!empty($puede_actualizar) && !empty($row['puede_enviar']))
-                                        <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-enviar-gastro"
-                                                data-url="{{ $row['url_enviar'] }}"
-                                                data-ordencompra-id="{{ $row['id'] }}"
-                                                data-url-paquete="{{ $row['url_paquete'] }}"
-                                                data-url-asignar="{{ $row['url_asignar_com'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                title="Enviar a Gastronomía">
-                                            <i class="fa fa-cutlery"></i>
-                                        </button>
-                                    @endif
-                                    @if (!empty($puede_actualizar) && !empty($row['puede_enviar_cxp']))
-                                        <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-enviar-cxp"
-                                                data-url="{{ $row['url_enviar_cxp'] }}"
-                                                data-ordencompra-id="{{ $row['id'] }}"
-                                                data-url-paquete="{{ $row['url_paquete'] }}"
-                                                data-url-asignar="{{ $row['url_asignar_com'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                title="{{ ((int) ($row['pendientes_carga'] ?? 0) > 0 && (int) ($row['sector_id'] ?? 0) > 0) ? 'Enviar FC/NC pendientes a Cuentas a pagar' : 'Enviar a Cuentas a pagar' }}">
-                                            <i class="fa fa-share"></i>
-                                        </button>
-                                    @endif
-                                    @if (!empty($puede_enviar_pagos) && !empty($row['puede_enviar_pagos']))
-                                        <button type="button" class="btn btn-xs btn-outline-success js-bandeja-enviar-pagos"
-                                                data-url="{{ $row['url_enviar_pagos'] }}"
-                                                title="Enviar a Pagos">
-                                            <i class="fa fa-share-square-o"></i>
-                                        </button>
-                                    @endif
-                                    @if (!empty($puede_devolver_cxp) && !empty($row['puede_devolver_cxp']))
-                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-legajo"
-                                                data-url-cxp="{{ $row['url_devolver_cxp'] }}"
-                                                data-url-compras="{{ (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras'])) ? $row['url_devolver_compras'] : '' }}"
-                                                title="{{ (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras'])) ? 'Devolver legajo (Cuentas a pagar o Compras)' : 'Devolver a Cuentas a pagar' }}">
-                                            <i class="fa fa-undo"></i>
-                                        </button>
-                                    @elseif (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras']))
-                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-legajo"
-                                                data-url-cxp=""
-                                                data-url-compras="{{ $row['url_devolver_compras'] }}"
-                                                title="Devolver a Compras">
-                                            <i class="fa fa-reply"></i>
-                                        </button>
-                                    @endif
-                                    @if (!empty($puede_archivar) && !empty($row['puede_finalizar']))
-                                        <form method="POST" action="{{ $row['url_finalizar'] }}" class="d-inline"
-                                              onsubmit="return confirm('¿Archivar el legajo OC {{ $row['numero'] }}?');">
-                                            @csrf
-                                            <button type="submit" class="btn btn-xs btn-outline-success" title="Archivar legajo">
-                                                <i class="fa fa-archive"></i>
-                                            </button>
-                                        </form>
-                                    @endif
-                                </td>
-                            </tr>
+                                </tr>
+                            @else
+                                @php
+                                    $row = $filaVista['row'] ?? $filaVista;
+                                    if (is_object($row) && method_exists($row, 'toArray')) {
+                                        $row = $row->toArray();
+                                    } elseif (is_object($row)) {
+                                        $row = (array) $row;
+                                    }
+                                    $nCargadasFac = (int) ($row['facturas_cargadas_count'] ?? 0);
+                                    $hayFacPendiente = ! empty($row['facturas_legajo']);
+                                    $puedeConsultarFacturas = ! empty($row['url_paquete'])
+                                        && ($hayFacPendiente || $nCargadasFac > 0 || ! empty($row['url_factura']));
+                                @endphp
+                                <tr>
+                                    @foreach (($columnasVisibles ?? []) as $keyColumna)
+                                        @include('compras.legajo_bandeja.partials.workbench_celda', ['key' => $keyColumna, 'row' => $row])
+                                    @endforeach
+                                    @include('compras.legajo_bandeja.partials.workbench_herramientas', ['row' => $row])
+                                </tr>
+                            @endif
                         @empty
                             <tr>
-                                <td colspan="{{ $vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES ? 12 : 11 }}" class="text-center text-muted">
-                                    @if (!empty($sinSectorAsignado))
+                                <td colspan="{{ $colspanGrilla }}" class="text-center text-muted">
+                                    @if (! empty($sinSectorAsignado))
                                         No tiene sector de legajo asignado. No se muestran registros.
                                     @else
                                         No hay legajos para estos filtros.
@@ -1367,13 +1299,25 @@ Bandeja de legajos
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
             @if (method_exists($filas, 'links'))
                 <div class="card-footer">
-                    {{ $filas->links() }}
+                    {{ $filas->appends($filtrosQuery ?? [])->links() }}
                 </div>
             @endif
         </div>
     </div>
 </div>
+
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnas' => 'guardar_columnas_listado_legajo_bandeja',
+    'grillaLayout' => $grillaLayout ?? [],
+    'filtros' => $filtros ?? [],
+    'filtrosQuery' => $filtrosQuery ?? [],
+    'vistaActiva' => $vistaActiva ?? null,
+    'paraQueryStringDnd' => [\App\Support\Compras\OrdencompraLegajoBandejaFiltros::class, 'paraQueryString'],
+])
+@include('compras.legajo_bandeja.partials.workbench_modales')
+
 @endsection

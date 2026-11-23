@@ -4,11 +4,11 @@
     $variant = $variant ?? 'app';
 @endphp
 @if ($variant === 'compact')
-    <span class="d-inline-flex align-items-center flex-nowrap ml-1" role="group" aria-label="Exportar listado">
-        <a href="{{ route($ruta, ['formato' => 'PDF']).$suffix }}" class="btn btn-sm bg-danger mr-1" title="Exportar PDF">
+    <span class="d-inline-flex align-items-center flex-nowrap ml-1" style="gap:.35rem;" role="group" aria-label="Exportar listado">
+        <a href="{{ route($ruta, ['formato' => 'PDF']).$suffix }}" class="btn btn-sm bg-danger" title="Exportar PDF">
             <i class="fas fa-file-pdf"></i> Pdf
         </a>
-        <a href="{{ route($ruta, ['formato' => 'EXCEL']).$suffix }}" class="btn btn-sm bg-success mr-1" title="Exportar Excel">
+        <a href="{{ route($ruta, ['formato' => 'EXCEL']).$suffix }}" class="btn btn-sm bg-success" title="Exportar Excel">
             <i class="fas fa-file-excel"></i> Excel
         </a>
         <a href="{{ route($ruta, ['formato' => 'CSV']).$suffix }}" class="btn btn-sm bg-warning" title="Exportar CSV">

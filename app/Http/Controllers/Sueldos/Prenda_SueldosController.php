@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrenda_Sueldos;
 use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
+use App\Models\Sueldos\Prenda_Sueldos;
 use App\Repositories\Sueldos\Prenda_SueldosRepositoryInterface;
 use App\Support\Sueldos\PrendaSueldosListadoFiltros;
 use Illuminate\Http\Request;
@@ -147,6 +148,107 @@ class Prenda_SueldosController extends Controller
         }
 
         abort(404);
+    }
+
+    /** Modal de consulta: prendas activas (código / descripción). */
+    public function consultaPrenda(Request $request)
+    {
+        $this->autorizarConsultaPrenda();
+
+        $consulta = trim((string) $request->input('consulta', ''));
+        $incluirIds = $request->input('ids', []);
+        if (! is_array($incluirIds)) {
+            $incluirIds = [];
+        }
+        $incluirIds = array_values(array_filter(array_map('intval', $incluirIds)));
+
+        $q = Prenda_Sueldos::query()->orderBy('orden')->orderBy('codigo');
+        $q->where(function ($w) use ($incluirIds) {
+            $w->where('activo', true);
+            if ($incluirIds !== []) {
+                $w->orWhereIn('id', $incluirIds);
+            }
+        });
+        if ($consulta !== '') {
+            $q->where(function ($w) use ($consulta) {
+                $w->where('descripcion', 'like', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'like', '%'.$consulta.'%')
+                    ->orWhere('id', $consulta);
+            });
+        }
+        $filas = $q->limit(80)->get(['id', 'codigo', 'descripcion', 'activo']);
+        $html = '';
+        $puedeAbm = can('editar-prenda-sueldos', false) || can('listar-prenda-sueldos', false);
+        foreach ($filas as $f) {
+            $codigo = (string) $f->codigo;
+            $html .= '<tr data-id="'.$f->id.'" data-codigo="'.e($codigo).'" data-nombre="'.e((string) $f->descripcion).'">'
+                .'<td>'.$f->id.'</td>'
+                .'<td>'.e($codigo).'</td>'
+                .'<td>'.e((string) $f->descripcion).($f->activo ? '' : ' <span class="badge badge-secondary">Inactiva</span>').'</td>'
+                .'<td class="text-nowrap">'
+                .'<button type="button" class="btn btn-sm btn-primary elige-prenda">Elegir</button> ';
+            if ($puedeAbm) {
+                $html .= '<a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="'
+                    .route('editar_prenda_sueldos', $f->id).'?origen=modal_consulta&vista=consulta">Consultar</a>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        return response()->json([
+            'data' => $html !== '' ? $html : '<tr><td colspan="4" class="text-muted">Sin resultados</td></tr>',
+        ]);
+    }
+
+    public function resolverPrenda(Request $request)
+    {
+        $this->autorizarConsultaPrenda();
+
+        $valor = trim((string) $request->input('codigo', $request->input('valor', '')));
+        if ($valor === '') {
+            return response()->json(['ok' => false]);
+        }
+
+        $incluirIds = $request->input('ids', []);
+        if (! is_array($incluirIds)) {
+            $incluirIds = [];
+        }
+        $incluirIds = array_values(array_filter(array_map('intval', $incluirIds)));
+
+        $base = Prenda_Sueldos::query()->where(function ($w) use ($incluirIds) {
+            $w->where('activo', true);
+            if ($incluirIds !== []) {
+                $w->orWhereIn('id', $incluirIds);
+            }
+        });
+
+        $prenda = (clone $base)->where('codigo', $valor)->first()
+            ?? (clone $base)->where('id', (int) $valor)->first();
+
+        if (! $prenda) {
+            return response()->json(['ok' => false, 'error' => 'Prenda no encontrada']);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => (int) $prenda->id,
+            'codigo' => (string) $prenda->codigo,
+            'nombre' => (string) $prenda->descripcion,
+        ]);
+    }
+
+    private function autorizarConsultaPrenda(): void
+    {
+        if (can('listar-prenda-sueldos', false)
+            || can('listar-entrega-prenda', false)
+            || can('entregar-prenda', false)
+            || can('editar-entrega-prenda', false)
+            || can('editar-lineas-entrega-prenda', false)
+            || can('actualizar-empleado-sueldos', false)
+            || can('crear-solicitud-indumentaria', false)
+            || can('aprobar-solicitud-indumentaria', false)) {
+            return;
+        }
+        abort(403);
     }
 
     private function colores()

@@ -4969,6 +4969,11 @@ Route::post('compras/suscripciones/{id}/enviar', 'Compras\SuscripcionController@
 
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
+Route::post('compras/ordencompra/workbench/vista', 'Compras\OrdencompraController@guardarVistaListado')->name('guardar_vista_listado_ordencompra');
+Route::delete('compras/ordencompra/workbench/vista/{id}', 'Compras\OrdencompraController@eliminarVistaListado')->name('eliminar_vista_listado_ordencompra')->whereNumber('id');
+Route::post('compras/ordencompra/workbench/columnas', 'Compras\OrdencompraController@guardarColumnasListado')->name('guardar_columnas_listado_ordencompra');
+Route::post('compras/ordencompra/workbench/etiquetas', 'Compras\OrdencompraController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_ordencompra');
+Route::post('compras/ordencompra/workbench/preview', 'Compras\OrdencompraController@previewWorkbench')->name('preview_workbench_ordencompra');
 Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
 Route::get('compras/ordencompra/{id}/editar', 'Compras\OrdencompraController@editar')->name('editar_ordencompra')->middleware('modo.consulta');
 Route::put('compras/ordencompra/{id}', 'Compras\OrdencompraController@actualizar')->name('actualizar_ordencompra')->middleware('modo.consulta');
@@ -5009,6 +5014,11 @@ Route::post('compras/ordencompra/{id}/finalizar-legajo', 'Compras\OrdencompraCon
 Route::get('compras/ordencompra/{id}/gate-cuentas-a-pagar', 'Compras\OrdencompraController@gateCuentasAPagar')->name('ordencompra_gate_cuentas_a_pagar');
 Route::get('compras/legajos', 'Compras\OrdencompraLegajoBandejaController@index')->name('consultar_legajo_compra');
 Route::get('compras/lista-legajos/{formato?}', 'Compras\OrdencompraLegajoBandejaController@exportar')->name('listar_legajo_compra');
+Route::post('compras/legajos/workbench/vista', 'Compras\OrdencompraLegajoBandejaController@guardarVistaListado')->name('guardar_vista_listado_legajo_bandeja');
+Route::delete('compras/legajos/workbench/vista/{id}', 'Compras\OrdencompraLegajoBandejaController@eliminarVistaListado')->name('eliminar_vista_listado_legajo_bandeja')->whereNumber('id');
+Route::post('compras/legajos/workbench/columnas', 'Compras\OrdencompraLegajoBandejaController@guardarColumnasListado')->name('guardar_columnas_listado_legajo_bandeja');
+Route::post('compras/legajos/workbench/etiquetas', 'Compras\OrdencompraLegajoBandejaController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_legajo_bandeja');
+Route::post('compras/legajos/workbench/preview', 'Compras\OrdencompraLegajoBandejaController@previewWorkbench')->name('preview_workbench_legajo_bandeja');
 Route::get('compras/legajos/seguimiento', 'Compras\OrdencompraLegajoSeguimientoController@index')->name('consultar_seguimiento_legajo_compra');
 Route::get('compras/legajos/seguimiento/{id}/ficha', 'Compras\OrdencompraLegajoSeguimientoController@ficha')->name('ficha_seguimiento_legajo_compra');
 Route::get('compras/legajos/{id}/historia', 'Compras\OrdencompraLegajoBandejaController@historia')->name('ordencompra_legajo_bandeja_historia');
@@ -6252,9 +6262,11 @@ Route::delete('sueldos/reporte-definible/{id}/variante/{varianteId}', 'Sueldos\R
 Route::get('sueldos/prenda', 'Sueldos\Prenda_SueldosController@index')->name('consultar_prenda_sueldos');
 Route::get('sueldos/listaprenda/{formato?}/{busqueda?}', 'Sueldos\Prenda_SueldosController@listar')->name('lista_prenda_sueldos');
 Route::post('sueldos/prenda/sincronizar-anita', 'Sueldos\Prenda_SueldosController@sincronizarAnita')->name('sincronizar_prenda_sueldos');
+Route::post('sueldos/prenda/consultaprenda', 'Sueldos\Prenda_SueldosController@consultaPrenda')->name('consulta_prenda_sueldos');
+Route::get('sueldos/prenda/resolverprenda', 'Sueldos\Prenda_SueldosController@resolverPrenda')->name('resolver_prenda_sueldos');
 Route::get('sueldos/prenda/crear', 'Sueldos\Prenda_SueldosController@crear')->name('crear_prenda_sueldos');
 Route::post('sueldos/prenda', 'Sueldos\Prenda_SueldosController@guardar')->name('guardar_prenda_sueldos');
-Route::get('sueldos/prenda/{id}/editar', 'Sueldos\Prenda_SueldosController@editar')->name('editar_prenda_sueldos');
+Route::get('sueldos/prenda/{id}/editar', 'Sueldos\Prenda_SueldosController@editar')->name('editar_prenda_sueldos')->middleware('modo.consulta');
 Route::put('sueldos/prenda/{id}', 'Sueldos\Prenda_SueldosController@actualizar')->name('actualizar_prenda_sueldos');
 Route::delete('sueldos/prenda/{id}', 'Sueldos\Prenda_SueldosController@eliminar')->name('eliminar_prenda_sueldos');
 
@@ -6265,11 +6277,20 @@ Route::delete('sueldos/prenda/{id}', 'Sueldos\Prenda_SueldosController@eliminar'
 Route::get('sueldos/indumentaria/configuracion', 'Sueldos\Indumentaria_ConfiguracionController@editar')->name('config_indumentaria');
 Route::put('sueldos/indumentaria/configuracion', 'Sueldos\Indumentaria_ConfiguracionController@actualizar')->name('actualizar_config_indumentaria');
 Route::get('sueldos/indumentaria/prenda/{prenda}/variantes', 'Sueldos\Empleado_IndumentariaSueldosController@variantes')->name('indumentaria_prenda_variantes');
+Route::post('sueldos/indumentaria/prenda/{prenda}/consultavariante', 'Sueldos\Empleado_IndumentariaSueldosController@consultaVariante')->name('consulta_variante_prenda_sueldos');
+Route::get('sueldos/indumentaria/resolvervariante', 'Sueldos\Empleado_IndumentariaSueldosController@resolverVariante')->name('resolver_variante_prenda_sueldos');
 Route::get('sueldos/entrega-prenda', 'Sueldos\Entrega_PrendaReporteController@index')->name('entrega_prenda_reporte');
 Route::get('sueldos/listar-entrega-prenda/{formato?}', 'Sueldos\Entrega_PrendaReporteController@exportar')->name('listar_entrega_prenda');
 Route::get('sueldos/entrega-prenda/{entrega}/comprobante', 'Sueldos\Entrega_PrendaReporteController@comprobante')->name('comprobante_entrega_prenda');
+Route::get('sueldos/entrega-prenda/{entrega}/editar', 'Sueldos\Entrega_PrendaReporteController@editar')->name('editar_entrega_prenda');
+Route::put('sueldos/entrega-prenda/{entrega}', 'Sueldos\Entrega_PrendaReporteController@actualizar')->name('actualizar_entrega_prenda');
 Route::post('sueldos/entrega-prenda/{entrega}/anular', 'Sueldos\Empleado_IndumentariaSueldosController@anular')->name('anular_entrega_prenda_sueldos');
 Route::post('sueldos/entrega-prenda/{entrega}/tulegajo', 'Sueldos\Empleado_IndumentariaSueldosController@enviarTulegajo')->name('tulegajo_entrega_prenda_sueldos');
+Route::post('sueldos/entrega-prenda/workbench/vista', 'Sueldos\Entrega_PrendaReporteController@guardarVistaListado')->name('guardar_vista_listado_entrega_prenda');
+Route::delete('sueldos/entrega-prenda/workbench/vista/{id}', 'Sueldos\Entrega_PrendaReporteController@eliminarVistaListado')->name('eliminar_vista_listado_entrega_prenda');
+Route::post('sueldos/entrega-prenda/workbench/columnas', 'Sueldos\Entrega_PrendaReporteController@guardarColumnasListado')->name('guardar_columnas_listado_entrega_prenda');
+Route::post('sueldos/entrega-prenda/workbench/etiquetas', 'Sueldos\Entrega_PrendaReporteController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_entrega_prenda');
+Route::post('sueldos/entrega-prenda/workbench/preview', 'Sueldos\Entrega_PrendaReporteController@previewWorkbench')->name('preview_workbench_entrega_prenda');
 
 Route::get('sueldos/indumentaria/planificacion', 'Sueldos\Indumentaria_PlanificacionController@index')->name('planificacion_indumentaria');
 Route::get('sueldos/indumentaria/listar-planificacion/{formato?}', 'Sueldos\Indumentaria_PlanificacionController@exportar')->name('listar_planificacion_indumentaria');

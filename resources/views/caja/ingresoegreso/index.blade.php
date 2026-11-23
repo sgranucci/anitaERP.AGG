@@ -5,6 +5,7 @@
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -16,6 +17,8 @@
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $ieWorkbenchJs = public_path('assets/pages/scripts/caja/ingresoegreso/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -23,6 +26,8 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/workbench.js') }}?v={{ file_exists($ieWorkbenchJs) ? filemtime($ieWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
@@ -161,7 +166,7 @@
                         @endif
                         @if (($ordenActualThead ?? []) !== [])
                             <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por ID descendente y lo saca de la vista">
-                                <i class="fa fa-sort"></i> Quitar orden
+                                <i class="fa fa-undo"></i> Orden estándar
                             </a>
                         @endif
                     </div>
@@ -247,23 +252,28 @@
                     Las cobranzas POS (gastronomía, estacionamiento) se consultan en el módulo Cobranza.
                 </div>
             @endif
-            <div class="px-3 py-2 border-bottom bg-white small d-flex flex-wrap" style="gap:1rem;">
+            <div class="px-3 py-2 border-bottom bg-white small d-flex flex-wrap align-items-center" style="gap:1rem;">
                 <span><strong>{{ number_format((int) $totalesListado['cantidad'], 0, ',', '.') }}</strong> movimientos</span>
                 <span>Ingresos <strong>{{ number_format((float) $totalesListado['ingresos'], 2, ',', '.') }}</strong></span>
                 <span>Egresos <strong>{{ number_format((float) $totalesListado['egresos'], 2, ',', '.') }}</strong></span>
                 <span class="text-muted">Totales del filtro completo, en pesos.</span>
+                <span class="ml-auto">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_ingresoegreso',
+                        'queryparams' => $filtrosQuery ?? [],
+                        'variant' => 'compact',
+                    ])
+                </span>
             </div>
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body py-2 border-bottom bg-white">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_ingresoegreso',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
-            </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
@@ -272,7 +282,7 @@
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="width80" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -365,10 +375,17 @@
                     </tbody>
                 </table>
             </div>
+            </div>
         </div>
     </div>
 </div>
 {{ $caja_movimiento->appends($filtrosQuery ?? [])->links() }}
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_ingresoegreso',
+    'paraQueryStringDnd' => [\App\Support\Caja\IngresoEgresoListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('caja.ingresoegreso.partials.workbench_modales')
 @include('compras.pagoproveedor.partials.modal_enviar_proveedor')
 @include('caja.ingresoegreso.revertiringresoegresomodal')

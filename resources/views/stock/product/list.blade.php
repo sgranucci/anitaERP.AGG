@@ -5,6 +5,7 @@ Art&iacute;culos
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -16,6 +17,8 @@ Art&iacute;culos
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $productoWorkbenchJs = public_path('assets/pages/scripts/stock/product/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -23,6 +26,8 @@ Art&iacute;culos
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/product/workbench.js') }}?v={{ file_exists($productoWorkbenchJs) ? filemtime($productoWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
 @if (can('listar-reporte-historial-precios-compra', false))
@@ -79,6 +84,16 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
         return $sortDir === 'asc' ? ' ↑' : ' ↓';
     };
     $limpiarUrl = route('products.index', ['filtro_limpiar' => 1]);
+    $camposOrdenablesTheadBarra = \App\Support\Stock\ArticuloFerliListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesTheadBarra
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort'], $qsQuitarOrden['page']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('products.index', $qsQuitarOrden);
+
 @endphp
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
@@ -168,6 +183,12 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
+                                <i class="fa fa-undo"></i> Orden estándar
+                            </a>
+                        @endif
+
                     </div>
                 </div>
                 @include('stock.product.partials.filtros_externos')
@@ -176,18 +197,23 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body table-responsive p-0">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_producto_ferli',
                     'queryparams' => $filtrosQuery ?? [],
+                    'variant' => 'compact',
                 ])
-                <table class="table table-striped table-bordered table-hover table-sm mb-0" id="tabla-paginada">
+                <table class="tabla-ancha table table-striped table-bordered table-hover table-sm mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach (($columnasVisibles ?? []) as $keyColumna)
                                 @include('stock.product.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th class="width80 text-nowrap" data-orderable="false"></th>
+                            <th class="width80 text-nowrap" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -255,6 +281,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                         @endforeach
                     </tbody>
                 </table>
+                </div>
             </div>
             @if (method_exists($articulos, 'links'))
                 <div class="card-footer clearfix py-2">
@@ -276,6 +303,12 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
 @if (can('listar-reporte-historial-precios-compra', false))
 <input type="hidden" id="historial-precios-articulo-url" value="{{ route('reporte_historial_precios_articulo') }}">
 @endif
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_producto_ferli',
+    'paraQueryStringDnd' => [\App\Support\Stock\ArticuloFerliListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('stock.articulo.partials.workbench_modales', [
     'rutaGuardarColumnas' => 'guardar_columnas_listado_producto_ferli',
     'rutaGuardarVista' => 'guardar_vista_listado_producto_ferli',

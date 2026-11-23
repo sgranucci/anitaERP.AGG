@@ -114,7 +114,7 @@
                                     style="{{ $styleCol }}"
                                     title="{{ $tituloCol }} — clic para ordenar">
                                     <a href="{{ route('tipotransaccion_compra', $qsSort) }}" class="lw-sort-link">
-                                        {{ $tituloVisible }}
+                                        <span class="lw-th-label">{{ $tituloVisible }}</span>
                                         @if ($dirCol === 'asc')
                                             <i class="fa fa-sort-up lw-sort-icon"></i>
                                         @elseif ($dirCol === 'desc')

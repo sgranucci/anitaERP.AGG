@@ -73,4 +73,11 @@
             <a href="{{ $urlOpc('no') }}" class="btn {{ $opcActual === 'no' ? 'btn-info' : 'btn-outline-info' }}">Sin opcionales</a>
         </div>
     @endif
+    <div class="ml-auto pl-2 pr-1 py-1 formula-export-chips">
+        @include('includes.exportar-tabla-queryparams', [
+            'ruta' => $exportRuta ?? 'listar_formula_articulo',
+            'queryparams' => $exportQueryparams ?? $filtrosQuery ?? [],
+            'variant' => 'compact',
+        ])
+    </div>
 </div>

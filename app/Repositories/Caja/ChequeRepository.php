@@ -83,8 +83,6 @@ class ChequeRepository implements ChequeRepositoryInterface
 
     public function all()
     {
-        $this->asegurarSyncInicialDesdeAnita();
-
         $query = $this->model->with('empresas')
             ->with('cuentacajas')
             ->with('bancos')
@@ -108,8 +106,6 @@ class ChequeRepository implements ChequeRepositoryInterface
      */
     public function leeCheque($filtros, bool $flPaginando = true)
     {
-        $this->asegurarSyncInicialDesdeAnita();
-
         if (is_string($filtros)) {
             $texto = trim($filtros);
             $filtros = array_merge(ChequeListadoFiltros::filtrosVacios(), [
@@ -229,23 +225,6 @@ class ChequeRepository implements ChequeRepositoryInterface
             'cantidad' => $cantidad,
             'por_moneda' => $porMoneda,
         ];
-    }
-
-    /**
-     * Primera carga: CHP (cpromae) y CHT (ctermae) por separado si falta cada origen.
-     */
-    private function asegurarSyncInicialDesdeAnita(): void
-    {
-        try {
-            if (! $this->model->newQuery()->where('origen', 'E')->exists()) {
-                $this->sincronizarCpromaeConAnita();
-            }
-            if (! $this->model->newQuery()->where('origen', 'R')->exists()) {
-                $this->sincronizarCtermaeConAnita();
-            }
-        } catch (\Throwable $e) {
-            report($e);
-        }
     }
 
     public function create(array $data)

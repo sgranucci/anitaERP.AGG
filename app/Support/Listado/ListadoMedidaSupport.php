@@ -33,6 +33,7 @@ final class ListadoMedidaSupport
             'sueldo_basico' => ['Suma de sueldo básico', false],
             'cant_dias' => ['Suma de días', false],
             'importe_perdida' => ['Suma de importe no cobrado', false],
+            'cantidad' => ['Suma de cantidad', false],
             'valor_origen' => ['Suma de valor origen', true],
             'valor_baja' => ['Suma de valor baja', true],
             'monto_factura' => ['Suma de monto factura', true],

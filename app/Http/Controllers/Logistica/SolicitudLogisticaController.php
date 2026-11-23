@@ -42,6 +42,9 @@ class SolicitudLogisticaController extends Controller
         $this->puedeEntrar();
 
         $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
 
         return view('logistica.solicitud.index', $armado + [
             'puedeCrear' => can('crear-logistica-solicitud', false),
@@ -446,9 +449,9 @@ class SolicitudLogisticaController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
      */
-    private function armarListado(Request $request): array
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
     {
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(SolicitudLogisticaListadoColumnas::RECURSO, $usuarioId);
@@ -504,6 +507,28 @@ class SolicitudLogisticaController extends Controller
                 $filtros['agrupar'] ?? []
             );
         }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = SolicitudLogisticaListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif (!empty($forzarEstandar)) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('logistica_solicitud', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
+
 
         $catalogo = SolicitudLogisticaListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(

@@ -1,46 +1,68 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
-    $logos = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datos);
+    use App\Support\Sueldos\EntregaPrendaListadoColumnas;
+    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
+    $totalFilas = is_countable($datas) ? count($datas) : 0;
+    $columnas = $columnasVisibles ?? EntregaPrendaListadoColumnas::defaultsVisibles();
+    $etiquetas = $etiquetasColumnas ?? [];
+    $totalUnidades = rtrim(rtrim(number_format((float) ($totalCantidad ?? 0), 3, ',', '.'), '0'), ',');
 @endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="utf-8">
-    <style>
-        body { font-family: 'DejaVu Sans', sans-serif; font-size: 8px; color: #17202A; }
-        .cab { width: 100%; margin-bottom: 8px; }
-        .cab td { vertical-align: middle; }
-        h1 { font-size: 14px; margin: 0; }
-        .meta { font-size: 8px; color: #555; }
-        table.data { width: 100%; border-collapse: collapse; }
-        table.data th { background: #85C1E9; color: #17202A; border: 1px solid #cccccc; padding: 3px; }
-        table.data td { border: 1px solid #cccccc; padding: 3px; }
-        table.data tr:nth-child(even) td { background: #f5f5f5; }
-        .text-right { text-align: right; }
-    </style>
+	<meta charset="UTF-8">
+	<title>Entregas de indumentaria</title>
+	<style>
+		body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+		table.data { border-collapse: collapse; width: 100%; }
+		table.data td, table.data th { border: 1px solid #cccccc; text-align: left; padding: 3px; }
+		table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+		table.data thead tr { background-color: #85C1E9; }
+		table.data th { font-size: 7px; font-weight: bold; color: #17202A; }
+		table.data td.num { text-align: right; }
+		.listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; }
+		.listado-header td { border: none; }
+		.meta { font-size: 8px; color: #444; }
+	</style>
 </head>
 <body>
-    <table class="cab">
-        <tr>
-            <td style="width:120px">
-                @foreach ($logos as $logo)
-                    <img src="{{ $logo['uri'] }}" style="height:40px">
-                @endforeach
-            </td>
-            <td>
-                <h1>Entregas de indumentaria</h1>
-                <div class="meta">
-                    Año {{ $filtros['anio'] }}
-                    @if ($filtros['fecha_desde']) · Desde {{ $filtros['fecha_desde'] }} @endif
-                    @if ($filtros['fecha_hasta']) · Hasta {{ $filtros['fecha_hasta'] }} @endif
-                    · Generado {{ now()->format('d/m/Y H:i') }}
-                    · Registros: {{ $datos->count() }}
-                    · Total unidades: {{ rtrim(rtrim(number_format($totalCantidad, 2, ',', '.'), '0'), ',') }}
-                </div>
-            </td>
-        </tr>
-    </table>
-
-    @include('sueldos.entrega_prenda.partials.tabla_datos', ['enPantalla' => false])
+	<table class="listado-header">
+		<tr>
+			<td style="width: 30%;">
+				@foreach ($logosCabecera as $logo)
+					<img src="{{ $logo['uri'] }}" alt="" style="max-height: 50px;">
+				@endforeach
+			</td>
+			<td style="width: 45%; text-align: center;">
+				<h2 style="margin: 0; font-size: 18px;">Entregas de indumentaria</h2>
+				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
+				@if (!empty($subtitulo))
+					<div class="meta">{{ $subtitulo }}</div>
+				@endif
+			</td>
+			<td style="width: 25%; text-align: right;">
+				Registros: {{ $totalFilas }}<br>
+				Total unidades: {{ $totalUnidades }}
+			</td>
+		</tr>
+	</table>
+	<table class="data">
+		<thead>
+			<tr>
+				@foreach ($columnas as $key)
+					<th>{{ $etiquetas[$key] ?? $key }}</th>
+				@endforeach
+			</tr>
+		</thead>
+		<tbody>
+			@foreach ($datas as $row)
+				<tr>
+					@foreach ($columnas as $key)
+						<td class="{{ $key === 'cantidad' ? 'num' : '' }}">{{ EntregaPrendaListadoColumnas::valorCelda($row, $key) }}</td>
+					@endforeach
+				</tr>
+			@endforeach
+		</tbody>
+	</table>
 </body>
 </html>

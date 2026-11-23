@@ -9,6 +9,7 @@ use App\Models\Stock\Talle;
 use App\Models\Sueldos\Prenda_Articulo_Sueldos;
 use App\Models\Sueldos\Prenda_Sueldos;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Sueldos\IndumentariaSkuSupport;
 use App\Support\Sueldos\PrendaSueldosListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -164,7 +165,7 @@ class Prenda_SueldosRepository implements Prenda_SueldosRepositoryInterface
             }
             $vistos[$clave] = true;
 
-            $sku = trim((string) ($v['sku'] ?? ''));
+            $sku = IndumentariaSkuSupport::normalizarDesdeAnita((string) ($v['sku'] ?? ''));
             $articuloId = $this->resolverArticuloId($sku);
 
             Prenda_Articulo_Sueldos::create([
@@ -179,13 +180,13 @@ class Prenda_SueldosRepository implements Prenda_SueldosRepositoryInterface
 
     private function resolverArticuloId(string $sku): ?int
     {
+        $sku = IndumentariaSkuSupport::normalizarDesdeAnita($sku);
         if ($sku === '') {
             return null;
         }
-        $skuSinCeros = ltrim($sku, '0');
         $articulo = Articulo::query()
             ->where('sku', $sku)
-            ->orWhereRaw("TRIM(LEADING '0' FROM sku) = ?", [$skuSinCeros])
+            ->orWhereRaw("TRIM(LEADING '0' FROM sku) = ?", [$sku])
             ->first(['id']);
 
         return $articulo?->id;
@@ -325,7 +326,7 @@ class Prenda_SueldosRepository implements Prenda_SueldosRepositoryInterface
                 continue;
             }
 
-            $sku = trim((string) ($row->part_articulo ?? ''));
+            $sku = IndumentariaSkuSupport::normalizarDesdeAnita((string) ($row->part_articulo ?? ''));
             Prenda_Articulo_Sueldos::create([
                 'prenda_id' => $prendaId,
                 'color_id' => $colorId,

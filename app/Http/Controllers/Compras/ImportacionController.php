@@ -110,6 +110,28 @@ class ImportacionController extends Controller
             ListadoVistaSupport::recordarOrdenYAgrupar($vistaActiva, $filtros['orden'] ?? [], $filtros['agrupar'] ?? []);
         }
 
+        if ($request->boolean('quitar_orden')) {
+            $filtros['orden'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = ImportacionListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif (!empty($forzarEstandar)) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('importacion', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
+
+
         $catalogo = ImportacionListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas($recurso, $catalogo);
 

@@ -13,8 +13,17 @@ use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoBandejaFiltros;
+use App\Support\Compras\OrdencompraLegajoBandejaListadoColumnas;
+use App\Support\Compras\OrdencompraLegajoBandejaListadoPreferenciasUsuario;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
 
@@ -44,53 +53,158 @@ class OrdencompraLegajoBandejaController extends Controller
 
                 return redirect()->route('consultar_legajo_compra', $guardados);
             }
-
-            $filtros = $this->filtrosDesdeRequest($request);
-            $filtrosQuery = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
-            $page = (int) $request->query('page', 0);
-            if ($page > 1) {
-                $filtrosQuery['page'] = $page;
-            }
-            OrdencompraLegajoBandejaFiltros::persistir($filtrosQuery);
-        } else {
-            $filtros = $this->filtrosDesdeRequest($request);
-            $filtrosQuery = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
         }
 
-        $filas = $this->service->paginar($filtros);
+        $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
 
-        return view('compras.legajo_bandeja.index', [
-            'filas' => $filas,
-            'filtros' => $filtros,
-            'filtrosQuery' => $filtrosQuery,
-            'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'puede_actualizar' => can('actualizar-ordencompra', false),
-            'puede_asignar_com' => $this->puedeAsignarCom(),
-            'puede_cargar_cxp' => can('crear-comprobante-proveedor', false),
-            'puede_enviar_pagos' => can('crear-comprobante-proveedor', false)
-                || can('actualizar-ordencompra', false)
-                || can('listar-legajo-compra', false),
-            'puede_devolver_cxp' => can('editar-pagoproveedor', false)
-                || can('crear-pagoproveedor', false)
-                || can('actualizar-ordencompra', false)
-                || can('listar-legajo-compra', false),
-            'puede_devolver_compras' => can('crear-comprobante-proveedor', false)
-                || can('actualizar-ordencompra', false)
-                || can('editar-pagoproveedor', false)
-                || can('crear-pagoproveedor', false)
-                || can('listar-legajo-compra', false),
-            'puede_ver_comprobante' => can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false),
-            'puede_ver_pago' => can('editar-pagoproveedor', false) || can('listar-pagoproveedor', false),
-            'puede_archivar' => can('actualizar-ordencompra', false)
-                || can('editar-pagoproveedor', false)
-                || can('crear-pagoproveedor', false)
-                || can('listar-legajo-compra', false),
-            'dias_recordatorio' => (int) config('compras.legajo.recordatorio_dias', 3),
-            'alcanceSector' => OrdencompraSectorVisibilidadSupport::etiquetaAlcance(),
-            'sinSectorAsignado' => OrdencompraSectorVisibilidadSupport::sinSectorAsignado(),
-            'vistasPermitidas' => OrdencompraSectorVisibilidadSupport::vistasBandejaPermitidas(),
-        ]);
+        if (OrdencompraSectorVisibilidadSupport::esUsuarioSectorCuentasAPagar()) {
+            $persistir = $armado['filtrosQuery'] ?? [];
+            $page = (int) $request->query('page', 0);
+            if ($page > 1) {
+                $persistir['page'] = $page;
+            }
+            OrdencompraLegajoBandejaFiltros::persistir($persistir);
+        }
+
+        return view('compras.legajo_bandeja.index', $armado);
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        $this->autorizar();
+
+        $filtros = $this->filtrosDesdeRequest($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = OrdencompraLegajoBandejaListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $perPage = (int) ($filtros['_per_page'] ?? 20);
+        $page = $this->service->paginar($filtros, max(1, $perPage));
+        $total = (int) $page->total();
+        $filas = $page->getCollection();
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            OrdencompraLegajoBandejaFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            OrdencompraLegajoBandejaFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? $this->service->cortes($filtrosCortes)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn ($row, string $key): string => OrdencompraLegajoBandejaListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        $this->autorizar();
+
+        $filtros = $this->filtrosDesdeRequest($request);
+        $layout = OrdencompraLegajoBandejaListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'] ?? OrdencompraLegajoBandejaFiltros::MODO_TODOS,
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()
+                ->route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('consultar_legajo_compra', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        $this->autorizar();
+        $ok = ListadoVistaSupport::eliminar(
+            $id,
+            OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+            (int) auth()->id()
+        );
+
+        return redirect()->route('consultar_legajo_compra', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        $this->autorizar();
+        $layout = OrdencompraLegajoBandejaListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario(
+                $vistaId,
+                OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+                (int) auth()->id()
+            );
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            OrdencompraLegajoBandejaListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->filtrosDesdeRequest($request);
+        $qs = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('consultar_legajo_compra', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        $this->autorizar();
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(OrdencompraLegajoBandejaListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'consultar_legajo_compra',
+            OrdencompraLegajoBandejaFiltros::paraQueryString($this->filtrosDesdeRequest($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function exportar(Request $request, ?string $formato = null)
@@ -425,6 +539,186 @@ class OrdencompraLegajoBandejaController extends Controller
         return redirect()
             ->route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString($this->filtrosDesdeRequest($request)))
             ->with('mensaje', $mensaje);
+    }
+
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
+    {
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(OrdencompraLegajoBandejaListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+            && ! $request->has('vista')
+            && ! $request->has('tab')
+            && ! $request->has('atajo')
+            && ! $request->has('nro_oc')
+            && ! $request->has('nro_factura')
+            && ! $request->has('nro_com')
+            && ! $request->has('nro_op')
+            && ! $request->has('presupuesto')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(OrdencompraLegajoBandejaListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(
+                    OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+                    (int) session('rol_id')
+                );
+        }
+
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->filtrosDesdeRequest($request),
+            $request
+        );
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = OrdencompraLegajoBandejaFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito'], $filtros['_limpiar']);
+
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            OrdencompraLegajoBandejaListadoPreferenciasUsuario::olvidarOrden();
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('consultar_legajo_compra', $params)
+                ->with('mensaje', 'Se volvió al orden estándar de la bandeja.');
+        }
+
+        if ($request->exists('sort')) {
+            OrdencompraLegajoBandejaListadoPreferenciasUsuario::persistirOrden($filtros['sort'] ?? []);
+        } elseif (ListadoOrdenamientoSupport::normalizar(
+            $filtros['sort'] ?? [],
+            OrdencompraLegajoBandejaFiltros::camposOrdenables()
+        ) === []) {
+            $ordenRecordado = OrdencompraLegajoBandejaListadoPreferenciasUsuario::leerOrden();
+            if ($ordenRecordado !== []) {
+                $filtros['sort'] = $ordenRecordado;
+            }
+        }
+
+        $catalogo = OrdencompraLegajoBandejaListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = OrdencompraLegajoBandejaListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = OrdencompraLegajoBandejaListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
+        $filas = $this->service->paginar($filtros);
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar(
+            $filtros['agrupar'] ?? [],
+            OrdencompraLegajoBandejaFiltros::camposOrdenables()
+        ) !== []) {
+            $cortes = $this->service->cortes($filtros);
+        }
+
+        $camposFiltro = OrdencompraLegajoBandejaFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+
+        if ($vistaActiva) {
+            $filtros['vista_id'] = $vistaActiva->id;
+            unset($filtros['vista_estandar']);
+        } elseif ($forzarEstandar) {
+            $filtros['vista_estandar'] = 1;
+            unset($filtros['vista_id']);
+        }
+        $filtros['columnas'] = implode(',', $columnasVisibles);
+        $filtrosQuery = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
+
+        return [
+            'filas' => $filas,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
+            'puede_actualizar' => can('actualizar-ordencompra', false),
+            'puede_asignar_com' => $this->puedeAsignarCom(),
+            'puede_cargar_cxp' => can('crear-comprobante-proveedor', false),
+            'puede_enviar_pagos' => can('crear-comprobante-proveedor', false)
+                || can('actualizar-ordencompra', false)
+                || can('listar-legajo-compra', false),
+            'puede_devolver_cxp' => can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+                || can('actualizar-ordencompra', false)
+                || can('listar-legajo-compra', false),
+            'puede_devolver_compras' => can('crear-comprobante-proveedor', false)
+                || can('actualizar-ordencompra', false)
+                || can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+                || can('listar-legajo-compra', false),
+            'puede_ver_comprobante' => can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false),
+            'puede_ver_pago' => can('editar-pagoproveedor', false) || can('listar-pagoproveedor', false),
+            'puede_archivar' => can('actualizar-ordencompra', false)
+                || can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+                || can('listar-legajo-compra', false),
+            'dias_recordatorio' => (int) config('compras.legajo.recordatorio_dias', 3),
+            'alcanceSector' => OrdencompraSectorVisibilidadSupport::etiquetaAlcance(),
+            'sinSectorAsignado' => OrdencompraSectorVisibilidadSupport::sinSectorAsignado(),
+            'vistasPermitidas' => OrdencompraSectorVisibilidadSupport::vistasBandejaPermitidas(),
+        ];
     }
 
     private function filtrosDesdeRequest(Request $request): array

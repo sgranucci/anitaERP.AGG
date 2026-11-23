@@ -28,5 +28,5 @@ interface Empleado_SueldosRepositoryInterface extends RepositoryInterface
     /**
      * @return array<string, mixed>
      */
-    public function vincularDomicilios(): array;
+    public function vincularDomicilios(bool $ejecutar = true): array;
 }

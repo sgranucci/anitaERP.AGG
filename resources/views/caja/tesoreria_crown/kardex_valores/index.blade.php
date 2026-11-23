@@ -7,6 +7,7 @@
 @section('styles')
     <link rel="stylesheet" href="{{ asset('assets/css/tesoreria-crown-jornada.css') }}?v={{ filemtime(public_path('assets/css/tesoreria-crown-jornada.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section('contenido')
@@ -123,8 +124,12 @@
 
                     @if ($filtros['consultar'] ?? false)
                         <p class="small text-muted mb-2">{{ $filas->total() }} movimiento(s) de valor.</p>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-bordered table-hover mb-0" id="tabla-paginada">
+                        <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap table-responsive">
+                    <table class="tabla-ancha table table-sm table-bordered table-hover mb-0" id="tabla-paginada">
                                 <thead style="background:#85C1E9;color:#17202A;">
                                     <tr>
                                         @foreach ($columnasVisibles as $keyColumna)
@@ -151,11 +156,16 @@
                                 </tbody>
                             </table>
                         </div>
+            </div>
                         <div class="mt-2">
                             {{ $filas->links() }}
                         </div>
                     @endif
 
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_tesoreria_crown_kardex_valores',
+])
                     @include('caja.tesoreria_crown.partials.workbench_modales', [
                         'rutaGuardarColumnas' => 'guardar_columnas_tesoreria_crown_kardex_valores',
                         'rutaGuardarVista' => 'guardar_vista_tesoreria_crown_kardex_valores',
@@ -181,6 +191,8 @@
     <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-agrupar.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-disenador-preview.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-vista-guardar.js')) }}"></script>
+    @php $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js'); @endphp<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/workbench.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/workbench.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/kardex_consulta.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/kardex_consulta.js')) }}"></script>

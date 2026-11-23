@@ -37,6 +37,18 @@ class SancionReporte_SueldosController extends Controller
         can('listar-sancion-reporte-sueldos');
 
         [$filtros, $vistaActiva, $forzarEstandar] = $this->filtrosDePantalla($request);
+        if ($request->boolean('quitar_orden')) {
+            $params = SancionReporteListadoFiltros::paraQueryString($filtros, true);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('sancion_reporte_sueldos', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
         $filtrosConsulta = $filtros;
         $filtrosConsulta['agrupar'] = SancionReporteListadoFiltros::agruparEfectivo($filtros);
 
@@ -350,6 +362,18 @@ class SancionReporte_SueldosController extends Controller
                 $filtros['agrupar'] ?? []
             );
         }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+        }
+
 
         $filtros = $this->aplicarEmpresas($request, $filtros);
 

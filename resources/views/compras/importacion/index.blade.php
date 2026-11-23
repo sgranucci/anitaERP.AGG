@@ -5,6 +5,7 @@ Importaciones
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -16,6 +17,8 @@ Importaciones
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $importacionWorkbenchJs = public_path('assets/pages/scripts/compras/importacion/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}" type="text/javascript"></script>
@@ -23,6 +26,8 @@ Importaciones
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/importacion/workbench.js') }}?v={{ file_exists($importacionWorkbenchJs) ? filemtime($importacionWorkbenchJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 @endsection
 
 @php
@@ -39,6 +44,16 @@ Importaciones
     $vistasListado = $vistasListado ?? collect();
     $vistaActiva = $vistaActiva ?? null;
     $workbenchListo = $workbenchListo ?? false;
+    $camposOrdenablesTheadBarra = \App\Support\Compras\ImportacionListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['orden'] ?? [],
+        $camposOrdenablesTheadBarra
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort'], $qsQuitarOrden['page']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('importacion', $qsQuitarOrden);
+
     $estadoAct = (string) ($filtros['filtro_estado'] ?? '');
 @endphp
 
@@ -137,6 +152,12 @@ Importaciones
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
+                                <i class="fa fa-undo"></i> Orden estándar
+                            </a>
+                        @endif
+
                     </div>
                 </div>
 
@@ -236,12 +257,17 @@ Importaciones
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_importacion',
                     'queryparams' => $filtrosQuery ?? [],
+                    'variant' => 'compact',
                 ])
-                <table class="table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
+                <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $key)
@@ -250,9 +276,9 @@ Importaciones
                                     $cfgPantalla = $layoutPantallaPorKey[$key] ?? $cfg;
                                     $alinea = $cfg['alinea'] ?? 'izquierda';
                                     $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
-                                    $minLegible = LwGrilla::anchoMinimoLegible($key, $catalogoColumnas[$key] ?? []);
                                     $cls = LwGrilla::claseAlineacion($alinea);
                                     $tituloCol = $etiquetasColumnas[$key] ?? ($catalogoColumnas[$key]['label'] ?? $key);
+                                    $minLegible = LwGrilla::anchoMinimoLegible($key, $catalogoColumnas[$key] ?? [], $tituloCol);
                                     if ($usaScrollHorizontal) {
                                         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
                                     } else {
@@ -276,11 +302,15 @@ Importaciones
                                         );
                                     }
                                 @endphp
-                                <th class="{{ $cls }} lw-col {{ $esOrdenable ? 'lw-col-sortable' : '' }} {{ $dirCol ? 'lw-col-sorted' : '' }}"
-                                    style="{{ $styleCol }}" title="{{ $tituloCol }}{{ $esOrdenable ? ' — clic para ordenar' : '' }}">
+                                <th class="{{ $cls }} lw-col lw-th-drag {{ $esOrdenable ? 'lw-col-sortable' : '' }} {{ $dirCol ? 'lw-col-sorted' : '' }}"
+                                    style="{{ $styleCol }}"
+                                    title="{{ $tituloCol }} — arrastrá para mover · × para ocultar (con confirmación){{ $esOrdenable ? ' · clic para ordenar filas' : '' }}"
+                                    data-col-key="{{ $key }}"
+                                    draggable="true">
+                                    <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
                                     @if ($esOrdenable)
-                                        <a href="{{ route('importacion', $qsSort) }}" class="lw-sort-link">
-                                            {{ $tituloCol }}
+                                        <a href="{{ route('importacion', $qsSort) }}" class="lw-sort-link" draggable="false">
+                                            <span class="lw-th-label">{{ $tituloCol }}</span>
                                             @if ($dirCol === 'asc')
                                                 <i class="fa fa-sort-up lw-sort-icon"></i>
                                             @elseif ($dirCol === 'desc')
@@ -293,12 +323,15 @@ Importaciones
                                             @endif
                                         </a>
                                     @else
-                                        {{ $tituloCol }}
+                                        <span class="lw-th-titulo">{{ $tituloCol }}</span>
                                     @endif
+                                    <button type="button" class="lw-th-hide" title="Ocultar columna (pide confirmación)" aria-label="Ocultar columna" draggable="false">
+                                        <i class="fa fa-times" aria-hidden="true"></i>
+                                    </button>
                                 </th>
                             @endforeach
                             <th class="lw-col-acciones" data-orderable="false"
-                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;"></th>
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -372,11 +405,18 @@ Importaciones
                         @endforelse
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>
 </div>
 {{ $datas->appends($filtrosQuery ?? [])->links() }}
 
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_importacion',
+    'paraQueryStringDnd' => [\App\Support\Compras\ImportacionListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('compras.importacion.partials.workbench_modales')
 @endsection

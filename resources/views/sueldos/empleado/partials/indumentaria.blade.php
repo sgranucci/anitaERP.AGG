@@ -19,13 +19,39 @@
         </div>
     @endif
 
-    {{-- plantilla compartida de prendas para los selects (entrega y solicitud) --}}
-    <select id="tpl-prendas" class="d-none">
-        <option value="">— Prenda —</option>
-        @foreach ($prendas as $pr)
-            <option value="{{ $pr->id }}">{{ $pr->codigo }} - {{ $pr->descripcion }}</option>
-        @endforeach
-    </select>
+    <template id="tpl-linea-indumentaria-modal">
+        <tr>
+            <td class="text-left align-middle">
+                <button type="button" class="btn-accion-tabla btn-quitar-linea tooltipsC" title="Quitar">
+                    <i class="fa fa-times-circle text-danger"></i>
+                </button>
+            </td>
+            <td>
+                <div class="tm-prenda-campo d-flex flex-nowrap align-items-center w-100" style="gap:4px;">
+                    <input type="hidden" class="prenda_id" value="">
+                    <button type="button" title="Consulta prendas (F1)" class="btn-accion-tabla consultaprenda flex-shrink-0">
+                        <i class="fa fa-search text-primary"></i>
+                    </button>
+                    <input type="text" class="form-control form-control-sm codigoprenda" placeholder="Cód." title="Código; Enter valida; F1 consulta" autocomplete="off" style="width:4.5rem;flex-shrink:0;">
+                    <input type="text" class="form-control form-control-sm descripcionprenda text-truncate" placeholder="Descripción" readonly tabindex="-1" style="min-width:0;flex:1 1 auto;">
+                </div>
+            </td>
+            <td>
+                <div class="tm-variante-prenda-campo d-flex flex-nowrap align-items-center w-100" style="gap:4px;">
+                    <input type="hidden" class="prenda_articulo_id" value="">
+                    <button type="button" title="Consulta color/talle (F1)" class="btn-accion-tabla consultavarianteprenda flex-shrink-0">
+                        <i class="fa fa-search text-primary"></i>
+                    </button>
+                    <input type="text" class="form-control form-control-sm codigovarianteprenda" placeholder="SKU" title="SKU; Enter valida; F1 consulta" autocomplete="off" style="width:7rem;flex-shrink:0;">
+                    <input type="text" class="form-control form-control-sm descripcionvarianteprenda text-truncate" placeholder="Color / talle" readonly tabindex="-1" style="min-width:0;flex:1 1 auto;">
+                </div>
+                <div class="linea-saldo small text-muted mt-1"></div>
+            </td>
+            <td>
+                <input type="number" min="0.01" step="0.01" class="form-control form-control-sm linea-cantidad" value="1">
+            </td>
+        </tr>
+    </template>
 
     <div class="row">
         {{-- Dotación / saldos --}}
@@ -86,19 +112,40 @@
                 <div class="card card-outline card-secondary">
                     <div class="card-header py-2"><h3 class="card-title"><i class="fa fa-ruler"></i> Perfil de talles</h3></div>
                     <div class="card-body p-2">
-                        <form id="form-talles-indumentaria">
-                            <table class="table table-sm mb-2">
+                        <form id="form-talles-indumentaria" data-enter-campos="1">
+                            <p class="small text-muted mb-2">C&oacute;digo de talle: F1 o lupa abren la consulta; Enter avanza.</p>
+                            <table class="table table-sm table-bordered mb-2">
+                                <thead style="background:#85C1E9;color:#17202A">
+                                    <tr>
+                                        <th>Prenda</th>
+                                        <th style="width:55%">Talle</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     @foreach ($resumen['prendas'] as $p)
+                                        @php
+                                            $te = $tallesEmpleadoDetalle[$p['prenda_id']] ?? null;
+                                            $talleAsig = $te?->talle;
+                                        @endphp
                                         <tr>
-                                            <td>{{ $p['descripcion'] }}</td>
-                                            <td style="width:45%">
-                                                <select name="talles[{{ $p['prenda_id'] }}]" class="form-control form-control-sm" {{ ($puedeTalles ?? $puedeEntregar) ? '' : 'disabled' }}>
-                                                    <option value="">—</option>
-                                                    @foreach ($talles as $t)
-                                                        <option value="{{ $t->id }}" {{ (int) ($tallesEmpleado[$p['prenda_id']] ?? 0) === (int) $t->id ? 'selected' : '' }}>{{ $t->nombre }}</option>
-                                                    @endforeach
-                                                </select>
+                                            <td class="align-middle">{{ $p['descripcion'] }}</td>
+                                            <td>
+                                                <div class="tm-talle-campo d-flex flex-nowrap align-items-center" style="gap:4px;"
+                                                     data-prenda-id="{{ $p['prenda_id'] }}">
+                                                    <input type="hidden" name="talles[{{ $p['prenda_id'] }}]" class="talle_id"
+                                                           value="{{ $te->talle_id ?? '' }}">
+                                                    @if ($puedeTalles ?? $puedeEntregar)
+                                                        <button type="button" title="Consulta talles (F1)" class="btn-accion-tabla consultatalle flex-shrink-0">
+                                                            <i class="fa fa-search text-primary"></i>
+                                                        </button>
+                                                    @endif
+                                                    <input type="text" class="form-control form-control-sm codigotalle" value="{{ $talleAsig->codigo ?? '' }}"
+                                                           placeholder="C&oacute;d." autocomplete="off" style="width:4.5rem;"
+                                                           {{ ($puedeTalles ?? $puedeEntregar) ? '' : 'readonly' }}>
+                                                    <input type="text" class="form-control form-control-sm descripciontalle text-truncate"
+                                                           value="{{ $talleAsig->nombre ?? '' }}" placeholder="Talle" readonly tabindex="-1"
+                                                           style="min-width:0;flex:1 1 auto;">
+                                                </div>
                                             </td>
                                         </tr>
                                     @endforeach
@@ -130,9 +177,15 @@
                                     <input type="text" id="entrega_obs" class="form-control form-control-sm" maxlength="255">
                                 </div>
                             </div>
+                            <p class="small text-muted mb-2">Código de prenda y SKU: F1 o lupa abren la consulta; Enter avanza.</p>
                             <table class="table table-sm table-bordered" id="tabla-entrega-lineas">
                                 <thead style="background:#85C1E9;color:#17202A">
-                                    <tr><th style="width:35%">Prenda</th><th style="width:40%">Color / Talle (SKU)</th><th style="width:12%">Cant.</th><th style="width:13%"></th></tr>
+                                    <tr>
+                                        <th style="width:4%" class="text-left">Acciones</th>
+                                        <th style="width:36%">Prenda</th>
+                                        <th style="width:44%">Color / Talle (SKU)</th>
+                                        <th style="width:16%">Cant.</th>
+                                    </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -170,9 +223,15 @@
                                     <input type="text" id="solicitud_obs" class="form-control form-control-sm" maxlength="255">
                                 </div>
                             </div>
+                            <p class="small text-muted mb-2">Código de prenda y SKU: F1 o lupa abren la consulta; Enter avanza.</p>
                             <table class="table table-sm table-bordered" id="tabla-solicitud-lineas">
                                 <thead style="background:#85C1E9;color:#17202A">
-                                    <tr><th style="width:35%">Prenda</th><th style="width:40%">Color / Talle (SKU)</th><th style="width:12%">Cant.</th><th style="width:13%"></th></tr>
+                                    <tr>
+                                        <th style="width:4%" class="text-left">Acciones</th>
+                                        <th style="width:36%">Prenda</th>
+                                        <th style="width:44%">Color / Talle (SKU)</th>
+                                        <th style="width:16%">Cant.</th>
+                                    </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -223,6 +282,9 @@
                                         </td>
                                         <td class="text-nowrap">
                                             <a href="{{ route('comprobante_entrega_prenda', ['entrega' => $e->id]) }}" target="_blank" rel="noopener" class="btn btn-xs btn-info" title="Comprobante"><i class="fa fa-file-pdf"></i></a>
+                                            @if (! empty($puedeEditarEntrega))
+                                                <a href="{{ route('editar_entrega_prenda', ['entrega' => $e->id]) }}" target="_blank" rel="noopener" class="btn btn-xs btn-outline-primary" title="Editar entrega"><i class="fa fa-edit"></i></a>
+                                            @endif
                                             @if (!empty($puedeTulegajo) && !empty($tulegajoHabilitado) && $e->tulegajo_estado !== 'ENVIADO')
                                                 <button type="button" class="btn btn-xs btn-primary btn-tulegajo-entrega" data-url="{{ route('tulegajo_entrega_prenda_sueldos', ['entrega' => $e->id]) }}" title="Enviar a TuLegajo"><i class="fa fa-cloud-upload-alt"></i></button>
                                             @endif
@@ -300,4 +362,8 @@
             </div>
         </div>
     </div>
+
+    @include('includes.sueldos.modalconsultaprenda')
+    @include('includes.sueldos.modalconsultavarianteprenda')
+    @include('includes.stock.modalconsultatalle')
 </div>

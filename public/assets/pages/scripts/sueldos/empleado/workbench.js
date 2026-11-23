@@ -84,7 +84,7 @@
     }
 
     $(function () {
-        var $form = $('#form-filtros-empleado-sueldos, #form-filtros-sancion-reporte').first();
+        var $form = $('#form-filtros-empleado-sueldos, #form-filtros-sancion-reporte, #form-filtros-entrega-prenda').first();
         if (!$form.length || !$('.lw-workbench').length) {
             return;
         }
@@ -127,6 +127,21 @@
         });
 
         function queryExternosEmpleado() {
+            if ($form.is('#form-filtros-entrega-prenda')) {
+                // Año vacío = todos los años: se envía igual para no volver al año en curso.
+                var extraEntrega = [];
+                ['anio', 'fecha_desde', 'fecha_hasta', 'agrupamiento_id', 'empresa_id', 'empresa_todas'].forEach(function (k) {
+                    var $campo = $form.find('[name="' + k + '"]');
+                    if (!$campo.length) {
+                        return;
+                    }
+                    var val = $campo.val() || '';
+                    if (val !== '' || k === 'anio') {
+                        extraEntrega.push(encodeURIComponent(k) + '=' + encodeURIComponent(val));
+                    }
+                });
+                return extraEntrega.length ? '&' + extraEntrega.join('&') : '';
+            }
             if ($form.is('#form-filtros-sancion-reporte')) {
                 var claves = ['fecha_desde', 'fecha_hasta', 'apellido', 'estado', 'legajo_desde', 'legajo_hasta', 'tipo_sancion_id', 'motivo_sancion_id', 'consolidar_empresas'];
                 var extraSancion = [];

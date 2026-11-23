@@ -145,7 +145,31 @@ class ChequeController extends Controller
         );
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
 
-        $catalogo = ChequeListadoColumnas::catalogoActivo();
+        
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            $filtros['orden'] = 'fechapago';
+            $filtros['orden_dir'] = 'desc';
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = ChequeListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif (! empty($forzarEstandar)) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('cheque', $params)
+                ->with('mensaje', 'Se volvió al orden estándar (fecha de cheque, más reciente primero).');
+        }
+
+$catalogo = ChequeListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
             ChequeListadoColumnas::RECURSO,
             $catalogo

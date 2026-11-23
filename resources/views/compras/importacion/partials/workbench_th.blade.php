@@ -7,9 +7,9 @@
     $cfgPantalla = $layoutPantallaPorKey[$key] ?? $cfg;
     $alinea = $cfg['alinea'] ?? 'izquierda';
     $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
-    $minLegible = LwGrilla::anchoMinimoLegible($key, $catalogoColumnas[$key] ?? []);
     $cls = LwGrilla::claseAlineacion($alinea);
     $tituloCol = $etiquetasColumnas[$key] ?? ($catalogoColumnas[$key]['label'] ?? $key);
+    $minLegible = LwGrilla::anchoMinimoLegible($key, $catalogoColumnas[$key] ?? [], $tituloCol);
     if ($usaScrollHorizontal) {
         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
     } else {
@@ -30,7 +30,7 @@
     style="{{ $styleCol }}" title="{{ $tituloCol }}{{ $esOrdenable ? ' — clic para ordenar' : '' }}">
     @if ($esOrdenable)
         <a href="{{ route('importacion', $qsSort) }}" class="lw-sort-link">
-            {{ $tituloCol }}
+            <span class="lw-th-label">{{ $tituloCol }}</span>
             @if ($dirCol === 'asc')
                 <i class="fa fa-sort-up lw-sort-icon"></i>
             @elseif ($dirCol === 'desc')

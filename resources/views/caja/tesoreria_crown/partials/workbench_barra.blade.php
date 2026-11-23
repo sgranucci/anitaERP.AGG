@@ -61,7 +61,7 @@
         @if (($filtros['sort'] ?? []) !== [])
             <a href="{{ route($rutaListado, array_merge($filtrosQuery ?? [], ['quitar_orden' => 1])) }}"
                class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por defecto y lo saca de la vista">
-                <i class="fa fa-sort"></i> Quitar orden
+                <i class="fa fa-undo"></i> Orden estándar
             </a>
         @endif
     </div>

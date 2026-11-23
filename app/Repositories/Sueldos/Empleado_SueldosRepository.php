@@ -50,6 +50,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'empresa', 'categoria', 'agrupamiento', 'lugartrabajo', 'centrocosto',
                 'obrasocial', 'sindicato', 'vacacion', 'art', 'motivoegreso',
                 'leyendas', 'ingresos.motivoegreso', 'archivos', 'paisNacimiento', 'revistasLsd',
+                'pais', 'provinciaDomicilio', 'localidadDomicilio',
             ])
             ->findOrFail($id);
 
@@ -419,35 +420,42 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
     /**
      * Vincula los textos de provincia/localidad de empleados ya cargados con los maestros reales.
-     * Idempotente: sólo toca filas con provincia_id o localidad_id en null. Bypass Eloquent/auditoría.
+     * Idempotente: sólo toca filas con provincia_id, localidad_id o pais_id en null. Bypass Eloquent/auditoría.
      *
      * @return array<string, mixed>
      */
-    public function vincularDomicilios(): array
+    public function vincularDomicilios(bool $ejecutar = true): array
     {
         $vinc = new EmpleadoDomicilioVinculador();
+        $creadas = $vinc->asegurarLocalidadesFaltantes($ejecutar);
+        $paisArgentinaId = (int) (DB::table('pais')->where('nombre', 'Argentina')->value('id') ?: 1);
 
         $stats = [
             'procesados' => 0,
+            'a_actualizar' => 0,
             'provincia_vinculada' => 0,
             'provincia_corregida' => 0,
             'localidad_vinculada' => 0,
+            'pais_vinculado' => 0,
             'cp_completado' => 0,
+            'localidades_creadas' => $creadas['creadas'] ?? 0,
+            'localidades_ya_existian' => $creadas['existentes'] ?? 0,
+            'ejecutado' => $ejecutar,
         ];
         $sinProv = [];
         $sinLoc = [];
 
         $this->model->newQuery()
             ->where(function ($q) {
-                $q->whereNull('provincia_id')->orWhereNull('localidad_id');
+                $q->whereNull('provincia_id')->orWhereNull('localidad_id')->orWhereNull('pais_id');
             })
             ->where(function ($q) {
                 $q->where(fn ($qq) => $qq->whereNotNull('provincia')->where('provincia', '!=', ''))
                     ->orWhere(fn ($qq) => $qq->whereNotNull('localidad')->where('localidad', '!=', ''));
             })
-            ->select('id', 'provincia', 'localidad', 'provincia_id', 'localidad_id', 'codigo_postal')
+            ->select('id', 'provincia', 'localidad', 'provincia_id', 'localidad_id', 'pais_id', 'codigo_postal')
             ->orderBy('id')
-            ->chunkById(500, function ($rows) use ($vinc, &$stats, &$sinProv, &$sinLoc) {
+            ->chunkById(500, function ($rows) use ($vinc, $paisArgentinaId, $ejecutar, &$stats, &$sinProv, &$sinLoc) {
                 foreach ($rows as $e) {
                     $stats['procesados']++;
                     $update = [];
@@ -481,14 +489,32 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                                 $update['codigo_postal'] = $r['cp'];
                                 $stats['cp_completado']++;
                             }
+                        } elseif (! empty($r['forzar_provincia']) && $r['provincia_id']) {
+                            if (! $provId || (int) $r['provincia_id'] !== $provId) {
+                                $stats[$provId ? 'provincia_corregida' : 'provincia_vinculada']++;
+                                $update['provincia_id'] = (int) $r['provincia_id'];
+                                $provId = (int) $r['provincia_id'];
+                            }
+                            $k = mb_strtoupper(trim((string) $e->localidad));
+                            $sinLoc[$k] = ($sinLoc[$k] ?? 0) + 1;
                         } else {
                             $k = mb_strtoupper(trim((string) $e->localidad));
                             $sinLoc[$k] = ($sinLoc[$k] ?? 0) + 1;
                         }
                     }
 
+                    $quedaraProv = isset($update['provincia_id']) ? (int) $update['provincia_id'] : $provId;
+                    $quedaraLoc = isset($update['localidad_id']) ? (int) $update['localidad_id'] : ($e->localidad_id ? (int) $e->localidad_id : null);
+                    if (! $e->pais_id && ($quedaraProv || $quedaraLoc)) {
+                        $update['pais_id'] = $paisArgentinaId;
+                        $stats['pais_vinculado']++;
+                    }
+
                     if ($update !== []) {
-                        DB::table('empleado_sueldos')->where('id', $e->id)->update($update);
+                        $stats['a_actualizar']++;
+                        if ($ejecutar) {
+                            DB::table('empleado_sueldos')->where('id', $e->id)->update($update);
+                        }
                     }
                 }
             });
@@ -919,6 +945,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         );
         $res['leyendas'] = $this->importarEmpleyInicial($api, $empresaIdPorCodigo, $idPorKey, $now);
         $res['actualizados_cuenta'] = $this->sincronizarCuentaEmpresaDesdeAnita($empresaPorCodigo);
+        // Textos Anita → IDs de país / provincia / localidad (no pisa IDs ya cargados).
+        $res['domicilios'] = $this->vincularDomicilios(true);
 
         return $res;
     }

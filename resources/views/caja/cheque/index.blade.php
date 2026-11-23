@@ -5,6 +5,7 @@
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -16,6 +17,8 @@
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $chequeWorkbenchJs = public_path('assets/pages/scripts/caja/cheque/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -23,6 +26,8 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cheque/workbench.js') }}?v={{ file_exists($chequeWorkbenchJs) ? filemtime($chequeWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 @if (($graficoCheque['total'] ?? 0) > 0)
 <script src="{{ asset('assets/lte/plugins/chart.js/Chart.min.js') }}"></script>
 <script>
@@ -121,6 +126,15 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $retornoImpresionNd = \App\Support\Ventas\ComprobanteImpresionSesionUrlSupport::retornoRequestActual();
     $limpiarUrl = route('cheque', ChequeListadoFiltros::paraQueryStringExternos($filtros ?? []));
+    $ordenActualThead = (
+        (($filtros['orden'] ?? 'fechapago') !== 'fechapago' || ($filtros['orden_dir'] ?? 'desc') !== 'desc')
+        || \App\Support\Listado\ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], \App\Support\Caja\ChequeListadoFiltros::camposOrdenables()) !== []
+    ) ? [['campo' => $filtros['orden'] ?? 'fechapago', 'dir' => $filtros['orden_dir'] ?? 'desc']] : [];
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort'], $qsQuitarOrden['orden'], $qsQuitarOrden['orden_dir'], $qsQuitarOrden['page']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('cheque', $qsQuitarOrden);
+
     $ordenActual = $filtros['orden'] ?? 'fechapago';
     $ordenDir = $filtros['orden_dir'] ?? 'desc';
     $urlOrden = function (string $col) use ($filtrosQuery, $ordenActual, $ordenDir) {
@@ -290,6 +304,12 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
+                                <i class="fa fa-undo"></i> Orden estándar
+                            </a>
+                        @endif
+
                     </div>
                 </div>
                 @include('caja.cheque.partials.workbench_qbe')
@@ -354,19 +374,23 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     });
                 });
             </script>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @if (($puede_depositar_cheque ?? false) || ($puede_caucionar_cheque ?? false))
-                            <th class="text-center" style="width:2.2rem;" data-orderable="false">
+                            <th class="text-center lw-col-fija" style="width:2.2rem;" data-orderable="false">
                                 <input type="checkbox" id="cheque-select-all" title="Seleccionar página" />
                             </th>
                             @endif
                             @foreach ($columnasVisibles as $keyColumna)
                             @include('caja.cheque.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th class="text-nowrap" style="width:1%;" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:1%;" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -411,7 +435,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                         @endphp
                         <tr>
                             @if (($puede_depositar_cheque ?? false) || ($puede_caucionar_cheque ?? false))
-                            <td class="text-center">
+                            <td class="text-center lw-col-fija">
                                 @if ($puedeDepositar || $puedeCaucionar)
                                     <input type="checkbox" class="cheque-select-row" value="{{ $data->id }}"
                                            data-monto="{{ number_format((float) $data->monto, 2, '.', '') }}"
@@ -504,6 +528,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     </tbody>
                 </table>
             </div>
+            </div>
         </div>
     </div>
 </div>
@@ -521,5 +546,11 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 @if ($puede_caucionar_cheque ?? false)
     @include('caja.cheque.modal_caucion')
 @endif
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. Checkbox = lw-col-fija. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_cheque',
+    'paraQueryStringDnd' => [\App\Support\Caja\ChequeListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('caja.cheque.partials.workbench_modales')
 @endsection

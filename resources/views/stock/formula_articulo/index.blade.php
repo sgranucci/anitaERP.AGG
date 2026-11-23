@@ -5,6 +5,7 @@ Fórmulas de artículos
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -15,6 +16,8 @@ Fórmulas de artículos
     $agruparJs = public_path('assets/pages/scripts/listado/workbench-agrupar.js');
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
     $formulaJs = public_path('assets/pages/scripts/stock/formula_articulo/workbench.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
@@ -22,6 +25,8 @@ Fórmulas de artículos
 <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ file_exists($agruparJs) ? filemtime($agruparJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/formula_articulo/workbench.js') }}?v={{ file_exists($formulaJs) ? filemtime($formulaJs) : time() }}"></script>
 @endsection
 
@@ -165,31 +170,32 @@ Fórmulas de artículos
                         @endif
                         @if ($ordenActualThead !== [])
                             <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
-                                <i class="fa fa-sort"></i> Quitar orden
+                                <i class="fa fa-undo"></i> Orden estándar
                             </a>
                         @endif
                     </div>
                 </div>
-                @include('stock.formula_articulo.partials.filtros_externos')
+                @include('stock.formula_articulo.partials.filtros_externos', [
+                    'exportRuta' => 'listar_formula_articulo',
+                    'exportQueryparams' => $filtrosQuery ?? [],
+                ])
                 @include('stock.formula_articulo.partials.workbench_qbe')
             </form>
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body py-2 border-bottom bg-white">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'listar_formula_articulo',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
-            </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
                                 @include('stock.formula_articulo.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th class="text-nowrap" style="width:70px"></th>
+                            <th class="text-nowrap" style="width:70px">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -254,11 +260,18 @@ Fórmulas de artículos
                     </tbody>
                 </table>
             </div>
+            </div>
             <div class="px-3 py-2">
                 {{ $formulas->appends($filtrosQuery ?? [])->links() }}
             </div>
         </div>
     </div>
 </div>
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_formula_articulo',
+    'paraQueryStringDnd' => [\App\Support\Stock\FormulaArticuloListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('stock.formula_articulo.partials.workbench_modales')
 @endsection

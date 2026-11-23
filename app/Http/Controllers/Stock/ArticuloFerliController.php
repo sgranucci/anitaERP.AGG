@@ -155,6 +155,27 @@ class ArticuloFerliController extends Controller
         unset($filtros['_qbe_explicito']);
         ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
 
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = ArticuloFerliListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif ($forzarEstandar) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('products.index', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
+
         $catalogo = ArticuloFerliListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
             ArticuloFerliListadoColumnas::RECURSO,

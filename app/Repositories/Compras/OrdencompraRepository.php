@@ -14,8 +14,10 @@ use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraCircuitoRelacion;
+use App\Support\Compras\OrdencompraListadoColumnas;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Database\SqlDialectSupport;
@@ -120,7 +122,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         $q = $this->queryListadoIndex($filtros, $sectorUsuarioId);
 
         if ($paginar) {
-            $result = $q->paginate(10);
+            $perPage = (int) (is_array($filtros) ? ($filtros['_per_page'] ?? 10) : 10);
+            $result = $q->paginate($perPage > 0 ? $perPage : 10);
             $this->aplicarMontoLineasListado($result->getCollection());
 
             return $result;
@@ -247,21 +250,38 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
     {
         $filtros = $this->normalizarFiltros($filtros);
 
+        // Se seleccionan también los escalares que el diseñador de vista puede mostrar:
+        // los joins ya están, así la grilla no necesita un select dinámico por columna.
         $select = [
             'ordencompra.id',
             'ordencompra.numeroordencompra',
             'ordencompra.fecha',
+            'ordencompra.fechaentrega',
             'ordencompra.estadoordencompra',
             'ordencompra.requisicion_id',
             'ordencompra.proveedor_id',
             'ordencompra.sector_legajocompra_id',
             'ordencompra.creousuario_id',
+            'ordencompra.tratamiento',
+            'ordencompra.comentario',
+            'ordencompra.detalle',
+            'ordencompra.created_at',
+            'ordencompra.updated_at',
             'empresa.nombre as nombreempresa',
+            'centrocosto.codigo as codigocentrocosto',
             'centrocosto.nombre as nombrecentrocosto',
+            'proveedor.codigo as codigoproveedor',
             'proveedor.nombre as nombreproveedor',
             $this->expresionNombreSolicitanteListado(),
             'sector_legajocompra.nombre as nombresector',
+            'condicioncompra.nombre as nombrecondicioncompra',
+            'requisicion.numerorequisicion',
+            'requisicion.motivotratamiento',
+            'requisicion.contrataciondirecta',
         ];
+        if (Schema::hasColumn('requisicion', 'nroinscripcion')) {
+            $select[] = 'requisicion.nroinscripcion as nroinscripcion';
+        }
         if (EntornoEmpresaSupport::esCrown() && Schema::hasColumn('ordencompra', 'sala_id')) {
             $select[] = 'sala.codigo as codigosala';
             $select[] = 'sala.nombre as nombresala';
@@ -281,10 +301,9 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             $q->leftJoin('sala', 'sala.id', '=', 'ordencompra.sala_id');
         }
         OrdencompraCircuitoRelacion::aplicarColumnas($q);
-        $q->orderByDesc('ordencompra.fecha')
-            ->orderByDesc('ordencompra.id');
 
         $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);
+        OrdencompraListadoFiltros::aplicarOrden($q, $filtros);
 
         return $q;
     }
@@ -295,14 +314,20 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
      */
     public function cortesIndex(array $filtros, ?int $sectorUsuarioId): array
     {
-        $campos = OrdencompraListadoFiltros::CAMPOS;
+        $campos = OrdencompraListadoFiltros::camposOrdenables();
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            OrdencompraListadoColumnas::RECURSO,
+            OrdencompraListadoColumnas::catalogoActivo()
+        );
 
         return ListadoCortesSupport::calcular(
             $this->queryListadoIndex($filtros, $sectorUsuarioId),
             ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
             $campos,
             'ordencompra.id',
-            static fn (object $row, string $key): string => trim((string) ($row->{$key} ?? '')),
+            static fn (object $row, string $key): string => OrdencompraListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => OrdencompraListadoColumnas::sqlAgrupacion($key),
+            $etiquetas,
         );
     }
 
@@ -336,6 +361,10 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         if (Schema::hasColumn('requisicion', 'nroinscripcion')) {
             $select[] = 'requisicion.nroinscripcion as nroinscripcion';
         }
+        if (EntornoEmpresaSupport::esCrown() && Schema::hasColumn('ordencompra', 'sala_id')) {
+            $select[] = 'sala.codigo as codigosala';
+            $select[] = 'sala.nombre as nombresala';
+        }
 
         $q = $this->model->query()
             ->select($select)
@@ -346,8 +375,11 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         $this->unirSolicitanteListado($q);
         $q->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
             ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
-            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
-            ->orderByDesc('ordencompra.fecha')
+            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id');
+        if (EntornoEmpresaSupport::esCrown() && Schema::hasColumn('ordencompra', 'sala_id')) {
+            $q->leftJoin('sala', 'sala.id', '=', 'ordencompra.sala_id');
+        }
+        $q->orderByDesc('ordencompra.fecha')
             ->orderByDesc('ordencompra.id');
 
         $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);

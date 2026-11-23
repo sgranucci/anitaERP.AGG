@@ -5,8 +5,6 @@ namespace App\Http\Controllers\Sueldos;
 use App\Exports\Sueldos\EmpleadoSueldosListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionEmpleado_Sueldos;
-use App\Models\Configuracion\Pais;
-use App\Models\Configuracion\Provincia;
 use App\Models\Contable\Centrocosto;
 use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Art_Sueldos;
@@ -122,6 +120,28 @@ class Empleado_SueldosController extends Controller
                 $filtros['agrupar'] ?? []
             );
         }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = EmpleadoSueldosListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif (!empty($forzarEstandar)) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('consultar_empleado_sueldos', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
+
 
         $catalogo = EmpleadoSueldosListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
@@ -265,15 +285,17 @@ class Empleado_SueldosController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $r = $this->repository->vincularDomicilios();
+        $r = $this->repository->vincularDomicilios(true);
 
         return redirect('sueldos/empleado')->with(
             'mensaje',
             'Vinculación de domicilios: '.$r['procesados'].' empleados procesados · '
-                .$r['provincia_vinculada'].' provincias vinculadas · '
+                .($r['a_actualizar'] ?? 0).' actualizados · '
+                .$r['provincia_vinculada'].' provincias · '
                 .$r['provincia_corregida'].' provincias corregidas (CABA) · '
-                .$r['localidad_vinculada'].' localidades vinculadas · '
-                .$r['cp_completado'].' códigos postales completados. '
+                .$r['localidad_vinculada'].' localidades · '
+                .($r['pais_vinculado'] ?? 0).' país · '
+                .$r['cp_completado'].' códigos postales. '
                 .'Sin coincidencia: '.$r['sin_provincia_textos'].' textos de provincia, '
                 .$r['sin_localidad_textos'].' de localidad.'
         );
@@ -807,8 +829,6 @@ class Empleado_SueldosController extends Controller
             'centrocostos' => Centrocosto::query()->orderBy('codigo')->get(),
             'obrasociales' => Obrasocial_Sueldos::query()->orderBy('codigo')->get(),
             'sindicatos' => Sindicato_Sueldos::query()->orderBy('codigo')->get(),
-            'pais_query' => Pais::query()->orderBy('nombre')->get(),
-            'provincia_query' => Provincia::query()->orderBy('nombre')->get(),
             'vacaciones' => Vacacion_Sueldos::query()->orderBy('codigo')->get(),
             'arts' => Art_Sueldos::query()->orderBy('codigo')->get(),
             'motivosegreso' => Motivoegreso_Sueldos::query()->orderBy('codigo')->get(),

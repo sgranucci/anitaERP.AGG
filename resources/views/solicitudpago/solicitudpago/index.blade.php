@@ -5,6 +5,7 @@
 
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -20,6 +21,8 @@
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $spWorkbenchJs = public_path('assets/pages/scripts/solicitudpago/solicitudpago/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -27,6 +30,8 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/solicitudpago/solicitudpago/workbench.js') }}?v={{ file_exists($spWorkbenchJs) ? filemtime($spWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 @if (can('crear-solicitud-pago', false))
 <script src="{{asset("assets/pages/scripts/solicitudpago/solicitudpago/carga_masiva.js")}}" type="text/javascript"></script>
 @endif
@@ -39,6 +44,14 @@
     $columnasVisibles = $columnasVisibles ?? [];
     $catalogoColumnas = $catalogoColumnas ?? [];
     $etiquetasColumnas = $etiquetasColumnas ?? [];
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['orden'] ?? [],
+        SolicitudpagoListadoFiltros::camposOrdenables()
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort'], $qsQuitarOrden['page']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('consultar_solicitudpago', $qsQuitarOrden);
 @endphp
 
 @section('contenido')
@@ -138,6 +151,12 @@
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
+                                <i class="fa fa-undo"></i> Orden estándar
+                            </a>
+                        @endif
+
                         <span class="lw-toolbar-export">
                             @include('includes.exportar-tabla-queryparams', [
                                 'ruta' => 'lista_solicitudpago',
@@ -184,8 +203,12 @@
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $key)
@@ -202,10 +225,14 @@
                                     }
                                     $alinea = $layoutPorKey[$key]['alinea'] ?? 'izquierda';
                                 @endphp
-                                <th class="{{ LwGrilla::claseAlineacion($alinea) }} {{ $esOrdenable ? 'lw-col-sortable' : '' }}">
+                                <th class="{{ LwGrilla::claseAlineacion($alinea) }} lw-th-drag {{ $esOrdenable ? 'lw-col-sortable' : '' }}"
+                                    title="{{ $tituloCol }} — arrastrá para mover · × para ocultar (con confirmación){{ $esOrdenable ? ' · clic para ordenar filas' : '' }}"
+                                    data-col-key="{{ $key }}"
+                                    draggable="true">
+                                    <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
                                     @if ($esOrdenable)
-                                        <a href="{{ route('consultar_solicitudpago', $qsSort) }}" class="lw-sort-link">
-                                            {{ $tituloCol }}
+                                        <a href="{{ route('consultar_solicitudpago', $qsSort) }}" class="lw-sort-link" draggable="false">
+                                            <span class="lw-th-label">{{ $tituloCol }}</span>
                                             @if ($dirCol === 'asc')
                                                 <i class="fa fa-sort-up"></i>
                                             @elseif ($dirCol === 'desc')
@@ -218,14 +245,17 @@
                                             @endif
                                         </a>
                                     @else
-                                        {{ $tituloCol }}
+                                        <span class="lw-th-titulo">{{ $tituloCol }}</span>
                                     @endif
+                                    <button type="button" class="lw-th-hide" title="Ocultar columna (pide confirmación)" aria-label="Ocultar columna" draggable="false">
+                                        <i class="fa fa-times" aria-hidden="true"></i>
+                                    </button>
                                 </th>
                             @endforeach
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
-                                <th>{{ $calc['etiqueta'] ?? '' }}</th>
+                                <th class="lw-col-fija">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="width120 text-nowrap" data-orderable="false"></th>
+                            <th class="width120 text-nowrap" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -269,7 +299,7 @@
                                         ])
                                     @endforeach
                                     @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
-                                        <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
+                                        <td class="lw-col-fija">{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
                                     @endforeach
                                     <td class="text-nowrap">
                                         @include('solicitudpago.solicitudpago.partials.fila_acciones', ['data' => $data, 'retornoListadoQuery' => $retornoListadoQuery])
@@ -284,10 +314,17 @@
                     </tbody>
                 </table>
             </div>
+            </div>
         </div>
     </div>
 </div>
 {{ $coleccion->appends($filtrosQuery ?? [])->links() }}
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_solicitudpago',
+    'paraQueryStringDnd' => [\App\Support\Solicitudpago\SolicitudpagoListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('solicitudpago.solicitudpago.partials.workbench_modales')
 @include('includes.solicitudpago.modal_familia_vinculos')
 @if (can('crear-solicitud-pago', false))

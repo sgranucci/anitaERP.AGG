@@ -15,10 +15,11 @@
     $idxCol = $esOrdenable
         ? \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActual, $key)
         : null;
-    $claseCol = $alineacion;
+    $claseCol = trim($alineacion.' lw-th-drag');
+    $titleTh .= ' — arrastrá para mover · × para ocultar (con confirmación)';
     if ($esOrdenable) {
         $claseCol = trim($claseCol.' lw-col-sortable'.($dirCol ? ' lw-col-sorted' : ''));
-        $titleTh .= ' — clic para ordenar';
+        $titleTh .= ' · clic para ordenar filas';
         $qsSort = $filtrosQuery ?? [];
         unset($qsSort['sort']);
         $qsSort = array_merge(
@@ -29,10 +30,11 @@
         );
     }
 @endphp
-<th class="{{ $claseCol }}" title="{{ $titleTh }}" @if ($key === 'mail') style="width:36px" @endif>
+<th class="{{ $claseCol }}" title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true" @if ($key === 'mail') style="width:36px" @endif>
+    <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
     @if ($esOrdenable)
-        <a href="{{ route('pagoproveedor', $qsSort) }}" class="lw-sort-link">
-            {{ $titulo }}
+        <a href="{{ route('pagoproveedor', $qsSort) }}" class="lw-sort-link" draggable="false">
+            <span class="lw-th-label">{{ $titulo }}</span>
             @if ($dirCol === 'asc')
                 <i class="fa fa-sort-up lw-sort-icon"></i>
             @elseif ($dirCol === 'desc')
@@ -45,8 +47,11 @@
             @endif
         </a>
     @elseif ($key === 'mail')
-        <i class="fa fa-envelope" style="opacity:.45"></i>
+        <span class="lw-th-titulo"><i class="fa fa-envelope" style="opacity:.45"></i></span>
     @else
-        {{ $titulo }}
+        <span class="lw-th-titulo">{{ $titulo }}</span>
     @endif
+    <button type="button" class="lw-th-hide" title="Ocultar columna (pide confirmación)" aria-label="Ocultar columna" draggable="false">
+        <i class="fa fa-times" aria-hidden="true"></i>
+    </button>
 </th>

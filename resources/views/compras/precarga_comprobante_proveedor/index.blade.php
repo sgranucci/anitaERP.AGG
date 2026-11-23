@@ -80,7 +80,7 @@ use App\Support\Listado\QueryRetornoListado; ?>
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Empresa</th>
@@ -93,7 +93,7 @@ use App\Support\Listado\QueryRetornoListado; ?>
                             <th>Total</th>
                             <th>Estado</th>
                             <th>Origen</th>
-                            <th class="text-nowrap" style="width:180px" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:180px" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>

@@ -51,9 +51,19 @@ use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
+use App\Support\Compras\OrdencompraListadoColumnas;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use App\Support\Compras\OrdencompraListadoPreferenciasUsuario;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use Illuminate\Http\JsonResponse;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
@@ -100,63 +110,372 @@ class OrdencompraController extends Controller
             $this->ordencompraAnitaSyncService->sincronizarConAnita((int) Auth::id());
         }
 
-        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
-        $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
-            : collect();
-        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
-        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
-            $request,
-            null,
-            $empresaDefault,
-            $salaDefault
+        $armado = $this->armarListado($request);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
+
+        return view('compras.ordencompra.index', $armado);
+    }
+
+    /**
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function armarListado(Request $request): array|\Illuminate\Http\RedirectResponse
+    {
+        $salaQuery = $this->salasParaFiltroListado();
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(OrdencompraListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                OrdencompraListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+            && ! $request->has('sala_id')
+            && ! $request->has('sala_todas')
+            && ! $request->has('presupuesto')
+            && ! $request->has('estado')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(OrdencompraListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(OrdencompraListadoColumnas::RECURSO, (int) session('rol_id'));
+        }
+
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request, null, $salaQuery),
+            $request
         );
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = OrdencompraListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito'], $filtros['_limpiar']);
         $filtros = ListadoVisualSupport::aplicarPedido(
             $filtros,
             $request,
-            null,
-            OrdencompraListadoFiltros::CAMPOS
+            ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null,
+            OrdencompraListadoFiltros::camposOrdenables()
         );
+        $guardoQbeVista = ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($request->boolean('quitar_qbe') && $vistaActiva && $guardoQbeVista) {
+            return redirect()
+                ->route('consultar_ordencompra', ['vista_id' => $vistaActiva->id])
+                ->with('mensaje', 'Se quitaron los filtros de la vista «'.$vistaActiva->nombre.'». Las columnas siguen igual.');
+        }
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            OrdencompraListadoPreferenciasUsuario::olvidarOrden();
+            if ($vistaActiva) {
+                $filtros['vista_id'] = $vistaActiva->id;
+                unset($filtros['vista_estandar']);
+                ListadoVistaSupport::recordarOrdenYAgrupar($vistaActiva, [], $filtros['agrupar'] ?? []);
+            } elseif ($forzarEstandar) {
+                $filtros['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje', 'Se volvió al orden estándar (fecha, más reciente primero).');
+        }
+
+        if ($request->exists('sort')) {
+            OrdencompraListadoPreferenciasUsuario::persistirOrden($filtros['sort'] ?? []);
+        } elseif (ListadoOrdenamientoSupport::normalizar(
+            $filtros['sort'] ?? [],
+            OrdencompraListadoFiltros::camposOrdenables()
+        ) === []) {
+            $ordenRecordado = OrdencompraListadoPreferenciasUsuario::leerOrden();
+            if ($ordenRecordado !== []) {
+                $filtros['sort'] = $ordenRecordado;
+            }
+        }
+
+        $catalogo = OrdencompraListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            OrdencompraListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = OrdencompraListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = OrdencompraListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        $filtros['_columnas'] = $columnasVisibles;
+
         $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
-        $ordencompra = $this->ordencompraRepository->listadoIndex(
-            $filtros,
-            $sectorId,
-            true,
-        );
-        $estados = OrdencompraEstados::todos();
-        $sectores = OrdencompraLegajoGastronomiaSupport::sectoresParaCambio();
+        $ordencompra = $this->ordencompraRepository->listadoIndex($filtros, $sectorId, true);
         $resumen = $this->ordencompraRepository->resumenIndex($filtros, $sectorId);
+
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar(
+            $filtros['agrupar'] ?? [],
+            OrdencompraListadoFiltros::camposOrdenables()
+        ) !== []) {
+            $cortes = $this->ordencompraRepository->cortesIndex($filtros, $sectorId);
+        }
+
+        $camposFiltro = OrdencompraListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+
+        if ($vistaActiva) {
+            $filtros['vista_id'] = $vistaActiva->id;
+            unset($filtros['vista_estandar']);
+        } elseif ($forzarEstandar) {
+            $filtros['vista_estandar'] = 1;
+            unset($filtros['vista_id']);
+        }
+        $filtros['columnas'] = implode(',', $columnasVisibles);
         $filtrosQuery = array_merge(
             OrdencompraListadoFiltros::paraQueryString($filtros),
             ListadoVisualSupport::paraQueryString($filtros)
         );
-        $etiquetas = [];
-        foreach (OrdencompraListadoFiltros::CAMPOS as $key => $meta) {
-            $etiquetas[$key] = $meta['label'];
-        }
+
         $graficoSeries = ListadoVisualSupport::seriesDeConsulta(
             $filtros,
-            OrdencompraListadoFiltros::CAMPOS,
+            OrdencompraListadoFiltros::camposOrdenables(),
             $etiquetas,
             fn (array $para): array => $this->ordencompraRepository->cortesIndex($para, $sectorId)
         );
 
-        return view('compras.ordencompra.index', [
+        return [
             'ordencompra' => $ordencompra,
-            'busqueda' => $filtros['busqueda'],
+            'busqueda' => $filtros['busqueda'] ?? '',
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
-            'camposFiltro' => OrdencompraListadoFiltros::CAMPOS,
+            'camposFiltro' => $camposFiltro,
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
+            'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'sala_query' => $salaQuery,
-            'estados' => $estados,
-            'sectores' => $sectores,
+            'estados' => OrdencompraEstados::todos(),
+            'sectores' => OrdencompraLegajoGastronomiaSupport::sectoresParaCambio(),
             'sectorUsuario' => ($sectorId !== null && $sectorId > 0) ? $sectorId : null,
             'alcanceSector' => OrdencompraSectorVisibilidadSupport::etiquetaAlcance(),
             'resumen' => $resumen,
             'graficoSeries' => $graficoSeries,
             'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
-        ]);
+        ];
+    }
+
+    private function salasParaFiltroListado(): \Illuminate\Support\Collection
+    {
+        return \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
+            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
+            : collect();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, object>|null  $salaQuery
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(
+        Request $request,
+        ?string $busquedaRuta = null,
+        ?\Illuminate\Support\Collection $salaQuery = null
+    ): array {
+        $salaQuery ??= $this->salasParaFiltroListado();
+        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
+        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
+
+        return OrdencompraListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault,
+            $salaDefault
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasDesdeRequest(Request $request): array
+    {
+        $columnasRequest = $request->input('columnas');
+        if (is_string($columnasRequest)) {
+            $columnasRequest = array_filter(array_map('trim', explode(',', $columnasRequest)));
+        }
+
+        return OrdencompraListadoPreferenciasUsuario::resolverColumnas(
+            is_array($columnasRequest) ? $columnasRequest : null
+        );
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-ordencompra');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = OrdencompraListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $filtros['_columnas'] = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
+        $page = $this->ordencompraRepository->listadoIndex($filtros, $sectorId, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            OrdencompraListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            OrdencompraListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? $this->ordencompraRepository->cortesIndex($filtrosCortes, $sectorId)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => OrdencompraListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-ordencompra');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = OrdencompraListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $graficosVista = ListadoLienzoSupport::normalizar(
+            $request->input('graficos'),
+            $request->input('grafico'),
+            $request->exists('graficos'),
+            OrdencompraListadoFiltros::camposOrdenables()
+        );
+        $vista = ListadoVistaSupport::guardar(
+            OrdencompraListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista),
+                'graficos' => $graficosVista,
+                'formato' => ListadoVisualSupport::normalizarFormato(
+                    $request->input('formato'),
+                    OrdencompraListadoFiltros::camposOrdenables()
+                ),
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        ListadoVisualSupport::asignarRol($vista, $request, OrdencompraListadoColumnas::RECURSO);
+        $qs = OrdencompraListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('consultar_ordencompra', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-ordencompra');
+        $ok = ListadoVistaSupport::eliminar($id, OrdencompraListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('consultar_ordencompra', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-ordencompra');
+        $layout = OrdencompraListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, OrdencompraListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            OrdencompraListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = OrdencompraListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('consultar_ordencompra', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-ordencompra');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            OrdencompraListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(OrdencompraListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'consultar_ordencompra',
+            OrdencompraListadoFiltros::paraQueryString($this->resolverFiltrosListado($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function crear(Request $request)
@@ -257,17 +576,8 @@ class OrdencompraController extends Controller
         can('listar-ordencompra');
 
         $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
-        $empresaDefault = \App\Support\Configuracion\EmpresaFiltroExternoSupport::empresaDefaultDesdeSesion();
-        $salaQuery = \App\Support\Configuracion\EntornoEmpresaSupport::esCrown()
-            ? \App\Support\Compras\ProveedorSalaAnitaSupport::salasParaSelectorUsuario()
-            : collect();
-        $salaDefault = $salaQuery->isNotEmpty() ? (int) $salaQuery->first()->id : null;
-        $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
-            $request,
-            $busqueda,
-            $empresaDefault,
-            $salaDefault
-        );
+        // Mismo resolver que el index: el export respeta QBE, orden y chips activos.
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
 
         if (in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
             ini_set('memory_limit', '-1');

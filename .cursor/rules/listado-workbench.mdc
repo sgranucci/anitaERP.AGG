@@ -98,6 +98,31 @@ Fechas de alta y modificación entran al QBE y quedan ocultas hasta que el dise�
 - Tablas: `listado_vista` (+ `menu_id`). En otro entorno (Ferli) correr `2026_09_24_191000_crear_tablas_listado_workbench` y `2026_09_25_203000_listado_vista_menu_id` si faltan. No hay vistas precargadas.
 - Escritura en producción: regla `base-datos-no-escribir-sin-preguntar`. No actualizar vistas existentes sin un sí explícito.
 
+## Columnas en la grilla (modelo estándar de consulta)
+
+Canónico: entregas de indumentaria. Stack compartido para ir replicando a otros workbenches.
+
+| Acción | Dónde |
+|---|---|
+| **Reordenar** | Arrastrar el encabezado (`th[data-col-key]`) |
+| **Ocultar** | × en el encabezado (hover) |
+| **Agregar / anchos / títulos** | **Diseñar vista** (modal) |
+
+- JS: `public/assets/pages/scripts/listado/workbench-columnas-dnd.js`
+- Partial: `includes.listado.workbench_columnas_dnd` (`window.lwColumnasDnd` + form `#form-lw-columnas-dnd` + modal `#modal-lw-ocultar-columna`)
+- CSS: `.lw-th-drag`, `.lw-th-hide` en `listado-workbench.css`
+- Persiste con el mismo `guardar_columnas_listado_*` (vista activa o grilla estándar del usuario)
+- Mínimo una columna visible; la columna **Acciones** (fija) no entra en el DnD; el `<th>` lleva el título **Acciones** (no vacío ni «Herramientas»)
+- Si la grilla desborda en horizontal: stack `tabla-ancha` (scroll arriba + abajo). Regla `reportes-tabla-ancha-doble-scroll`
+- Checkbox u otras columnas fijas a la izquierda: clase `lw-col-fija` en `th`/`td` (no se reordenan ni se ocultan)
+- La × **pide confirmación** (modal Bootstrap) antes de ocultar
+- En el `th`: `data-col-key`, asa de drag, × de ocultar; no inventar un botón «Columnas» aparte
+
+Ya con DnD (× con modal): entregas indumentaria, empleado, cheque, artículo, comprobante/pago proveedor, ingreso/egreso, tickets, cliente, proveedor, logística, OT, fórmula, bien de uso, pedido Interforming, importación, solicitud de pago, sanción, Crown (jornada/bóveda/movimiento/cajero/kardex/resultado online), artículos Ferli.
+Pendiente fuera de workbench estándar: cobranza (visual distinto).
+
+Al migrar otro index workbench: cargar el JS, incluir el partial con la ruta de guardar columnas, y poner `data-col-key` + × en el partial `workbench_th`.
+
 ## Cortes (Pack C)
 
 - Botón con texto **Cortes**. Abierto: fondo `#2471A3` y chevron abajo. Cerrado: outline y chevron a la derecha. Lo pinta el CSS con `.collapsed` (Bootstrap); el script inline del contenido corre antes que jQuery.

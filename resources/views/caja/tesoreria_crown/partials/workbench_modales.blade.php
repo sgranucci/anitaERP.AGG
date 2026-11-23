@@ -124,7 +124,7 @@
                                                         </td>
                                                         <td>
                                                             <input type="number" name="grilla[{{ $i }}][ancho]" class="form-control form-control-sm"
-                                                                   value="{{ $fila['ancho'] }}" min="40" max="600" step="10">
+                                                                   value="{{ $fila['ancho'] }}" min="40" max="600" step="1">
                                                         </td>
                                                         <td>
                                                             <select name="grilla[{{ $i }}][alinea]" class="form-control form-control-sm">

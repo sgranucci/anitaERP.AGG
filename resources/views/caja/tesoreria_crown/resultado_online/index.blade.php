@@ -6,6 +6,7 @@
 
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section('scripts')
@@ -15,6 +16,8 @@
     <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-agrupar.js')) }}" type="text/javascript"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-disenador-preview.js')) }}" type="text/javascript"></script>
     <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-vista-guardar.js')) }}" type="text/javascript"></script>
+    @php $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js'); @endphp<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/workbench.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/workbench.js')) }}" type="text/javascript"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}" type="text/javascript"></script>
 @endsection
@@ -82,8 +85,12 @@
                 'recursoVisual' => \App\Support\Caja\TesoreriaCrownResultadoOnlineListadoColumnas::RECURSO,
                 'rutaListadoVisual' => 'tesoreria_crown_resultado_online',
             ])
-            <div class="card-body table-responsive p-0">
-                <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
@@ -133,6 +140,7 @@
                     </tbody>
                 </table>
             </div>
+            </div>
             <div class="card-footer clearfix">
                 @if ($filas->total() > 0)
                     <span class="text-muted">{{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }}</span>
@@ -142,6 +150,10 @@
         </div>
     </div>
 </div>
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_tesoreria_crown_resultado_online',
+])
 @include('caja.tesoreria_crown.partials.workbench_modales', [
     'rutaGuardarColumnas' => 'guardar_columnas_tesoreria_crown_resultado_online',
     'rutaGuardarVista' => 'guardar_vista_tesoreria_crown_resultado_online',

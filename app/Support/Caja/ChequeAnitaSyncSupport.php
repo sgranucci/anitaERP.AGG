@@ -10,8 +10,9 @@ use App\Support\Database\SqlDialectSupport;
 /**
  * Lectura Anita para sync de cheques al ERP.
  *
- * Quirks de schema Ferli (sin cpro_empresa / cter_empresa, cuentas multiempresa):
- * solo aplica fallback de empresa principal en Ferli. AGG debe resolver empresa real.
+ * Quirks de schema: Ferli/Crown/El Bierzo suelen venir sin cpro_empresa / cter_empresa
+ * (y cuentas de caja multiempresa sin empresa_id) → fallback a empresa principal.
+ * AGG debe resolver empresa real desde Anita o la cuenta.
  */
 final class ChequeAnitaSyncSupport
 {
@@ -253,8 +254,12 @@ final class ChequeAnitaSyncSupport
             return (int) $cuentacaja->empresa_id;
         }
 
-        // Ferli / Crown: cuentas multiempresa + Anita sin cpro/cter_empresa.
-        if (EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown()) {
+        // Ferli / Crown / El Bierzo: cuentas multiempresa + Anita sin cpro/cter_empresa.
+        if (
+            EntornoEmpresaSupport::esFerli()
+            || EntornoEmpresaSupport::esCrown()
+            || EntornoEmpresaSupport::esElBierzo()
+        ) {
             return self::empresaPrincipalId();
         }
 

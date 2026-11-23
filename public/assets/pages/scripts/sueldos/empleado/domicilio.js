@@ -1,4 +1,4 @@
-// Domicilio del empleado: localidad por consulta (F1 / lupa / Enter), no por combo.
+// Domicilio del empleado: país / provincia / localidad por consulta (F1 / lupa / Enter).
 // Al cambiar la provincia se limpia la localidad; el modal filtra por #provincia_id.
 
 function limpiarCampoLocalidadEmpleado() {
@@ -22,12 +22,15 @@ $(function () {
         return;
     }
 
-    $('#provincia_id').on('change', function () {
-        var texto = $(this).children('option:selected').text();
+    $(document).on('change', '#provincia_id', function () {
+        var $campo = $(this).closest('.tm-provincia-campo');
+        var nombre = String($campo.find('.nombreprovincia').val() || $('#nombreprovincia').val() || '').trim();
         if ($(this).val()) {
-            $('#desc_provincia').val(texto);
+            $('#desc_provincia').val(nombre);
+            $campo.find('.desc_provincia').val(nombre);
         } else {
             $('#desc_provincia').val('');
+            $campo.find('.desc_provincia').val('');
         }
         limpiarCampoLocalidadEmpleado();
     });

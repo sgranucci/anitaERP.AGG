@@ -238,6 +238,12 @@ class SolicitudpagoController extends Controller
         if ($this->requestTraeFiltrosListado($request)) {
             $filtros = $this->filtrosWorkbench($request, $empresaDefault, $vistaActiva);
             $filtrosQuery = $this->queryWorkbench($filtros, $vistaActiva, $forzarEstandar);
+            if ($request->boolean('quitar_orden')) {
+                session([self::SESSION_FILTROS => $filtrosQuery]);
+                return redirect()
+                    ->route('consultar_solicitudpago', $filtrosQuery)
+                    ->with('mensaje', 'Se volvió al orden estándar.');
+            }
             $page = (int) $request->input('page', 0);
             if ($page > 1) {
                 $filtrosQuery['page'] = $page;
@@ -392,6 +398,17 @@ class SolicitudpagoController extends Controller
                 $filtros['agrupar'] ?? []
             );
         }
+        if ($request->boolean('quitar_orden')) {
+            $filtros['orden'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+        }
+
         if (($filtros['empresa_scope'] ?? 'una') !== 'todas' && empty($filtros['empresa_id']) && $empresaDefault) {
             $filtros['empresa_id'] = $empresaDefault;
             $filtros['empresa_scope'] = 'una';

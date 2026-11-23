@@ -5,6 +5,7 @@
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -15,6 +16,8 @@
     $agruparJs = public_path('assets/pages/scripts/listado/workbench-agrupar.js');
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
     $solicitudWorkbenchJs = public_path('assets/pages/scripts/logistica/solicitud-workbench.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
@@ -22,6 +25,8 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ file_exists($agruparJs) ? filemtime($agruparJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/logistica/solicitud-workbench.js') }}?v={{ file_exists($solicitudWorkbenchJs) ? filemtime($solicitudWorkbenchJs) : time() }}"></script>
 @endsection
 
@@ -46,6 +51,16 @@
     }
     $limpiarQ['filtro_limpiar'] = 1;
     $limpiarUrl = route('logistica_solicitud', $limpiarQ);
+    $camposOrdenablesTheadBarra = \App\Support\Logistica\SolicitudLogisticaListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesTheadBarra
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort'], $qsQuitarOrden['page']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('logistica_solicitud', $qsQuitarOrden);
+
 @endphp
 
 @section('contenido')
@@ -130,6 +145,12 @@
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
+                                <i class="fa fa-undo"></i> Orden estándar
+                            </a>
+                        @endif
+
                     </div>
                 </div>
                 @include('logistica.solicitud.partials.filtros_externos')
@@ -152,16 +173,21 @@
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_logistica_solicitud',
                     'queryparams' => $filtrosQuery ?? [],
+                    'variant' => 'compact',
                 ])
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
                                 @include('logistica.solicitud.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th class="text-nowrap" style="width:70px" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:70px" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -184,9 +210,16 @@
                     </tbody>
                 </table>
             </div>
+            </div>
         </div>
     </div>
 </div>
 {{ $datas->appends($filtrosQuery ?? [])->links() }}
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_logistica_solicitud',
+    'paraQueryStringDnd' => [\App\Support\Logistica\SolicitudLogisticaListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('logistica.solicitud.partials.workbench_modales')
 @endsection

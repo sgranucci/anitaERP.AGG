@@ -89,8 +89,11 @@
 
 .lw-toolbar-export {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   width: 100%;
+  padding: 0.4rem 0.75rem;
+  box-sizing: border-box;
 }
 
 .lw-toolbar-busqueda .lw-search-rapida {
@@ -244,12 +247,22 @@
 
 .lw-workbench #tabla-paginada th.lw-col,
 .lw-workbench #tabla-paginada td.lw-col {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 0; /* fuerza ellipsis con table-layout:fixed */
   padding-left: 0.45rem;
   padding-right: 0.45rem;
+  white-space: nowrap;
+}
+
+/* Celdas: ellipsis OK. Encabezados: título completo (regla tabla-ancha / sin comprimir th). */
+.lw-workbench #tabla-paginada td.lw-col {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0; /* fuerza ellipsis con table-layout:fixed */
+}
+
+.lw-workbench #tabla-paginada th.lw-col {
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
 }
 
 .lw-workbench #tabla-paginada .lw-celda-texto {
@@ -753,6 +766,107 @@
 
 .lw-col-sorted {
   background: rgba(255, 255, 255, 0.35);
+}
+
+/* Workbench estándar: arrastrar / ocultar columnas en thead.
+   Padding fijo para asa/× (sin cambiar al hover: si no, el sort se comprime o el grip pega al texto). */
+.lw-th-drag {
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+  position: relative;
+  padding-left: 1.05rem !important;
+  padding-right: 1.15rem !important;
+}
+
+.lw-th-drag:active,
+.lw-th-dragging {
+  cursor: grabbing;
+}
+
+/* Título completo en encabezado; el ícono de orden queda al lado. */
+.lw-th-drag .lw-sort-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow: visible;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.lw-th-drag .lw-sort-link .lw-th-label {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.lw-th-drag .lw-sort-link .lw-sort-icon,
+.lw-th-drag .lw-sort-link .lw-sort-prio,
+.lw-th-drag .lw-sort-link > i,
+.lw-th-drag .lw-sort-link > sup {
+  flex: 0 0 auto;
+}
+
+.lw-th-drag .lw-th-titulo {
+  display: inline-block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.lw-th-drag-handle {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+  opacity: 0;
+  font-size: 0.7rem;
+  line-height: 1;
+  z-index: 1;
+  pointer-events: none;
+  color: #1B4F72;
+}
+
+.lw-th-hide {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  border: 0;
+  background: transparent;
+  color: #922B21;
+  opacity: 0;
+  padding: 0 3px;
+  line-height: 1;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border-radius: 2px;
+  z-index: 1;
+}
+
+.lw-th-drag:hover .lw-th-drag-handle {
+  opacity: 0.85;
+  pointer-events: auto;
+}
+
+.lw-th-drag:hover .lw-th-hide,
+.lw-th-hide:focus {
+  opacity: 0.85;
+}
+
+.lw-th-hide:hover {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.lw-th-drop-target {
+  box-shadow: inset 3px 0 0 #1B4F72;
+  background: rgba(255, 255, 255, 0.55) !important;
+}
+
+.lw-th-dragging {
+  opacity: 0.55;
 }
 
 .lw-orden-recordado {

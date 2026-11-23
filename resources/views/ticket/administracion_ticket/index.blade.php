@@ -5,6 +5,7 @@
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
@@ -18,6 +19,8 @@
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $ticketWorkbenchJs = public_path('assets/pages/scripts/ticket/administracion_ticket/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -25,6 +28,8 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/ticket/administracion_ticket/workbench.js') }}?v={{ file_exists($ticketWorkbenchJs) ? filemtime($ticketWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script>
     function eliminarTicket(event) {
         if (!confirm('¿Desea eliminar el ticket?')) {
@@ -188,7 +193,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                     <div class="lw-toolbar-right">
                         @if ($ordenActualThead !== [])
                             <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por ID descendente y lo saca de la vista">
-                                <i class="fa fa-sort"></i> Quitar orden
+                                <i class="fa fa-undo"></i> Orden estándar
                             </a>
                         @endif
                     </div>
@@ -254,7 +259,8 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                     @include('includes.exportar-tabla-queryparams', [
                         'ruta' => 'lista_administracion_ticket',
                         'queryparams' => $filtrosQuery ?? [],
-                    ])
+                    'variant' => 'compact',
+                ])
                 </div>
                 <div class="mb-1 mb-md-0 ml-auto">
                     @include('ticket.administracion_ticket.partials.filtros_externos')
@@ -263,7 +269,11 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body table-responsive p-0">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
                 @if ($ver_todos_tickets ?? true)
                     <div class="alert alert-secondary py-2 mb-0 mx-3 mt-3 small">
                         <i class="fa fa-users"></i>
@@ -276,7 +286,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                         Marque «Ver todos los tickets» para ver el resto del equipo.
                     </div>
                 @endif
-                <table class="table table-striped table-bordered table-hover tabla-acciones-fijas" id="tabla-paginada">
+                <table class="table table-striped table-bordered table-hover tabla-acciones-fijas" PLACEHOLDER_KEEP>
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
@@ -285,7 +295,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="col-acciones-tabla" data-orderable="false"></th>
+                            <th class="col-acciones-tabla" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -336,12 +346,19 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                     </tbody>
                 </table>
             </div>
+            </div>
             <div class="card-footer">
                 {{ $ticket->appends($filtrosQuery ?? [])->links() }}
             </div>
         </div>
     </div>
 </div>
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_administracion_ticket',
+    'paraQueryStringDnd' => [\App\Support\Ticket\AdministracionTicketListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('caja.ingresoegreso.partials.workbench_modales', [
     'rutaGuardarColumnas' => 'guardar_columnas_listado_administracion_ticket',
     'rutaGuardarVista' => 'guardar_vista_listado_administracion_ticket',

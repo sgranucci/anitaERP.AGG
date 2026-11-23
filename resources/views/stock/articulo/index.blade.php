@@ -5,6 +5,25 @@ Art&iacute;culos
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+/* Acciones fijas a la derecha, un solo renglón (no wrap en 2 filas). */
+.lw-workbench .articulo-grilla {
+    --tabla-ancha-der: 14.5rem;
+}
+.lw-workbench .articulo-grilla #tabla-paginada th.lw-col-acciones,
+.lw-workbench .articulo-grilla #tabla-paginada td.lw-col-acciones {
+    width: var(--tabla-ancha-der);
+    min-width: var(--tabla-ancha-der);
+    max-width: none;
+    white-space: nowrap;
+    overflow: visible;
+    text-align: center;
+    vertical-align: middle;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+}
+</style>
 @endsection
 
 @section("scripts")
@@ -18,6 +37,8 @@ Art&iacute;culos
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $articuloWorkbenchJs = public_path('assets/pages/scripts/stock/articulo/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
@@ -25,6 +46,8 @@ Art&iacute;culos
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/workbench.js') }}?v={{ file_exists($articuloWorkbenchJs) ? filemtime($articuloWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/modeloetiqueta.js")}}" type="text/javascript"></script>
@@ -171,7 +194,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])
                             <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden por SKU y lo saca de la vista">
-                                <i class="fa fa-sort"></i> Quitar orden
+                                <i class="fa fa-undo"></i> Orden estándar
                             </a>
                         @endif
                     </div>
@@ -191,25 +214,28 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body py-2 border-bottom bg-white d-flex flex-wrap align-items-center justify-content-between">
-                <div class="mb-1 mb-md-0">
-                    @include('includes.exportar-tabla-queryparams', [
-                        'ruta' => 'lista_articulo',
-                        'queryparams' => $filtrosQuery ?? [],
-                    ])
-                </div>
+            <div class="lw-toolbar-export border-bottom bg-white">
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_articulo',
+                    'queryparams' => $filtrosQuery ?? [],
+                    'variant' => 'compact',
+                ])
             </div>
-            <div class="card-body table-responsive p-0">
+            <div class="tabla-ancha-grilla articulo-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
                 @php
                     $filtroEmpresaActivo = ArticuloListadoFiltros::filtroEmpresaActivo();
                 @endphp
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
                             @include('stock.articulo.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
-                            <th data-orderable="false"></th>
+                            <th class="lw-col-acciones col-fija-der-1" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -225,7 +251,8 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 @foreach ($columnasVisibles as $keyColumna)
                                 @include('stock.articulo.partials.workbench_celda', ['key' => $keyColumna])
                                 @endforeach
-                            <td>
+                            <td class="lw-col-acciones col-fija-der-1">
+                                <div class="lw-acciones-inner">
                        			@if (can('editar-articulos', false))
                                 	<a href="{{route('editar_articulo', ['id' => $articulo->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
@@ -328,16 +355,24 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                     </button>
                                 </form>
 								@endif
+                                </div>
                             </td>
                         	</tr>
                         @endforeach
                     </tbody>
                 </table>
+                </div>
             </div>
         </div>
     </div>
 </div>
 {{ $articulos->appends($filtrosQuery ?? [])->links() }}
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_articulo',
+    'paraQueryStringDnd' => [\App\Support\Stock\ArticuloListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('stock.articulo.partials.workbench_modales')
 @include('includes.stock.modalconsultaprecioarticulo')
 @include('includes.stock.modalconsultalistaprecio')

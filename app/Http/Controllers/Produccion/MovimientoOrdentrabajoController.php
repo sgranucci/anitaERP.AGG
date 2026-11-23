@@ -63,6 +63,9 @@ class MovimientoOrdentrabajoController extends Controller
         }
 
         $armado = $this->armarListado($request, $otId > 0 ? $otId : null);
+        if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+            return $armado;
+        }
 
         return view('produccion.movimientoordentrabajo.index', $armado);
     }
@@ -415,9 +418,9 @@ class MovimientoOrdentrabajoController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
      */
-    private function armarListado(Request $request, ?int $otId): array
+    private function armarListado(Request $request, ?int $otId): array|\Illuminate\Http\RedirectResponse
     {
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(MovimientoOrdentrabajoListadoColumnas::RECURSO, $usuarioId);
@@ -470,6 +473,35 @@ class MovimientoOrdentrabajoController extends Controller
                 $filtros['agrupar'] ?? []
             );
         }
+
+        if ($request->boolean('quitar_orden')) {
+            $filtros['sort'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = MovimientoOrdentrabajoListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif (! empty($forzarEstandar)) {
+                $params['vista_estandar'] = 1;
+            }
+            if ($otId > 0) {
+                $params['id'] = $otId;
+
+                return redirect()
+                    ->route('consultamovimientoordentrabajo', $params)
+                    ->with('mensaje', 'Se volvió al orden estándar.');
+            }
+
+            return redirect()
+                ->route('movimientoordentrabajo', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
+
 
         $catalogo = MovimientoOrdentrabajoListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(

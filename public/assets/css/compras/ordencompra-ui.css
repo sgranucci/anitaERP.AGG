@@ -232,27 +232,131 @@
 
 /* ---- grilla ---- */
 
+.oc-ui .oc-grilla-ancha {
+    margin: 0;
+}
+
+.oc-ui .oc-grilla-ancha .tabla-ancha-wrap {
+    max-height: none;
+    border: none;
+}
+
+.oc-ui .oc-grilla-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
 .oc-ui .oc-grilla {
     margin-bottom: 0;
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
 }
 
 .oc-ui .oc-grilla thead th {
     background: var(--oc-thead);
     color: var(--oc-thead-ink);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    font-size: 12px;
+    text-transform: none;
+    letter-spacing: 0;
     font-weight: 700;
     white-space: nowrap;
     vertical-align: middle;
     border-bottom: 2px solid #5DADE2;
     border-top: none;
+    padding: 0.45rem 0.55rem;
 }
 
 .oc-ui .oc-grilla tbody td {
-    padding: 10px 14px;
+    padding: 6px 8px;
     vertical-align: middle;
-    border-top: 1px solid var(--oc-border);
+    border: 1px solid var(--oc-border);
+    font-size: 12px;
+    line-height: 1.25;
+}
+
+.oc-ui .oc-grilla.table-bordered thead th {
+    border: 1px solid #5DADE2;
+    border-bottom-width: 2px;
+}
+
+/* Workbench: encabezados al estilo legajo (sin mayúsculas forzadas; asa con aire). */
+.oc-ui.lw-workbench #tabla-paginada thead th {
+    font-size: 12px !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+}
+
+.oc-ui.lw-workbench #tabla-paginada thead th.lw-th-drag {
+    padding-left: 1.05rem !important;
+    padding-right: 1.15rem !important;
+}
+
+.oc-ui.lw-workbench #tabla-paginada tbody td {
+    font-size: 12px !important;
+    padding: 6px 8px;
+    line-height: 1.25;
+}
+
+/* Título completo en encabezados (sin ellipsis que cortaba «Orden de pago»). */
+.oc-ui.lw-workbench #tabla-paginada thead th.lw-th-drag .lw-th-label {
+    overflow: visible;
+    text-overflow: clip;
+    max-width: none;
+}
+
+.oc-ui.lw-workbench #tabla-paginada th.oc-col-acciones {
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+}
+
+.oc-ui.lw-workbench #tabla-paginada th.oc-col-acciones,
+.oc-ui.lw-workbench #tabla-paginada td.oc-col-acciones,
+.oc-ui.lw-workbench #tabla-paginada th.lw-col-acciones,
+.oc-ui.lw-workbench #tabla-paginada td.lw-col-acciones {
+    width: 9.5rem;
+    min-width: 9.5rem;
+    max-width: 10.5rem;
+    padding: 4px 4px;
+    overflow: visible;
+    text-align: center;
+    white-space: normal;
+    vertical-align: middle;
+}
+
+/* Acciones en hasta 2 renglones para que entren todas las herramientas. */
+.oc-ui.lw-workbench #tabla-paginada .oc-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1px 0;
+    max-width: 10rem;
+    margin: 0 auto;
+}
+
+.oc-ui.lw-workbench #tabla-paginada .oc-acciones .btn-accion-tabla,
+.oc-ui.lw-workbench #tabla-paginada .oc-acciones .form-eliminar,
+.oc-ui.lw-workbench #tabla-paginada .oc-acciones form.d-inline {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0 1px;
+    min-width: 1.4rem;
+    min-height: 1.4rem;
+    font-size: 12px;
+    flex: 0 0 auto;
+}
+
+.oc-ui.lw-workbench #tabla-paginada td.oc-col-numero,
+.oc-ui.lw-workbench #tabla-paginada td.oc-num,
+.oc-ui.lw-workbench #tabla-paginada td.oc-col-fecha {
+    overflow: visible;
+    white-space: nowrap;
+    word-break: normal;
 }
 
 .oc-ui .oc-grilla tbody tr:nth-child(odd) {

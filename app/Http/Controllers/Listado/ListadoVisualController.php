@@ -11,6 +11,7 @@ use App\Support\Contable\BienUsoListadoColumnas;
 use App\Support\Logistica\SolicitudLogisticaListadoColumnas;
 use App\Support\Stock\ArticuloListadoColumnas;
 use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
+use App\Support\Sueldos\EntregaPrendaListadoColumnas;
 use App\Support\Sueldos\SancionReporteListadoColumnas;
 use App\Support\Ticket\AdministracionTicketListadoColumnas;
 use App\Support\Ventas\ClienteListadoColumnas;
@@ -84,6 +85,10 @@ class ListadoVisualController extends Controller
             SancionReporteListadoColumnas::RECURSO => [
                 'permiso' => 'listar-sancion-reporte-sueldos',
                 'ruta' => 'sancion_reporte_sueldos',
+            ],
+            EntregaPrendaListadoColumnas::RECURSO => [
+                'permiso' => 'listar-entrega-prenda',
+                'ruta' => 'entrega_prenda_reporte',
             ],
             BienUsoListadoColumnas::RECURSO => [
                 'permiso' => 'listar-bien-uso',

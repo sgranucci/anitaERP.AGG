@@ -1,14 +1,14 @@
 ---
-description: Reportes con grilla ancha — scroll horizontal arriba y abajo sincronizados (tabla-ancha)
-globs: resources/views/**/*reporte*/**,resources/views/**/*_reporte/**,resources/views/**/partials/tabla*.blade.php,public/assets/css/tabla-ancha-reporte.css,public/assets/pages/scripts/admin/tabla-ancha-reporte.js
-alwaysApply: false
+description: Toda grilla con scroll horizontal — barras arriba y abajo sincronizadas (tabla-ancha)
+globs: resources/views/**/*.blade.php,public/assets/css/tabla-ancha-reporte.css,public/assets/pages/scripts/admin/tabla-ancha-reporte.js,public/assets/css/listado-workbench.css
+alwaysApply: true
 ---
 
-# Reportes: doble scroll horizontal (arriba + abajo)
+# Grillas anchas: doble scroll horizontal (arriba + abajo)
 
-Toda **tabla ancha de reporte en pantalla** (muchas columnas, overflow horizontal) debe usar el stack **`tabla-ancha`**: barra de scroll **arriba** y barra **abajo** sincronizadas. No dejar solo `table-responsive` (scroll únicamente abajo).
+Toda **tabla en pantalla** que pueda desbordar en horizontal (workbench, listado CRUD, reporte de consulta) debe usar el stack **`tabla-ancha`**: barra de scroll **arriba** y barra **abajo** sincronizadas. No dejar solo `table-responsive` / `overflow-x: auto` con scroll únicamente abajo.
 
-Complementa `reportes-consulta-paginado-export.mdc`.
+Complementa `reportes-consulta-paginado-export.mdc` y `listado-workbench.mdc`.
 
 ## Canónico
 
@@ -18,20 +18,21 @@ Complementa `reportes-consulta-paginado-export.mdc`.
 | JS | `public/assets/pages/scripts/admin/tabla-ancha-reporte.js` |
 | Markup | `data-tabla-ancha` + `.tabla-ancha-scroll-top` + `.tabla-ancha-wrap` + `table.tabla-ancha` |
 
-Referencias: `contable/flash_contable`, `caja/flash/reporte_historico`, `caja/tesoreria_crown` anexos, `stock/recepcion_conversion_control`.
+Referencias: `compras/ordencompra` (workbench), `contable/flash_contable`, `caja/flash/reporte_historico`, anexos Crown, `stock/recepcion_conversion_control`.
+
+## Título de la columna fija de botones
+
+En workbench / listados, la última columna de botones se titula **Acciones** (no «Herramientas», no dejar el `<th>` vacío). Queda fuera del loop de `$columnasVisibles` y no entra en el DnD.
 
 ## Obligatorio en pantalla
 
-1. Incluir CSS y JS con `?v=filemtime` en el index del reporte.
+1. Incluir CSS y JS con `?v=filemtime` en el index / vista de consulta.
 2. Envolver la grilla (solo vista pantalla, no PDF/Excel):
 
 ```blade
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) ?: time() }}"></script>
 
-<p class="small text-muted mb-1">
-    Tabla ancha: usá la <strong>barra de scroll de arriba</strong>, o Shift + rueda del mouse / deslizá el trackpad.
-</p>
 <div class="tabla-ancha-grilla" data-tabla-ancha>
     <div class="tabla-ancha-scroll-top" hidden>
         <div class="tabla-ancha-scroll-top-inner"></div>
@@ -39,15 +40,17 @@ Referencias: `contable/flash_contable`, `caja/flash/reporte_historico`, `caja/te
     <div class="tabla-ancha-wrap">
         <table class="table table-sm table-bordered mb-0 tabla-ancha" id="tabla-paginada">
             …
+            <th class="…">Acciones</th>
         </table>
     </div>
 </div>
 ```
 
-3. El JS mide el ancho de la tabla, muestra la barra superior solo si hay overflow, y sincroniza `scrollLeft` arriba ↔ abajo.
+3. El JS mide el ancho de la tabla, muestra la barra superior **solo si hay overflow**, y sincroniza `scrollLeft` arriba ↔ abajo.
 4. PDF / Excel / CSV: **sin** este wrapper (siguen la vista de export).
+5. No comprimir columnas con `table-layout: fixed` + ellipsis en encabezados solo para “evitar” el scroll: si no entra, se usa el doble scroll.
 
-## Opcional (según reporte)
+## Opcional (según pantalla)
 
 | Modificador | Uso |
 |---|---|
@@ -61,7 +64,7 @@ No inventar otro sync de scroll ni CSS duplicado: reutilizar estos assets.
 ## Prohibido
 
 ```blade
-{{-- ❌ Solo scroll abajo en reporte de muchas columnas --}}
+{{-- ❌ Solo scroll abajo en grilla ancha --}}
 <div class="table-responsive">
     <table id="tabla-paginada">…</table>
 </div>
@@ -71,11 +74,16 @@ No inventar otro sync de scroll ni CSS duplicado: reutilizar estos assets.
 {{-- ❌ Copiar markup/JS de sync propio en el módulo --}}
 ```
 
+```blade
+{{-- ❌ Columna de botones sin título --}}
+<th class="lw-col-acciones" data-orderable="false"></th>
+```
+
 ## Comprobación rápida
 
 ```bash
 rg 'data-tabla-ancha|tabla-ancha-scroll-top|tabla-ancha-reporte' resources/views/{modulo}/{recurso}/
 rg 'table-responsive' resources/views/{modulo}/{recurso}/index.blade.php
-# En reportes anchos nuevos: debe haber data-tabla-ancha, no solo table-responsive
+# Grilla ancha nueva: debe haber data-tabla-ancha; th de botones = Acciones
 php artisan view:cache
 ```

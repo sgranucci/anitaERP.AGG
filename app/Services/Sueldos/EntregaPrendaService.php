@@ -3,6 +3,7 @@
 namespace App\Services\Sueldos;
 
 use App\Models\Stock\Depmae;
+use App\Models\Stock\MovimientoStock;
 use App\Models\Sueldos\Configuracion_Indumentaria_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Entrega_Prenda_Articulo_Sueldos;
@@ -11,6 +12,7 @@ use App\Models\Sueldos\Prenda_Agrupamiento_Sueldos;
 use App\Models\Sueldos\Prenda_Articulo_Sueldos;
 use App\Services\Stock\MovimientoStockService;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -169,7 +171,152 @@ class EntregaPrendaService
         $anio = (int) $fechaCarbon->year;
         $sexo = Prenda_Agrupamiento_Sueldos::sexoDesdeEmpleado($empleado->sexo);
 
-        // Resolver líneas -> artículos (SKU) del maestro de stock.
+        ['detalle' => $detalle, 'cantidadPorPrenda' => $cantidadPorPrenda] = $this->resolverDetalle($lineas, $fechaCarbon);
+
+        if (! $omitirCupo) {
+            $this->validarCupo($empleado, (int) ($empleado->agrupamiento_id ?? 0), $sexo, $anio, $cantidadPorPrenda);
+        }
+
+        $empresaId = (int) ($deposito->empresa_id ?? $empleado->empresa_id ?? 0);
+
+        return DB::transaction(function () use ($empleado, $config, $empresaId, $fechaCarbon, $anio, $detalle, $observacion, $usuarioId) {
+            $movimientostockId = $this->crearMovimientoStock($empleado, $config, $empresaId, $fechaCarbon, $detalle);
+
+            $entrega = Entrega_Prenda_Sueldos::create([
+                'empleado_id' => (int) $empleado->id,
+                'fecha' => $fechaCarbon->toDateString(),
+                'anio' => $anio,
+                'deposito_id' => (int) $config->deposito_id,
+                'tipotransaccion_stock_id' => (int) $config->tipotransaccion_stock_id,
+                'movimientostock_id' => $movimientostockId ?: null,
+                'observacion' => $this->normalizarObservacion($observacion),
+                'usuario_id' => $usuarioId,
+            ]);
+
+            $this->crearLineas($entrega, $detalle);
+
+            return $entrega->fresh(['articulos.prenda', 'articulos.color', 'articulos.talle']);
+        });
+    }
+
+    /**
+     * Edita solo la cabecera (fecha, observación y reset de TuLegajo). No toca stock ni asientos:
+     * en el movimiento de stock solo se alinean fecha y leyenda.
+     */
+    public function actualizarCabecera(
+        Entrega_Prenda_Sueldos $entrega,
+        ?string $fecha,
+        ?string $observacion,
+        bool $resetTulegajo,
+    ): Entrega_Prenda_Sueldos {
+        return DB::transaction(function () use ($entrega, $fecha, $observacion, $resetTulegajo) {
+            $fechaCarbon = $fecha ? Carbon::parse($fecha) : Carbon::parse($entrega->fecha);
+
+            $datos = [
+                'fecha' => $fechaCarbon->toDateString(),
+                'anio' => (int) $fechaCarbon->year,
+                'observacion' => $this->normalizarObservacion($observacion),
+            ];
+            if ($resetTulegajo) {
+                $datos['tulegajo_estado'] = null;
+                $datos['tulegajo_enviado_at'] = null;
+                $datos['tulegajo_mensaje'] = null;
+            }
+            $entrega->update($datos);
+
+            $movId = (int) ($entrega->movimientostock_id ?? 0);
+            if ($movId > 0) {
+                $movimiento = MovimientoStock::query()->find($movId);
+                if ($movimiento !== null) {
+                    $movimiento->update([
+                        'fecha' => $fechaCarbon->toDateString(),
+                        'leyenda' => $this->leyendaMovimiento($entrega->empleado ?? Empleado_Sueldos::query()->find($entrega->empleado_id)),
+                    ]);
+                }
+            }
+
+            return $entrega->fresh(['empleado', 'articulos.prenda', 'articulos.color', 'articulos.talle']);
+        });
+    }
+
+    /**
+     * Reemplaza las líneas de una entrega: revierte el movimiento de stock/asiento, regraba las líneas
+     * y genera un movimiento nuevo con la misma forma que {@see registrar()}.
+     *
+     * @param  array<int, array{prenda_articulo_id:int, cantidad:float}>  $lineas
+     */
+    public function actualizarLineas(
+        Entrega_Prenda_Sueldos $entrega,
+        array $lineas,
+        ?string $fecha,
+        ?string $observacion,
+        ?int $usuarioId,
+        bool $omitirCupo = false,
+    ): Entrega_Prenda_Sueldos {
+        $empleado = Empleado_Sueldos::query()->findOrFail($entrega->empleado_id);
+
+        $config = $this->configuracion();
+        if (! $config->estaCompleta()) {
+            throw new \RuntimeException('Configure el depósito de origen y el tipo de transacción de indumentaria antes de editar las líneas.');
+        }
+        $deposito = Depmae::query()->find($config->deposito_id);
+        if ($deposito === null) {
+            throw new \RuntimeException('El depósito de origen configurado no existe.');
+        }
+
+        $fechaCarbon = $fecha ? Carbon::parse($fecha) : Carbon::parse($entrega->fecha);
+        $anio = (int) $fechaCarbon->year;
+        $sexo = Prenda_Agrupamiento_Sueldos::sexoDesdeEmpleado($empleado->sexo);
+
+        ['detalle' => $detalle, 'cantidadPorPrenda' => $cantidadPorPrenda] = $this->resolverDetalle($lineas, $fechaCarbon);
+
+        if (! $omitirCupo) {
+            // Las líneas actuales de ESTA entrega no cuentan contra el cupo: se van a reemplazar.
+            $this->validarCupo($empleado, (int) ($empleado->agrupamiento_id ?? 0), $sexo, $anio, $cantidadPorPrenda, $entrega);
+        }
+
+        $empresaId = (int) ($deposito->empresa_id ?? $empleado->empresa_id ?? 0);
+
+        // borraMovimientoStock / guardaMovimientoStock abren su propia transacción: anidan como savepoint.
+        return DB::transaction(function () use ($entrega, $empleado, $config, $empresaId, $fechaCarbon, $anio, $detalle, $observacion, $usuarioId) {
+            $movAnterior = (int) ($entrega->movimientostock_id ?? 0);
+            if ($movAnterior > 0) {
+                // Se libera la referencia antes de borrar el movimiento (revierte stock y asiento).
+                $entrega->update(['movimientostock_id' => null]);
+                $this->movimientoStockService->borraMovimientoStock($movAnterior);
+            }
+
+            EloquentAuditDeleteSupport::each($entrega->articulos()->getQuery());
+
+            $movimientostockId = $this->crearMovimientoStock($empleado, $config, $empresaId, $fechaCarbon, $detalle);
+
+            $datos = [
+                'fecha' => $fechaCarbon->toDateString(),
+                'anio' => $anio,
+                'deposito_id' => (int) $config->deposito_id,
+                'tipotransaccion_stock_id' => (int) $config->tipotransaccion_stock_id,
+                'movimientostock_id' => $movimientostockId ?: null,
+                'observacion' => $this->normalizarObservacion($observacion),
+            ];
+            if ($usuarioId !== null && $usuarioId > 0) {
+                $datos['usuario_id'] = $usuarioId;
+            }
+            $entrega->update($datos);
+
+            $this->crearLineas($entrega, $detalle);
+
+            return $entrega->fresh(['empleado', 'articulos.prenda', 'articulos.color', 'articulos.talle']);
+        });
+    }
+
+    /**
+     * Resuelve líneas -> variantes/artículos (SKU) del maestro de stock con cantidad y vencimiento.
+     *
+     * @param  array<int, array{prenda_articulo_id:int, cantidad:float}>  $lineas
+     * @return array{detalle: list<array{variante: Prenda_Articulo_Sueldos, cantidad: float, vence_el: ?string}>, cantidadPorPrenda: array<int, float>}
+     */
+    private function resolverDetalle(array $lineas, Carbon $fechaCarbon): array
+    {
         $detalle = [];
         $cantidadPorPrenda = [];
         foreach ($lineas as $l) {
@@ -199,12 +346,21 @@ class EntregaPrendaService
             throw new \RuntimeException('Debe indicar al menos una prenda con cantidad mayor a cero.');
         }
 
-        if (! $omitirCupo) {
-            $this->validarCupo($empleado, (int) ($empleado->agrupamiento_id ?? 0), $sexo, $anio, $cantidadPorPrenda);
-        }
+        return ['detalle' => $detalle, 'cantidadPorPrenda' => $cantidadPorPrenda];
+    }
 
-        $empresaId = (int) ($deposito->empresa_id ?? $empleado->empresa_id ?? 0);
-
+    /**
+     * Descuento de stock + asiento contable reutilizando movimientos de stock.
+     *
+     * @param  list<array{variante: Prenda_Articulo_Sueldos, cantidad: float, vence_el: ?string}>  $detalle
+     */
+    private function crearMovimientoStock(
+        Empleado_Sueldos $empleado,
+        Configuracion_Indumentaria_Sueldos $config,
+        int $empresaId,
+        Carbon $fechaCarbon,
+        array $detalle,
+    ): int {
         $articulosId = [];
         $cantidades = [];
         foreach ($detalle as $d) {
@@ -212,56 +368,56 @@ class EntregaPrendaService
             $cantidades[] = $d['cantidad'];
         }
 
-        return DB::transaction(function () use (
-            $empleado, $config, $deposito, $empresaId, $fechaCarbon, $anio,
-            $articulosId, $cantidades, $detalle, $observacion, $usuarioId
-        ) {
-            // Descuento de stock + asiento contable reutilizando movimientos de stock.
-            $payload = [
-                'tipotransaccion_stock_id' => (int) $config->tipotransaccion_stock_id,
-                'fecha' => $fechaCarbon->toDateString(),
-                'deposito_id' => (int) $config->deposito_id,
-                'empresa_id' => $empresaId,
-                'centrocosto_destino_id' => (int) ($config->centrocosto_id ?: $empleado->centrocosto_id ?: 0) ?: null,
-                'lote' => ' ',
-                'loteimportacion_id' => null,
-                'leyenda' => 'Entrega indumentaria - Legajo '.$empleado->legajo.' '.$empleado->nombre,
-                'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA,
-                'articulos_id' => $articulosId,
-                'cantidades' => $cantidades,
-            ];
+        $payload = [
+            'tipotransaccion_stock_id' => (int) $config->tipotransaccion_stock_id,
+            'fecha' => $fechaCarbon->toDateString(),
+            'deposito_id' => (int) $config->deposito_id,
+            'empresa_id' => $empresaId,
+            'centrocosto_destino_id' => (int) ($config->centrocosto_id ?: $empleado->centrocosto_id ?: 0) ?: null,
+            'lote' => ' ',
+            'loteimportacion_id' => null,
+            'leyenda' => $this->leyendaMovimiento($empleado),
+            'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA,
+            'articulos_id' => $articulosId,
+            'cantidades' => $cantidades,
+        ];
 
-            $resultado = $this->movimientoStockService->guardaMovimientoStock($payload, 'create');
-            $movimientostockId = is_array($resultado) ? (int) ($resultado['id'] ?? 0) : 0;
+        $resultado = $this->movimientoStockService->guardaMovimientoStock($payload, 'create');
 
-            $entrega = Entrega_Prenda_Sueldos::create([
-                'empleado_id' => (int) $empleado->id,
-                'fecha' => $fechaCarbon->toDateString(),
-                'anio' => $anio,
-                'deposito_id' => (int) $config->deposito_id,
-                'tipotransaccion_stock_id' => (int) $config->tipotransaccion_stock_id,
-                'movimientostock_id' => $movimientostockId ?: null,
-                'observacion' => $observacion ? mb_substr(trim($observacion), 0, 255) : null,
-                'usuario_id' => $usuarioId,
+        return is_array($resultado) ? (int) ($resultado['id'] ?? 0) : 0;
+    }
+
+    /**
+     * @param  list<array{variante: Prenda_Articulo_Sueldos, cantidad: float, vence_el: ?string}>  $detalle
+     */
+    private function crearLineas(Entrega_Prenda_Sueldos $entrega, array $detalle): void
+    {
+        foreach ($detalle as $d) {
+            $v = $d['variante'];
+            Entrega_Prenda_Articulo_Sueldos::create([
+                'entrega_id' => $entrega->id,
+                'prenda_id' => (int) $v->prenda_id,
+                'prenda_articulo_id' => (int) $v->id,
+                'color_id' => $v->color_id,
+                'talle_id' => $v->talle_id,
+                'articulo_id' => $v->articulo_id,
+                'sku' => $v->sku,
+                'cantidad' => $d['cantidad'],
+                'vence_el' => $d['vence_el'] ?? null,
             ]);
+        }
+    }
 
-            foreach ($detalle as $d) {
-                $v = $d['variante'];
-                Entrega_Prenda_Articulo_Sueldos::create([
-                    'entrega_id' => $entrega->id,
-                    'prenda_id' => (int) $v->prenda_id,
-                    'prenda_articulo_id' => (int) $v->id,
-                    'color_id' => $v->color_id,
-                    'talle_id' => $v->talle_id,
-                    'articulo_id' => $v->articulo_id,
-                    'sku' => $v->sku,
-                    'cantidad' => $d['cantidad'],
-                    'vence_el' => $d['vence_el'] ?? null,
-                ]);
-            }
+    private function leyendaMovimiento(?Empleado_Sueldos $empleado): string
+    {
+        return 'Entrega indumentaria - Legajo '.($empleado->legajo ?? '').' '.($empleado->nombre ?? '');
+    }
 
-            return $entrega->fresh(['articulos.prenda', 'articulos.color', 'articulos.talle']);
-        });
+    private function normalizarObservacion(?string $observacion): ?string
+    {
+        $obs = $observacion !== null ? mb_substr(trim($observacion), 0, 255) : '';
+
+        return $obs !== '' ? $obs : null;
     }
 
     public function anular(Entrega_Prenda_Sueldos $entrega): void
@@ -280,8 +436,14 @@ class EntregaPrendaService
     /**
      * @param  array<int, float>  $cantidadPorPrenda
      */
-    private function validarCupo(Empleado_Sueldos $empleado, int $agrupamientoId, string $sexo, int $anio, array $cantidadPorPrenda): void
-    {
+    private function validarCupo(
+        Empleado_Sueldos $empleado,
+        int $agrupamientoId,
+        string $sexo,
+        int $anio,
+        array $cantidadPorPrenda,
+        ?Entrega_Prenda_Sueldos $excluirEntrega = null,
+    ): void {
         if ($agrupamientoId <= 0) {
             return;
         }
@@ -314,6 +476,10 @@ class EntregaPrendaService
                 $ventana = 'año '.$anio;
             }
 
+            if ($excluirEntrega !== null) {
+                $entregado = max(0.0, $entregado - $this->cantidadDeEntregaEnVentana($excluirEntrega, (int) $prendaId, $vidaUtil > 0, $anio));
+            }
+
             if ($entregado + $cantidad > $limite + 1e-6) {
                 $nombre = $prenda ? ($prenda->codigo.' - '.$prenda->descripcion) : ('prenda ID '.$prendaId);
                 throw new \RuntimeException(
@@ -322,6 +488,29 @@ class EntregaPrendaService
                 );
             }
         }
+    }
+
+    /**
+     * Cantidad que la entrega ya aporta hoy al conteo del cupo (misma ventana que usa validarCupo),
+     * para no contarla dos veces cuando se están reemplazando sus líneas.
+     */
+    private function cantidadDeEntregaEnVentana(Entrega_Prenda_Sueldos $entrega, int $prendaId, bool $porVigencia, int $anio): float
+    {
+        $query = Entrega_Prenda_Articulo_Sueldos::query()
+            ->where('entrega_id', $entrega->id)
+            ->where('prenda_id', $prendaId);
+
+        if ($porVigencia) {
+            $ref = Carbon::today()->toDateString();
+            $query->where(function ($q) use ($ref) {
+                $q->whereNull('vence_el')->orWhere('vence_el', '>=', $ref);
+            });
+        } elseif ((int) $entrega->anio !== $anio) {
+            // Las líneas viejas pertenecen a otro año: no están en el conteo del año nuevo.
+            return 0.0;
+        }
+
+        return (float) $query->sum('cantidad');
     }
 
     private function fmt(float $v): string

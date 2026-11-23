@@ -9,7 +9,10 @@
 <script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/banco/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/maestro/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/maestro/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/configuracion/pais/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/pais/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/localidad/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/localidad/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/talle/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/talle/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/domicilio.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/domicilio.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/arca-padron.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/arca-padron.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/bases.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/bases.js')) ?: time() }}"></script>
@@ -17,6 +20,8 @@
 <script src="{{ asset('assets/pages/scripts/sueldos/formula_debugger.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/formula_debugger.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/liquidacion_preview.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/liquidacion_preview.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/ausencias.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/ausencias.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/prenda/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/prenda/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/prenda/consulta_variante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/prenda/consulta_variante.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/indumentaria.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/indumentaria.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/familiares.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/familiares.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/contratos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/contratos.js')) ?: time() }}"></script>
@@ -261,6 +266,8 @@
 </style>
 
 @include('sueldos.empleado.modal_vigencias_base')
+@include('includes.configuracion.modalconsultapais')
+@include('includes.configuracion.modalconsultaprovincia')
 @include('includes.configuracion.modalconsultalocalidad')
 @include('includes.caja.modalconsultabanco')
 @include('includes.sueldos.modalconsulta_maestro_sueldos')

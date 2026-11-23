@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Sueldos;
 
 use App\Http\Controllers\Controller;
 use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
-use App\Models\Stock\Talle;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Empleado_Talle_Sueldos;
 use App\Models\Sueldos\Entrega_Prenda_Sueldos;
@@ -40,12 +39,87 @@ class Empleado_IndumentariaSueldosController extends Controller
     {
         $this->autorizarLectura();
 
+        return response()->json(['variantes' => $this->variantesDePrenda((int) $prendaId)]);
+    }
+
+    /** Modal HTML: variantes de una prenda (color / talle / SKU / saldo). */
+    public function consultaVariante(Request $request, $prendaId): JsonResponse
+    {
+        $this->autorizarLectura();
+
+        $consulta = mb_strtolower(trim((string) $request->input('consulta', '')));
+        $html = '';
+        foreach ($this->variantesDePrenda((int) $prendaId) as $v) {
+            $etiqueta = trim(($v['color'] ?? '').' '.($v['talle'] ?? ''));
+            $haystack = mb_strtolower($etiqueta.' '.($v['sku'] ?? '').' '.$v['id']);
+            if ($consulta !== '' && ! str_contains($haystack, $consulta)) {
+                continue;
+            }
+            $saldoTxt = $v['saldo'] === null ? '—' : number_format((float) $v['saldo'], 3, ',', '.');
+            $html .= '<tr data-id="'.$v['id'].'"'
+                .' data-sku="'.e((string) $v['sku']).'"'
+                .' data-color="'.e((string) $v['color']).'"'
+                .' data-talle="'.e((string) $v['talle']).'"'
+                .' data-articulo="'.(int) $v['articulo_id'].'"'
+                .' data-saldo="'.($v['saldo'] === null ? '' : $v['saldo']).'"'
+                .' data-nombre="'.e(trim($etiqueta.' · '.(($v['sku'] !== '') ? $v['sku'] : 's/SKU'))).'">'
+                .'<td>'.$v['id'].'</td>'
+                .'<td>'.e((string) $v['color']).'</td>'
+                .'<td>'.e((string) $v['talle']).'</td>'
+                .'<td>'.e((string) ($v['sku'] !== '' ? $v['sku'] : 's/SKU')).'</td>'
+                .'<td class="text-right">'.$saldoTxt.'</td>'
+                .'<td class="text-nowrap"><button type="button" class="btn btn-sm btn-primary elige-variante-prenda">Elegir</button></td>'
+                .'</tr>';
+        }
+
+        return response()->json([
+            'data' => $html !== '' ? $html : '<tr><td colspan="6" class="text-muted">Sin variantes para esta prenda</td></tr>',
+        ]);
+    }
+
+    public function resolverVariante(Request $request): JsonResponse
+    {
+        $this->autorizarLectura();
+
+        $prendaId = (int) $request->input('prenda_id');
+        $valor = trim((string) $request->input('codigo', $request->input('valor', '')));
+        if ($prendaId <= 0 || $valor === '') {
+            return response()->json(['ok' => false]);
+        }
+
+        foreach ($this->variantesDePrenda($prendaId) as $v) {
+            $matchSku = $v['sku'] !== '' && strcasecmp((string) $v['sku'], $valor) === 0;
+            $matchId = (string) $v['id'] === $valor;
+            if (! $matchSku && ! $matchId) {
+                continue;
+            }
+
+            return response()->json([
+                'ok' => true,
+                'id' => $v['id'],
+                'sku' => $v['sku'],
+                'color' => $v['color'],
+                'talle' => $v['talle'],
+                'articulo_id' => $v['articulo_id'],
+                'saldo' => $v['saldo'],
+                'nombre' => trim(($v['color'] ?? '').' '.($v['talle'] ?? '').' · '.(($v['sku'] !== '') ? $v['sku'] : 's/SKU')),
+            ]);
+        }
+
+        return response()->json(['ok' => false, 'error' => 'Variante no encontrada para la prenda']);
+    }
+
+    /**
+     * @return list<array{id:int,color:string,talle:string,sku:string,articulo_id:int,saldo:float|null}>
+     */
+    private function variantesDePrenda(int $prendaId): array
+    {
         $config = $this->servicio->configuracion();
         $depositoId = (int) ($config->deposito_id ?? 0);
 
         $variantes = Prenda_Articulo_Sueldos::query()
             ->with(['color:id,nombre', 'talle:id,nombre'])
-            ->where('prenda_id', (int) $prendaId)
+            ->where('prenda_id', $prendaId)
             ->get();
 
         $data = [];
@@ -64,7 +138,7 @@ class Empleado_IndumentariaSueldosController extends Controller
             ];
         }
 
-        return response()->json(['variantes' => $data]);
+        return $data;
     }
 
     public function entregar(Request $request, $empleadoId)
@@ -260,9 +334,12 @@ class Empleado_IndumentariaSueldosController extends Controller
             ->orderBy('orden')->orderBy('descripcion')
             ->get(['id', 'codigo', 'descripcion']);
 
-        $tallesEmpleado = Empleado_Talle_Sueldos::query()
+        $tallesEmpleadoDetalle = Empleado_Talle_Sueldos::query()
+            ->with('talle:id,codigo,nombre')
             ->where('empleado_id', $empleado->id)
-            ->pluck('talle_id', 'prenda_id')->all();
+            ->get()
+            ->keyBy('prenda_id');
+        $tallesEmpleado = $tallesEmpleadoDetalle->map(fn ($r) => (int) $r->talle_id)->all();
 
         $usuarioId = (int) $this->usuarioId();
         $solicitudes = Solicitud_Prenda_Sueldos::query()
@@ -284,11 +361,14 @@ class Empleado_IndumentariaSueldosController extends Controller
             'entregas' => $entregas,
             'prendas' => $prendas,
             'prendasDotacion' => $prendasDotacion,
-            'talles' => Talle::query()->orderBy('nombre')->get(['id', 'nombre']),
             'tallesEmpleado' => $tallesEmpleado,
+            'tallesEmpleadoDetalle' => $tallesEmpleadoDetalle,
             'puedeEntregar' => EmpleadoLegajoVisualizacion::puedeMutar(can('entregar-prenda', false) && $config->estaCompleta()),
             'puedeTalles' => EmpleadoLegajoVisualizacion::puedeMutar(can('entregar-prenda', false)),
             'puedeAnular' => EmpleadoLegajoVisualizacion::puedeMutar(can('anular-entrega-prenda', false)),
+            'puedeEditarEntrega' => EmpleadoLegajoVisualizacion::puedeMutar(
+                can('editar-entrega-prenda', false) || can('editar-lineas-entrega-prenda', false)
+            ),
             'solicitudes' => $solicitudes,
             'puedeAprobarMap' => $puedeAprobarMap,
             'puedeSolicitar' => EmpleadoLegajoVisualizacion::puedeMutar(can('crear-solicitud-indumentaria', false)),
@@ -308,6 +388,7 @@ class Empleado_IndumentariaSueldosController extends Controller
             return;
         }
         if (! can('listar-entrega-prenda', false) && ! can('entregar-prenda', false) && ! can('actualizar-empleado-sueldos', false)
+            && ! can('editar-entrega-prenda', false) && ! can('editar-lineas-entrega-prenda', false)
             && ! can('crear-solicitud-indumentaria', false) && ! can('aprobar-solicitud-indumentaria', false)) {
             abort(403);
         }

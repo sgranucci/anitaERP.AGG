@@ -59,5 +59,12 @@
         <a href="{{ $urlMail('') }}" class="btn btn-sm btn-outline-secondary {{ $mailActual === '' ? 'active' : '' }}">Todos</a>
         <a href="{{ $urlMail('enviado') }}" class="btn btn-sm btn-outline-secondary {{ $mailActual === 'enviado' ? 'active' : '' }}">Enviado</a>
         <a href="{{ $urlMail('no') }}" class="btn btn-sm btn-outline-secondary {{ $mailActual === 'no' ? 'active' : '' }}">Sin enviar</a>
+        <span class="ml-auto">
+            @include('includes.exportar-tabla-queryparams', [
+                'ruta' => 'lista_pagoproveedor',
+                'queryparams' => $filtrosQuery ?? [],
+                'variant' => 'compact',
+            ])
+        </span>
     </div>
 </div>

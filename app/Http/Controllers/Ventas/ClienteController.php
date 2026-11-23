@@ -220,6 +220,28 @@ class ClienteController extends Controller
             );
         }
 
+        if ($request->boolean('quitar_orden')) {
+            $filtros['orden'] = [];
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar(
+                    $vistaActiva,
+                    [],
+                    $filtros['agrupar'] ?? []
+                );
+            }
+            $params = ClienteListadoFiltros::paraQueryString($filtros);
+            if ($vistaActiva) {
+                $params['vista_id'] = $vistaActiva->id;
+            } elseif (!empty($forzarEstandar)) {
+                $params['vista_estandar'] = 1;
+            }
+
+            return redirect()
+                ->route('cliente', $params)
+                ->with('mensaje', 'Se volvió al orden estándar.');
+        }
+
+
         $catalogo = ClienteListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
             ClienteListadoColumnas::RECURSO,

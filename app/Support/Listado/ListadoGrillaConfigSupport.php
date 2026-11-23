@@ -36,8 +36,8 @@ final class ListadoGrillaConfigSupport
      */
     public const ANCHO_COL_ACCIONES = 144;
 
-    /** Piso absoluto (px) al escalar: debajo no se lee. */
-    public const ANCHO_MIN_LEGIBLE = 44;
+    /** Piso absoluto (px) al escalar: debajo no se lee (cubre Código/Estado con DnD). */
+    public const ANCHO_MIN_LEGIBLE = 56;
 
     /**
      * @param  array<string, array{label: string, default?: bool, type?: string, ...}>  $catalogo
@@ -227,35 +227,50 @@ final class ListadoGrillaConfigSupport
     private static function anchoDefault(string $key, array $meta): int
     {
         return match ($key) {
-            'id' => 52,
+            'id' => 56,
             'fuera_pago' => 56,
-            'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc' => 60,
+            'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc' => 72,
             'numerodocumento', 'codigopostal', 'telefono' => 96,
             'cbu' => 160,
             'alias_cbu' => 110,
             'cuentaventa', 'cuentacompra', 'cuentagasto' => 220,
             'nombre' => 150,
-            'fantasia', 'domicilio' => 120,
+            'fantasia' => 160,
+            'domicilio' => 120,
             'leyenda', 'email', 'emailoc' => 140,
             'localidad', 'provincia', 'pais', 'empresa' => 90,
+            'estado' => 80,
+            'apoc' => 72,
             default => (($meta['type'] ?? '') === 'entero' ? 64 : 110),
         };
     }
 
     /**
      * Piso de legibilidad por columna al ajustar a pantalla.
+     * Incluye el título (no truncar encabezados con ellipsis).
      *
      * @param  array<string, mixed>  $meta
      */
-    public static function anchoMinimoLegible(string $key, array $meta = []): int
+    public static function anchoMinimoLegible(string $key, array $meta = [], ?string $titulo = null): int
     {
-        return match ($key) {
-            'id', 'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc', 'fuera_pago' => self::ANCHO_MIN_LEGIBLE,
+        $base = match ($key) {
+            'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago' => self::ANCHO_MIN_LEGIBLE,
+            'estado', 'apoc' => 72,
             'cbu' => 100,
             'numerodocumento', 'alias_cbu' => 72,
-            'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda' => 80,
+            'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda' => 96,
             default => (($meta['type'] ?? '') === 'entero' ? 52 : 64),
         };
+
+        $label = trim($titulo ?? (string) ($meta['label'] ?? $key));
+        if ($label === '') {
+            return $base;
+        }
+
+        // ~7.2px/carácter (thead 0.78rem) + asa DnD / × / ícono de orden.
+        $porTitulo = (int) min(220, max(self::ANCHO_MIN_LEGIBLE, (int) round(mb_strlen($label) * 7.2 + 52)));
+
+        return max($base, $porTitulo);
     }
 
     /**
@@ -290,7 +305,8 @@ final class ListadoGrillaConfigSupport
         foreach ($idxs as $i) {
             $key = (string) $layout[$i]['key'];
             $preferido = max(1, (int) $layout[$i]['ancho']);
-            $min = self::anchoMinimoLegible($key);
+            $titulo = (string) ($layout[$i]['titulo'] ?? '');
+            $min = self::anchoMinimoLegible($key, [], $titulo !== '' ? $titulo : null);
             $escalado = (int) max($min, (int) round($preferido * $factor));
             $layout[$i]['ancho'] = $escalado;
         }

@@ -5,6 +5,7 @@
 
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 @endsection
 
 @section('scripts')
@@ -15,6 +16,8 @@
     $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
     $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
     $empleadoWorkbenchJs = public_path('assets/pages/scripts/sueldos/empleado/workbench.js');
+    $columnasDndJs = public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js');
+    $tablaAnchaJs = public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js');
     $qbeAbierto = \App\Support\Listado\ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? []);
 @endphp
 <script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
@@ -23,6 +26,8 @@
 <script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/workbench.js') }}?v={{ file_exists($empleadoWorkbenchJs) ? filemtime($empleadoWorkbenchJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ file_exists($columnasDndJs) ? filemtime($columnasDndJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/tipo_sancion/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/motivo_sancion/consulta.js') }}"></script>
@@ -152,6 +157,16 @@
         $limpiarQ['vista_id'] = $vistaActiva->id;
     }
     $limpiarUrl = route('sancion_reporte_sueldos', $limpiarQ);
+    $camposOrdenablesTheadBarra = \App\Support\Sueldos\SancionReporteListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesTheadBarra
+    );
+    $qsQuitarOrden = $filtrosQuery ?? [];
+    unset($qsQuitarOrden['sort'], $qsQuitarOrden['page']);
+    $qsQuitarOrden['quitar_orden'] = 1;
+    $urlQuitarOrden = route('sancion_reporte_sueldos', $qsQuitarOrden);
+
     $hayTexto = trim((string) ($filtros['apellido'] ?? '')) !== ''
         || trim((string) ($filtros['valor'] ?? '')) !== ''
         || $qbeAbierto
@@ -306,6 +321,12 @@
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
                         @endif
+                        @if (($ordenActualThead ?? []) !== [])
+                            <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
+                                <i class="fa fa-undo"></i> Orden estándar
+                            </a>
+                        @endif
+
                     </div>
                 </div>
                 @include('sueldos.sancion_reporte.partials.workbench_qbe')
@@ -356,16 +377,31 @@
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_sancion_reporte_sueldos',
                     'queryparams' => $filtrosQuery ?? [],
+                    'variant' => 'compact',
                 ])
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+            <div class="tabla-ancha-grilla" data-tabla-ancha>
+                <div class="tabla-ancha-scroll-top" hidden>
+                    <div class="tabla-ancha-scroll-top-inner"></div>
+                </div>
+                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                                <th>{{ ($etiquetasColumnas ?? [])[$keyColumna] ?? $keyColumna }}</th>
+                                @php
+                                    $tituloCol = ($etiquetasColumnas ?? [])[$keyColumna] ?? $keyColumna;
+                                    $titleTh = $tituloCol.' — arrastrá para mover · × para ocultar (con confirmación)';
+                                @endphp
+                                <th class="lw-th-drag" title="{{ $titleTh }}" data-col-key="{{ $keyColumna }}" draggable="true">
+                                    <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
+                                    <span class="lw-th-titulo">{{ $tituloCol }}</span>
+                                    <button type="button" class="lw-th-hide" title="Ocultar columna (pide confirmación)" aria-label="Ocultar columna" draggable="false">
+                                        <i class="fa fa-times" aria-hidden="true"></i>
+                                    </button>
+                                </th>
                             @endforeach
-                            <th class="text-nowrap" style="width:110px"></th>
+                            <th class="text-nowrap" style="width:110px">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -464,12 +500,19 @@
                     </tbody>
                 </table>
             </div>
+            </div>
         </div>
     </div>
 </div>
 @if ($datas)
     {{ $datas->appends($filtrosQuery ?? [])->links() }}
 @endif
+{{-- Reordenar/ocultar columnas en thead; agregar = Diseñar vista. --}}
+@include('includes.listado.workbench_columnas_dnd', [
+    'rutaGuardarColumnasDnd' => 'guardar_columnas_listado_sancion_reporte_sueldos',
+    'paraQueryStringDnd' => [\App\Support\Sueldos\SancionReporteListadoFiltros::class, 'paraQueryString'],
+    'filtrosDnd' => $filtros ?? [],
+])
 @include('sueldos.empleado.partials.workbench_modales', [
     'rutaGuardarColumnas' => 'guardar_columnas_listado_sancion_reporte_sueldos',
     'rutaGuardarVista' => 'guardar_vista_listado_sancion_reporte_sueldos',

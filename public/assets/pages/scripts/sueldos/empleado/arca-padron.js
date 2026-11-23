@@ -116,14 +116,26 @@
         if (df.codPostal) setVal('codigo_postal', df.codPostal);
 
         // El change de provincia limpia la localidad; los campos de localidad se cargan después.
+        if (df.pais_id && byId('pais_id')) {
+            setVal('pais_id', df.pais_id);
+            if (df.pais_codigo) setVal('pais_id_codigo', df.pais_codigo);
+            if (df.pais) {
+                const $nombrePais = document.querySelector('.tm-pais-campo .nombrepais');
+                if ($nombrePais) $nombrePais.value = df.pais;
+            }
+        }
         if (df.provincia_id && byId('provincia_id')) {
             setVal('provincia_id', df.provincia_id);
+            if (df.provincia_codigo) setVal('codigoprovincia', df.provincia_codigo);
+            setVal('nombreprovincia', df.provincia || '');
+            setVal('desc_provincia', df.provincia || '');
             triggerChange('provincia_id');
-            const provSel = byId('provincia_id');
-            const provText = provSel && provSel.selectedOptions && provSel.selectedOptions[0] ? provSel.selectedOptions[0].text : '';
-            setVal('desc_provincia', df.provincia || provText);
+            // Reponer nombre tras el change (el modal no rellena option text).
+            setVal('nombreprovincia', df.provincia || '');
+            setVal('desc_provincia', df.provincia || '');
         } else if (df.provincia) {
             setVal('desc_provincia', df.provincia);
+            setVal('nombreprovincia', df.provincia);
         }
 
         if (df.localidad_id) {

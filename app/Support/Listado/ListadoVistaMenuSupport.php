@@ -28,6 +28,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Proveedores',
         ],
+        'compras.ordencompra' => [
+            'url_base' => 'compras/ordencompra',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Órdenes de compra',
+        ],
         'compras.importacion' => [
             'url_base' => 'compras/importacion',
             'icono' => 'fa-bookmark',
@@ -42,6 +47,11 @@ final class ListadoVistaMenuSupport
             'url_base' => 'sueldos/sancion-reporte',
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Consultas de sanciones',
+        ],
+        'sueldos.entrega_prenda' => [
+            'url_base' => 'sueldos/entrega-prenda',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Entregas de indumentaria',
         ],
         'logistica.solicitud' => [
             'url_base' => 'logistica/solicitud',

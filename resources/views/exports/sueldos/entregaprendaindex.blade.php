@@ -1,35 +1,37 @@
 @php
-    $fmt = fn ($v) => number_format((float) $v, 2, ',', '.');
+    $columnas = $columnasVisibles ?? [];
+    $etiquetas = $etiquetasColumnas ?? [];
+    $span = max(1, count($columnas));
+    $totalUnidades = rtrim(rtrim(number_format((float) ($totalCantidad ?? 0), 3, ',', '.'), '0'), ',');
 @endphp
 <table>
-    @if ($reservarFilaLogoExcel)
-        <tr><td></td></tr>
-    @endif
-    <tr><td colspan="8">Entregas de indumentaria — Generado {{ now()->format('d/m/Y H:i') }}</td></tr>
-    <tr>
-        <th>Legajo</th>
-        <th>Empleado</th>
-        <th>Fecha</th>
-        <th>Prenda</th>
-        <th>Color</th>
-        <th>Talle</th>
-        <th>SKU</th>
-        <th>Cantidad</th>
-    </tr>
-    @foreach ($datos as $r)
-        <tr>
-            <td>{{ $r->legajo }}</td>
-            <td>{{ $r->empleado_nombre }}</td>
-            <td>{{ \Carbon\Carbon::parse($r->fecha)->format('d/m/Y') }}</td>
-            <td>{{ $r->prenda_codigo }} - {{ $r->prenda }}</td>
-            <td>{{ $r->color }}</td>
-            <td>{{ $r->talle }}</td>
-            <td>{{ $r->sku }}</td>
-            <td>{{ $fmt($r->cantidad) }}</td>
-        </tr>
-    @endforeach
-    <tr>
-        <td colspan="7" style="text-align:right"><strong>Total unidades</strong></td>
-        <td><strong>{{ $fmt($totalCantidad) }}</strong></td>
-    </tr>
+	@if (!empty($reservarFilaLogoExcel))
+		<tbody>
+			<tr><td colspan="{{ $span }}" style="height: 52px;">&#160;</td></tr>
+		</tbody>
+	@endif
+	<tbody>
+		<tr>
+			<td colspan="{{ $span }}"><strong style="font-size: 16pt;">Entregas de indumentaria</strong></td>
+		</tr>
+		<tr>
+			<td colspan="{{ $span }}">Generado {{ date('d/m/Y H:i') }}@if (!empty($subtitulo)) — {{ $subtitulo }}@endif — Total unidades: {{ $totalUnidades }}</td>
+		</tr>
+	</tbody>
+	<thead>
+		<tr>
+			@foreach ($columnas as $key)
+				<th>{{ $etiquetas[$key] ?? $key }}</th>
+			@endforeach
+		</tr>
+	</thead>
+	<tbody>
+		@foreach ($datas as $row)
+			<tr>
+				@foreach ($columnas as $key)
+					<td>{{ \App\Support\Sueldos\EntregaPrendaListadoColumnas::valorCelda($row, $key) }}</td>
+				@endforeach
+			</tr>
+		@endforeach
+	</tbody>
 </table>

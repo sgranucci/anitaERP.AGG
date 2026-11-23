@@ -17,6 +17,7 @@ use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoBandejaFiltros;
+use App\Support\Compras\OrdencompraLegajoBandejaListadoColumnas;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -26,6 +27,10 @@ use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use App\Support\Compras\PagoproveedorEtiquetaAnitaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Listado\ListadoQbeSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -59,9 +64,40 @@ class OrdencompraLegajoBandejaService
     }
 
     /**
+     * Cortes SQL del universo filtrado (Pack C). Solo conteo.
+     *
      * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
      */
-    private function queryBase(array $filtros): Builder
+    public function cortes(array $filtros): array
+    {
+        $campos = OrdencompraLegajoBandejaFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        if ($agrupar === []) {
+            return ['activo' => false];
+        }
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            OrdencompraLegajoBandejaListadoColumnas::RECURSO,
+            OrdencompraLegajoBandejaListadoColumnas::catalogoActivo()
+        );
+
+        return ListadoCortesSupport::calcular(
+            $this->queryBase($filtros, false),
+            $agrupar,
+            $campos,
+            'ordencompra.id',
+            static fn (object $row, string $key): string => OrdencompraLegajoBandejaListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => OrdencompraLegajoBandejaListadoColumnas::sqlAgrupacion($key),
+            $etiquetas,
+            []
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  bool  $conOrden  false para cortes (el motor agrega su propio GROUP BY / ORDER)
+     */
+    private function queryBase(array $filtros, bool $conOrden = true): Builder
     {
         $query = Ordencompra::query()
             ->select([
@@ -88,9 +124,6 @@ class OrdencompraLegajoBandejaService
                 'sector_legajocompras:id,nombre',
             ]);
         $this->joinsParaFiltrosListado($query);
-        $query
-            ->orderByDesc('ordencompra.fecha')
-            ->orderByDesc('ordencompra.id');
 
         app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($query, 'ordencompra.empresa_id');
         $atajoEarly = (string) ($filtros['atajo'] ?? '');
@@ -170,8 +203,8 @@ class OrdencompraLegajoBandejaService
 
         $this->aplicarAtajo($query, (string) ($filtros['atajo'] ?? ''));
 
-        if ($vista === OrdencompraLegajoBandejaFiltros::VISTA_CXP) {
-            $query->reorder()->orderBy('ordencompra.id');
+        if ($conOrden) {
+            OrdencompraLegajoBandejaFiltros::aplicarOrden($query, $filtros);
         }
 
         return $query;
@@ -633,6 +666,19 @@ class OrdencompraLegajoBandejaService
         if (! empty($filtros['empresa_id'])) {
             $query->where('ordencompra.empresa_id', (int) $filtros['empresa_id']);
         }
+        if (! empty($filtros['presupuesto'])) {
+            OrdencompraListadoFiltros::aplicar($query, [
+                'presupuesto' => $filtros['presupuesto'],
+                'modo' => OrdencompraListadoFiltros::MODO_TODOS,
+                'valor' => '',
+                'qbe' => ListadoQbeSupport::vacio(),
+            ]);
+        }
+
+        if (OrdencompraLegajoBandejaFiltros::aplicarQbeSiCorresponde($query, $filtros)) {
+            return;
+        }
+
         if (! OrdencompraListadoFiltros::tieneCriteriosTexto($filtros)) {
             return;
         }
@@ -659,11 +705,9 @@ class OrdencompraLegajoBandejaService
         $query->where(function ($q) use ($filtros) {
             $inner = $filtros;
             $inner['empresa_id'] = null;
+            $inner['presupuesto'] = null;
+            $inner['qbe'] = ListadoQbeSupport::vacio();
             OrdencompraListadoFiltros::aplicar($q, $inner);
-            $valorInner = trim((string) ($filtros['valor'] ?? ''));
-            if ($valorInner !== '' && ($filtros['modo'] ?? OrdencompraListadoFiltros::MODO_TODOS) === OrdencompraListadoFiltros::MODO_TODOS) {
-                // Texto libre: no expandir a EXISTS de documentos (usar Nº factura/COM/OP del panel).
-            }
         });
     }
 

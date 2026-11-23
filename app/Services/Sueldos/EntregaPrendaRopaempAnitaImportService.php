@@ -11,6 +11,7 @@ use App\Models\Sueldos\Entrega_Prenda_Sueldos;
 use App\Models\Sueldos\Prenda_Articulo_Sueldos;
 use App\Models\Sueldos\Prenda_Sueldos;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Sueldos\IndumentariaSkuSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -113,9 +114,9 @@ class EntregaPrendaRopaempAnitaImportService
                     continue;
                 }
 
-                $sku = trim((string) ($ln['rop_articulo'] ?? ''));
+                $sku = IndumentariaSkuSupport::normalizarDesdeAnita((string) ($ln['rop_articulo'] ?? ''));
                 if ($sku === '' && $variante) {
-                    $sku = (string) ($variante->sku ?? '');
+                    $sku = IndumentariaSkuSupport::normalizarDesdeAnita((string) ($variante->sku ?? ''));
                 }
 
                 $vidaUtil = (int) ($prenda->vida_util_meses ?? 0);
@@ -129,7 +130,7 @@ class EntregaPrendaRopaempAnitaImportService
                     'articulo_id' => $variante && $variante->articulo_id
                         ? (int) $variante->articulo_id
                         : null,
-                    'sku' => $sku !== '' ? mb_substr($sku, 0, 20) : ($variante->sku ?? null),
+                    'sku' => $sku !== '' ? mb_substr($sku, 0, 20) : null,
                     'cantidad' => $cant,
                     'vence_el' => $venceEl,
                 ];
