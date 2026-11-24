@@ -19,7 +19,7 @@
 </p>
 
 <p style="margin:0 0 16px 0;">
-    Adjunto el PDF con el listado por artículo (reparto).
+    Adjunto el PDF (mismo formato que l-pedkilo: total por artículo x agrupación + repartos con pedidos).
 </p>
 
 <p style="margin-top:20px; font-size:12px; color:#666;">

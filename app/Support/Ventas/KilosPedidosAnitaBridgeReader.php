@@ -7,7 +7,8 @@ use RuntimeException;
 
 /**
  * Una sola lectura bridge de pendmae+pendmov (+ stkmae) para el mail de kilos El Bierzo.
- * Equivale al recorrido batch de l-pedkilo (REPARTO_AGRUP, kilos teóricos).
+ * Equivale al recorrido batch de l-pedkilo -b (REPARTO_AGRUP + TOTAL, kilos teóricos).
+ * El filtro de repartos acota; el listado se totaliza por artículo (no abre por reparto).
  */
 final class KilosPedidosAnitaBridgeReader
 {
@@ -46,10 +47,11 @@ final class KilosPedidosAnitaBridgeReader
             'campos' => '
                 penm_tipo, penm_letra, penm_sucursal, penm_nro, penm_estado, penm_fecha_ent, penm_expreso,
                 penv_reparto, penv_articulo, penv_pieza, penv_cantidad, penv_kilos_reales, penv_orden,
+                stkm_agrupacion, stkm_unidad_xenv,
                 stkm_desc
             ',
             'whereArmado' => $where,
-            'orderBy' => 'penv_reparto, penv_articulo, penv_orden',
+            'orderBy' => 'penv_articulo, penv_reparto, penv_orden',
         ];
 
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($data));

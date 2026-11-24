@@ -110,7 +110,8 @@ final class KilosPedidosMailPerfiles
             'fecha_hasta' => $fecha,
             'reparto_desde' => (string) ($perfil['reparto_desde'] ?? ''),
             'reparto_hasta' => (string) ($perfil['reparto_hasta'] ?? ''),
-            'tipolistado' => 'ABRE',
+            // l-pedkilo -b → REPARTO_AGRUP + TOTAL: total por artículo (sin abrir por reparto).
+            'tipolistado' => 'ARTICULO',
             'estado' => 'TODO',
         ];
     }

@@ -140,14 +140,19 @@ class KilosPedidosMailDistribucionService
         $filtros = $informe['filtros'] ?? [];
         $html = view('ventas.kilos_pedidos_mail.listado', [
             'filas' => $informe['filas_merge'] ?? [],
+            'repartos' => $informe['repartos'] ?? [],
             'filtros' => $filtros,
             'perfilNombre' => $perfil['nombre'] ?? 'Kilos pedidos',
         ])->render();
 
         $tmp = storage_path('pdf/listados/kilos_pedidos_mail_'.uniqid('', true).'.pdf');
         @mkdir(dirname($tmp), 0775, true);
-        DompdfListadoSupport::guardarLegalLandscape($html, $tmp, [
+        // Mismo cuerpo que l-pedkilo -b: listado angosto / portrait (no landscape ERP).
+        DompdfListadoSupport::guardar($html, $tmp, [
+            'paper' => 'letter',
+            'orientation' => 'portrait',
             'titulo_corto' => 'Kilos pedidos',
+            'page_text' => 'Pagina {PAGE_NUM}',
         ]);
         $bin = is_file($tmp) ? (string) file_get_contents($tmp) : '';
         @unlink($tmp);

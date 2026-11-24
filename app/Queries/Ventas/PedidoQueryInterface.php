@@ -87,5 +87,12 @@ interface PedidoQueryInterface
      * @param  array<string, mixed>  $filtros
      */
     public function findPorKiloCategoriaFiltros(array $filtros);
+
+    /**
+     * Totales de kilos por reparto (mail l-pedkilo: bloque «Repartos con pedidos»).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public function findKilosPorRepartoFiltros(array $filtros);
 }
 

@@ -14,7 +14,7 @@ $base = [
         'refresco_desde' => env('PEDIDO_IMPORTAR_ANITA_REFRESCO_DESDE', '05:00'),
         'refresco_hasta' => env('PEDIDO_IMPORTAR_ANITA_REFRESCO_HASTA', '18:00'),
     ],
-    // Reemplazo l-pedkilo -b: ventas:distribuir-kilos-pedidos-mail (Modulo Aviso programado)
+    // Reemplazo l-pedkilo -b (REPARTO_AGRUP+TOTAL por artículo): ventas:distribuir-kilos-pedidos-mail
     'kilos_pedidos_mail' => [
         'habilitado' => filter_var(env('PEDIDO_KILOS_PEDIDOS_MAIL_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
     ],

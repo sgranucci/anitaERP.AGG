@@ -885,4 +885,51 @@ class PedidoQuery implements PedidoQueryInterface
             )
             ->get();
     }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function findKilosPorRepartoFiltros(array $filtros)
+    {
+        $desdefecha = (string) ($filtros['fecha_desde'] ?? '');
+        $hastafecha = (string) ($filtros['fecha_hasta'] ?? '');
+        $estado = (string) ($filtros['estado'] ?? 'PENDIENTE');
+        $codigodesdetransporte = trim((string) ($filtros['reparto_desde'] ?? ''));
+        $codigohastatransporte = trim((string) ($filtros['reparto_hasta'] ?? ''));
+
+        $pedido = $this->model
+            ->select(
+                'transporte.id as transporte_id',
+                'transporte.codigo as codigotransporte',
+                'transporte.nombre as nombretransporte',
+                DB::raw('SUM(pedido_articulo.kilo) as total_kilo'),
+                DB::raw('SUM(pedido_articulo.pieza) as total_pieza'),
+                DB::raw('SUM(pedido_articulo.caja) as total_caja'),
+            )
+            ->join('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
+            ->join('articulo', 'articulo.id', '=', 'pedido_articulo.articulo_id')
+            ->join('cliente', 'cliente.id', '=', 'pedido.cliente_id')
+            ->leftJoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
+            ->whereBetween('pedido.fechaentrega', [$desdefecha, $hastafecha]);
+
+        if ($estado === 'PENDIENTE') {
+            $pedido = $pedido->where('pedido.estadopedido', 'Pendiente');
+        }
+
+        \App\Support\Ventas\KiloPedidoListadoFiltros::aplicarFiltroRepartoEnQuery(
+            $pedido,
+            $codigodesdetransporte,
+            $codigohastatransporte,
+        );
+
+        \App\Support\Ventas\KiloPedidoListadoFiltros::aplicarFiltroVendedorUsuarioEnQuery(
+            $pedido,
+            $this->vendedorRepository->leeVendedoresAsociados(),
+        );
+
+        return $pedido
+            ->groupBy('transporte.id', 'transporte.codigo', 'transporte.nombre')
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('transporte.codigo'))
+            ->get();
+    }
 }

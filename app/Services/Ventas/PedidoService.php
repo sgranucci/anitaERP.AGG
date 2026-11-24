@@ -925,7 +925,10 @@ class PedidoService
 				}
 
 				if (EntornoEmpresaSupport::esElBierzo()) {
-					$data['codigo'] = app(PedidoBierzoAnitaBridgeService::class)->sincronizar((int) $id);
+					$syncAlEditar = (bool) config('facturacion.ANITA_PEDIDO_SYNC_AL_EDITAR', false);
+					if ($funcion === 'create' || $syncAlEditar) {
+						$data['codigo'] = app(PedidoBierzoAnitaBridgeService::class)->sincronizar((int) $id);
+					}
 				}
 			}
 

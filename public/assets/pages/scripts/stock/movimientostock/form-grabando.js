@@ -42,6 +42,13 @@
         $('#formgeneral button[type="submit"]').prop('disabled', true);
     }
 
+    function liberarOverlayGrabando() {
+        if (window.PedidoProcesoOverlay && typeof PedidoProcesoOverlay.detener === 'function') {
+            PedidoProcesoOverlay.detener();
+        }
+        $('#formgeneral button[type="submit"]').prop('disabled', false);
+    }
+
     function validarPreciosObligatorios() {
         var m = meta();
         if (!m.pidePrecio) {
@@ -82,6 +89,24 @@
         return false;
     }
 
+    /**
+     * Surmar (etiquetas AP/DES/TRA) debe validar ANTES del overlay.
+     * Si el overlay arranca y el submit se cancela, la pantalla queda congelada.
+     */
+    function validarSurmarEtiquetas() {
+        if (typeof window.msSurmarValidarAntesDeSubmit !== 'function') {
+            return true;
+        }
+        try {
+            return !!window.msSurmarValidarAntesDeSubmit();
+        } catch (err) {
+            if (typeof console !== 'undefined' && console.error) {
+                console.error('Surmar validación etiquetas', err);
+            }
+            return false;
+        }
+    }
+
     $(function () {
         var $form = $('#formgeneral');
         if (!$form.length) {
@@ -89,12 +114,18 @@
         }
 
         $form.on('submit', function (e) {
-            if (!validarPreciosObligatorios()) {
+            if (!validarPreciosObligatorios() || !validarSurmarEtiquetas()) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
+                liberarOverlayGrabando();
                 return false;
             }
             mostrarOverlayGrabando();
+        });
+
+        // Si el servidor rehidrata el form (bfcache / atrás), no dejar overlay huérfano.
+        window.addEventListener('pageshow', function () {
+            liberarOverlayGrabando();
         });
     });
 }(jQuery));

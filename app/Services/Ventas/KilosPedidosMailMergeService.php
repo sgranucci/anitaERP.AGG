@@ -6,8 +6,10 @@ use App\Queries\Ventas\PedidoQueryInterface;
 use App\Support\Ventas\KilosPedidosAnitaBridgeReader;
 
 /**
- * Arma kilos pedidos (modo ABRE / ítem) mergeando ERP + Anita sin duplicar,
- * y produce el control de diferencias entre ambas fuentes.
+ * Arma kilos pedidos en modo batch de l-pedkilo -b (REPARTO_AGRUP + TOTAL):
+ * total por artículo en el rango de repartos, sin abrir por reparto.
+ * Merge ERP + Anita sin duplicar y control de diferencias.
+ * Salida aplanada con el mismo formato visual que l-pedkilo (agrupación + repartos).
  */
 class KilosPedidosMailMergeService
 {
@@ -16,7 +18,6 @@ class KilosPedidosMailMergeService
     public function __construct(
         private readonly PedidoQueryInterface $pedidoQuery,
         private readonly KilosPedidosAnitaBridgeReader $anitaReader,
-        private readonly KiloPedidoReporteService $kiloPedidoReporteService,
     ) {
     }
 
@@ -27,6 +28,7 @@ class KilosPedidosMailMergeService
      *     filas_erp: list<array<string, mixed>>,
      *     filas_anita: list<array<string, mixed>>,
      *     filas_merge: list<array<string, mixed>>,
+     *     repartos: list<array{codigo: string, nombre: string, total_kilo: float}>,
      *     diffs: list<array<string, mixed>>,
      *     totales_erp: array{pieza: float, kilo: float, caja: float, pesada: float},
      *     totales_anita: array{pieza: float, kilo: float, caja: float, pesada: float},
@@ -39,7 +41,8 @@ class KilosPedidosMailMergeService
     public function generar(array $filtros): array
     {
         $filtros = array_merge([
-            'tipolistado' => 'ABRE',
+            // Modo batch l-pedkilo -b: total por artículo (no ABRE por reparto).
+            'tipolistado' => 'ARTICULO',
             'estado' => 'TODO',
             'reparto_desde' => '',
             'reparto_hasta' => '',
@@ -58,14 +61,7 @@ class KilosPedidosMailMergeService
 
         $claves = array_values(array_unique(array_merge(array_keys($mapErp), array_keys($mapAnita))));
         usort($claves, static function (string $a, string $b): int {
-            [$ra, $sa] = explode('|', $a, 2);
-            [$rb, $sb] = explode('|', $b, 2);
-            $cmp = ((int) $ra) <=> ((int) $rb);
-            if ($cmp !== 0) {
-                return $cmp;
-            }
-
-            return strcmp($sa, $sb);
+            return strnatcasecmp($a, $b);
         });
 
         $filasErp = [];
@@ -99,9 +95,9 @@ class KilosPedidosMailMergeService
             }
         }
 
-        $filasMergeAplanadas = $this->aplanarPorReparto($filasMerge);
-        $filasErpAplanadas = $this->aplanarPorReparto($filasErp);
-        $filasAnitaAplanadas = $this->aplanarPorReparto($filasAnita);
+        $filasMergeAplanadas = $this->aplanarEstiloAnita($filasMerge);
+        $filasErpAplanadas = $this->aplanarEstiloAnita($filasErp);
+        $filasAnitaAplanadas = $this->aplanarEstiloAnita($filasAnita);
 
         $cuadran = $diffs === []
             && $this->totalesCasiIguales($totErp, $totAnita);
@@ -111,6 +107,7 @@ class KilosPedidosMailMergeService
             'filas_erp' => $filasErpAplanadas,
             'filas_anita' => $filasAnitaAplanadas,
             'filas_merge' => $filasMergeAplanadas,
+            'repartos' => $this->listarRepartos($filtros),
             'diffs' => $diffs,
             'totales_erp' => $totErp,
             'totales_anita' => $totAnita,
@@ -127,34 +124,33 @@ class KilosPedidosMailMergeService
      */
     private function mapearErp(array $filtros): array
     {
-        $datos = $this->pedidoQuery->findPorKiloPedidoFiltros($filtros);
+        // Misma totalización por artículo que el batch REPARTO_AGRUP+TOTAL (sin abrir reparto).
+        $datos = $this->pedidoQuery->findPorKiloCategoriaFiltros($filtros);
         $map = [];
         foreach ($datos as $row) {
-            $reparto = (string) (int) ($row->codigotransporte ?? 0);
             $sku = $this->normalizarSku((string) ($row->sku ?? ''));
             if ($sku === '') {
                 continue;
             }
-            $clave = $this->clave($reparto, $sku);
+            $clave = $this->clave($sku);
             if (isset($map[$clave])) {
                 $map[$clave]['total_pieza'] += (float) ($row->total_pieza ?? 0);
                 $map[$clave]['total_kilo'] += (float) ($row->total_kilo ?? 0);
                 $map[$clave]['total_caja'] += (float) ($row->total_caja ?? 0);
-                $map[$clave]['total_pesada'] += (float) ($row->total_pesada ?? 0);
                 continue;
             }
             $map[$clave] = [
                 'fuente' => 'ERP',
-                'codigotransporte' => $reparto,
-                'nombretransporte' => (string) ($row->nombretransporte ?? ''),
-                'transporte_id' => (int) ($row->transporte_id ?? 0),
                 'sku' => $sku,
                 'descripcion' => (string) ($row->descripcion ?? ''),
                 'articulo_id' => (int) ($row->articulo_id ?? 0),
+                'categoria_id' => (int) ($row->categoria_id ?? 0),
+                'codigocategoria' => (string) ($row->codigocategoria ?? ''),
+                'nombrecategoria' => (string) ($row->nombrecategoria ?? ''),
                 'total_pieza' => (float) ($row->total_pieza ?? 0),
                 'total_kilo' => (float) ($row->total_kilo ?? 0),
                 'total_caja' => (float) ($row->total_caja ?? 0),
-                'total_pesada' => (float) ($row->total_pesada ?? 0),
+                'total_pesada' => 0.0,
             ];
         }
 
@@ -170,29 +166,26 @@ class KilosPedidosMailMergeService
         $lineas = $this->anitaReader->listarLineas($filtros);
         $map = [];
         foreach ($lineas as $row) {
-            $repartoRaw = (int) ($row->penv_reparto ?? 0);
-            if ($repartoRaw <= 0) {
-                $repartoRaw = (int) ($row->penm_expreso ?? 0);
-            }
-            $reparto = (string) $repartoRaw;
             $sku = $this->normalizarSku((string) ($row->penv_articulo ?? ''));
             if ($sku === '') {
                 continue;
             }
-            $clave = $this->clave($reparto, $sku);
+            $clave = $this->clave($sku);
             $pieza = $this->floatAnita($row->penv_pieza ?? 0);
             $kilo = $this->floatAnita($row->penv_cantidad ?? 0); // teórico (l-pedkilo TEORICO)
             $pesada = $this->floatAnita($row->penv_kilos_reales ?? 0);
-            $caja = 0.0;
+            $ux = $this->floatAnita($row->stkm_unidad_xenv ?? 0);
+            $caja = $ux > 0.00001 ? ($pieza / $ux) : 0.0;
+            $agrup = trim((string) ($row->stkm_agrupacion ?? ''));
             if (! isset($map[$clave])) {
                 $map[$clave] = [
                     'fuente' => 'ANITA',
-                    'codigotransporte' => $reparto,
-                    'nombretransporte' => '',
-                    'transporte_id' => 0,
                     'sku' => $sku,
                     'descripcion' => trim((string) ($row->stkm_desc ?? '')),
                     'articulo_id' => 0,
+                    'categoria_id' => 0,
+                    'codigocategoria' => $this->codigoAgrupacionAnita($agrup),
+                    'nombrecategoria' => '',
                     'total_pieza' => 0.0,
                     'total_kilo' => 0.0,
                     'total_caja' => 0.0,
@@ -201,14 +194,40 @@ class KilosPedidosMailMergeService
             }
             $map[$clave]['total_pieza'] += $pieza;
             $map[$clave]['total_kilo'] += $kilo;
-            $map[$clave]['total_pesada'] += $pesada;
             $map[$clave]['total_caja'] += $caja;
+            $map[$clave]['total_pesada'] += $pesada;
             if ($map[$clave]['descripcion'] === '' && trim((string) ($row->stkm_desc ?? '')) !== '') {
                 $map[$clave]['descripcion'] = trim((string) $row->stkm_desc);
+            }
+            if (($map[$clave]['codigocategoria'] ?? '') === '' && $agrup !== '') {
+                $map[$clave]['codigocategoria'] = $this->codigoAgrupacionAnita($agrup);
             }
         }
 
         return $map;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{codigo: string, nombre: string, total_kilo: float}>
+     */
+    private function listarRepartos(array $filtros): array
+    {
+        $rows = $this->pedidoQuery->findKilosPorRepartoFiltros($filtros);
+        $out = [];
+        foreach ($rows as $row) {
+            $kilo = (float) ($row->total_kilo ?? 0);
+            if (abs($kilo) < 0.00001) {
+                continue;
+            }
+            $out[] = [
+                'codigo' => (string) ($row->codigotransporte ?? ''),
+                'nombre' => (string) ($row->nombretransporte ?? ''),
+                'total_kilo' => $kilo,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -223,6 +242,10 @@ class KilosPedidosMailMergeService
             $fila['fuente'] = 'AMBOS';
             if (($fila['descripcion'] ?? '') === '' && ($anita['descripcion'] ?? '') !== '') {
                 $fila['descripcion'] = $anita['descripcion'];
+            }
+            if (($fila['codigocategoria'] ?? '') === '' && ($anita['codigocategoria'] ?? '') !== '') {
+                $fila['codigocategoria'] = $anita['codigocategoria'];
+                $fila['nombrecategoria'] = $anita['nombrecategoria'] ?? '';
             }
 
             return $fila;
@@ -254,7 +277,6 @@ class KilosPedidosMailMergeService
             return [
                 'clave' => $clave,
                 'motivo' => 'solo_anita',
-                'codigotransporte' => $anita['codigotransporte'] ?? '',
                 'sku' => $anita['sku'] ?? '',
                 'descripcion' => $anita['descripcion'] ?? '',
                 'erp_kilo' => 0.0,
@@ -268,7 +290,6 @@ class KilosPedidosMailMergeService
             return [
                 'clave' => $clave,
                 'motivo' => 'solo_erp',
-                'codigotransporte' => $erp['codigotransporte'] ?? '',
                 'sku' => $erp['sku'] ?? '',
                 'descripcion' => $erp['descripcion'] ?? '',
                 'erp_kilo' => (float) ($erp['total_kilo'] ?? 0),
@@ -288,7 +309,6 @@ class KilosPedidosMailMergeService
         return [
             'clave' => $clave,
             'motivo' => 'importe_distinto',
-            'codigotransporte' => $erp['codigotransporte'] ?? '',
             'sku' => $erp['sku'] ?? '',
             'descripcion' => $erp['descripcion'] ?? '',
             'erp_kilo' => (float) $erp['total_kilo'],
@@ -300,63 +320,121 @@ class KilosPedidosMailMergeService
     }
 
     /**
+     * Formato l-pedkilo REPARTO_AGRUP+TOTAL: encabezado de agrupación, detalle Art/Desc/Piezas/Kilos/Cajas,
+     * sin subtotal por grupo; al final Total general.
+     *
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
-    private function aplanarPorReparto(array $filas): array
+    private function aplanarEstiloAnita(array $filas): array
     {
         if ($filas === []) {
             return [];
         }
 
         usort($filas, static function (array $a, array $b): int {
-            $cmp = ((int) ($a['codigotransporte'] ?? 0)) <=> ((int) ($b['codigotransporte'] ?? 0));
+            $cmp = strnatcasecmp(
+                (string) ($a['codigocategoria'] ?? ''),
+                (string) ($b['codigocategoria'] ?? '')
+            );
             if ($cmp !== 0) {
                 return $cmp;
             }
 
-            return strcmp((string) ($a['sku'] ?? ''), (string) ($b['sku'] ?? ''));
+            return strnatcasecmp((string) ($a['sku'] ?? ''), (string) ($b['sku'] ?? ''));
         });
 
-        $coleccion = collect($filas)->map(static function (array $f) {
-            return (object) [
-                'codigotransporte' => $f['codigotransporte'] ?? '',
-                'nombretransporte' => $f['nombretransporte'] ?? '',
-                'transporte_id' => $f['transporte_id'] ?? 0,
-                'sku' => $f['sku'] ?? '',
-                'descripcion' => $f['descripcion'] ?? '',
-                'articulo_id' => $f['articulo_id'] ?? 0,
-                'codigocategoria' => '',
-                'fechaentrega' => '',
-                'total_pieza' => $f['total_pieza'] ?? 0,
-                'total_kilo' => $f['total_kilo'] ?? 0,
-                'total_caja' => $f['total_caja'] ?? 0,
-                'total_pesada' => $f['total_pesada'] ?? 0,
-                'fuente' => $f['fuente'] ?? '',
-            ];
-        });
+        $aplanadas = [];
+        $agrupActual = null;
+        $totales = $this->totalesVacios();
 
-        $aplanadas = $this->kiloPedidoReporteService->aplanarFilas($coleccion, ['tipolistado' => 'ABRE']);
-        // Propagar fuente en detalle.
-        $porClave = [];
         foreach ($filas as $f) {
-            $porClave[$this->clave((string) ($f['codigotransporte'] ?? ''), (string) ($f['sku'] ?? ''))] = $f['fuente'] ?? '';
-        }
-        foreach ($aplanadas as &$fila) {
-            if (($fila['tipo_fila'] ?? '') !== 'detalle') {
-                continue;
+            $codigo = (string) ($f['codigocategoria'] ?? '');
+            $nombre = (string) ($f['nombrecategoria'] ?? '');
+            if ($codigo !== $agrupActual) {
+                $agrupActual = $codigo;
+                $aplanadas[] = [
+                    'tipo_fila' => 'encabezado_agrupacion',
+                    'codigocategoria' => $this->codigoAgrupacionDisplay($codigo),
+                    'nombrecategoria' => $nombre,
+                ];
             }
-            $k = $this->clave((string) ($fila['codigotransporte'] ?? ''), (string) ($fila['sku'] ?? ''));
-            $fila['fuente'] = $porClave[$k] ?? '';
+
+            $pieza = (float) ($f['total_pieza'] ?? 0);
+            $kilo = (float) ($f['total_kilo'] ?? 0);
+            $caja = (float) ($f['total_caja'] ?? 0);
+            $totales['pieza'] += $pieza;
+            $totales['kilo'] += $kilo;
+            $totales['caja'] += $caja;
+
+            $aplanadas[] = [
+                'tipo_fila' => 'detalle',
+                'sku' => $this->skuDisplay((string) ($f['sku'] ?? '')),
+                'descripcion' => (string) ($f['descripcion'] ?? ''),
+                'codigocategoria' => $this->codigoAgrupacionDisplay($codigo),
+                'nombrecategoria' => $nombre,
+                'articulo_id' => (int) ($f['articulo_id'] ?? 0),
+                'total_pieza' => $pieza,
+                'total_kilo' => $kilo,
+                'total_caja' => $caja,
+                'fuente' => (string) ($f['fuente'] ?? ''),
+            ];
         }
-        unset($fila);
+
+        $aplanadas[] = [
+            'tipo_fila' => 'total_final',
+            'total_pieza' => $totales['pieza'],
+            'total_kilo' => $totales['kilo'],
+            'total_caja' => $totales['caja'],
+        ];
 
         return $aplanadas;
     }
 
-    private function clave(string $reparto, string $sku): string
+    /** Anita muestra stkm_agrupacion en 4 chars (00G0); ERP suele traer G0. */
+    private function codigoAgrupacionDisplay(string $codigo): string
     {
-        return ((string) (int) $reparto).'|'.$this->normalizarSku($sku);
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return '';
+        }
+        if (strlen($codigo) >= 4) {
+            return substr($codigo, 0, 4);
+        }
+
+        return str_pad($codigo, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** Anita bridge trae stkm_agrupacion (00G0); ERP compara por G0. */
+    private function codigoAgrupacionAnita(string $agrup): string
+    {
+        $agrup = trim($agrup);
+        if ($agrup === '') {
+            return '';
+        }
+        // Misma normalización que Articulo::… ltrim zeros sobre stkm_agrupacion.
+        $sinCeros = ltrim($agrup, '0');
+
+        return $sinCeros !== '' ? $sinCeros : $agrup;
+    }
+
+    /** l-pedkilo imprime stkm_articulo+9 (últimos 4). */
+    private function skuDisplay(string $sku): string
+    {
+        $sku = trim($sku);
+        if ($sku === '') {
+            return '';
+        }
+        if (strlen($sku) > 4) {
+            return substr($sku, -4);
+        }
+
+        return str_pad($sku, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function clave(string $sku): string
+    {
+        return $this->normalizarSku($sku);
     }
 
     /** Misma normalización que PedidoImportarDesdeAnitaService::resolverArticulo. */

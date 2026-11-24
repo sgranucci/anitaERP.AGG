@@ -118,6 +118,9 @@ switch(strtoupper(config('app.empresa')))
             "ANITA_PEDIDO_REGRABAR_HABILITADO" => filter_var(env('BIERZO_PEDIDO_ANITA_REGRABAR', true), FILTER_VALIDATE_BOOLEAN),
             "ANITA_PEDIDO_REGRABAR_MAX_INTENTOS" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_MAX_INTENTOS', 20)),
             "ANITA_PEDIDO_REGRABAR_LIMITE" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_LIMITE', 20)),
+            // false (default): al editar pedido en ERP no reescribe pendmae/pendmov (evita fusionar bonif Anita).
+            // true: vuelve a sincronizar Anita en cada Guardar. El alta ERP→Anita sigue siempre.
+            "ANITA_PEDIDO_SYNC_AL_EDITAR" => filter_var(env('BIERZO_PEDIDO_ANITA_SYNC_AL_EDITAR', false), FILTER_VALIDATE_BOOLEAN),
             // Último número CAEA forzado por PV (próximo = piso+1). PV 8 no tiene compemis Anita.
             "CAEA_PISO_NUMERO_POR_CODIGO" => [
                 '00008' => (int) env('FACTURACION_CAEA_PISO_PV_00008', 43),

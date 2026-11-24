@@ -66,7 +66,7 @@ class BatchMailsAnitaErpControlService
                 'fecha_hasta' => $fecha,
                 'reparto_desde' => '',
                 'reparto_hasta' => '',
-                'tipolistado' => 'ABRE',
+                'tipolistado' => 'ARTICULO',
                 'estado' => 'TODO',
             ]);
             $diffs = count($kilos['diffs'] ?? []);

@@ -609,6 +609,34 @@
         });
     }
 
+    function liberarOverlaySiHubiera() {
+        if (window.PedidoProcesoOverlay && typeof PedidoProcesoOverlay.detener === 'function') {
+            PedidoProcesoOverlay.detener();
+        }
+        $('#formgeneral button[type="submit"]').prop('disabled', false);
+        if (typeof window.liberarPantallaModalesBloqueados === 'function') {
+            window.liberarPantallaModalesBloqueados();
+        }
+    }
+
+    /**
+     * Aviso sin alert() encima de transición Bootstrap (deja backdrop / modal-open).
+     * Si hay modal a abrir, el mensaje va al modal; si no, alert diferido.
+     */
+    function avisarValidacion(msg, abrirModalFn) {
+        setMsg(msg, false);
+        liberarOverlaySiHubiera();
+        if (typeof abrirModalFn === 'function') {
+            window.setTimeout(function () {
+                abrirModalFn();
+            }, 0);
+            return;
+        }
+        window.setTimeout(function () {
+            window.alert(msg);
+        }, 0);
+    }
+
     function validarAntesDeSubmit() {
         if (!debeMostrar()) {
             return true;
@@ -631,8 +659,6 @@
         });
         if (faltan.length) {
             var msg = 'Surmar ' + abreviaturaTipo() + ': cada ítem debe tener al menos una etiqueta. Faltan renglón(es): ' + faltan.join(', ');
-            setMsg(msg, false);
-            alert(msg);
             var $falta = filasItems().filter(function () {
                 var n = String($(this).find('.item').val() || '');
                 return faltan.indexOf(n) !== -1;
@@ -640,7 +666,9 @@
             if ($falta.length) {
                 seleccionar($falta);
             }
-            $('#ms_etiqueta_scan').focus();
+            avisarValidacion(msg, function () {
+                $('#ms_etiqueta_scan').trigger('focus');
+            });
             return false;
         }
         if (esAp()) {
@@ -663,16 +691,18 @@
             });
             if (faltanEmi.length) {
                 var msgE = 'Surmar AP: cada ítem debe emitir etiquetas (en que separa / cantidad). Faltan renglón(es): ' + faltanEmi.join(', ');
-                setMsg(msgE, false);
-                alert(msgE);
                 var $fe = filasItems().filter(function () {
                     var n = String($(this).find('.item').val() || '');
                     return faltanEmi.indexOf(n) !== -1;
                 }).first();
                 if ($fe.length) {
                     seleccionar($fe);
-                    abrirModalEmisionAp();
                 }
+                // Abrir modal de emisión (sin alert encima): evita pantalla congelada.
+                avisarValidacion(msgE, function () {
+                    abrirModalEmisionAp();
+                    setApModalMsg(msgE, false);
+                });
                 return false;
             }
         }
@@ -755,13 +785,31 @@
         }
         if (window.BrowserPrint) {
             try {
+                var hecho = false;
+                var fallback = function () {
+                    if (hecho) {
+                        return;
+                    }
+                    hecho = true;
+                    descargarZpl(zpl);
+                };
+                // Si Zebra Browser Print no responde, no dejar la UI colgada.
+                var to = window.setTimeout(fallback, 4000);
                 BrowserPrint.getDefaultDevice('printer', function (device) {
+                    window.clearTimeout(to);
+                    if (hecho) {
+                        return;
+                    }
+                    hecho = true;
                     if (device) {
                         device.send(zpl);
                     } else {
                         descargarZpl(zpl);
                     }
-                }, function () { descargarZpl(zpl); });
+                }, function () {
+                    window.clearTimeout(to);
+                    fallback();
+                });
                 return;
             } catch (e) {}
         }
@@ -947,10 +995,13 @@
             setMsg('Etiqueta quitada', true);
         });
 
-        $('form').on('submit', function (e) {
+        // Validación canónica: form-grabando.js llama msSurmarValidarAntesDeSubmit
+        // ANTES del overlay. Este handler es respaldo si form-grabando no está.
+        $('#formgeneral').on('submit.msSurmarEtiquetas', function (e) {
             if (!validarAntesDeSubmit()) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
+                liberarOverlaySiHubiera();
                 return false;
             }
         });
@@ -999,6 +1050,7 @@
                 return;
             }
             e.preventDefault();
+            e.stopPropagation();
             var $fields = $('.ms-ap-etiq-nav:visible:not([readonly])');
             var i = $fields.index(this);
             if (i >= 0 && i < $fields.length - 1) {
@@ -1007,7 +1059,15 @@
                 confirmarUnidadApModal();
             }
         });
+
+        // Escape libera overlay/modales huérfanos si la pantalla quedó bloqueada.
+        $(document).on('keydown.msSurmarLiberar', function (e) {
+            if (e.key === 'Escape' && !$('#modalEmisionEtiquetaApSurmar').hasClass('show')) {
+                liberarOverlaySiHubiera();
+            }
+        });
     });
 
     window.msSurmarEtiquetasToggle = togglePanel;
+    window.msSurmarValidarAntesDeSubmit = validarAntesDeSubmit;
 })(jQuery);

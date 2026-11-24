@@ -15,6 +15,8 @@ use RuntimeException;
 /**
  * Réplica ERP → Anita de pedidos El Bierzo (pendmae + pendmov).
  * En otro entorno no hace nada.
+ * Al editar: solo si config facturacion.ANITA_PEDIDO_SYNC_AL_EDITAR (env BIERZO_PEDIDO_ANITA_SYNC_AL_EDITAR).
+ * El alta desde ERP sigue llamando sincronizar() siempre.
  */
 class PedidoBierzoAnitaBridgeService
 {

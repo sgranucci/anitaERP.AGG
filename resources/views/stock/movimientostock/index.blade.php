@@ -18,19 +18,6 @@
 (function ($) {
     var ids = @json(array_values(array_map('intval', $surmarImprimir)));
     var url = @json(route('movimientostock_zpl_etiquetas_surmar'));
-    function enviarZpl(zpl) {
-        if (!zpl) return;
-        if (window.BrowserPrint) {
-            try {
-                BrowserPrint.getDefaultDevice('printer', function (device) {
-                    if (device) device.send(zpl);
-                    else descargar(zpl);
-                }, function () { descargar(zpl); });
-                return;
-            } catch (e) {}
-        }
-        descargar(zpl);
-    }
     function descargar(zpl) {
         var blob = new Blob([zpl], { type: 'text/plain' });
         var a = document.createElement('a');
@@ -38,11 +25,38 @@
         a.download = 'etiqueta_surmar.zpl';
         a.click();
     }
+    function enviarZpl(zpl) {
+        if (!zpl) return;
+        if (window.BrowserPrint) {
+            try {
+                var hecho = false;
+                var fallback = function () {
+                    if (hecho) return;
+                    hecho = true;
+                    descargar(zpl);
+                };
+                // Timeout: Browser Print colgado dejaba la solapa sin respuesta.
+                var to = window.setTimeout(fallback, 4000);
+                BrowserPrint.getDefaultDevice('printer', function (device) {
+                    window.clearTimeout(to);
+                    if (hecho) return;
+                    hecho = true;
+                    if (device) device.send(zpl);
+                    else descargar(zpl);
+                }, function () {
+                    window.clearTimeout(to);
+                    fallback();
+                });
+                return;
+            } catch (e) {}
+        }
+        descargar(zpl);
+    }
     $(function () {
         $.ajax({
             url: url,
             method: 'POST',
-            data: { _token: $('meta[name="csrf-token"]').attr('content'), ids: ids },
+            data: { _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(), ids: ids },
             success: function (resp) {
                 if (!resp || !resp.ok || !resp.etiquetas) return;
                 resp.etiquetas.forEach(function (e) { enviarZpl(e.zpl); });
