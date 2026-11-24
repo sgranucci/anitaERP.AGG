@@ -994,6 +994,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
      */
     Route::get('ventas/mercadolibre-pedidos', 'Ventas\Mercadolibre\MercadolibrePedidoController@index')->name('mercadolibre_pedidos');
     Route::post('ventas/mercadolibre-pedidos/sincronizar', 'Ventas\Mercadolibre\MercadolibrePedidoController@sincronizar')->name('mercadolibre_pedidos_sincronizar');
+    Route::post('ventas/mercadolibre-pedidos/facturar-masivo', 'Ventas\Mercadolibre\MercadolibrePedidoController@facturarMasivo')->name('mercadolibre_pedidos_facturar_masivo');
     Route::get('ventas/mercadolibre-pedidos/{id}', 'Ventas\Mercadolibre\MercadolibrePedidoController@show')->name('mercadolibre_pedido_show')->where('id', '[0-9]+');
     Route::post('ventas/mercadolibre-pedidos/{id}/refrescar', 'Ventas\Mercadolibre\MercadolibrePedidoController@refrescar')->name('mercadolibre_pedido_refrescar')->where('id', '[0-9]+');
     Route::post('ventas/mercadolibre-pedidos/{id}/facturar', 'Ventas\Mercadolibre\MercadolibrePedidoController@facturar')->name('mercadolibre_pedido_facturar')->where('id', '[0-9]+');

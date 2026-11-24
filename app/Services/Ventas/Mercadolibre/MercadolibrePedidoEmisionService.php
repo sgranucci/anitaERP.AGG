@@ -12,6 +12,7 @@ use App\Services\Ventas\FacturacionService;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\Mercadolibre\MercadolibreDefaultsSupport;
 use App\Support\Ventas\Mercadolibre\MercadolibrePedidoEstadoSupport;
+use App\Support\Ventas\Mercadolibre\MercadolibrePedidoListoSupport;
 use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -205,17 +206,121 @@ final class MercadolibrePedidoEmisionService
      */
     public function grupoFacturable(MercadolibrePedido $pedido): Collection
     {
-        $pedido->loadMissing('lineas');
-        if (! $pedido->pack_id) {
-            return collect([$pedido]);
+        return MercadolibrePedidoListoSupport::grupoFacturable($pedido);
+    }
+
+    /**
+     * Factura en lote pedidos listos. Un pack = una factura (dedupe por pack_id).
+     *
+     * @param  list<int|string>  $pedidoIds
+     * @return array{
+     *   ok:bool,
+     *   facturados:int,
+     *   omitidos:int,
+     *   errores:int,
+     *   detalle:list<array{id:int,order_id:?int,ok:bool,motivo?:string,venta_id?:int}>
+     * }
+     */
+    public function emitirMasivo(array $pedidoIds, int $max = 30): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $pedidoIds))));
+        if ($ids === []) {
+            return [
+                'ok' => false,
+                'facturados' => 0,
+                'omitidos' => 0,
+                'errores' => 0,
+                'detalle' => [['id' => 0, 'order_id' => null, 'ok' => false, 'motivo' => 'No hay pedidos seleccionados']],
+            ];
         }
 
-        return MercadolibrePedido::query()
-            ->where('seller_id', $pedido->seller_id)
-            ->where('pack_id', $pedido->pack_id)
+        $pedidos = MercadolibrePedido::query()
             ->with('lineas')
+            ->whereIn('id', $ids)
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->keyBy('id');
+
+        $vistos = [];
+        $aEmitir = [];
+        $facturados = 0;
+        $omitidos = 0;
+        $errores = 0;
+        $detalle = [];
+
+        foreach ($ids as $id) {
+            /** @var MercadolibrePedido|null $pedido */
+            $pedido = $pedidos->get($id);
+            if (! $pedido) {
+                $omitidos++;
+                $detalle[] = ['id' => $id, 'order_id' => null, 'ok' => false, 'motivo' => 'Pedido inexistente'];
+                continue;
+            }
+            $clave = MercadolibrePedidoListoSupport::claveGrupo($pedido);
+            if (isset($vistos[$clave])) {
+                // Hermano del mismo pack: una sola factura; no suma omitido.
+                continue;
+            }
+            $vistos[$clave] = true;
+            $aEmitir[] = $pedido;
+        }
+
+        if (count($aEmitir) > $max) {
+            $sobrantes = array_slice($aEmitir, $max);
+            $aEmitir = array_slice($aEmitir, 0, $max);
+            foreach ($sobrantes as $pedido) {
+                $omitidos++;
+                $detalle[] = [
+                    'id' => (int) $pedido->id,
+                    'order_id' => $pedido->order_id ? (int) $pedido->order_id : null,
+                    'ok' => false,
+                    'motivo' => 'Supera el máximo de '.$max.' facturas por corrida',
+                ];
+            }
+        }
+
+        foreach ($aEmitir as $pedido) {
+            $eval = MercadolibrePedidoListoSupport::evaluar($pedido);
+            if (! $eval['listo']) {
+                $omitidos++;
+                $detalle[] = [
+                    'id' => (int) $pedido->id,
+                    'order_id' => $pedido->order_id ? (int) $pedido->order_id : null,
+                    'ok' => false,
+                    'motivo' => implode('; ', $eval['motivos']),
+                ];
+                continue;
+            }
+
+            $resultado = $this->emitir($pedido->fresh(['lineas']), $eval['input']);
+            if ($resultado['ok'] ?? false) {
+                $facturados++;
+                $detalle[] = [
+                    'id' => (int) $pedido->id,
+                    'order_id' => $pedido->order_id ? (int) $pedido->order_id : null,
+                    'ok' => true,
+                    'venta_id' => (int) ($resultado['venta_id'] ?? 0),
+                ];
+            } else {
+                $errores++;
+                $detalle[] = [
+                    'id' => (int) $pedido->id,
+                    'order_id' => $pedido->order_id ? (int) $pedido->order_id : null,
+                    'ok' => false,
+                    'motivo' => (string) ($resultado['error'] ?? 'Error al emitir'),
+                ];
+            }
+        }
+
+        Log::info('mercadolibre.emision.masivo', compact('facturados', 'omitidos', 'errores'));
+
+        return [
+            'ok' => $errores === 0 && $facturados > 0,
+            'facturados' => $facturados,
+            'omitidos' => $omitidos,
+            'errores' => $errores,
+            'detalle' => $detalle,
+        ];
     }
 
     /**

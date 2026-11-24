@@ -6,6 +6,7 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/mercadolibre_pedido/index.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/mercadolibre_pedido/index.js')) }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -16,6 +17,13 @@
     'titulo' => 'Procesando…',
     'subtitulo' => 'Puede demorar. No cierre la página.',
 ])
+
+@php
+    $listosPorId = $listosPorId ?? [];
+    $puedeFacturar = $puedeFacturar ?? false;
+    $cantListosPagina = collect($listosPorId)->filter()->count();
+@endphp
+
 <div class="card card-info">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
         <h3 class="card-title mb-0">Pedidos Mercado Libre</h3>
@@ -94,10 +102,41 @@
             </form>
         @endif
 
+        <p class="text-muted small mb-3">
+            <strong>Consultar</strong> filtra pedidos ya guardados en anitaERP.
+            <strong>Sincronizar</strong> baja/actualiza órdenes pagadas desde Mercado Libre.
+            <strong>Facturar seleccionados</strong> solo toma pedidos listos (SKU, PV/depósito/medio y datos fiscales OK).
+            Órdenes del mismo pack se agrupan en una sola factura.
+        </p>
+
+        @if ($puedeFacturar)
+            <form method="POST" action="{{ route('mercadolibre_pedidos_facturar_masivo') }}" id="form-ml-masivo">
+                @csrf
+                <input type="hidden" name="desde" value="{{ $filtros['desde'] ?? '' }}">
+                <input type="hidden" name="hasta" value="{{ $filtros['hasta'] ?? '' }}">
+                <input type="hidden" name="estado_erp" value="{{ $filtros['estado_erp'] ?? '' }}">
+                <input type="hidden" name="texto" value="{{ $filtros['texto'] ?? '' }}">
+                <div class="mb-2">
+                    <button type="submit" class="btn btn-warning btn-sm" id="btn-ml-masivo"
+                            @if ($cantListosPagina === 0) disabled @endif>
+                        <i class="fa fa-file-invoice"></i> Facturar seleccionados
+                        <span class="badge badge-light" id="ml-masivo-count">0</span>
+                    </button>
+                    <span class="text-muted small ml-2">
+                        Listos en esta página: {{ $cantListosPagina }} (máx. 30 facturas por corrida)
+                    </span>
+                </div>
+        @endif
+
         <div class="table-responsive">
             <table class="table table-sm table-bordered table-hover" id="tabla-paginada">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
+                        @if ($puedeFacturar)
+                            <th style="width:36px;">
+                                <input type="checkbox" id="ml-check-all-listos" title="Marcar todos los listos">
+                            </th>
+                        @endif
                         <th>Order</th>
                         <th>Pack</th>
                         <th>Pagado</th>
@@ -114,7 +153,18 @@
                 </thead>
                 <tbody>
                     @forelse ($coleccion as $p)
-                        <tr>
+                        @php
+                            $esListo = ! empty($listosPorId[(int) $p->id]);
+                        @endphp
+                        <tr class="@if ($esListo) table-success @endif">
+                            @if ($puedeFacturar)
+                                <td class="text-center">
+                                    @if ($esListo)
+                                        <input type="checkbox" class="ml-check-pedido" name="pedido_ids[]"
+                                               value="{{ $p->id }}">
+                                    @endif
+                                </td>
+                            @endif
                             <td>{{ $p->order_id }}</td>
                             <td>{{ $p->pack_id ?: '—' }}</td>
                             <td>{{ optional($p->paid_at)->format('d/m/Y H:i') }}</td>
@@ -140,29 +190,18 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="12" class="text-center text-muted">Sin pedidos en el filtro.</td>
+                            <td colspan="{{ $puedeFacturar ? 13 : 12 }}" class="text-center text-muted">Sin pedidos en el filtro.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+
+        @if ($puedeFacturar)
+            </form>
+        @endif
+
         {{ $coleccion->appends($filtrosQuery)->links() }}
     </div>
 </div>
-<script>
-(function () {
-    var form = document.getElementById('form-ml-sync');
-    var btn = document.getElementById('btn-ml-sync');
-    var overlay = document.getElementById('ml-proceso-overlay');
-    if (!form || !btn || !overlay) return;
-    btn.addEventListener('click', function () {
-        overlay.classList.remove('d-none');
-        overlay.style.display = 'flex';
-    });
-    window.addEventListener('pageshow', function () {
-        overlay.classList.add('d-none');
-        overlay.style.display = '';
-    });
-})();
-</script>
 @endsection
