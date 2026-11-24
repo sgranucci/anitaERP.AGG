@@ -249,6 +249,11 @@
                             <div>{{ $filas->links() }}</div>
                         </div>
                     @endif
+
+                    @include('compras.iva_compras.partials.totales_tipo', [
+                        'resultado' => $resultado,
+                        'puede_ver_tipotransaccion' => $puede_ver_tipotransaccion ?? false,
+                    ])
                 </div>
             @endif
         </div>

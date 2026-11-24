@@ -59,6 +59,10 @@ final class IvaComprasReporteService
             $desglose = IvaComprasDesgloseSupport::desgloseDesdeComprobante($cp, $coef);
             $columnas = $desglose['columnas'];
             $tipo = strtoupper(trim((string) ($cp->tipotransaccion_compras->abreviatura ?? '')));
+            $tipoNombre = trim((string) ($cp->tipotransaccion_compras->nombre ?? ''));
+            if ($tipoNombre === '') {
+                $tipoNombre = $tipo;
+            }
             $proveedor = $cp->proveedores;
             $fechaIva = $cp->fechaiva?->format('Y-m-d') ?? '';
             $fechaMov = $cp->fechacomprobante?->format('Y-m-d') ?? $fechaIva;
@@ -76,6 +80,7 @@ final class IvaComprasReporteService
                 'fecha_orden' => $fechaIva !== '' ? $fechaIva : $fechaMov,
                 'importe_orden' => round((float) ($columnas[IvaComprasColumnasSupport::KEY_TOTAL] ?? 0), 2),
                 'tipo' => $tipo,
+                'tipo_nombre' => $tipoNombre,
                 'tipo_orden' => $tipo,
                 'tipotransaccion_compra_id' => (int) ($cp->tipotransaccion_compra_id ?? 0),
                 'comprobante' => $this->formatearComprobante($cp),
@@ -103,6 +108,7 @@ final class IvaComprasReporteService
         }
 
         $filas = $this->ordenarFilas($filas, $filtros);
+        $totalesPorTipo = $this->armarTotalesPorTipo($filas);
 
         foreach ($totalesGeneral as $k => $v) {
             $totalesGeneral[$k] = round($v, 2);
@@ -113,6 +119,7 @@ final class IvaComprasReporteService
             'columnas' => IvaComprasColumnasSupport::columnas(),
             'filas' => $filas,
             'filas_display' => $filas,
+            'totales_por_tipo' => $totalesPorTipo,
             'totales_general' => $totalesGeneral,
             'stats' => [
                 'comprobantes' => count($filas),
@@ -325,5 +332,50 @@ final class IvaComprasReporteService
         }
 
         return true;
+    }
+
+    /**
+     * Una fila por tipo de comprobante, sobre el detalle completo del filtro.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function armarTotalesPorTipo(array $filas): array
+    {
+        $totales = [];
+        foreach ($filas as $fila) {
+            $tipoId = (int) ($fila['tipotransaccion_compra_id'] ?? 0);
+            $tipo = (string) ($fila['tipo'] ?? '');
+            $clave = $tipoId.'|'.$tipo;
+            if (! isset($totales[$clave])) {
+                $tipoNombre = trim((string) ($fila['tipo_nombre'] ?? ''));
+                if ($tipoNombre === '') {
+                    $tipoNombre = $tipo;
+                }
+                $totales[$clave] = [
+                    'tipotransaccion_compra_id' => $tipoId,
+                    'tipo' => $tipo,
+                    'tipo_nombre' => $tipoNombre,
+                    'cantidad' => 0,
+                    'columnas' => IvaComprasColumnasSupport::montosVacios(),
+                ];
+            }
+            $totales[$clave]['cantidad']++;
+            IvaComprasColumnasSupport::acumular($totales[$clave]['columnas'], $fila['columnas'] ?? []);
+        }
+
+        $lista = array_values($totales);
+        usort($lista, static function (array $a, array $b): int {
+            return strcmp((string) ($a['tipo'] ?? ''), (string) ($b['tipo'] ?? ''));
+        });
+
+        foreach ($lista as &$tot) {
+            foreach ($tot['columnas'] as $k => $v) {
+                $tot['columnas'][$k] = round((float) $v, 2);
+            }
+        }
+        unset($tot);
+
+        return $lista;
     }
 }

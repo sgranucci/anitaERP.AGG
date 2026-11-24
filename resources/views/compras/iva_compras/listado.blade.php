@@ -120,6 +120,34 @@
         </tbody>
     </table>
 
+    @if (! empty($resultado['totales_por_tipo']))
+        <h3 class="seccion">Por tipo de comprobante</h3>
+        <table class="data" style="margin-top: 6px;">
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th>Nombre</th>
+                    <th class="text-right">Comp.</th>
+                    @foreach ($columnas as $col)
+                        <th class="text-right">{{ $col['label'] }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($resultado['totales_por_tipo'] as $tot)
+                    <tr>
+                        <td>{{ $tot['tipo'] ?? '' }}</td>
+                        <td>{{ $tot['tipo_nombre'] ?? ($tot['tipo'] ?? '') }}</td>
+                        <td class="text-right">{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                        @foreach ($columnas as $col)
+                            <td class="text-right">{{ number_format((float) ($tot['columnas'][$col['key']] ?? 0), 2, ',', '.') }}</td>
+                        @endforeach
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
     @if (! empty($resultado['conciliacion_contable']['habilitada']))
         @php $conc = $resultado['conciliacion_contable']; $res = $conc['resumen_empresa'] ?? []; @endphp
         <h3 class="seccion">Conciliación contable</h3>
