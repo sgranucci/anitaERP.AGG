@@ -62,5 +62,12 @@
                 <a href="{{ $urlPlazo('vencidas') }}" class="btn {{ $plazoActual === 'vencidas' ? 'btn-danger' : 'btn-outline-danger' }}">Vencidas</a>
             </div>
         </div>
+        <div class="mb-1 ml-auto">
+            @include('includes.exportar-tabla-queryparams', [
+                'ruta' => 'lista_logistica_solicitud',
+                'queryparams' => $filtrosQuery ?? [],
+                'variant' => 'compact',
+            ])
+        </div>
     </div>
 </div>

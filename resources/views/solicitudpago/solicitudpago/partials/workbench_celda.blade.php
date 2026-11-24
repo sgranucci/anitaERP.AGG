@@ -9,20 +9,26 @@
     $retornoListadoQuery = $retornoListadoQuery ?? [];
 @endphp
 @if ($key === 'codigo')
-    <td class="{{ $cls }} lw-col text-nowrap">
+    @php
+        $esHija = (int) ($data->solicitudpago_madre_id ?? 0) > 0;
+        $esMadrePlan = ((int) ($data->cuotas_total_count ?? 0) > 0) || ((int) ($data->hijas_count ?? 0) > 0);
+        $tituloCodigo = (string) $data->codigo;
+        if ($esMadrePlan) {
+            $tituloCodigo .= ' · Madre';
+        } elseif ($esHija) {
+            $tituloCodigo .= ' · Hija';
+        }
+    @endphp
+    <td class="{{ $cls }} lw-col sp-col-codigo text-nowrap" title="{{ $tituloCodigo }}">
         @if (can('editar-solicitud-pago', false))
             <a href="{{ route('editar_solicitudpago', ['id' => $data->id] + $retornoListadoQuery) }}" class="text-primary font-weight-bold">{{ $data->codigo }}</a>
         @else
             {{ $data->codigo }}
         @endif
-        @php
-            $esHija = (int) ($data->solicitudpago_madre_id ?? 0) > 0;
-            $esMadrePlan = ((int) ($data->cuotas_total_count ?? 0) > 0) || ((int) ($data->hijas_count ?? 0) > 0);
-        @endphp
         @if ($esMadrePlan)
-            <span class="badge badge-primary ml-1">Madre</span>
+            <span class="text-primary small" aria-hidden="true">*</span>
         @elseif ($esHija)
-            <span class="badge badge-light border ml-1">Hija</span>
+            <span class="text-muted small" aria-hidden="true">·</span>
         @endif
     </td>
 @elseif ($key === 'estado')
@@ -71,6 +77,10 @@
                 <span class="text-muted small">+{{ $pagosCol->count() - 2 }} más</span>
             @endif
         @endif
+    </td>
+@elseif ($key === 'monto')
+    <td class="{{ $cls }} lw-col sp-col-monto text-nowrap" @if ($title !== '') title="{{ $title }}" @endif>
+        <span class="lw-celda-texto">{{ $valor !== '' ? $valor : '—' }}</span>
     </td>
 @else
     <td class="{{ $cls }} lw-col" @if ($title !== '') title="{{ $title }}" @endif><span class="lw-celda-texto">{{ $valor !== '' ? $valor : '—' }}</span></td>

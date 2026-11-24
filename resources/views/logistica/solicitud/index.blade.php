@@ -169,13 +169,6 @@
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body py-2 border-bottom bg-white">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_logistica_solicitud',
-                    'queryparams' => $filtrosQuery ?? [],
-                    'variant' => 'compact',
-                ])
-            </div>
             <div class="tabla-ancha-grilla" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>

@@ -6,6 +6,41 @@
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+/* Vista estándar: Acciones como columna normal. Con scroll (más columnas): sticky derecha. */
+.lw-workbench .sp-grilla {
+    --tabla-ancha-der: 9rem;
+}
+.lw-workbench .sp-grilla #tabla-paginada th.lw-col-acciones,
+.lw-workbench .sp-grilla #tabla-paginada td.lw-col-acciones {
+    width: var(--tabla-ancha-der);
+    min-width: var(--tabla-ancha-der);
+    max-width: var(--tabla-ancha-der);
+    white-space: nowrap;
+    overflow: visible;
+    text-align: center;
+    vertical-align: middle;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
+}
+.lw-workbench .sp-grilla.sp-grilla--fit .col-fija-der-1 {
+    position: static;
+    right: auto;
+    box-shadow: none;
+    z-index: auto;
+}
+.lw-workbench .sp-grilla #tabla-paginada .lw-acciones-inner form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    flex: 0 0 auto;
+}
+.lw-workbench .sp-grilla #tabla-paginada td.sp-col-monto .lw-celda-texto {
+    text-overflow: clip;
+}
+</style>
 @endsection
 
 @section("scripts")
@@ -143,7 +178,7 @@
                         <input type="search" id="lw-search-rapida" class="form-control form-control-sm lw-search-rapida"
                                value="{{ ($filtros['modo'] ?? '') !== 'qbe' ? ($filtros['valor'] ?? '') : '' }}"
                                placeholder="Texto o número" autocomplete="off">
-                        <button type="submit" id="btn-lw-buscar-rapida" class="btn btn-sm btn-primary" data-busqueda-rapida="1">
+                        <button type="button" id="btn-lw-buscar-rapida" class="btn btn-sm btn-primary" data-busqueda-rapida="1">
                             <i class="fa fa-search"></i>
                         </button>
                         @if (SolicitudpagoListadoFiltros::tieneCriteriosAplicados($filtros ?? []))
@@ -156,14 +191,6 @@
                                 <i class="fa fa-undo"></i> Orden estándar
                             </a>
                         @endif
-
-                        <span class="lw-toolbar-export">
-                            @include('includes.exportar-tabla-queryparams', [
-                                'ruta' => 'lista_solicitudpago',
-                                'queryparams' => $filtrosQuery ?? [],
-                                'variant' => 'compact',
-                            ])
-                        </span>
                     </div>
                 </div>
                 @include('solicitudpago.solicitudpago.partials.filtros_listado', [
@@ -194,6 +221,17 @@
                 foreach (($grillaLayout ?? []) as $filaLayout) {
                     $layoutPorKey[$filaLayout['key']] = $filaLayout;
                 }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = LwGrilla::ANCHO_COL_ACCIONES;
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
                 $camposOrdenablesThead = SolicitudpagoListadoFiltros::camposOrdenables();
                 $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
                     $filtros['orden'] ?? [],
@@ -203,17 +241,33 @@
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            <div class="tabla-ancha-grilla sp-grilla {{ $usaScrollHorizontal ? '' : 'sp-grilla--fit' }}" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
                     <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $key)
                                 @php
+                                    $cfg = $layoutPorKey[$key] ?? null;
+                                    $cfgPantalla = $layoutPantallaPorKey[$key] ?? $cfg;
+                                    $alinea = $cfg['alinea'] ?? 'izquierda';
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $minLegible = LwGrilla::anchoMinimoLegible(
+                                        $key,
+                                        $catalogoColumnas[$key] ?? [],
+                                        $etiquetasColumnas[$key] ?? ($catalogoColumnas[$key]['label'] ?? $key)
+                                    );
+                                    $cls = LwGrilla::claseAlineacion($alinea);
                                     $tituloCol = $etiquetasColumnas[$key] ?? ($catalogoColumnas[$key]['label'] ?? $key);
+                                    if ($usaScrollHorizontal) {
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
+                                    }
                                     $esOrdenable = isset($camposOrdenablesThead[$key]);
                                     $dirCol = \App\Support\Listado\ListadoOrdenamientoSupport::direccionDeCampo($ordenActualThead, $key);
                                     $idxCol = \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActualThead, $key);
@@ -223,9 +277,9 @@
                                         $ordenToggle = \App\Support\Listado\ListadoOrdenamientoSupport::togglePrimario($ordenActualThead, $key, $camposOrdenablesThead);
                                         $qsSort = array_merge($qsSort, \App\Support\Listado\ListadoOrdenamientoSupport::paraQueryString($ordenToggle));
                                     }
-                                    $alinea = $layoutPorKey[$key]['alinea'] ?? 'izquierda';
                                 @endphp
-                                <th class="{{ LwGrilla::claseAlineacion($alinea) }} lw-th-drag {{ $esOrdenable ? 'lw-col-sortable' : '' }}"
+                                <th class="{{ $cls }} lw-col lw-th-drag {{ $esOrdenable ? 'lw-col-sortable' : '' }} {{ $dirCol ? 'lw-col-sorted' : '' }}"
+                                    style="{{ $styleCol }}"
                                     title="{{ $tituloCol }} — arrastrá para mover · × para ocultar (con confirmación){{ $esOrdenable ? ' · clic para ordenar filas' : '' }}"
                                     data-col-key="{{ $key }}"
                                     draggable="true">
@@ -255,7 +309,8 @@
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th class="lw-col-fija">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="width120 text-nowrap" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones col-fija-der-1" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -301,8 +356,11 @@
                                     @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
                                         <td class="lw-col-fija">{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
                                     @endforeach
-                                    <td class="text-nowrap">
-                                        @include('solicitudpago.solicitudpago.partials.fila_acciones', ['data' => $data, 'retornoListadoQuery' => $retornoListadoQuery])
+                                    <td class="lw-col-acciones col-fija-der-1"
+                                        style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                        <div class="lw-acciones-inner">
+                                            @include('solicitudpago.solicitudpago.partials.fila_acciones', ['data' => $data, 'retornoListadoQuery' => $retornoListadoQuery])
+                                        </div>
                                     </td>
                                 </tr>
                             @endif

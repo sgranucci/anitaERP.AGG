@@ -9,7 +9,8 @@ use App\Support\Listado\ListadoGrillaConfigSupport;
 
 final class AdministracionTicketListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'ticket-administracion-listado-grilla-estandar-v1';
+    /** v2: vista estándar más compacta (comentario/resolución/tiempo opcionales). */
+    private const CACHE_GRILLA = 'ticket-administracion-listado-grilla-estandar-v2';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout

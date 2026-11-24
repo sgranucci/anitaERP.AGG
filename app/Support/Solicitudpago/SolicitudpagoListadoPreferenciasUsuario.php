@@ -12,7 +12,7 @@ use App\Support\Listado\ListadoGrillaConfigSupport;
  */
 final class SolicitudpagoListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'solicitudpago-listado-grilla-estandar-v1';
+    private const CACHE_GRILLA = 'solicitudpago-listado-grilla-estandar-v3';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout

@@ -20,20 +20,21 @@ final class AdministracionTicketListadoColumnas
     public static function catalogo(): array
     {
         return [
-            'id' => self::col('ID', 'entero', 'ticket.id', 'id'),
-            'fecha' => self::col('Fecha', 'fecha', 'ticket.fecha', 'fecha'),
-            'sala' => self::col('Sala', 'texto', 'sala.nombre', 'nombresala'),
-            'sector' => self::col('Sector', 'texto', 'sector_ticket.nombre', 'nombresector'),
-            'areadestino' => self::col('Área de destino', 'texto', 'areadestino.nombre', 'nombreareadestino'),
-            'usuario' => self::col('Generó usuario', 'texto', 'usuario.nombre', 'nombreusuario'),
-            'categoria' => self::col('Categoría', 'texto', 'categoria_ticket.nombre', 'nombrecategoria_ticket'),
-            'subcategoria' => self::col('Subcategoría', 'texto', 'subcategoria_ticket.nombre', 'nombresubcategoria_ticket'),
-            'estado' => self::col('Estado', 'texto', 'ticket.estado_ticket', 'estado'),
-            'titulo' => self::col('Título', 'texto', 'ticket.titulo', 'titulo'),
-            'comentario' => self::col('Comentario', 'texto', 'ticket.comentario', 'comentario'),
-            'tecnico' => self::col('Técnico asignado', 'texto', 'tickets_tarea.nombretecnico', 'nombretecnico'),
-            'fecha_resolucion' => self::col('Resolución', 'fecha', 'ticket.fecha_resolucion', 'fecha_resolucion'),
-            'tiempo_insumido' => self::col('Tiempo insumido (min)', 'entero', 'ticket.tiempo_insumido_total', 'tiempo_insumido_total'),
+            'id' => self::col('ID', 'entero', 'ticket.id', 'id', true, 56),
+            'fecha' => self::col('Fecha', 'fecha', 'ticket.fecha', 'fecha', true, 86),
+            'sala' => self::col('Sala', 'texto', 'sala.nombre', 'nombresala', true, 80),
+            'sector' => self::col('Sector', 'texto', 'sector_ticket.nombre', 'nombresector', true, 86),
+            'areadestino' => self::col('Área de destino', 'texto', 'areadestino.nombre', 'nombreareadestino', true, 100),
+            'usuario' => self::col('Generó usuario', 'texto', 'usuario.nombre', 'nombreusuario', true, 100),
+            'categoria' => self::col('Categoría', 'texto', 'categoria_ticket.nombre', 'nombrecategoria_ticket', true, 96),
+            'subcategoria' => self::col('Subcategoría', 'texto', 'subcategoria_ticket.nombre', 'nombresubcategoria_ticket', true, 100),
+            'estado' => self::col('Estado', 'texto', 'ticket.estado_ticket', 'estado', true, 86),
+            'titulo' => self::col('Título', 'texto', 'ticket.titulo', 'titulo', true, 120),
+            // Comentario / resolución / tiempo: se suman desde Diseñar vista (activa sticky Acciones).
+            'comentario' => self::col('Comentario', 'texto', 'ticket.comentario', 'comentario', false, 160),
+            'tecnico' => self::col('Técnico asignado', 'texto', 'tickets_tarea.nombretecnico', 'nombretecnico', true, 110),
+            'fecha_resolucion' => self::col('Resolución', 'fecha', 'ticket.fecha_resolucion', 'fecha_resolucion', false, 100),
+            'tiempo_insumido' => self::col('Tiempo insumido (min)', 'entero', 'ticket.tiempo_insumido_total', 'tiempo_insumido_total', false, 90),
         ];
     }
 
@@ -50,7 +51,14 @@ final class AdministracionTicketListadoColumnas
      */
     public static function defaultsVisibles(): array
     {
-        return array_keys(self::catalogo());
+        $out = [];
+        foreach (self::catalogo() as $key => $meta) {
+            if (! empty($meta['default'])) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -135,17 +143,24 @@ final class AdministracionTicketListadoColumnas
     }
 
     /**
-     * @return array{label: string, type: string, source: string, attr: string, filterable: bool, default: bool, group: string}
+     * @return array{label: string, type: string, source: string, attr: string, filterable: bool, default: bool, ancho: int, group: string}
      */
-    private static function col(string $label, string $type, string $source, string $attr): array
-    {
+    private static function col(
+        string $label,
+        string $type,
+        string $source,
+        string $attr,
+        bool $default = true,
+        int $ancho = 110
+    ): array {
         return [
             'label' => $label,
             'type' => $type,
             'source' => $source,
             'attr' => $attr,
             'filterable' => true,
-            'default' => true,
+            'default' => $default,
+            'ancho' => $ancho,
             'group' => 'Ticket',
         ];
     }

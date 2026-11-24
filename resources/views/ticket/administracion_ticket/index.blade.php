@@ -49,39 +49,35 @@
         font-weight: 600;
         cursor: pointer;
     }
-    /* La columna de editar/eliminar no puede achicarse: al entrar desde el
-       link del mail (sin menú) la grilla ocupa todo el ancho y la aplasta. */
-    .lw-workbench #tabla-paginada.tabla-acciones-fijas {
-        border-collapse: separate;
-        border-spacing: 0;
+    /* Vista estándar: Acciones normal. Con scroll (más columnas): sticky derecha. */
+    .lw-workbench .ticket-grilla {
+        --tabla-ancha-der: 4.75rem;
     }
-    .lw-workbench #tabla-paginada th.col-acciones-tabla,
-    .lw-workbench #tabla-paginada td.col-acciones-tabla {
-        position: sticky;
-        right: 0;
-        width: 4.75rem;
-        min-width: 4.75rem;
-        max-width: 4.75rem;
+    .lw-workbench .ticket-grilla #tabla-paginada th.lw-col-acciones,
+    .lw-workbench .ticket-grilla #tabla-paginada td.lw-col-acciones {
+        width: var(--tabla-ancha-der);
+        min-width: var(--tabla-ancha-der);
+        max-width: var(--tabla-ancha-der);
         white-space: nowrap;
+        overflow: visible;
         text-align: center;
         vertical-align: middle;
-        background-clip: padding-box;
-        box-shadow: -2px 0 4px rgba(0, 0, 0, 0.06);
+        padding-left: 0.15rem;
+        padding-right: 0.15rem;
     }
-    .lw-workbench #tabla-paginada thead th.col-acciones-tabla {
-        top: 0;
-        z-index: 5;
-        background-color: #85C1E9;
+    .lw-workbench .ticket-grilla.ticket-grilla--fit .col-fija-der-1 {
+        position: static;
+        right: auto;
+        box-shadow: none;
+        z-index: auto;
     }
-    .lw-workbench #tabla-paginada tbody td.col-acciones-tabla {
-        z-index: 3;
-        background-color: #fff;
-    }
-    .lw-workbench #tabla-paginada.table-striped tbody tr:nth-of-type(odd) td.col-acciones-tabla {
-        background-color: #f2f2f2;
-    }
-    .lw-workbench #tabla-paginada.table-hover tbody tr:hover td.col-acciones-tabla {
-        background-color: #EBF5FB;
+    .lw-workbench .ticket-grilla #tabla-paginada .lw-acciones-inner form {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        flex: 0 0 auto;
     }
 </style>
 @endsection
@@ -269,33 +265,53 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            @if ($ver_todos_tickets ?? true)
+                <div class="alert alert-secondary py-2 mb-0 mx-3 mt-2 small">
+                    <i class="fa fa-users"></i>
+                    Mostrando <strong>todos los tickets</strong> del área Sistemas / Tecnología.
+                </div>
+            @else
+                <div class="alert alert-light border py-2 mb-0 mx-3 mt-2 small text-muted">
+                    <i class="fa fa-user"></i>
+                    Mostrando tickets <strong>asignados a usted</strong>.
+                    Marque «Ver todos los tickets» para ver el resto del equipo.
+                </div>
+            @endif
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = 76; // editar + borrar
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+                $colspanGrilla = count($columnasVisibles) + count($filtros['calculadas'] ?? []) + 1;
+            @endphp
+            <div class="tabla-ancha-grilla ticket-grilla {{ $usaScrollHorizontal ? '' : 'ticket-grilla--fit' }}" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                @if ($ver_todos_tickets ?? true)
-                    <div class="alert alert-secondary py-2 mb-0 mx-3 mt-3 small">
-                        <i class="fa fa-users"></i>
-                        Mostrando <strong>todos los tickets</strong> del área Sistemas / Tecnología.
-                    </div>
-                @else
-                    <div class="alert alert-light border py-2 mb-0 mx-3 mt-3 small text-muted">
-                        <i class="fa fa-user"></i>
-                        Mostrando tickets <strong>asignados a usted</strong>.
-                        Marque «Ver todos los tickets» para ver el resto del equipo.
-                    </div>
-                @endif
-                <table class="table table-striped table-bordered table-hover tabla-acciones-fijas" PLACEHOLDER_KEEP>
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
                                 @include('ticket.administracion_ticket.partials.workbench_th', ['key' => $keyColumna])
                             @endforeach
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
-                                <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
+                                <th class="lw-col-fija" data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="col-acciones-tabla" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones col-fija-der-1" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -316,9 +332,10 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                                     ])
                                 @endforeach
                                 @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
-                                    <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
+                                    <td class="lw-col-fija">{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
                                 @endforeach
-                                <td class="col-acciones-tabla">
+                                <td class="lw-col-acciones col-fija-der-1"
+                                    style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
                                     <div class="lw-acciones-inner">
                                     @if ($puedeVerTicket)
                                         <a href="{{ route('edita_administracion_ticket', ['id' => $data->id] + ($retornoListadoQuery ?? [])) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
@@ -338,7 +355,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ count($columnasVisibles) + count($filtros['calculadas'] ?? []) + 1 }}" class="text-center text-muted py-4">
+                                <td colspan="{{ max(1, $colspanGrilla) }}" class="text-center text-muted py-4">
                                     No hay tickets con los filtros aplicados.
                                 </td>
                             </tr>

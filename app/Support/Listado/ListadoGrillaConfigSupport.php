@@ -226,6 +226,13 @@ final class ListadoGrillaConfigSupport
      */
     private static function anchoDefault(string $key, array $meta): int
     {
+        if (isset($meta['ancho']) && is_numeric($meta['ancho'])) {
+            $anchoMeta = (int) $meta['ancho'];
+            if ($anchoMeta >= 40 && $anchoMeta <= 600) {
+                return $anchoMeta;
+            }
+        }
+
         return match ($key) {
             'id' => 56,
             'fuera_pago' => 56,
