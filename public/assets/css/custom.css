@@ -849,3 +849,29 @@ table.data th.num,
 table.data td.num {
     text-align: right !important;
 }
+
+/*
+ * Modal scrollable + <form>: Bootstrap espera header/body/footer como hijos
+ * flex de .modal-content. Si un form los envuelve, overflow:hidden recorta
+ * el footer (p. ej. «Aplicar a la grilla» / «Confirmar») y hay que zoom 50%.
+ */
+.modal-dialog-scrollable .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+}
+
+.modal-dialog-scrollable .modal-content > form > .modal-body,
+.modal-dialog-scrollable .modal-content > .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.modal-dialog-scrollable .modal-content > form > .modal-header,
+.modal-dialog-scrollable .modal-content > form > .modal-footer {
+    flex-shrink: 0;
+}

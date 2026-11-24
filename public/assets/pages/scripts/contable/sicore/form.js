@@ -372,11 +372,19 @@
         }
 
         function actualizarBotonConfirmarSp() {
-            var ok = !!$('#sicore-sp-vencimiento').val();
-            if (!$('#sicore-sp-aviso-duplicado').hasClass('d-none') && !$('#sicore-sp-generar-igual').is(':checked')) {
-                ok = false;
+            var $btn = $('#sicore-sp-btn-confirmar');
+            var faltaVencimiento = !$('#sicore-sp-vencimiento').val();
+            var faltaGenerarIgual = !$('#sicore-sp-aviso-duplicado').hasClass('d-none')
+                && !$('#sicore-sp-generar-igual').is(':checked');
+            var ok = !faltaVencimiento && !faltaGenerarIgual;
+            $btn.prop('disabled', !ok);
+            if (ok) {
+                $btn.removeAttr('title');
+            } else if (faltaVencimiento) {
+                $btn.attr('title', 'Completá la fecha de vencimiento para habilitar el botón.');
+            } else {
+                $btn.attr('title', 'Marcá «Generar igual» para confirmar pese al aviso de duplicado.');
             }
-            $('#sicore-sp-btn-confirmar').prop('disabled', !ok);
         }
 
         function abrirModalSolicitudSp() {

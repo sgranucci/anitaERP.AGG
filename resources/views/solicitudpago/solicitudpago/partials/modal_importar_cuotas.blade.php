@@ -150,7 +150,8 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-success" id="btn-aplicar-import-cuotas-sp" disabled>
+                    <button type="button" class="btn btn-success" id="btn-aplicar-import-cuotas-sp" disabled
+                            title="Primero analizá el archivo con Vista previa.">
                         <i class="fa fa-check"></i> Aplicar a la grilla
                     </button>
                 </div>

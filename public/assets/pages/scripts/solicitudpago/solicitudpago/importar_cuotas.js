@@ -245,8 +245,9 @@
         }
 
         if (data.filas_preview && data.filas_preview.length) {
-            html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
-            html += '<thead style="background:#85C1E9;color:#17202A;"><tr>';
+            html += '<div class="table-responsive" style="max-height:280px;">';
+            html += '<table class="table table-sm table-bordered mb-0">';
+            html += '<thead style="background:#85C1E9;color:#17202A;position:sticky;top:0;z-index:1;"><tr>';
             html += '<th>Fila</th><th class="text-right">Nro</th><th>Vencimiento</th>';
             html += '<th class="text-right">Monto</th><th>Resultado</th>';
             html += '</tr></thead><tbody>';
@@ -269,6 +270,13 @@
         $contenido.html(html || '<p class="text-muted small mb-0">Sin filas de datos.</p>');
         importacionHabilitada = !!hayOk && filasAplicar.length > 0;
         $btnAplicar.prop('disabled', !importacionHabilitada);
+        if (importacionHabilitada) {
+            $btnAplicar.removeAttr('title');
+        } else if (!hayOk) {
+            $btnAplicar.attr('title', 'No hay filas OK para aplicar. Revisá el mapeo y volvé a generar la vista previa.');
+        } else {
+            $btnAplicar.attr('title', 'Esperá a que termine la vista previa o volvé a analizar el archivo.');
+        }
     }
 
     function solicitarPreview() {

@@ -88,6 +88,12 @@ return [
             'permiso' => 'listar-ai-decisiones',
         ],
         [
+            'herramienta' => 'Facturas por canal',
+            'ubicacion' => $gob.' → botón Facturas por canal',
+            'accion' => 'Reporte predefinido: precargas por agente/API, scan e IA Anita + errores (presets 7d / 30d / mes).',
+            'permiso' => 'listar-ai-decisiones',
+        ],
+        [
             'herramienta' => 'Salud operativa',
             'ubicacion' => $gob.' (tarjeta superior)',
             'accion' => 'Flags AI, mail, batch, eventos pendientes, RAG, MCP.',

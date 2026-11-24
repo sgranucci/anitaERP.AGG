@@ -13,6 +13,9 @@
                 <div class="card-header">
                     <h3 class="card-title">Gobernanza IA — decisiones</h3>
                     <div class="card-tools">
+                        <a href="{{ route('ai_decision_facturas_canal') }}" class="btn btn-sm btn-success" title="Reporte listo: ingresos por agente, scan, IA y errores">
+                            <i class="fa fa-file-invoice"></i> Facturas por canal
+                        </a>
                         <a href="{{ route('manual_ia') }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" title="Manual de Plataforma IA">
                             <i class="fa fa-book"></i> Manual IA
                         </a>
@@ -29,6 +32,18 @@
                         'salud' => $salud ?? null,
                         'eventosPendientes' => $eventosPendientes ?? [],
                     ])
+
+                    <div class="alert alert-success d-flex flex-wrap align-items-center justify-content-between mb-3" style="gap:.75rem;">
+                        <div>
+                            <strong>Facturas por canal</strong>
+                            <span class="d-block small mb-0">
+                                Reporte listo: agente/API, scan, IA Anita y errores (últimos 30 días o presets).
+                            </span>
+                        </div>
+                        <a href="{{ route('ai_decision_facturas_canal') }}" class="btn btn-success btn-sm text-nowrap">
+                            <i class="fa fa-file-invoice"></i> Abrir reporte
+                        </a>
+                    </div>
 
                     <form method="get" action="{{ route('ai_decision') }}" class="mb-3">
                         <input type="hidden" name="consultar" value="1">

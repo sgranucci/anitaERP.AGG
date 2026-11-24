@@ -283,6 +283,7 @@ Route::delete('configuracion/feriado/{id}', 'Configuracion\FeriadoController@eli
  * Gobernanza IA (ai_decision) — KPIs y auditoría de sugerencias
  */
 Route::get('configuracion/ai-decisiones', 'Configuracion\AiDecisionController@index')->name('ai_decision');
+Route::get('configuracion/ai-decisiones/facturas-canal', 'Configuracion\AiDecisionController@facturasCanal')->name('ai_decision_facturas_canal');
 Route::get('configuracion/listar-ai-decisiones/{formato?}', 'Configuracion\AiDecisionController@listar')->name('listar_ai_decision');
 Route::post('configuracion/ai-decisiones/descartar', 'Configuracion\AiDecisionController@descartar')->name('descartar_ai_decision');
 Route::get('configuracion/ai-agente-eventos', 'Configuracion\AiAgenteEventoController@index')->name('ai_agente_evento');
