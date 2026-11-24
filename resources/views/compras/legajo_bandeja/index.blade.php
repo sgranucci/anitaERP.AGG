@@ -10,8 +10,6 @@ Bandeja de legajos
 @include('includes.tabs-activas-estilos')
 <style>
     .bandeja-col-facturas {
-        max-width: 10.5rem;
-        min-width: 7rem;
         white-space: normal;
         word-wrap: break-word;
         overflow-wrap: anywhere;
@@ -645,42 +643,60 @@ Bandeja de legajos
         min-width: 0;
     }
     .lw-workbench .bandeja-grilla-ancha {
-        --tabla-ancha-der: 10.75rem;
+        /* ~2 botones de ancho → Acciones en 2 renglones; libera espacio a Facturas */
+        --tabla-ancha-der: 5.5rem;
         max-width: 100%;
         min-width: 0;
         width: 100%;
     }
     .lw-workbench .bandeja-grilla-ancha .tabla-ancha-wrap {
         max-width: 100%;
-        max-height: calc(100vh - 280px);
-        overflow-x: auto;
     }
-    .lw-workbench .bandeja-grilla-ancha .bandeja-col-facturas {
+    /* Vista estándar: tabla al 100% (tabla-ancha trae width:max-content y empujaba scroll). */
+    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100%;
+    }
+    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col {
+        max-width: 0;
+    }
+    /* Facturas/OC/paquete: no cortar con ellipsis; el nº de FC tiene que entrar entero. */
+    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col.bandeja-col-facturas,
+    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col.bandeja-col-paquete,
+    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col.bandeja-col-oc {
+        max-width: none;
+        overflow: visible;
+        text-overflow: clip;
         white-space: normal;
     }
     .lw-workbench .bandeja-grilla-ancha th.lw-col-acciones,
     .lw-workbench .bandeja-grilla-ancha td.lw-col-acciones {
+        width: var(--tabla-ancha-der) !important;
+        min-width: var(--tabla-ancha-der) !important;
+        max-width: var(--tabla-ancha-der) !important;
         white-space: normal;
         vertical-align: middle;
         text-align: center;
-        padding-left: 0.3rem;
-        padding-right: 0.3rem;
+        padding-left: 0.15rem;
+        padding-right: 0.15rem;
     }
-    /* Dentro de la columna fija: wrap local (como cuando entraba con Decisión) */
+    /* Columna fina: 2 botones por renglón */
     .lw-workbench .bandeja-acciones {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
-        gap: 0.12rem;
+        gap: 0.08rem;
         max-width: 100%;
+        width: 100%;
     }
     .lw-workbench .bandeja-acciones .btn {
         margin: 0;
-        padding: 0.18rem 0.34rem;
-        font-size: 0.82rem;
-        line-height: 1.15;
-        min-width: 1.6rem;
+        padding: 0.14rem 0.28rem;
+        font-size: 0.78rem;
+        line-height: 1.1;
+        min-width: 1.45rem;
     }
     .lw-workbench .bandeja-acciones .btn > .fa {
         font-size: 0.95em;
@@ -1221,22 +1237,61 @@ Bandeja de legajos
                     <p class="text-muted small mb-0">{{ $alcanceSector }}</p>
                 @endif
             </div>
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $catalogoColumnasBandeja = \App\Support\Compras\OrdencompraLegajoBandejaListadoColumnas::catalogoActivo();
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = 88; // ~5.5rem: 2 botones por renglón
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+            @endphp
             <div class="tabla-ancha-grilla bandeja-grilla-ancha" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap p-0">
-                <table class="table table-striped table-bordered table-hover tabla-ancha mb-0" id="tabla-paginada">
+                <div class="tabla-ancha-wrap p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                <table class="table table-striped table-bordered table-hover tabla-ancha mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach (($columnasVisibles ?? []) as $keyColumna)
+                                @php
+                                    $cfg = $layoutPorKey[$keyColumna] ?? null;
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? $cfg;
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $tituloCol = ($etiquetasColumnas ?? [])[$keyColumna]
+                                        ?? ($catalogoColumnasBandeja[$keyColumna]['label'] ?? $keyColumna);
+                                    $minLegible = LwGrilla::anchoMinimoLegible(
+                                        $keyColumna,
+                                        $catalogoColumnasBandeja[$keyColumna] ?? [],
+                                        $tituloCol
+                                    );
+                                    if ($usaScrollHorizontal) {
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
+                                    }
+                                @endphp
                                 @include('compras.legajo_bandeja.partials.workbench_th', [
                                     'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
                                     'camposOrdenablesThead' => $camposOrdenablesThead,
                                     'ordenActualThead' => $ordenActualThead,
                                 ])
                             @endforeach
-                            <th class="lw-col-acciones text-center" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones text-center" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>

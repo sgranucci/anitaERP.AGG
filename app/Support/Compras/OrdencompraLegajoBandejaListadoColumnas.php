@@ -56,6 +56,8 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => 'ordencompra.numeroordencompra',
             'attr' => 'numero',
             'group' => self::GRUPO_LEGAJO,
+            // Nº + badge Gastro/Anticipado; compacto para que la vista estándar entre sin scroll.
+            'ancho' => 96,
         ],
         'fecha' => [
             'label' => 'Fecha',
@@ -66,6 +68,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => 'ordencompra.fecha',
             'attr' => 'fecha',
             'group' => self::GRUPO_LEGAJO,
+            'ancho' => 72,
         ],
         'empresa' => [
             'label' => 'Empresa',
@@ -76,6 +79,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => 'empresa.nombre',
             'attr' => 'empresa',
             'group' => self::GRUPO_PARTES,
+            'ancho' => 80,
         ],
         'proveedor' => [
             'label' => 'Proveedor',
@@ -86,6 +90,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => 'proveedor.nombre',
             'attr' => 'proveedor',
             'group' => self::GRUPO_PARTES,
+            'ancho' => 130,
         ],
         'centrocosto' => [
             'label' => 'Centro de costo',
@@ -96,6 +101,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => 'centrocosto.nombre',
             'attr' => 'centrocosto',
             'group' => self::GRUPO_PARTES,
+            'ancho' => 80,
         ],
         'sector' => [
             'label' => 'Sector',
@@ -106,6 +112,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => 'sector_legajocompra.nombre',
             'attr' => 'sector',
             'group' => self::GRUPO_CIRCUITO,
+            'ancho' => 88,
         ],
         'dias' => [
             'label' => 'Días',
@@ -117,6 +124,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'attr' => 'dias',
             'group' => self::GRUPO_CIRCUITO,
             'alinea' => 'centro',
+            'ancho' => 56,
         ],
         'paquete' => [
             'label' => 'Paquete',
@@ -127,6 +135,7 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => '',
             'attr' => 'paquete_etiqueta',
             'group' => self::GRUPO_CIRCUITO,
+            'ancho' => 110,
         ],
         'facturas' => [
             'label' => 'Facturas',
@@ -137,6 +146,8 @@ final class OrdencompraLegajoBandejaListadoColumnas
             'source' => '',
             'attr' => 'facturas',
             'group' => self::GRUPO_CIRCUITO,
+            // Nº tipo "FNS C 0002-00001234" completo (sin ellipsis).
+            'ancho' => 170,
         ],
         'decision' => [
             'label' => 'Decisión',

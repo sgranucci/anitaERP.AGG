@@ -4,15 +4,21 @@
     $alineacion = match ($key) {
         'dias' => 'text-center',
         'facturas' => 'bandeja-col-facturas small',
+        'paquete' => 'bandeja-col-paquete',
+        'numero' => 'bandeja-col-oc',
         default => 'small',
     };
+    $cls = trim($alineacion.' lw-col');
+    $textoPlano = \App\Support\Compras\OrdencompraLegajoBandejaListadoColumnas::valorCelda($row, $key);
 @endphp
 @switch ($key)
     @case('id')
-        <td>{{ $row['id'] }}</td>
+        <td class="{{ $cls }}" @if ($textoPlano !== '') title="{{ $textoPlano }}" @endif>
+            <span class="lw-celda-texto">{{ $row['id'] }}</span>
+        </td>
         @break
     @case('numero')
-        <td>
+        <td class="{{ $cls }}" title="{{ $row['numero'] }}">
             <a href="{{ $row['url_oc'] }}" target="_blank" rel="noopener">{{ $row['numero'] }}</a>
             @if (! empty($row['es_anticipada']))
                 <span class="badge badge-warning" title="Legajo anticipado (factura antes de recepción)">
@@ -25,22 +31,32 @@
         </td>
         @break
     @case('fecha')
-        <td>{{ $row['fecha'] }}</td>
+        <td class="{{ $cls }}" @if ($textoPlano !== '') title="{{ $textoPlano }}" @endif>
+            <span class="lw-celda-texto">{{ $row['fecha'] }}</span>
+        </td>
         @break
     @case('empresa')
-        <td class="{{ $alineacion }}">{{ $row['empresa'] }}</td>
+        <td class="{{ $cls }}" @if (($row['empresa'] ?? '') !== '') title="{{ $row['empresa'] }}" @endif>
+            <span class="lw-celda-texto">{{ $row['empresa'] }}</span>
+        </td>
         @break
     @case('proveedor')
-        <td class="{{ $alineacion }}">{{ $row['proveedor'] }}</td>
+        <td class="{{ $cls }}" @if (($row['proveedor'] ?? '') !== '') title="{{ $row['proveedor'] }}" @endif>
+            <span class="lw-celda-texto">{{ $row['proveedor'] }}</span>
+        </td>
         @break
     @case('centrocosto')
-        <td class="{{ $alineacion }}">{{ $row['centrocosto'] }}</td>
+        <td class="{{ $cls }}" @if (($row['centrocosto'] ?? '') !== '') title="{{ $row['centrocosto'] }}" @endif>
+            <span class="lw-celda-texto">{{ $row['centrocosto'] }}</span>
+        </td>
         @break
     @case('sector')
-        <td class="{{ $alineacion }}">{{ $row['sector'] }}</td>
+        <td class="{{ $cls }}" @if (($row['sector'] ?? '') !== '') title="{{ $row['sector'] }}" @endif>
+            <span class="lw-celda-texto">{{ $row['sector'] }}</span>
+        </td>
         @break
     @case('dias')
-        <td class="{{ $alineacion }}">
+        <td class="{{ $cls }}">
             @if ((int) $row['dias'] >= (int) ($dias_recordatorio ?? 3))
                 <span class="badge badge-warning" title="{{ $row['fecha_ubicacion'] }}">{{ $row['dias'] }}</span>
             @else
@@ -49,7 +65,7 @@
         </td>
         @break
     @case('paquete')
-        <td>
+        <td class="{{ $cls }}" @if ($textoPlano !== '') title="{{ $textoPlano }}" @endif>
             @if (! empty($row['paquete_ok']))
                 <span class="badge badge-success" title="{{ $row['paquete_titulo'] ?? '' }}">{{ $row['paquete_etiqueta'] ?? ((! empty($row['exige_com']) || ! array_key_exists('exige_com', $row)) ? 'FC + COM' : 'FC (contrato sin COM)') }}</span>
             @else
@@ -80,7 +96,7 @@
         </td>
         @break
     @case('facturas')
-        <td class="{{ $alineacion }}">
+        <td class="{{ $cls }}">
             @if ($hayFacPendiente)
                 @foreach ($row['facturas_legajo'] as $facLeg)
                     <div class="bandeja-fac-item">
@@ -129,7 +145,7 @@
         </td>
         @break
     @case('decision')
-        <td>
+        <td class="{{ $cls }}" @if ($textoPlano !== '') title="{{ $textoPlano }}" @endif>
             @if (($row['decision'] ?? '') === 'Aprobado')
                 <span class="badge badge-success">Aprobado</span>
             @elseif (($row['decision'] ?? '') === 'Rechazado')
@@ -147,8 +163,12 @@
         </td>
         @break
     @case('fecha_alta')
-        <td>{{ $row['created_at'] ?? '' }}</td>
+        <td class="{{ $cls }}" @if (($row['created_at'] ?? '') !== '') title="{{ $row['created_at'] }}" @endif>
+            <span class="lw-celda-texto">{{ $row['created_at'] ?? '' }}</span>
+        </td>
         @break
     @default
-        <td class="{{ $alineacion }}">{{ \App\Support\Compras\OrdencompraLegajoBandejaListadoColumnas::valorCelda($row, $key) }}</td>
+        <td class="{{ $cls }}" @if ($textoPlano !== '') title="{{ $textoPlano }}" @endif>
+            <span class="lw-celda-texto">{{ $textoPlano }}</span>
+        </td>
 @endswitch

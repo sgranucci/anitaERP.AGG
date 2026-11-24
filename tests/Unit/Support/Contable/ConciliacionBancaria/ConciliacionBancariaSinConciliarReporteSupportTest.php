@@ -129,4 +129,64 @@ class ConciliacionBancariaSinConciliarReporteSupportTest extends TestCase
         $this->assertSame('OPP', $reporte['filas'][0]['tip']);
         $this->assertSame('111975', $reporte['filas'][0]['numero']);
     }
+
+    public function test_incluye_cob_y_ted_en_debitos_como_anita(): void
+    {
+        $reporte = ConciliacionBancariaSinConciliarReporteSupport::armar([
+            'empresa_id' => 1,
+            'cuentacaja' => (object) ['id' => 52, 'codigo' => '127', 'nombre' => 'MACRO GERLI'],
+            'fecha_desde' => '2026-11-01',
+            'fecha_hasta' => '2026-11-30',
+            'mes' => 11,
+            'anio' => 2026,
+            'pendientes_cheques_cpromae' => [
+                [
+                    'tip' => 'COB',
+                    'numero_cheque' => '1',
+                    'fecha_emision' => '2026-11-13',
+                    'fecha_cheque' => '2026-11-13',
+                    'importe' => -1786343.4,
+                    'debe' => 1786343.4,
+                    'haber' => null,
+                    'entregado_a' => 'PUCARA CINE SRL - COA Nro. 1 O',
+                    'hash' => 'cob-1',
+                ],
+                [
+                    'tip' => 'TED',
+                    'numero_cheque' => '10867',
+                    'fecha_emision' => '2026-11-18',
+                    'fecha_cheque' => '2026-11-18',
+                    'importe' => -16000000,
+                    'debe' => 16000000,
+                    'haber' => null,
+                    'entregado_a' => 'TRA 4079 Trf bma a macro',
+                    'hash' => 'ted-10867',
+                ],
+            ],
+            'pendientes_contables_otros' => [[
+                'tipo_comp' => 'TRA',
+                'nro' => '4079',
+                'fecha' => '2026-11-18',
+                'descripcion' => 'Trf bma a macro',
+                'debe' => 16000000,
+                'haber' => 0,
+                'hash' => 'tra-4079',
+            ]],
+        ]);
+
+        $this->assertSame(2, $reporte['totales']['n']);
+        $tips = array_column($reporte['filas'], 'tip');
+        $this->assertContains('COB', $tips);
+        $this->assertContains('TED', $tips);
+        $this->assertNotContains('TRA', $tips);
+
+        $porTip = [];
+        foreach ($reporte['filas'] as $f) {
+            $porTip[$f['tip']] = $f;
+        }
+        $this->assertSame(1786343.4, $porTip['COB']['debito']);
+        $this->assertSame(0.0, $porTip['COB']['credito']);
+        $this->assertSame(16000000.0, $porTip['TED']['debito']);
+        $this->assertSame(0.0, $porTip['TED']['credito']);
+    }
 }

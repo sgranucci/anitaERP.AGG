@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
 
 final class OrdencompraLegajoBandejaListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'legajo-bandeja-listado-grilla-estandar-v2';
+    private const CACHE_GRILLA = 'legajo-bandeja-listado-grilla-estandar-v4';
 
     private const CACHE_ORDEN = 'legajo-bandeja-listado-orden-v1';
 

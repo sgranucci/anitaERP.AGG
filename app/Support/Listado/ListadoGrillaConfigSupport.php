@@ -264,6 +264,11 @@ final class ListadoGrillaConfigSupport
             'concepto' => 90,
             'movimientos' => 150,
             'numero' => 72,
+            'centrocosto' => 80,
+            'sector' => 88,
+            'dias' => 56,
+            'paquete' => 110,
+            'facturas' => 170,
             'moneda' => 52,
             'fob_estimado' => 88,
             'gastos_estimados' => 88,
@@ -286,9 +291,10 @@ final class ListadoGrillaConfigSupport
     public static function anchoMinimoLegible(string $key, array $meta = [], ?string $titulo = null): int
     {
         $base = match ($key) {
-            'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago', 'mail', 'numeroparte', 'ubicacionparte' => self::ANCHO_MIN_LEGIBLE,
+            'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago', 'mail', 'numeroparte', 'ubicacionparte', 'dias' => self::ANCHO_MIN_LEGIBLE,
             'estado', 'apoc', 'fecha', 'unidadmedida', 'nofactura', 'saldo' => 72,
             'op', 'monto', 'sku', 'tipoarticulo', 'usoarticulo', 'numero' => 84,
+            'centrocosto', 'sector', 'paquete', 'facturas' => 88,
             'cbu' => 100,
             'numerodocumento', 'alias_cbu' => 72,
             'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda', 'proveedor', 'detalle', 'cuentas', 'descripcion', 'categoria', 'tipo', 'concepto', 'movimientos' => 96,

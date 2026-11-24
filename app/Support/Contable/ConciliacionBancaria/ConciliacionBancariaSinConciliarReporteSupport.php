@@ -12,14 +12,18 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Armado del listado estilo Anita “Movimientos de Cuentas sin conciliar”.
  *
- * Anita Tesorería solo lista cheques / OP pendientes (CH*, ACP, ANULA, OPP/OPA).
+ * Anita Tesorería lista cheques / OP / cobranzas / transferencias tesmov
+ * (CH*, ACP, ANULA, OPP/OPA, COB/COA/COC, TED/TEH, EGR).
  * No mete ASI, TRA ni movimientos Interbanking (IB): esos van a la carátula /
  * solapas de conciliación, no a este reporte.
  */
 final class ConciliacionBancariaSinConciliarReporteSupport
 {
     /** Tips que Anita incluye en “Movimientos de Cuentas sin conciliar”. */
-    public const TIPS_ANITA = ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP', 'ANULA', 'OPP', 'OPA'];
+    public const TIPS_ANITA = [
+        'CHP', 'CHD', 'CHQ', 'CHE', 'ACP', 'ANULA', 'OPP', 'OPA',
+        'COB', 'COA', 'COC', 'TED', 'TEH', 'EGR',
+    ];
 
     /**
      * @param  array<string, mixed>  $resultado  Salida de ConciliacionBancariaService::ejecutar / cache
