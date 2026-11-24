@@ -1,33 +1,26 @@
+@php
+    use App\Support\Listado\ListadoGrillaConfigSupport;
+    use App\Support\Stock\ArticuloListadoColumnas;
+
+    $cfg = $cfg ?? null;
+    $alinea = is_array($cfg) ? ($cfg['alinea'] ?? 'izquierda') : (in_array($key, ['saldo', 'precio_proveedor'], true) ? 'derecha' : 'izquierda');
+    $cls = trim(ListadoGrillaConfigSupport::claseAlineacion($alinea).' lw-col');
+    $titleTexto = ArticuloListadoColumnas::valorCelda($articulo, $key);
+@endphp
 @switch ($key)
     @case('sku')
-        <td>
-            {{ $articulo->codigoarticulo ?? '' }}
-            @if (! empty($articulo->fl_precio_promedio_transferencia))
-                <span class="badge badge-info ml-1" title="Artículo TITO (transferencia contable)">TITO</span>
-            @endif
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">
+                {{ $articulo->codigoarticulo ?? '' }}
+                @if (! empty($articulo->fl_precio_promedio_transferencia))
+                    <span class="badge badge-info ml-1" title="Artículo TITO (transferencia contable)">TITO</span>
+                @endif
+            </span>
         </td>
-        @break
-    @case('codigobarra')
-        <td>{{ $articulo->codigobarra ?? '' }}</td>
-        @break
-    @case('descripcion')
-        <td>{{ $articulo->descripcion ?? '' }}</td>
-        @break
-    @case('unidadmedida')
-        <td>{{ $articulo->nombreunidadmedida ?? '' }}</td>
-        @break
-    @case('categoria')
-        <td>{{ $articulo->nombrecategoria ?? '' }}</td>
-        @break
-    @case('tipoarticulo')
-        <td>{{ $articulo->nombretipoarticulo ?? '' }}</td>
-        @break
-    @case('usoarticulo')
-        <td>{{ $articulo->nombreusoarticulo ?? '' }}</td>
         @break
     @case('canal')
         @if (\App\Support\Stock\ArticuloListadoFiltros::filtroCanalActivo())
-            <td>
+            <td class="{{ $cls }}">
                 @php
                     $nombresCanal = $articulo->relationLoaded('canales')
                         ? $articulo->canales->pluck('nombre')->filter()->implode(', ')
@@ -43,27 +36,20 @@
         @break
     @case('empresa')
         @if ($filtroEmpresaActivo)
-            <td><small>{{ $articulo->nombreempresa ?: 'Todas' }}</small></td>
+            <td class="{{ $cls }}" title="{{ $articulo->nombreempresa ?: 'Todas' }}">
+                <span class="lw-celda-texto"><small>{{ $articulo->nombreempresa ?: 'Todas' }}</small></span>
+            </td>
         @endif
         @break
-    @case('numeroparte')
-        <td>{{ $articulo->numeroparte ?? '' }}</td>
-        @break
-    @case('ubicacionparte')
-        <td>{{ $articulo->ubicacionparte ?? '' }}</td>
-        @break
     @case('saldo')
-        <td class="text-right">
+        <td class="{{ $cls }} text-right">
             @if (isset($saldosDeposito[$articulo->id]))
                 {{ number_format($saldosDeposito[$articulo->id], 2, ',', '.') }}
             @endif
         </td>
         @break
-    @case('nofactura')
-        <td>{{ ($articulo->nofactura == '0' ? 'Facturable' : ($articulo->nofactura == '1' ? 'No facturable' : '')) }}</td>
-        @break
     @case('estado')
-        <td>
+        <td class="{{ $cls }}">
             @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
                 @php
                     $ef = strtoupper((string) ($articulo->estado_fabrica ?? $articulo->estado ?? ''));
@@ -76,31 +62,26 @@
                     Loc {{ $el === 'ACTIVO' ? 'A' : 'I' }}
                 </span>
             @else
-                {{ $articulo->estado }}
+                <span class="lw-celda-texto">{{ $articulo->estado }}</span>
             @endif
         </td>
         @break
-    @case('fecha_alta')
-        <td>{{ $articulo->created_at ? \Carbon\Carbon::parse($articulo->created_at)->format('d/m/Y') : '' }}</td>
-        @break
-    @case('fecha_modificacion')
-        <td>{{ $articulo->updated_at ? \Carbon\Carbon::parse($articulo->updated_at)->format('d/m/Y') : '' }}</td>
-        @break
-    @case('cuentaventa')
-    @case('cuentacompra')
-    @case('cuentagasto')
-        <td title="{{ $articulo->{$key} ?? '' }}">{{ $articulo->{$key} ?? '' }}</td>
-        @break
     @case('proveedor_art')
-        <td>
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
             @include('includes.listado.celda_enlace', [
                 'filaEnlace' => $articulo,
-                'metaEnlace' => \App\Support\Stock\ArticuloListadoColumnas::catalogoActivo()[$key] ?? [],
+                'metaEnlace' => ArticuloListadoColumnas::catalogoActivo()[$key] ?? [],
                 'textoEnlace' => $articulo->proveedor_art ?? '',
             ])
         </td>
         @break
     @case('precio_proveedor')
-        <td class="text-right">{{ \App\Support\Stock\ArticuloListadoColumnas::valorCelda($articulo, 'precio_proveedor') }}</td>
+        <td class="{{ $cls }} text-right" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $titleTexto }}</span>
+        </td>
         @break
+    @default
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $titleTexto }}</span>
+        </td>
 @endswitch

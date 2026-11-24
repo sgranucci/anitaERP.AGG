@@ -1,5 +1,5 @@
 {{-- Acciones fijas de la bandeja (fuera del DnD de columnas) --}}
-<td class="lw-col-acciones col-fija-der-1">
+<td class="lw-col-acciones">
 <div class="bandeja-acciones">
 @if (! $esSectorCxp)
                                     <a href="{{ $row['url_oc'] }}" class="btn btn-xs btn-info" title="Ver orden de compra" target="_blank" rel="noopener">

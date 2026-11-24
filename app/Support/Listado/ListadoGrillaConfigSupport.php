@@ -236,18 +236,34 @@ final class ListadoGrillaConfigSupport
         return match ($key) {
             'id' => 56,
             'fuera_pago' => 56,
+            'mail' => 40,
             'codigo', 'estado', 'tipoalta', 'semaforo', 'apoc' => 72,
             'numerodocumento', 'codigopostal', 'telefono' => 96,
+            'fecha' => 70,
+            'op' => 88,
+            'monto' => 100,
+            'sku' => 88,
+            'descripcion' => 170,
+            'unidadmedida' => 72,
+            'categoria' => 110,
+            'tipoarticulo' => 90,
+            'usoarticulo' => 90,
+            'numeroparte' => 64,
+            'ubicacionparte' => 72,
+            'saldo' => 80,
+            'nofactura' => 80,
+            'codigobarra' => 100,
             'cbu' => 160,
             'alias_cbu' => 110,
             'cuentaventa', 'cuentacompra', 'cuentagasto' => 220,
             'nombre' => 150,
             'fantasia' => 160,
+            'proveedor' => 180,
+            'detalle' => 130,
+            'cuentas' => 150,
             'domicilio' => 120,
             'leyenda', 'email', 'emailoc' => 140,
             'localidad', 'provincia', 'pais', 'empresa' => 90,
-            'estado' => 80,
-            'apoc' => 72,
             default => (($meta['type'] ?? '') === 'entero' ? 64 : 110),
         };
     }
@@ -261,11 +277,12 @@ final class ListadoGrillaConfigSupport
     public static function anchoMinimoLegible(string $key, array $meta = [], ?string $titulo = null): int
     {
         $base = match ($key) {
-            'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago' => self::ANCHO_MIN_LEGIBLE,
-            'estado', 'apoc' => 72,
+            'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago', 'mail', 'numeroparte', 'ubicacionparte' => self::ANCHO_MIN_LEGIBLE,
+            'estado', 'apoc', 'fecha', 'unidadmedida', 'nofactura', 'saldo' => 72,
+            'op', 'monto', 'sku', 'tipoarticulo', 'usoarticulo' => 84,
             'cbu' => 100,
             'numerodocumento', 'alias_cbu' => 72,
-            'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda' => 96,
+            'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda', 'proveedor', 'detalle', 'cuentas', 'descripcion', 'categoria' => 96,
             default => (($meta['type'] ?? '') === 'entero' ? 52 : 64),
         };
 

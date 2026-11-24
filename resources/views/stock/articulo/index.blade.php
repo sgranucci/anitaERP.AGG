@@ -15,13 +15,22 @@ Art&iacute;culos
 .lw-workbench .articulo-grilla #tabla-paginada td.lw-col-acciones {
     width: var(--tabla-ancha-der);
     min-width: var(--tabla-ancha-der);
-    max-width: none;
+    max-width: var(--tabla-ancha-der);
     white-space: nowrap;
     overflow: visible;
     text-align: center;
     vertical-align: middle;
     padding-left: 0.2rem;
     padding-right: 0.2rem;
+}
+/* Fit: tabla al 100% (tabla-ancha trae width:max-content y empujaba todo). */
+.lw-workbench .articulo-grilla .lw-table-fit .tabla-ancha {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100%;
+}
+.lw-workbench .articulo-grilla .lw-table-fit .tabla-ancha td.lw-col {
+    max-width: 0; /* ellipsis con table-layout:fixed */
 }
 </style>
 @endsection
@@ -163,7 +172,6 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 </option>
                             @endforeach
                             </select>
-                        @include('stock.articulo.partials.filtros_externos')
                         <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#modal-lw-grilla"
                                 @if (! ($workbenchListo ?? false)) disabled title="Requiere migraci&oacute;n" @endif>
                             <i class="fa fa-th"></i> Dise&ntilde;ar vista
@@ -199,6 +207,18 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                         @endif
                     </div>
                 </div>
+                <div class="card-body py-2 border-bottom bg-white">
+                    <div class="d-flex flex-wrap align-items-center" style="gap:.35rem;">
+                        @include('stock.articulo.partials.filtros_externos')
+                        <span class="ml-auto">
+                            @include('includes.exportar-tabla-queryparams', [
+                                'ruta' => 'lista_articulo',
+                                'queryparams' => $filtrosQuery ?? [],
+                                'variant' => 'compact',
+                            ])
+                        </span>
+                    </div>
+                </div>
                 @include('stock.articulo.partials.workbench_qbe')
                 @php
                     $ejesVisual = \App\Support\Stock\ArticuloListadoFiltros::camposOrdenables();
@@ -214,28 +234,61 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="lw-toolbar-export border-bottom bg-white">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_articulo',
-                    'queryparams' => $filtrosQuery ?? [],
-                    'variant' => 'compact',
-                ])
-            </div>
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $filtroEmpresaActivo = ArticuloListadoFiltros::filtroEmpresaActivo();
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                // Vista estándar: forzar fit (table-layout:fixed al 100%). Los min-width por
+                // título del thead sumaban > viewport y empujaban Acciones afuera.
+                $usaScrollHorizontal = count($columnasVisibles) > 14
+                    || $sumaAnchosPantalla > (LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 200);
+                $anchoAcciones = 232;
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+            @endphp
             <div class="tabla-ancha-grilla articulo-grilla" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                @php
-                    $filtroEmpresaActivo = ArticuloListadoFiltros::filtroEmpresaActivo();
-                @endphp
-                <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                            @include('stock.articulo.partials.workbench_th', ['key' => $keyColumna])
+                                @php
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? ($layoutPorKey[$keyColumna] ?? null);
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $tituloCol = $etiquetasColumnas[$keyColumna] ?? ($catalogoColumnas[$keyColumna]['label'] ?? $keyColumna);
+                                    if ($usaScrollHorizontal) {
+                                        $minLegible = LwGrilla::anchoMinimoLegible(
+                                            $keyColumna,
+                                            $catalogoColumnas[$keyColumna] ?? [],
+                                            $tituloCol
+                                        );
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        // Sin piso de título: si no, la suma de mins > pantalla y “no entra nada”.
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
+                                    }
+                                @endphp
+                                @include('stock.articulo.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
+                                ])
                             @endforeach
-                            <th class="lw-col-acciones col-fija-der-1" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -249,9 +302,13 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                             @endphp
     						<tr @class(['lw-tono-danger' => $tonoFila === 'danger', 'lw-tono-warning' => $tonoFila === 'warning', 'lw-tono-success' => $tonoFila === 'success'])>
                                 @foreach ($columnasVisibles as $keyColumna)
-                                @include('stock.articulo.partials.workbench_celda', ['key' => $keyColumna])
+                                @include('stock.articulo.partials.workbench_celda', [
+                                    'key' => $keyColumna,
+                                    'cfg' => $layoutPorKey[$keyColumna] ?? null,
+                                ])
                                 @endforeach
-                            <td class="lw-col-acciones col-fija-der-1">
+                            <td class="lw-col-acciones"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
                                 <div class="lw-acciones-inner">
                        			@if (can('editar-articulos', false))
                                 	<a href="{{route('editar_articulo', ['id' => $articulo->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

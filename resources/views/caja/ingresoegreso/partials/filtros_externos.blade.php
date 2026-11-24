@@ -99,5 +99,12 @@
         <a href="{{ $urlMail('') }}" class="btn btn-sm {{ $mailActual === '' ? 'btn-info' : 'btn-outline-secondary' }}">Todos</a>
         <a href="{{ $urlMail('enviado') }}" class="btn btn-sm {{ $mailActual === 'enviado' ? 'btn-info' : 'btn-outline-secondary' }}">Enviado</a>
         <a href="{{ $urlMail('no') }}" class="btn btn-sm {{ $mailActual === 'no' ? 'btn-info' : 'btn-outline-secondary' }}">Sin enviar</a>
+        <span class="ml-auto">
+            @include('includes.exportar-tabla-queryparams', [
+                'ruta' => 'lista_ingresoegreso',
+                'queryparams' => $filtrosQuery ?? [],
+                'variant' => 'compact',
+            ])
+        </span>
     </div>
 </div>

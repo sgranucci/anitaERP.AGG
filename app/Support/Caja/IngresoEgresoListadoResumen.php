@@ -35,6 +35,9 @@ final class IngresoEgresoListadoResumen
             'egresos' => 0.0,
         ];
 
+        // Una sola carga de asientos OPV (evita N+1 full-scan sobre asiento).
+        IngresoEgresoListadoMontoSupport::precargarAsientosOpv($filas);
+
         foreach ($filas as $fila) {
             $resumen = IngresoEgresoListadoMontoSupport::resumen($fila);
             if ($fila instanceof Model) {

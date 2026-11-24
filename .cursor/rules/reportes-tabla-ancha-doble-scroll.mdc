@@ -61,6 +61,10 @@ En workbench / listados, la última columna de botones se titula **Acciones** (n
 
 No inventar otro sync de scroll ni CSS duplicado: reutilizar estos assets.
 
+## Workbench paginado vs reporte a pantalla
+
+`.tabla-ancha-wrap` en el CSS base usa `max-height: calc(100vh - 240px)` + `overflow-y: auto` para reportes que llenan la ventana (flash, anexos Crown). En **workbench** (`.lw-workbench`) eso se anula en `listado-workbench.css`: sin caja con scroll vertical interno; solo horizontal si hace falta. La página scrollea una sola vez (toolbar + grilla + paginación).
+
 ## Prohibido
 
 ```blade

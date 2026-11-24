@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Cache;
 
 final class PagoproveedorListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'compras-pagoproveedor-listado-grilla-estandar-v1';
+    /** v2: Fecha/OP más chicas, OP a la izquierda, Proveedor más ancho. */
+    private const CACHE_GRILLA = 'compras-pagoproveedor-listado-grilla-estandar-v2';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout

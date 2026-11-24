@@ -1,4 +1,34 @@
 (function () {
+    function celdasAcciones(table) {
+        if (!table) {
+            return [];
+        }
+        return table.querySelectorAll('th.lw-col-acciones, td.lw-col-acciones, th.col-acciones-tabla, td.col-acciones-tabla');
+    }
+
+    function setStickyAcciones(root, table, activo) {
+        if (root.dataset.accionesStickyAuto === '0') {
+            return;
+        }
+        var celdas = celdasAcciones(table);
+        if (!celdas.length) {
+            return;
+        }
+        var i;
+        for (i = 0; i < celdas.length; i++) {
+            if (activo) {
+                celdas[i].classList.add('col-fija-der-1');
+            } else {
+                celdas[i].classList.remove('col-fija-der-1');
+            }
+        }
+        if (activo) {
+            root.classList.add('tabla-ancha--acciones-sticky');
+        } else {
+            root.classList.remove('tabla-ancha--acciones-sticky');
+        }
+    }
+
     function bindTablaAncha(root) {
         if (root.dataset.tablaAnchaBound === '1') {
             if (typeof root._tablaAnchaMedir === 'function') {
@@ -32,10 +62,14 @@
         }
         function medir() {
             medirDobleCabecera();
+            // Medir overflow sin sticky: si no, el ancho fijo de col-fija-der puede falsear.
+            setStickyAcciones(root, table, false);
             var ancho = table ? table.scrollWidth : wrap.scrollWidth;
             topInner.style.width = ancho + 'px';
-            if (wrap.scrollWidth > wrap.clientWidth + 2) {
+            var hayScroll = wrap.scrollWidth > wrap.clientWidth + 2;
+            if (hayScroll) {
                 topScroll.removeAttribute('hidden');
+                setStickyAcciones(root, table, true);
             } else {
                 topScroll.setAttribute('hidden', 'hidden');
             }

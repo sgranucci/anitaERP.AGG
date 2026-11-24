@@ -15,7 +15,7 @@
                 </a>
             @endif
             @if ($puedeBoveda ?? false)
-                <a href="{{ route('tesoreria_crown_boveda', ['sala_id' => $jornada->sala_id, 'jornada_id' => $jornada->id]) }}"
+                <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=boveda"
                    class="tc-nav-boveda {{ ($navActivo ?? '') === 'boveda' ? 'is-on' : '' }}">
                     <i class="fa fa-university" aria-hidden="true"></i>
                     Bóveda <span class="tc-count">{{ $navBoveda ?? 0 }}</span>

@@ -37,7 +37,9 @@ final class PagoproveedorListadoColumnas
             'default' => true,
             'export' => true,
             'filterable' => true,
+            // entero para QBE por número; la celda muestra "OPP 1-…" → izquierda
             'type' => 'entero',
+            'alinea' => 'izquierda',
             'source' => 'listado_op.numerotransaccion',
             'attr' => 'op',
             'group' => self::GRUPO_PAGO,

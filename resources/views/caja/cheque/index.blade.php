@@ -126,36 +126,23 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $retornoImpresionNd = \App\Support\Ventas\ComprobanteImpresionSesionUrlSupport::retornoRequestActual();
     $limpiarUrl = route('cheque', ChequeListadoFiltros::paraQueryStringExternos($filtros ?? []));
-    $ordenActualThead = (
-        (($filtros['orden'] ?? 'fechapago') !== 'fechapago' || ($filtros['orden_dir'] ?? 'desc') !== 'desc')
-        || \App\Support\Listado\ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], \App\Support\Caja\ChequeListadoFiltros::camposOrdenables()) !== []
-    ) ? [['campo' => $filtros['orden'] ?? 'fechapago', 'dir' => $filtros['orden_dir'] ?? 'desc']] : [];
+    $camposOrdenablesThead = ChequeListadoFiltros::camposOrdenables();
+    $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+        $filtros['sort'] ?? [],
+        $camposOrdenablesThead
+    );
+    // Dropdown legacy de orden: si no hay sort[] pero eligieron otro criterio, reflejarlo en el thead.
+    if ($ordenActualThead === []) {
+        $ordenLegacy = (string) ($filtros['orden'] ?? 'fechapago');
+        $dirLegacy = (string) ($filtros['orden_dir'] ?? 'desc');
+        if ($ordenLegacy !== 'fechapago' || $dirLegacy !== 'desc') {
+            $ordenActualThead = [['campo' => $ordenLegacy, 'dir' => $dirLegacy]];
+        }
+    }
     $qsQuitarOrden = $filtrosQuery ?? [];
     unset($qsQuitarOrden['sort'], $qsQuitarOrden['orden'], $qsQuitarOrden['orden_dir'], $qsQuitarOrden['page']);
     $qsQuitarOrden['quitar_orden'] = 1;
     $urlQuitarOrden = route('cheque', $qsQuitarOrden);
-
-    $ordenActual = $filtros['orden'] ?? 'fechapago';
-    $ordenDir = $filtros['orden_dir'] ?? 'desc';
-    $urlOrden = function (string $col) use ($filtrosQuery, $ordenActual, $ordenDir) {
-        $q = $filtrosQuery ?? [];
-        unset($q['sort'], $q['group']);
-        $q['orden'] = $col;
-        if ($ordenActual === $col) {
-            $q['orden_dir'] = $ordenDir === 'asc' ? 'desc' : 'asc';
-        } else {
-            $q['orden_dir'] = in_array($col, ['numerocheque'], true) ? 'asc' : 'desc';
-        }
-
-        return route('cheque', $q);
-    };
-    $marcaOrden = function (string $col) use ($ordenActual, $ordenDir) {
-        if ($ordenActual !== $col) {
-            return '';
-        }
-
-        return $ordenDir === 'asc' ? ' ↑' : ' ↓';
-    };
 @endphp
 <div class="row">
     <div class="col-lg-12">

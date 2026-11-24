@@ -16,9 +16,10 @@ use Illuminate\Support\Facades\Cache;
  */
 final class ArticuloListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'articulo-listado-grilla-estandar-v1';
+    /** v2: sin Cód. barra en la vista estándar (entra la grilla en pantalla). */
+    private const CACHE_GRILLA = 'articulo-listado-grilla-estandar-v2';
 
-    private const CACHE_COLUMNAS = 'articulo-listado-columnas';
+    private const CACHE_COLUMNAS = 'articulo-listado-columnas-v2';
 
     /**
      * Persiste la grilla de la Vista estándar (sin vista_id).

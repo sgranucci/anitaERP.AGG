@@ -1236,7 +1236,7 @@ Bandeja de legajos
                                     'ordenActualThead' => $ordenActualThead,
                                 ])
                             @endforeach
-                            <th class="lw-col-acciones col-fija-der-1 text-center" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones text-center" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>

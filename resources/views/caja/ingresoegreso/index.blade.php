@@ -6,6 +6,26 @@
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+    /* 5 botones (mail/print/edit/anular/revertir). Sticky lo prende tabla-ancha-reporte.js si hay scroll. */
+    .lw-workbench .ie-grilla-ancha {
+        --tabla-ancha-der: 12rem;
+    }
+    .lw-workbench .ie-grilla-ancha th.lw-col-acciones,
+    .lw-workbench .ie-grilla-ancha td.lw-col-acciones {
+        width: var(--tabla-ancha-der);
+        min-width: var(--tabla-ancha-der);
+        max-width: var(--tabla-ancha-der);
+    }
+    .lw-workbench .ie-grilla-ancha .lw-acciones-inner form {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        flex: 0 0 auto;
+    }
+</style>
 @endsection
 
 @section("scripts")
@@ -257,18 +277,11 @@
                 <span>Ingresos <strong>{{ number_format((float) $totalesListado['ingresos'], 2, ',', '.') }}</strong></span>
                 <span>Egresos <strong>{{ number_format((float) $totalesListado['egresos'], 2, ',', '.') }}</strong></span>
                 <span class="text-muted">Totales del filtro completo, en pesos.</span>
-                <span class="ml-auto">
-                    @include('includes.exportar-tabla-queryparams', [
-                        'ruta' => 'lista_ingresoegreso',
-                        'queryparams' => $filtrosQuery ?? [],
-                        'variant' => 'compact',
-                    ])
-                </span>
             </div>
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            <div class="tabla-ancha-grilla ie-grilla-ancha" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
@@ -282,7 +295,7 @@
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="width80" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -307,7 +320,8 @@
                             @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
                                 <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
                             @endforeach
-                            <td class="text-nowrap">
+                            <td class="lw-col-acciones text-nowrap">
+                                <div class="lw-acciones-inner">
                                 @if (! empty($data->_es_pago_proveedor) && (can('listar-ingresos-egresos-caja', false) || can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false)))
                                     <button type="button"
                                         class="btn-accion-tabla tooltipsC js-op-enviar-proveedor text-success"
@@ -363,6 +377,7 @@
                                         </button>
                                     </form>
                                 @endif
+                                </div>
                             </td>
                         </tr>
                         @empty

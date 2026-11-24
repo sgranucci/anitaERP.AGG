@@ -108,7 +108,13 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
                                 ->join('empresa', 'empresa.id', '=', 'caja_movimiento.empresa_id')
                                 ->leftjoin('conceptogasto', 'conceptogasto.id', '=', 'caja_movimiento.conceptogasto_id')
                                 ->leftJoin('usuario', 'usuario.id', '=', 'caja_movimiento.usuario_id')
-                                ->with(['caja_movimiento_cuentacajas', 'cheques']);
+                                // chequeReemplazoTransferencias: el monto del listado lo lee por fila;
+                                // sin eager load son N queries (una por movimiento).
+                                ->with([
+                                    'caja_movimiento_cuentacajas',
+                                    'cheques',
+                                    'chequeReemplazoTransferencias',
+                                ]);
 
         if ($caja_id > 0) {
             $caja_movimientos->where('caja_movimiento.caja_id', $caja_id);

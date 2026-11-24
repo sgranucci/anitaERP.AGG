@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\Caja_Movimiento;
 use App\Support\Configuracion\CotizacionVigenteSupport;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Monto y leyendas del index/export IE: cuentas de caja + cheques.
@@ -15,6 +18,36 @@ use App\Support\Configuracion\CotizacionVigenteSupport;
  */
 final class IngresoEgresoListadoMontoSupport
 {
+    /**
+     * Precarga asientos solo de OPV (el resumen los necesita; sin índice en
+     * asiento.caja_movimiento_id un loadMissing por fila era ~300–800 ms c/u).
+     *
+     * @param  iterable<int, mixed>  $filas
+     */
+    public static function precargarAsientosOpv(iterable $filas): void
+    {
+        $opvs = [];
+        foreach ($filas as $fila) {
+            if (! $fila instanceof Caja_Movimiento && ! $fila instanceof Model) {
+                continue;
+            }
+            if (method_exists($fila, 'relationLoaded') && $fila->relationLoaded('asientos')) {
+                continue;
+            }
+            if (! self::esOpv($fila)) {
+                continue;
+            }
+            $opvs[] = $fila;
+        }
+        if ($opvs === []) {
+            return;
+        }
+
+        (new EloquentCollection($opvs))->load([
+            'asientos.asiento_movimientos.cuentacontables',
+        ]);
+    }
+
     /**
      * @return array{ingreso: float, egreso: float, monto: float, lineas: list<string>}
      */

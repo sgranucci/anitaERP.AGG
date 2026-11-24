@@ -6,6 +6,24 @@
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+/* Acciones fijas a la derecha (editar + borrar). */
+.lw-workbench .bien-uso-grilla {
+    --tabla-ancha-der: 9rem;
+}
+.lw-workbench .bien-uso-grilla #tabla-paginada th.lw-col-acciones,
+.lw-workbench .bien-uso-grilla #tabla-paginada td.lw-col-acciones {
+    width: var(--tabla-ancha-der);
+    min-width: var(--tabla-ancha-der);
+    max-width: none;
+    white-space: nowrap;
+    overflow: visible;
+    text-align: center;
+    vertical-align: middle;
+    padding-left: 0.2rem;
+    padding-right: 0.2rem;
+}
+</style>
 @endsection
 
 @section("scripts")
@@ -177,6 +195,24 @@
                     Mostrando bienes del pool: <strong>{{ $alcance_centro_costo }}</strong>
                 </div>
             @endif
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = LwGrilla::ANCHO_COL_ACCIONES;
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+            @endphp
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
@@ -187,18 +223,39 @@
                     'variant' => 'compact',
                 ])
             </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            <div class="tabla-ancha-grilla bien-uso-grilla" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                    <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background-color:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                                @include('contable.bien_uso.partials.workbench_th', ['key' => $keyColumna])
+                                @php
+                                    $cfg = $layoutPorKey[$keyColumna] ?? null;
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? $cfg;
+                                    $alinea = $cfg['alinea'] ?? 'izquierda';
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $cls = LwGrilla::claseAlineacion($alinea);
+                                    $tituloCol = $etiquetasColumnas[$keyColumna] ?? ($catalogoColumnas[$keyColumna]['label'] ?? $keyColumna);
+                                    $minLegible = LwGrilla::anchoMinimoLegible($keyColumna, $catalogoColumnas[$keyColumna] ?? [], $tituloCol);
+                                    if ($usaScrollHorizontal) {
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
+                                    }
+                                @endphp
+                                @include('contable.bien_uso.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
+                                    'clsAlinea' => $cls,
+                                    'tituloOverride' => $tituloCol,
+                                ])
                             @endforeach
-                            <th class="text-nowrap" style="width:70px" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones col-fija-der-1" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -232,22 +289,32 @@
                                 @php $data = $filaVista['row']; @endphp
                                 <tr>
                                     @foreach ($columnasVisibles as $keyColumna)
-                                        @include('contable.bien_uso.partials.workbench_celda', ['key' => $keyColumna, 'data' => $data])
+                                        @include('contable.bien_uso.partials.workbench_celda', [
+                                            'key' => $keyColumna,
+                                            'data' => $data,
+                                            'cfg' => $layoutPorKey[$keyColumna] ?? null,
+                                            'styleCol' => ($usaScrollHorizontal
+                                                ? 'width:'.((int) (($layoutPantallaPorKey[$keyColumna] ?? [])['ancho'] ?? 100)).'px;'
+                                                : 'width:'.round((((int) (($layoutPantallaPorKey[$keyColumna] ?? [])['ancho'] ?? 100)) / $sumaAnchosPantalla) * $pctDatosDisponible, 2).'%;'),
+                                        ])
                                     @endforeach
-                                    <td class="text-nowrap align-middle">
-                                        @if (can('editar-bien-uso', false))
-                                            <a href="{{ route('editar_bien_uso', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                                <i class="fa fa-edit"></i>
-                                            </a>
-                                        @endif
-                                        @if (can('borrar-bien-uso', false))
-                                            <form action="{{ route('eliminar_bien_uso', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
-                                                @csrf @method("delete")
-                                                <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                                    <i class="fa fa-times-circle text-danger"></i>
-                                                </button>
-                                            </form>
-                                        @endif
+                                    <td class="lw-col-acciones col-fija-der-1 text-nowrap"
+                                        style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                        <div class="lw-acciones-inner">
+                                            @if (can('editar-bien-uso', false))
+                                                <a href="{{ route('editar_bien_uso', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                                    <i class="fa fa-edit"></i>
+                                                </a>
+                                            @endif
+                                            @if (can('borrar-bien-uso', false))
+                                                <form action="{{ route('eliminar_bien_uso', ['id' => $data->id]) }}" class="d-inline-flex form-eliminar mb-0" method="POST">
+                                                    @csrf @method("delete")
+                                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                                        <i class="fa fa-times-circle text-danger"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @endif

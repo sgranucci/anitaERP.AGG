@@ -213,12 +213,25 @@
   position: relative;
 }
 
+/*
+ * tabla-ancha-reporte.css pone max-height + overflow-y en .tabla-ancha-wrap
+ * (reportes a pantalla completa). En workbench paginado eso genera scroll
+ * interno + scroll de la ventana. Acá solo scroll horizontal; el vertical es la página.
+ */
+.lw-workbench .tabla-ancha-wrap {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
 /* Vista estándar / pocas columnas: ocupa el ancho útil sin scroll lateral. */
 .lw-workbench .lw-table-fit {
   overflow-x: auto; /* solo si el viewport es más chico que el piso legible */
 }
-.lw-workbench .lw-table-fit .lw-tabla-grilla {
+.lw-workbench .lw-table-fit .lw-tabla-grilla,
+.lw-workbench .lw-table-fit .tabla-ancha.lw-tabla-grilla {
   width: 100%;
+  min-width: 100%;
   table-layout: fixed;
 }
 

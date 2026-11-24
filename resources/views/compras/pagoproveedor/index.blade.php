@@ -7,13 +7,46 @@
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 <style>
+    /* Acciones sticky a la derecha (editar/print/docs/mail/revertir ≈ 5 botones). */
+    .lw-workbench .pp-grilla-ancha {
+        --tabla-ancha-der: 11.5rem;
+    }
+    .lw-workbench .pp-grilla-ancha th.lw-col-acciones,
+    .lw-workbench .pp-grilla-ancha td.lw-col-acciones {
+        width: var(--tabla-ancha-der);
+        min-width: var(--tabla-ancha-der);
+        max-width: var(--tabla-ancha-der);
+    }
+    .lw-workbench .pp-grilla-ancha .lw-acciones-inner form {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        flex: 0 0 auto;
+    }
     #tabla-paginada tr.pp-tono-danger > td { background:#FDEDEC !important; }
     #tabla-paginada tr.pp-tono-warning > td { background:#FEF9E7 !important; }
     #tabla-paginada tr.pp-tono-success > td { background:#E8F8F5 !important; }
+    #tabla-paginada tr.pp-tono-danger > td.col-fija-der-1 { background:#FDEDEC !important; }
+    #tabla-paginada tr.pp-tono-warning > td.col-fija-der-1 { background:#FEF9E7 !important; }
+    #tabla-paginada tr.pp-tono-success > td.col-fija-der-1 { background:#E8F8F5 !important; }
     #tabla-paginada td.pp-fecha-celda { line-height: 1; padding-top: 0.15rem; padding-bottom: 0.1rem; }
     #tabla-paginada .pp-fecha-bloque { display: inline-flex; flex-direction: column; line-height: 1; }
     #tabla-paginada .pp-fecha-dia { line-height: 1.05; }
     #tabla-paginada .pp-fecha-hora { display: block; margin-top: 1px; font-size: 0.62rem; line-height: 1; color: #7f8c8d; letter-spacing: .02em; }
+    /* Cuentas: lista compacta sin estirar la grilla. */
+    #tabla-paginada td.pp-cuentas-celda ul {
+        margin: 0;
+        padding-left: 1rem;
+        max-width: 100%;
+    }
+    #tabla-paginada td.pp-cuentas-celda li {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
+    }
 </style>
 @endsection
 
@@ -348,21 +381,62 @@
                     @include('includes.listado.workbench_cortes', ['cortes' => $cortes])
                 </div>
             @endif
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = 184;
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+            @endphp
+            <div class="tabla-ancha-grilla pp-grilla-ancha" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                                @include('compras.pagoproveedor.partials.workbench_th', ['key' => $keyColumna])
+                                @php
+                                    $cfg = $layoutPorKey[$keyColumna] ?? null;
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? $cfg;
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $tituloCol = $etiquetasColumnas[$keyColumna] ?? ($catalogoColumnas[$keyColumna]['label'] ?? $keyColumna);
+                                    $minLegible = LwGrilla::anchoMinimoLegible(
+                                        $keyColumna,
+                                        $catalogoColumnas[$keyColumna] ?? [],
+                                        $tituloCol
+                                    );
+                                    if ($usaScrollHorizontal) {
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        // Sin piso de título: evita que la suma de mins empuje Acciones afuera.
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
+                                    }
+                                @endphp
+                                @include('compras.pagoproveedor.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
+                                    'cfg' => $cfg,
+                                ])
                             @endforeach
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="width80" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -380,12 +454,15 @@
                                     @include('compras.pagoproveedor.partials.workbench_celda', [
                                         'key' => $keyColumna,
                                         'fila' => $fila,
+                                        'cfg' => $layoutPorKey[$keyColumna] ?? null,
                                     ])
                                 @endforeach
                                 @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
                                     <td>{{ $fila->calculadas['calc_'.$iCalc] ?? '' }}</td>
                                 @endforeach
-                                <td class="text-nowrap">
+                                <td class="lw-col-acciones text-nowrap"
+                                    style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                    <div class="lw-acciones-inner">
                                     @php
                                         $opSoloLectura = strtoupper(trim((string) ($fila->estado ?? ''))) === 'REVERTIDA';
                                     @endphp
@@ -471,6 +548,7 @@
                                             </form>
                                         @endif
                                     @endif
+                                    </div>
                                 </td>
                             </tr>
                         @empty

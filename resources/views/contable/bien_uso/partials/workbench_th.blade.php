@@ -1,6 +1,5 @@
 @php
-    $titulo = ($etiquetasColumnas ?? [])[$key] ?? $key;
-    $alineacion = '';
+    $titulo = $tituloOverride ?? (($etiquetasColumnas ?? [])[$key] ?? $key);
     $camposOrden = $camposOrdenablesThead ?? [];
     $ordenActual = $ordenActualThead ?? [];
     $esOrdenable = isset($camposOrden[$key]);
@@ -10,7 +9,7 @@
     $idxCol = $esOrdenable
         ? \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActual, $key)
         : null;
-    $claseCol = trim($alineacion.' lw-th-drag');
+    $claseCol = trim(($clsAlinea ?? '').' lw-col lw-th-drag');
     $titleTh = $titulo.' — arrastrá para mover · × para ocultar (con confirmación)';
     if ($esOrdenable) {
         $claseCol = trim($claseCol.' lw-col-sortable'.($dirCol ? ' lw-col-sorted' : ''));
@@ -25,7 +24,11 @@
         );
     }
 @endphp
-<th class="{{ $claseCol }}" title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true">
+<th class="{{ $claseCol }}"
+    @if (! empty($styleCol)) style="{{ $styleCol }}" @endif
+    title="{{ $titleTh }}"
+    data-col-key="{{ $key }}"
+    draggable="true">
     <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
     @if ($esOrdenable)
         <a href="{{ route('bien_uso', $qsSort) }}" class="lw-sort-link" draggable="false">

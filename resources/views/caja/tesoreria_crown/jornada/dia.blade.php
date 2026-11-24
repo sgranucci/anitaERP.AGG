@@ -43,6 +43,10 @@
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/listado.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/listado.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/mesa_revertir.js')) }}"></script>
     <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/anexo_orden_columnas.js')) }}"></script>
+    @if (($panel ?? '') === 'boveda')
+        <script src="{{ asset('assets/pages/scripts/listado/workbench-columnas-dnd.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-columnas-dnd.js')) }}"></script>
+        <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/boveda_panel.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/boveda_panel.js')) }}"></script>
+    @endif
     @if (in_array($panel ?? '', ['rescajero', 'anexo3'], true))
         <script src="{{ asset('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js') }}?v={{ filemtime(public_path('assets/pages/scripts/caja/tesoreria_crown/auditoria_importe.js')) }}"></script>
     @endif
@@ -93,6 +97,7 @@
                 if ($jornada) {
                     $exportDeskRuta = match ($panel ?? '') {
                         'mesas' => 'listar_mesas_tesoreria_crown_jornada',
+                        'boveda' => 'listar_tesoreria_crown_boveda',
                         'slots' => 'listar_slots_tesoreria_crown_jornada',
                         'poder' => 'listar_poder_publico_tesoreria_crown_jornada',
                         'anexo' => 'listar_anexo1_tesoreria_crown_jornada',
@@ -108,12 +113,20 @@
                             'columnas' => implode(',', $columnasVisibles ?? []),
                         ])
                         : (
-                            ($panel ?? '') === 'anexo'
-                                ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'nuevo']
+                            ($panel ?? '') === 'boveda'
+                                ? array_merge($filtrosQuery ?? [], [
+                                    'jornada_id' => $jornada->id,
+                                    'deposito_id' => $lugar?->id,
+                                    'columnas' => implode(',', $columnasVisibles ?? []),
+                                ])
                                 : (
-                                    ($panel ?? '') === 'anexo2'
-                                        ? ['id' => $jornada->id, 'grupo_anexo2' => $anexo2['grupo'] ?? 'todo']
-                                        : ['id' => $jornada->id]
+                                    ($panel ?? '') === 'anexo'
+                                        ? ['id' => $jornada->id, 'formato_anexo' => $anexoVariante ?? 'nuevo']
+                                        : (
+                                            ($panel ?? '') === 'anexo2'
+                                                ? ['id' => $jornada->id, 'grupo_anexo2' => $anexo2['grupo'] ?? 'todo']
+                                                : ['id' => $jornada->id]
+                                        )
                                 )
                         );
                 }
@@ -259,6 +272,8 @@
                     @endif
                     @if ($panel === 'mesas')
                         @include('caja.tesoreria_crown.jornada.partials.mesa')
+                    @elseif ($panel === 'boveda')
+                        @include('caja.tesoreria_crown.jornada.partials.boveda')
                     @elseif ($panel === 'slots')
                         @include('caja.tesoreria_crown.jornada.partials.slots')
                     @elseif ($panel === 'poder')

@@ -7,6 +7,23 @@
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+    /* Jornadas: caber en una pantalla; nombres largos con ellipsis + title. */
+    .lw-workbench #tabla-paginada th[data-col-key="fecha"],
+    .lw-workbench #tabla-paginada td[data-col-key="fecha"] { width: 6.5rem; }
+    .lw-workbench #tabla-paginada th[data-col-key="estado"],
+    .lw-workbench #tabla-paginada td[data-col-key="estado"] { width: 5.5rem; }
+    .lw-workbench #tabla-paginada th[data-col-key="asignaciones"],
+    .lw-workbench #tabla-paginada td[data-col-key="asignaciones"],
+    .lw-workbench #tabla-paginada th[data-col-key="movimientos"],
+    .lw-workbench #tabla-paginada td[data-col-key="movimientos"] { width: 6.5rem; }
+    .lw-workbench #tabla-paginada th.lw-col-acciones,
+    .lw-workbench #tabla-paginada td.lw-col-acciones {
+        width: 10.5rem;
+        min-width: 10.5rem;
+        max-width: 10.5rem;
+    }
+</style>
 @endsection
 
 @section('scripts')
@@ -91,26 +108,36 @@
                 'exportRuta' => 'listar_tesoreria_crown_jornada',
                 'exportQueryparams' => $filtrosQuery ?? [],
             ])
+            {{-- Pocas columnas: caber en viewport (sin scroll lateral por nombres largos). --}}
             <div class="tabla-ancha-grilla" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap lw-table-fit">
+                    <table class="tabla-ancha table table-sm table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                         <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
                                 @foreach ($columnasVisibles as $keyColumna)
-                                    @include('caja.tesoreria_crown.partials.workbench_th', ['key' => $keyColumna, 'rutaListado' => 'tesoreria_crown_jornada'])
+                                    @include('caja.tesoreria_crown.partials.workbench_th', [
+                                        'key' => $keyColumna,
+                                        'rutaListado' => 'tesoreria_crown_jornada',
+                                        'thClass' => 'lw-col'.($keyColumna === 'cajeros' ? ' tc-col-cajeros' : ''),
+                                    ])
                                 @endforeach
-                                <th class="text-left" style="width:140px;" data-orderable="false">Acciones</th>
+                                <th class="lw-col-acciones" data-orderable="false">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($jornadas as $jornada)
-                                @php $puedeBorrar = (int) $jornada->comprobantes_count === 0; @endphp
+                                @php
+                                    $puedeBorrar = (int) $jornada->comprobantes_count === 0;
+                                    $nombresCajeros = $jornada->asignaciones->pluck('cajero.nombre')->filter()->unique()->implode(', ');
+                                @endphp
                                 <tr>
                                     @foreach ($columnasVisibles as $keyColumna)
-                                        <td>
+                                        <td class="lw-col{{ $keyColumna === 'cajeros' ? ' tc-col-cajeros' : '' }}"
+                                            data-col-key="{{ $keyColumna }}"
+                                            @if ($keyColumna === 'cajeros' && $nombresCajeros !== '') title="{{ $nombresCajeros }}" @endif>
                                             @switch($keyColumna)
                                                 @case('fecha')
                                                     <a class="text-primary" href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}">{{ $jornada->fecha->format('d/m/Y') }}</a>
@@ -129,37 +156,39 @@
                                                     {{ $jornada->comprobantes_count }}
                                                     @break
                                                 @case('cajeros')
-                                                    {{ $jornada->asignaciones->pluck('cajero.nombre')->filter()->unique()->implode(', ') ?: '—' }}
+                                                    <span class="lw-celda-texto">{{ $nombresCajeros !== '' ? $nombresCajeros : '—' }}</span>
                                                     @break
                                             @endswitch
                                         </td>
                                     @endforeach
-                                    <td class="text-left text-nowrap">
-                                        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
-                                            <i class="fa fa-edit"></i>
-                                        </a>
-                                        @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
-                                            <a href="{{ route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'abrir' => 1]) }}" class="btn-accion-tabla tooltipsC" title="Abrir caja">
-                                                <i class="fa fa-plus"></i>
+                                    <td class="lw-col-acciones text-nowrap">
+                                        <div class="lw-acciones-inner">
+                                            <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                                <i class="fa fa-edit"></i>
                                             </a>
-                                        @endif
-                                        @if ($jornada->estaAbierta() && can('editar-tesoreria-crown-jornada', false))
-                                            <form action="{{ route('cerrar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Cerrar la jornada del {{ $jornada->fecha->format('d/m/Y') }}?');">
-                                                @csrf
-                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Cerrar">
-                                                    <i class="fa fa-lock"></i>
-                                                </button>
-                                            </form>
-                                        @endif
-                                        @if ($puedeBorrar && can('editar-tesoreria-crown-jornada', false))
-                                            <form action="{{ route('eliminar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Eliminar la jornada del {{ $jornada->fecha->format('d/m/Y') }}? Se quitan las asignaciones de cajero.');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Eliminar">
-                                                    <i class="fa fa-times-circle text-danger"></i>
-                                                </button>
-                                            </form>
-                                        @endif
+                                            @if ($jornada->estaAbierta() && can('crear-tesoreria-crown-jornada', false))
+                                                <a href="{{ route('ver_tesoreria_crown_jornada', ['id' => $jornada->id, 'abrir' => 1]) }}" class="btn-accion-tabla tooltipsC" title="Abrir caja">
+                                                    <i class="fa fa-plus"></i>
+                                                </a>
+                                            @endif
+                                            @if ($jornada->estaAbierta() && can('editar-tesoreria-crown-jornada', false))
+                                                <form action="{{ route('cerrar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline-flex form-eliminar mb-0" onsubmit="return confirm('¿Cerrar la jornada del {{ $jornada->fecha->format('d/m/Y') }}?');">
+                                                    @csrf
+                                                    <button type="submit" class="btn-accion-tabla tooltipsC" title="Cerrar">
+                                                        <i class="fa fa-lock"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
+                                            @if ($puedeBorrar && can('editar-tesoreria-crown-jornada', false))
+                                                <form action="{{ route('eliminar_tesoreria_crown_jornada', $jornada->id) }}" method="POST" class="d-inline-flex form-eliminar mb-0" onsubmit="return confirm('¿Eliminar la jornada del {{ $jornada->fecha->format('d/m/Y') }}? Se quitan las asignaciones de cajero.');">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn-accion-tabla tooltipsC" title="Eliminar">
+                                                        <i class="fa fa-times-circle text-danger"></i>
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </div>
                                     </td>
                                 </tr>
                             @empty
@@ -169,7 +198,7 @@
                             @endforelse
                         </tbody>
                     </table>
-            </div>
+                </div>
             </div>
             <div class="card-footer clearfix">
                 @if ($jornadas->total() > 0)

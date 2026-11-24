@@ -118,7 +118,7 @@ final class BienUsoListadoColumnas
         ],
         'codigo_inventario' => [
             'label' => 'Cód. inventario',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'entero',
@@ -128,7 +128,7 @@ final class BienUsoListadoColumnas
         ],
         'uid' => [
             'label' => 'UID',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
@@ -338,7 +338,7 @@ final class BienUsoListadoColumnas
         ],
         'numero_serie' => [
             'label' => 'Nº serie',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
@@ -418,7 +418,7 @@ final class BienUsoListadoColumnas
         ],
         'hostname' => [
             'label' => 'Hostname',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
@@ -428,7 +428,7 @@ final class BienUsoListadoColumnas
         ],
         'ip' => [
             'label' => 'IP',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
@@ -438,7 +438,7 @@ final class BienUsoListadoColumnas
         ],
         'modelo' => [
             'label' => 'Modelo',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
@@ -448,7 +448,7 @@ final class BienUsoListadoColumnas
         ],
         'vendor' => [
             'label' => 'Vendor',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
@@ -458,7 +458,7 @@ final class BienUsoListadoColumnas
         ],
         'tema' => [
             'label' => 'Tema / juego',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',

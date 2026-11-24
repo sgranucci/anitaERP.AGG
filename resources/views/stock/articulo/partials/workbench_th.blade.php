@@ -3,18 +3,18 @@
         'sku' => 'SKU',
         'codigobarra' => 'Cód. barra',
         'descripcion' => 'Descripción',
-        'unidadmedida' => 'Unidad de Medida',
+        'unidadmedida' => 'Unidad',
         'categoria' => 'Categoría',
-        'tipoarticulo' => 'Tipo de Artículo',
+        'tipoarticulo' => 'Tipo',
         'usoarticulo' => 'Uso',
         'canal' => 'Canal',
         'empresa' => 'Empresa',
-        'numeroparte' => 'Nro.Parte',
-        'ubicacionparte' => 'Ubic.Parte',
-        'saldo' => 'Saldo dep.',
+        'numeroparte' => 'Parte',
+        'ubicacionparte' => 'Ubic.',
+        'saldo' => 'Saldo',
         'proveedor_art' => 'Proveedor',
         'precio_proveedor' => 'Precio proveedor',
-        'nofactura' => 'Facturable',
+        'nofactura' => 'Fact.',
         'estado' => 'Estado',
         'fecha_alta' => 'Fecha de alta',
         'fecha_modificacion' => 'Fecha de modificación',
@@ -36,7 +36,7 @@
     $idxCol = $esOrdenable
         ? \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActual, $key)
         : null;
-    $claseCol = trim($alineacion.' lw-th-drag');
+    $claseCol = trim($alineacion.' lw-col lw-th-drag');
     $titleTh .= ' — arrastrá para mover · × para ocultar (con confirmación)';
     if ($esOrdenable) {
         $claseCol = trim($claseCol.' lw-col-sortable'.($dirCol ? ' lw-col-sorted' : ''));
@@ -50,8 +50,13 @@
             )
         );
     }
+    $styleAttr = trim((string) ($styleCol ?? ''));
 @endphp
-<th class="{{ $claseCol }}" title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true">
+<th class="{{ $claseCol }}"
+    @if ($styleAttr !== '') style="{{ $styleAttr }}" @endif
+    title="{{ $titleTh }}"
+    data-col-key="{{ $key }}"
+    draggable="true">
     <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
     @if ($esOrdenable)
         <a href="{{ route('articulo', $qsSort) }}" class="lw-sort-link" draggable="false">

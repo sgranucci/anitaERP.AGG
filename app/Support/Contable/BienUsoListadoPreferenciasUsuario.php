@@ -14,7 +14,8 @@ use Illuminate\Support\Facades\Cache;
  */
 final class BienUsoListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'bien-uso-listado-grilla-estandar-v1';
+    /** v2: vista estándar compacta (sin columnas IT) para caber sin scroll. */
+    private const CACHE_GRILLA = 'bien-uso-listado-grilla-estandar-v2';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout

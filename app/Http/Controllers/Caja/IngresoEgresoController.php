@@ -40,6 +40,7 @@ use App\Support\Caja\IngresoEgresoListadoColumnas;
 use App\Support\Caja\IngresoEgresoListadoEnvioSupport;
 use App\Support\Caja\IngresoEgresoPagoProveedorSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
+use App\Support\Caja\IngresoEgresoListadoMontoSupport;
 use App\Support\Caja\IngresoEgresoListadoPreferenciasUsuario;
 use App\Support\Caja\IngresoEgresoListadoResumen;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
@@ -1194,6 +1195,8 @@ class IngresoEgresoController extends Controller
         $resumen = IngresoEgresoListadoResumen::desdeFilas($universo, $filtros['agrupar'] ?? [], $etiquetas);
         $graficoSeries = $this->seriesGraficos($filtros, $etiquetas, $universo);
         $caja_movimiento = (clone $builder)->paginate(10);
+        // Página aparte del universo: precarga OPV para que el blade no dispare loadMissing.
+        IngresoEgresoListadoMontoSupport::precargarAsientosOpv($caja_movimiento);
         IngresoEgresoPagoProveedorSupport::marcarMailEnPagina($caja_movimiento);
 
         $camposFiltro = IngresoEgresoListadoFiltros::camposQbeDisponibles();

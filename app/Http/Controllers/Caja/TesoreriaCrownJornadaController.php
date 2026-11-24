@@ -17,6 +17,8 @@ use App\Models\Caja\TesoreriaCrownMesa;
 use App\Models\Caja\TesoreriaCrownTipoDeposito;
 use App\Support\Caja\TesoreriaCrownAcceso;
 use App\Support\Caja\TesoreriaCrownAsignacionCatalogo;
+use App\Support\Caja\TesoreriaCrownBovedaListadoColumnas;
+use App\Support\Caja\TesoreriaCrownBovedaListadoFiltros;
 use App\Support\Caja\TesoreriaCrownBovedaSupport;
 use App\Support\Caja\TesoreriaCrownCierreSupport;
 use App\Support\Caja\TesoreriaCrownComprobanteSupport;
@@ -289,6 +291,82 @@ class TesoreriaCrownJornadaController extends Controller
     private function filtrosCajeros(Request $request, int $jornadaId): array
     {
         return TesoreriaCrownCajeroListadoFiltros::resolverDesdeRequest($request, $jornadaId);
+    }
+
+    /**
+     * Panel bóveda dentro del escritorio (misma grilla que el menú externo).
+     *
+     * @return array<string, mixed>|\Illuminate\Http\RedirectResponse
+     */
+    private function armarPanelBoveda(Request $request, TesoreriaCrownJornada $jornada, $sala): array|\Illuminate\Http\RedirectResponse
+    {
+        $lugares = TesoreriaCrownBovedaSupport::lugares((int) $sala->id);
+        $depositoId = (int) $request->input('deposito_id', 0);
+        $lugar = $lugares->firstWhere('id', $depositoId) ?? $lugares->first(
+            fn ($fila) => (string) ($fila->tipoDeposito->codigo ?? '') === 'BOVEDA'
+        ) ?? $lugares->first();
+
+        $armado = [];
+        $movimientos = collect();
+        $saldo = [];
+        if ($lugar) {
+            $armado = TesoreriaCrownWorkbenchSupport::preparar(
+                $request,
+                TesoreriaCrownBovedaListadoColumnas::RECURSO,
+                'ver_tesoreria_crown_jornada',
+                TesoreriaCrownBovedaListadoColumnas::catalogoActivo(),
+                fn (Request $req) => TesoreriaCrownBovedaListadoFiltros::resolverDesdeRequest(
+                    $req,
+                    (int) $sala->id,
+                    (int) $jornada->id,
+                    (int) $lugar->id
+                ),
+                [TesoreriaCrownBovedaListadoFiltros::class, 'camposOrdenables'],
+                [TesoreriaCrownBovedaListadoFiltros::class, 'camposQbe'],
+                [TesoreriaCrownBovedaListadoFiltros::class, 'normalizarOperador'],
+                function (array $filtros) use ($jornada): array {
+                    $params = TesoreriaCrownBovedaListadoFiltros::paraQueryString($filtros);
+                    unset($params['sala_id'], $params['jornada_id']);
+                    $params['id'] = (int) $jornada->id;
+                    $params['panel'] = 'boveda';
+
+                    return $params;
+                },
+            );
+            if ($armado instanceof \Illuminate\Http\RedirectResponse) {
+                return $armado;
+            }
+            $movimientos = TesoreriaCrownBovedaListadoFiltros::consulta(
+                (int) $jornada->id,
+                (int) $lugar->id,
+                $armado['filtros']
+            )->get();
+            $fecha = $jornada->fecha?->format('Y-m-d');
+            if ($fecha) {
+                $saldo = TesoreriaCrownBovedaSupport::saldoAgrupado(
+                    (int) $sala->id,
+                    TesoreriaCrownBovedaSupport::saldoCantidades((int) $lugar->id, $fecha)
+                );
+            }
+        }
+
+        $totalesMonedas = ['ARS' => 0.0, 'USD' => 0.0, 'EUR' => 0.0];
+        foreach ($movimientos as $mov) {
+            foreach (TesoreriaCrownBovedaListadoColumnas::montosPorMoneda($mov) as $codigo => $monto) {
+                $totalesMonedas[$codigo] = round($totalesMonedas[$codigo] + $monto, 2);
+            }
+        }
+
+        return array_merge($armado, [
+            'lugares' => $lugares,
+            'lugar' => $lugar,
+            'saldo' => $saldo,
+            'movimientos' => $movimientos,
+            'totalesMonedas' => $totalesMonedas,
+            'tieneCriterios' => $armado !== []
+                ? TesoreriaCrownBovedaListadoFiltros::tieneCriteriosAplicados($armado['filtros'])
+                : false,
+        ]);
     }
 
     private function filtrosDe(Request $request, int $salaId): array
@@ -812,13 +890,8 @@ class TesoreriaCrownJornadaController extends Controller
                 $anexo8Error = $e->getMessage();
             }
         }
-        if ($panel === 'boveda') {
-            return redirect()->route('tesoreria_crown_boveda', [
-                'sala_id' => $jornada->sala_id,
-                'jornada_id' => $jornada->id,
-            ]);
-        }
         $armadoCajeros = null;
+        $armadoBoveda = [];
         $asignaciones = collect();
         $asignacionesTodas = TesoreriaCrownDiaCajeroSupport::filasDeJornada($jornada);
         if ($panel === 'cajeros') {
@@ -837,6 +910,12 @@ class TesoreriaCrownJornadaController extends Controller
 
                     return str_contains($hay, $needle);
                 })->values();
+            }
+        }
+        if ($panel === 'boveda') {
+            $armadoBoveda = $this->armarPanelBoveda($request, $jornada, $sala);
+            if ($armadoBoveda instanceof \Illuminate\Http\RedirectResponse) {
+                return $armadoBoveda;
             }
         }
         $fecha = $jornada->fecha->format('Y-m-d');
@@ -865,15 +944,17 @@ class TesoreriaCrownJornadaController extends Controller
                 ->count()
             : 0;
 
-        return view('caja.tesoreria_crown.jornada.dia', array_merge($armadoCajeros ?? [], [
+        return view('caja.tesoreria_crown.jornada.dia', array_merge($armadoCajeros ?? [], $armadoBoveda, [
             'salas' => $salas,
             'sala' => $sala,
             'jornada' => $jornada,
             'asignaciones' => $asignaciones,
             'asignacionesTodas' => $asignacionesTodas,
-            'tieneCriterios' => is_array($armadoCajeros)
-                ? TesoreriaCrownCajeroListadoFiltros::tieneCriteriosAplicados($armadoCajeros['filtros'])
-                : false,
+            'tieneCriterios' => $panel === 'boveda'
+                ? (bool) ($armadoBoveda['tieneCriterios'] ?? false)
+                : (is_array($armadoCajeros)
+                    ? TesoreriaCrownCajeroListadoFiltros::tieneCriteriosAplicados($armadoCajeros['filtros'])
+                    : false),
             'recientes' => TesoreriaCrownJornada::query()
                 ->where('sala_id', $sala->id)
                 ->orderByDesc('fecha')

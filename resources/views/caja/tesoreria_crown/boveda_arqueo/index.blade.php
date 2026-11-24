@@ -38,7 +38,7 @@
                         </a>
                     @endif
                     @if ($jornada)
-                        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=boveda" class="btn btn-outline-info btn-sm">
+                        <a href="{{ route('ver_tesoreria_crown_jornada', $jornada->id) }}?panel=boveda{{ $lugar ? '&deposito_id='.$lugar->id : '' }}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-desktop"></i> Escritorio
                         </a>
                     @endif
