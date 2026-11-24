@@ -101,6 +101,66 @@
             @endforeach
         </tr>
     @endif
+    @if (! empty($resultado['totales_por_tipo']))
+        <tr>
+            <td colspan="{{ $colspanTotal }}" style="font-weight: bold;">Por tipo de comprobante</td>
+        </tr>
+        <tr>
+            <th>Tipo</th>
+            <th>Nombre</th>
+            <th>Comp.</th>
+            @foreach ($resultado['columnas'] ?? [] as $col)
+                <th>{{ $col['label'] }}</th>
+            @endforeach
+            @for ($i = 0; $i < max(0, $columnasFijas - 3); $i++)
+                <th></th>
+            @endfor
+        </tr>
+        @foreach ($resultado['totales_por_tipo'] as $tot)
+            <tr>
+                <td>{{ $tot['tipo'] ?? '' }}</td>
+                <td>{{ $tot['tipo_nombre'] ?? ($tot['tipo'] ?? '') }}</td>
+                <td>{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                @foreach ($resultado['columnas'] ?? [] as $col)
+                    <td>{{ $fmtMonto($tot['columnas'][$col['key']] ?? 0) }}</td>
+                @endforeach
+                @for ($i = 0; $i < max(0, $columnasFijas - 3); $i++)
+                    <td></td>
+                @endfor
+            </tr>
+        @endforeach
+    @endif
+    @if (! empty($resultado['totales_por_sucursal_tipo']))
+        <tr>
+            <td colspan="{{ $colspanTotal }}" style="font-weight: bold;">Por sucursal y tipo de comprobante</td>
+        </tr>
+        <tr>
+            <th>Sucursal</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Comp.</th>
+            @foreach ($resultado['columnas'] ?? [] as $col)
+                <th>{{ $col['label'] }}</th>
+            @endforeach
+            @for ($i = 0; $i < max(0, $columnasFijas - 4); $i++)
+                <th></th>
+            @endfor
+        </tr>
+        @foreach ($resultado['totales_por_sucursal_tipo'] as $tot)
+            <tr>
+                <td>{{ $tot['puntoventa_codigo'] ?? '' }}</td>
+                <td>{{ $tot['puntoventa_nombre'] ?? '' }}</td>
+                <td>{{ $tot['tipo'] ?? '' }}</td>
+                <td>{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                @foreach ($resultado['columnas'] ?? [] as $col)
+                    <td>{{ $fmtMonto($tot['columnas'][$col['key']] ?? 0) }}</td>
+                @endforeach
+                @for ($i = 0; $i < max(0, $columnasFijas - 4); $i++)
+                    <td></td>
+                @endfor
+            </tr>
+        @endforeach
+    @endif
     @if ($cortarJurisdiccion && ! empty($resultado['totales_por_jurisdiccion']))
         <tr>
             <td colspan="{{ $colspanTotal }}" style="font-weight: bold;">Totales por jurisdicción</td>

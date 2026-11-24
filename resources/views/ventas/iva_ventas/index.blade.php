@@ -374,6 +374,10 @@
                         #tabla-paginada thead th { font-weight: 600; border-color: #7fb3d5; }
                         #tabla-paginada tbody tr.iva-ventas-resumen-b { background-color: #fef9e7; font-weight: 600; }
                     </style>
+                    @include('ventas.iva_ventas.partials.totales_tipo', [
+                        'resultado' => $resultado,
+                        'puede_ver_tipotransaccion' => $puede_ver_tipotransaccion ?? false,
+                    ])
                     @include('ventas.iva_ventas.partials.totales_sucursal_tipo', [
                         'resultado' => $resultado,
                         'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,

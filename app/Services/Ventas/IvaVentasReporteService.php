@@ -36,6 +36,8 @@ final class IvaVentasReporteService
      *   columnas: list<array{key: string, label: string}>,
      *   filas: list<array<string, mixed>>,
      *   totales_por_puntoventa: list<array<string, mixed>>,
+     *   totales_por_tipo: list<array<string, mixed>>,
+     *   totales_por_sucursal_tipo: list<array<string, mixed>>,
      *   totales_general: array<string, float>,
      *   stats: array<string, int|float>
      * }
@@ -108,6 +110,10 @@ final class IvaVentasReporteService
             if ($tipo === '') {
                 $tipo = $this->tipoDesdeCodigo((string) $venta->codigo);
             }
+            $tipoNombre = trim((string) ($venta->tipotransacciones->nombre ?? ''));
+            if ($tipoNombre === '') {
+                $tipoNombre = $tipo;
+            }
 
             $fila = [
                 'tipo_fila' => 'detalle',
@@ -128,6 +134,7 @@ final class IvaVentasReporteService
                 'fecha_mov' => date('d/m/Y', strtotime((string) $venta->fecha)),
                 'fecha_orden' => $ordenFecha,
                 'tipo' => $tipo,
+                'tipo_nombre' => $tipoNombre,
                 'tipo_orden' => $tipo,
                 'tipotransaccion_id' => (int) ($venta->tipotransaccion_id ?? 0),
                 'comprobante' => $this->formatearComprobante($venta),
@@ -167,6 +174,7 @@ final class IvaVentasReporteService
             ? $this->armarTotalesPorJurisdiccion($filas)
             : [];
         $totalesPorSucursalTipo = $this->armarTotalesPorSucursalTipo($filas);
+        $totalesPorTipo = $this->armarTotalesPorTipo($filas);
 
         // Vista del listado: opcionalmente colapsa las Facturas B en un resumen por día + PV + tipo.
         // El detalle completo ($filas) se conserva para conciliación y auditoría de correlatividad.
@@ -193,6 +201,7 @@ final class IvaVentasReporteService
             'cortar_por_jurisdiccion' => $cortarJurisdiccion,
             'cortar_por_sucursal_tipo' => $cortarSucursalTipo,
             'totales_por_puntoventa' => $totalesPorPvLista,
+            'totales_por_tipo' => $totalesPorTipo,
             'totales_por_sucursal_tipo' => $totalesPorSucursalTipo,
             'totales_por_jurisdiccion' => $totalesPorJurisdiccion,
             'totales_general' => $totalesGeneral,
@@ -748,6 +757,51 @@ final class IvaVentasReporteService
     }
 
     /**
+     * Una fila por tipo de comprobante (todas las sucursales), sobre el detalle completo del filtro.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function armarTotalesPorTipo(array $filas): array
+    {
+        $totales = [];
+        foreach ($filas as $fila) {
+            $tipoId = (int) ($fila['tipotransaccion_id'] ?? 0);
+            $tipo = (string) ($fila['tipo'] ?? '');
+            $clave = $tipoId.'|'.$tipo;
+            if (! isset($totales[$clave])) {
+                $tipoNombre = trim((string) ($fila['tipo_nombre'] ?? ''));
+                if ($tipoNombre === '') {
+                    $tipoNombre = $tipo;
+                }
+                $totales[$clave] = [
+                    'tipotransaccion_id' => $tipoId,
+                    'tipo' => $tipo,
+                    'tipo_nombre' => $tipoNombre,
+                    'cantidad' => 0,
+                    'columnas' => IvaVentasColumnasSupport::montosVacios(),
+                ];
+            }
+            $totales[$clave]['cantidad']++;
+            IvaVentasColumnasSupport::acumular($totales[$clave]['columnas'], $fila['columnas'] ?? []);
+        }
+
+        $lista = array_values($totales);
+        usort($lista, static function (array $a, array $b): int {
+            return strcmp((string) ($a['tipo'] ?? ''), (string) ($b['tipo'] ?? ''));
+        });
+
+        foreach ($lista as &$tot) {
+            foreach ($tot['columnas'] as $k => $v) {
+                $tot['columnas'][$k] = round((float) $v, 2);
+            }
+        }
+        unset($tot);
+
+        return $lista;
+    }
+
+    /**
      * Una fila por punto de venta y tipo de comprobante, sobre el detalle completo del filtro.
      *
      * @param  list<array<string, mixed>>  $filas
@@ -769,6 +823,7 @@ final class IvaVentasReporteService
                     'sucursal' => (int) ($fila['sucursal'] ?? 0),
                     'tipotransaccion_id' => $tipoId,
                     'tipo' => $tipo,
+                    'tipo_nombre' => (string) ($fila['tipo_nombre'] ?? $tipo),
                     'cantidad' => 0,
                     'columnas' => IvaVentasColumnasSupport::montosVacios(),
                 ];
