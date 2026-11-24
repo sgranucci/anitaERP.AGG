@@ -6,8 +6,11 @@
     $queryConsulta = ['origen' => 'modal_consulta', 'vista' => 'consulta'];
 @endphp
 @if (count($totales) > 0)
-    <div class="px-3 py-2 border-bottom">
-        <h6 class="mb-2">Por tipo de comprobante</h6>
+    <div class="px-3 py-3 border-top border-bottom bg-white">
+        <h5 class="mb-2 text-dark">
+            <i class="fa fa-list-alt text-info"></i>
+            Totales por tipo de comprobante
+        </h5>
         <div class="table-responsive">
             <table class="table table-sm table-bordered table-hover mb-0" style="font-size: 0.78rem;">
                 <thead>
