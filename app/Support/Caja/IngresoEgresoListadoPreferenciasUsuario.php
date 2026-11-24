@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Cache;
 
 final class IngresoEgresoListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'caja-ingresoegreso-listado-grilla-estandar-v1';
+    /** v2: anchos compactos + lw-table-fit (vista estándar sin scroll horizontal). */
+    private const CACHE_GRILLA = 'caja-ingresoegreso-listado-grilla-estandar-v2';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout

@@ -6,6 +6,40 @@ Importaciones
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+    /* 2 botones (editar/eliminar). Sticky solo si hay scroll. */
+    .lw-workbench .imp-grilla {
+        --tabla-ancha-der: 5.5rem;
+    }
+    .lw-workbench .imp-grilla th.lw-col-acciones,
+    .lw-workbench .imp-grilla td.lw-col-acciones {
+        width: var(--tabla-ancha-der) !important;
+        min-width: var(--tabla-ancha-der) !important;
+        max-width: var(--tabla-ancha-der) !important;
+        padding-left: 0.1rem;
+        padding-right: 0.1rem;
+    }
+    .lw-workbench .imp-grilla .lw-table-fit .tabla-ancha {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100%;
+    }
+    .lw-workbench .imp-grilla .lw-table-fit .tabla-ancha td.lw-col {
+        max-width: 0;
+    }
+    .lw-workbench .imp-grilla .lw-acciones-inner .btn-accion-tabla {
+        min-width: 1.45rem;
+        padding: 0 0.05rem;
+    }
+    .lw-workbench .imp-grilla .lw-acciones-inner form {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        flex: 0 0 auto;
+    }
+</style>
 @endsection
 
 @section("scripts")
@@ -200,29 +234,36 @@ Importaciones
                     </div>
                 @endif
 
-                {{-- Chips externos (AND, por encima del QBE en la práctica operativa --}}
+                {{-- Chips externos (AND) + export compacto a la derecha --}}
                 <div class="px-3 pb-2">
-                    <div class="d-flex flex-wrap align-items-center mb-1">
-                        <span class="mr-2 text-muted small">Estado:</span>
+                    <div class="d-flex flex-wrap align-items-center mb-1" style="gap:.25rem;">
+                        <span class="mr-1 text-muted small">Estado:</span>
                         <a href="{{ route('importacion', array_merge($filtrosQuery ?? [], ['filtro_estado' => null])) }}"
-                           class="btn btn-sm mr-1 mb-1 {{ $estadoAct === '' ? 'btn-primary' : 'btn-outline-secondary' }}">Todos</a>
+                           class="btn btn-sm {{ $estadoAct === '' ? 'btn-primary' : 'btn-outline-secondary' }}">Todos</a>
                         @foreach ($estados as $est)
                             <a href="{{ route('importacion', array_merge($filtrosQuery ?? [], ['filtro_estado' => $est['id']])) }}"
-                               class="btn btn-sm mr-1 mb-1 {{ $estadoAct === $est['id'] ? 'btn-primary' : 'btn-outline-secondary' }}">
+                               class="btn btn-sm {{ $estadoAct === $est['id'] ? 'btn-primary' : 'btn-outline-secondary' }}">
                                 {{ $est['nombre'] }}
                             </a>
                         @endforeach
+                        <span class="ml-auto">
+                            @include('includes.exportar-tabla-queryparams', [
+                                'ruta' => 'lista_importacion',
+                                'queryparams' => $filtrosQuery ?? [],
+                                'variant' => 'compact',
+                            ])
+                        </span>
                     </div>
                     @if (($empresa_query ?? collect())->count() > 1)
-                        <div class="d-flex flex-wrap align-items-center">
-                            <span class="mr-2 text-muted small">Empresa:</span>
+                        <div class="d-flex flex-wrap align-items-center" style="gap:.25rem;">
+                            <span class="mr-1 text-muted small">Empresa:</span>
                             <a href="{{ route('importacion', array_merge($filtrosQuery ?? [], ['empresa_todas' => 1, 'empresa_id' => null])) }}"
-                               class="btn btn-sm mr-1 mb-1 {{ !empty($filtros['empresa_todas']) || empty($filtros['empresa_id']) ? 'btn-info' : 'btn-outline-secondary' }}">
+                               class="btn btn-sm {{ !empty($filtros['empresa_todas']) || empty($filtros['empresa_id']) ? 'btn-info' : 'btn-outline-secondary' }}">
                                 Todas mis empresas
                             </a>
                             @foreach ($empresa_query as $emp)
                                 <a href="{{ route('importacion', array_merge($filtrosQuery ?? [], ['empresa_id' => $emp->id, 'empresa_todas' => null])) }}"
-                                   class="btn btn-sm mr-1 mb-1 {{ (int)($filtros['empresa_id'] ?? 0) === (int)$emp->id && empty($filtros['empresa_todas']) ? 'btn-info' : 'btn-outline-secondary' }}">
+                                   class="btn btn-sm {{ (int)($filtros['empresa_id'] ?? 0) === (int)$emp->id && empty($filtros['empresa_todas']) ? 'btn-info' : 'btn-outline-secondary' }}">
                                     {{ $emp->nombre }}
                                 </a>
                             @endforeach
@@ -244,7 +285,7 @@ Importaciones
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
                 $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
-                $anchoAcciones = LwGrilla::ANCHO_COL_ACCIONES;
+                $anchoAcciones = 88; // ~5.5rem: editar + eliminar
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0
                     : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
@@ -257,16 +298,11 @@ Importaciones
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            <div class="tabla-ancha-grilla imp-grilla" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
                 <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_importacion',
-                    'queryparams' => $filtrosQuery ?? [],
-                    'variant' => 'compact',
-                ])
                 <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -282,8 +318,9 @@ Importaciones
                                     if ($usaScrollHorizontal) {
                                         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
                                     } else {
+                                        // Sin piso de título: evita que la suma de mins empuje Acciones afuera.
                                         $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
-                                        $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
                                     }
                                     $esOrdenable = isset($camposOrdenablesThead[$key]);
                                     $dirCol = \App\Support\Listado\ListadoOrdenamientoSupport::direccionDeCampo($ordenActualThead, $key);

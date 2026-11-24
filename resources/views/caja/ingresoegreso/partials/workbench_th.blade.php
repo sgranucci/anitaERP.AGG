@@ -1,6 +1,12 @@
 @php
     $titulo = ($etiquetasColumnas ?? [])[$key] ?? $key;
-    $alineacion = $key === 'monto' ? 'text-right' : '';
+    $alineaCfg = is_array($cfg ?? null) ? (string) ($cfg['alinea'] ?? '') : '';
+    $alineacion = match ($alineaCfg !== '' ? $alineaCfg : $key) {
+        'derecha', 'monto' => 'text-right',
+        'centro' => 'text-center',
+        'izquierda' => 'text-left',
+        default => '',
+    };
     $titleTh = $titulo;
     $camposOrden = $camposOrdenablesThead ?? [];
     $ordenActual = $ordenActualThead ?? [];
@@ -11,7 +17,7 @@
     $idxCol = $esOrdenable
         ? \App\Support\Listado\ListadoOrdenamientoSupport::indiceDeCampo($ordenActual, $key)
         : null;
-    $claseCol = trim($alineacion.' lw-th-drag');
+    $claseCol = trim($alineacion.' lw-col lw-th-drag');
     $titleTh .= ' — arrastrá para mover · × para ocultar (con confirmación)';
     if ($esOrdenable) {
         $claseCol = trim($claseCol.' lw-col-sortable'.($dirCol ? ' lw-col-sorted' : ''));
@@ -25,8 +31,13 @@
             )
         );
     }
+    $styleAttr = trim((string) ($styleCol ?? ''));
 @endphp
-<th class="{{ $claseCol }}" title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true">
+<th class="{{ $claseCol }}"
+    @if ($styleAttr !== '') style="{{ $styleAttr }}" @endif
+    title="{{ $titleTh }}"
+    data-col-key="{{ $key }}"
+    draggable="true">
     <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
     @if ($esOrdenable)
         <a href="{{ route('ingresoegreso', $qsSort) }}" class="lw-sort-link" draggable="false">

@@ -7,15 +7,24 @@
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 <style>
-    /* 5 botones (mail/print/edit/anular/revertir). Sticky lo prende tabla-ancha-reporte.js si hay scroll. */
+    /* Hasta 5 botones (mail/print/edit/anular/revertir). Sticky lo prende tabla-ancha-reporte.js si hay scroll. */
     .lw-workbench .ie-grilla-ancha {
-        --tabla-ancha-der: 12rem;
+        --tabla-ancha-der: 9.5rem;
     }
     .lw-workbench .ie-grilla-ancha th.lw-col-acciones,
     .lw-workbench .ie-grilla-ancha td.lw-col-acciones {
-        width: var(--tabla-ancha-der);
-        min-width: var(--tabla-ancha-der);
-        max-width: var(--tabla-ancha-der);
+        width: var(--tabla-ancha-der) !important;
+        min-width: var(--tabla-ancha-der) !important;
+        max-width: var(--tabla-ancha-der) !important;
+        padding-left: 0.1rem;
+        padding-right: 0.1rem;
+    }
+    .lw-workbench .ie-grilla-ancha .lw-acciones-inner {
+        gap: 0;
+    }
+    .lw-workbench .ie-grilla-ancha .lw-acciones-inner .btn-accion-tabla {
+        min-width: 1.45rem;
+        padding: 0 0.05rem;
     }
     .lw-workbench .ie-grilla-ancha .lw-acciones-inner form {
         display: inline-flex;
@@ -24,6 +33,31 @@
         padding: 0;
         border: 0;
         flex: 0 0 auto;
+    }
+    /* Vista estándar: tabla al 100% (tabla-ancha trae width:max-content y empujaba scroll). */
+    .lw-workbench .ie-grilla-ancha .lw-table-fit .tabla-ancha {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100%;
+    }
+    .lw-workbench .ie-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col {
+        max-width: 0;
+    }
+    /* Movimientos: lista compacta sin estirar la grilla. */
+    #tabla-paginada td.ie-movimientos-celda {
+        white-space: normal;
+        vertical-align: top;
+    }
+    #tabla-paginada td.ie-movimientos-celda ul {
+        margin: 0;
+        padding-left: 1rem;
+        max-width: 100%;
+    }
+    #tabla-paginada td.ie-movimientos-celda li {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100%;
     }
 </style>
 @endsection
@@ -55,6 +89,7 @@
 @php
     use App\Support\Caja\IngresoEgresoListadoFiltros;
     use App\Support\Caja\IngresoEgresoListadoMontoSupport;
+    use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
 
     $columnasVisibles = $columnasVisibles ?? [];
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
@@ -281,21 +316,60 @@
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
+            @php
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = 152; // ~9.5rem: 5 íconos sin hueco vacío
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+            @endphp
             <div class="tabla-ancha-grilla ie-grilla-ancha" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                                @include('caja.ingresoegreso.partials.workbench_th', ['key' => $keyColumna])
+                                @php
+                                    $cfg = $layoutPorKey[$keyColumna] ?? null;
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? $cfg;
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $tituloCol = $etiquetasColumnas[$keyColumna] ?? ($catalogoColumnas[$keyColumna]['label'] ?? $keyColumna);
+                                    $minLegible = LwGrilla::anchoMinimoLegible(
+                                        $keyColumna,
+                                        $catalogoColumnas[$keyColumna] ?? [],
+                                        $tituloCol
+                                    );
+                                    if ($usaScrollHorizontal) {
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
+                                    }
+                                @endphp
+                                @include('caja.ingresoegreso.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
+                                    'cfg' => $cfg,
+                                ])
                             @endforeach
                             @foreach (($filtros['calculadas'] ?? []) as $calc)
                                 <th data-orderable="false">{{ $calc['etiqueta'] ?? '' }}</th>
                             @endforeach
-                            <th class="lw-col-acciones" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -315,12 +389,14 @@
                                     'data' => $data,
                                     'ieMonto' => $ieMonto,
                                     'retornoListadoQuery' => $retornoListadoQuery,
+                                    'cfg' => $layoutPorKey[$keyColumna] ?? null,
                                 ])
                             @endforeach
                             @foreach (($filtros['calculadas'] ?? []) as $iCalc => $calc)
                                 <td>{{ $data->{'calc_'.$iCalc} ?? '' }}</td>
                             @endforeach
-                            <td class="lw-col-acciones text-nowrap">
+                            <td class="lw-col-acciones text-nowrap"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
                                 <div class="lw-acciones-inner">
                                 @if (! empty($data->_es_pago_proveedor) && (can('listar-ingresos-egresos-caja', false) || can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false)))
                                     <button type="button"

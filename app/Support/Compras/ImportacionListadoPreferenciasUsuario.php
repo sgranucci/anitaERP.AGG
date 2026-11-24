@@ -16,9 +16,10 @@ use Illuminate\Support\Facades\Cache;
  */
 final class ImportacionListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'importacion-listado-grilla-estandar-v1';
+    /** v2: vista estándar compacta (Total=landed, sin scroll, export junto a Estado). */
+    private const CACHE_GRILLA = 'importacion-listado-grilla-estandar-v2';
 
-    private const CACHE_COLUMNAS = 'importacion-listado-columnas';
+    private const CACHE_COLUMNAS = 'importacion-listado-columnas-v2';
 
     /**
      * Persiste la grilla de la Vista estándar (sin vista_id).

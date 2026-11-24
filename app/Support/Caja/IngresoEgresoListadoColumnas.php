@@ -72,6 +72,7 @@ final class IngresoEgresoListadoColumnas
             'source' => 'tipotransaccion_caja.nombre',
             'attr' => 'nombretipotransaccion_caja',
             'group' => self::GRUPO_MOVIMIENTO,
+            'ancho' => 130,
         ],
         'abreviatura' => [
             'label' => 'Abreviatura',
@@ -92,6 +93,7 @@ final class IngresoEgresoListadoColumnas
             'source' => 'conceptogasto.nombre',
             'attr' => 'nombreconceptogasto',
             'group' => self::GRUPO_MOVIMIENTO,
+            'ancho' => 90,
         ],
         'detalle' => [
             'label' => 'Detalle',
@@ -102,6 +104,7 @@ final class IngresoEgresoListadoColumnas
             'source' => 'caja_movimiento.detalle',
             'attr' => 'detalle',
             'group' => self::GRUPO_MOVIMIENTO,
+            'ancho' => 130,
         ],
         'usuario' => [
             'label' => 'Usuario',
@@ -153,6 +156,7 @@ final class IngresoEgresoListadoColumnas
             'source' => '',
             'attr' => 'monto',
             'group' => self::GRUPO_MOVIMIENTO,
+            'ancho' => 100,
         ],
         'movimientos' => [
             'label' => 'Movimientos',
@@ -163,6 +167,7 @@ final class IngresoEgresoListadoColumnas
             'source' => '',
             'attr' => 'movimientos',
             'group' => self::GRUPO_MOVIMIENTO,
+            'ancho' => 150,
         ],
     ];
 

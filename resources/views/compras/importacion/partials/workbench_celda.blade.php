@@ -11,7 +11,7 @@
 @if ($key === 'codigo')
     <td class="{{ $cls }} lw-col" @if ($title !== '') title="{{ $title }}" @endif>
         @if (can('editar-importacion', false))
-            <a href="{{ route('editar_importacion', ['id' => $data->id] + ($retornoListadoQuery ?? [])) }}" class="text-primary font-weight-bold">
+            <a href="{{ route('editar_importacion', ['id' => $data->id] + ($retornoListadoQuery ?? [])) }}" class="text-primary font-weight-bold lw-celda-texto d-block">
                 {{ $valor }}
             </a>
         @else
@@ -32,6 +32,10 @@
         @else
             <span class="badge badge-info">{{ $valor }}</span>
         @endif
+    </td>
+@elseif ($key === 'landed_cost')
+    <td class="{{ $cls }} lw-col text-nowrap" title="Total (landed cost)">
+        <span class="lw-celda-texto font-weight-bold">{{ $valor }}</span>
     </td>
 @else
     <td class="{{ $cls }} lw-col" @if ($title !== '') title="{{ $title }}" @endif><span class="lw-celda-texto">{{ $valor }}</span></td>

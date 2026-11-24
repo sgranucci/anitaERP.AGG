@@ -260,6 +260,15 @@ final class ListadoGrillaConfigSupport
             'fantasia' => 160,
             'proveedor' => 180,
             'detalle' => 130,
+            'tipo' => 130,
+            'concepto' => 90,
+            'movimientos' => 150,
+            'numero' => 72,
+            'moneda' => 52,
+            'fob_estimado' => 88,
+            'gastos_estimados' => 88,
+            'gastos_reales' => 88,
+            'landed_cost' => 92,
             'cuentas' => 150,
             'domicilio' => 120,
             'leyenda', 'email', 'emailoc' => 140,
@@ -279,10 +288,10 @@ final class ListadoGrillaConfigSupport
         $base = match ($key) {
             'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago', 'mail', 'numeroparte', 'ubicacionparte' => self::ANCHO_MIN_LEGIBLE,
             'estado', 'apoc', 'fecha', 'unidadmedida', 'nofactura', 'saldo' => 72,
-            'op', 'monto', 'sku', 'tipoarticulo', 'usoarticulo' => 84,
+            'op', 'monto', 'sku', 'tipoarticulo', 'usoarticulo', 'numero' => 84,
             'cbu' => 100,
             'numerodocumento', 'alias_cbu' => 72,
-            'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda', 'proveedor', 'detalle', 'cuentas', 'descripcion', 'categoria' => 96,
+            'nombre', 'fantasia', 'domicilio', 'email', 'emailoc', 'leyenda', 'proveedor', 'detalle', 'cuentas', 'descripcion', 'categoria', 'tipo', 'concepto', 'movimientos' => 96,
             default => (($meta['type'] ?? '') === 'entero' ? 52 : 64),
         };
 
