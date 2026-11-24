@@ -6,6 +6,56 @@ Art&iacute;culos
 @section("styles")
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+<style>
+/* Vista estándar: Acciones normal. Con scroll (más columnas): sticky derecha. */
+.lw-workbench .producto-ferli-grilla {
+    --tabla-ancha-der: 15rem;
+}
+.lw-workbench .producto-ferli-grilla #tabla-paginada th.lw-col-acciones,
+.lw-workbench .producto-ferli-grilla #tabla-paginada td.lw-col-acciones {
+    width: var(--tabla-ancha-der);
+    min-width: var(--tabla-ancha-der);
+    max-width: var(--tabla-ancha-der);
+    white-space: nowrap;
+    overflow: visible;
+    text-align: center;
+    vertical-align: middle;
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+}
+.lw-workbench .producto-ferli-grilla.producto-ferli-grilla--fit .col-fija-der-1 {
+    position: static;
+    right: auto;
+    box-shadow: none;
+    z-index: auto;
+}
+/* Fit: tabla al 100% (tabla-ancha trae width:max-content y empujaba Acciones). */
+.lw-workbench .producto-ferli-grilla .lw-table-fit .tabla-ancha {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100%;
+}
+.lw-workbench .producto-ferli-grilla .lw-table-fit .tabla-ancha td.lw-col {
+    max-width: 0;
+}
+.lw-workbench .producto-ferli-grilla #tabla-paginada .lw-acciones-inner {
+    gap: 0;
+}
+.lw-workbench .producto-ferli-grilla #tabla-paginada .lw-acciones-inner .btn-accion-tabla {
+    padding: 0 0.05rem;
+    min-width: 1.35rem;
+    min-height: 1.35rem;
+    font-size: 0.85rem;
+}
+.lw-workbench .producto-ferli-grilla #tabla-paginada .lw-acciones-inner form {
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    flex: 0 0 auto;
+}
+</style>
 @endsection
 
 @section("scripts")
@@ -30,6 +80,16 @@ Art&iacute;culos
 <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ file_exists($tablaAnchaJs) ? filemtime($tablaAnchaJs) : time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
+@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.kardex_deposito_scripts')
+<script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
+@if (\App\Support\Stock\ArticuloKardexCombinacionSupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/kardex-combinacion-ferli.js') }}" type="text/javascript"></script>
+@endif
+@endif
+@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-recepciones.js') }}" type="text/javascript"></script>
+@endif
 @if (can('listar-reporte-historial-precios-compra', false))
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-historial-precios.js') }}" type="text/javascript"></script>
 @endif
@@ -197,32 +257,72 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                // Vista estándar Ferli (~8 cols): fit. Sticky Acciones solo si hay overflow.
+                $usaScrollHorizontal = count($columnasVisibles ?? []) > 14
+                    || $sumaAnchosPantalla > (LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 200);
+                $anchoAcciones = 240;
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
+            @endphp
+            <div class="tabla-ancha-grilla producto-ferli-grilla {{ $usaScrollHorizontal ? '' : 'producto-ferli-grilla--fit' }}" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_producto_ferli',
-                    'queryparams' => $filtrosQuery ?? [],
-                    'variant' => 'compact',
-                ])
-                <table class="tabla-ancha table table-striped table-bordered table-hover table-sm mb-0" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                <table class="tabla-ancha table table-striped table-bordered table-hover table-sm mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach (($columnasVisibles ?? []) as $keyColumna)
-                                @include('stock.product.partials.workbench_th', ['key' => $keyColumna])
+                                @php
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? ($layoutPorKey[$keyColumna] ?? null);
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $tituloCol = $etiquetasColumnas[$keyColumna] ?? ($catalogoColumnas[$keyColumna]['label'] ?? $keyColumna);
+                                    if ($usaScrollHorizontal) {
+                                        $minLegible = LwGrilla::anchoMinimoLegible(
+                                            $keyColumna,
+                                            $catalogoColumnas[$keyColumna] ?? [],
+                                            $tituloCol
+                                        );
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    } else {
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
+                                    }
+                                @endphp
+                                @include('stock.product.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
+                                ])
                             @endforeach
-                            <th class="width80 text-nowrap" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones col-fija-der-1" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
 						@foreach($articulos as $articulo)
     						<tr>
                             @foreach (($columnasVisibles ?? []) as $keyColumna)
-                                @include('stock.product.partials.workbench_celda', ['key' => $keyColumna])
+                                @include('stock.product.partials.workbench_celda', [
+                                    'key' => $keyColumna,
+                                    'cfg' => $layoutPorKey[$keyColumna] ?? null,
+                                ])
                             @endforeach
-                            <td class="text-nowrap">
+                            <td class="lw-col-acciones col-fija-der-1 text-nowrap"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                <div class="lw-acciones-inner">
 								@if ($articulo->usoarticulo_id == 1)
                        				@if (can('editar-articulos-combinaciones', false))
           								<a class="btn-accion-tabla tooltipsC" href="{{ route('combinacion.index', ['id' => $articulo->id] + $retornoListadoQuery) }}" title="Combinaciones">
@@ -260,6 +360,46 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                                         <i class="fas fa-dollar-sign text-success"></i>
                                 	</button>
 								@endif
+                       			@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-saldos-articulo tooltipsC"
+                                	    title="Saldos por dep&oacute;sito"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->stkm_articulo ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->stkm_desc ?? '' }}">
+                                        <i class="fa fa-warehouse text-secondary"></i>
+                                	</button>
+                                    @if (\App\Support\Stock\ArticuloKardexCombinacionSupport::uiActiva())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-kardex-combinacion-ferli tooltipsC"
+                                	    title="Kardex por combinaci&oacute;n y dep&oacute;sito"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->stkm_articulo ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->stkm_desc ?? '' }}">
+                                        <i class="fa fa-list-alt text-info"></i>
+                                	</button>
+                                    @else
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-movimientos-stock-articulo tooltipsC"
+                                	    title="Kardex de stock"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->stkm_articulo ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->stkm_desc ?? '' }}"
+                                	    data-deposito-id="{{ $articulo->depositoentrega_id ?? '' }}">
+                                        <i class="fa fa-list-alt text-info"></i>
+                                	</button>
+                                    @endif
+								@endif
+                       			@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-recepciones-articulo tooltipsC"
+                                	    title="Recepciones de proveedor"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->stkm_articulo ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->stkm_desc ?? '' }}">
+                                        <i class="fa fa-truck text-primary"></i>
+                                	</button>
+								@endif
                        			@if (can('listar-reporte-historial-precios-compra', false))
                                 	<button type="button"
                                 	    class="btn-accion-tabla btn-historial-precios-articulo tooltipsC"
@@ -276,6 +416,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                                     </button>
                                 </form>
 								@endif
+                                </div>
                             </td>
                         	</tr>
                         @endforeach
@@ -300,6 +441,18 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
 </div>
 @include('includes.stock.modalconsultaprecioarticulo')
 @include('includes.stock.modalconsultalistaprecio')
+@if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
+@include('includes.stock.modal_kardex_deposito')
+@include('includes.stock.modal_saldos_articulo')
+@if (\App\Support\Stock\ArticuloKardexCombinacionSupport::uiActiva())
+@include('includes.stock.modal_kardex_combinacion')
+@endif
+<input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
+<input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
+@endif
+@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
+<input type="hidden" id="recepcion-proveedor-consulta-articulo-url" value="{{ route('recepcion_proveedor_consulta_articulo') }}">
+@endif
 @if (can('listar-reporte-historial-precios-compra', false))
 <input type="hidden" id="historial-precios-articulo-url" value="{{ route('reporte_historial_precios_articulo') }}">
 @endif

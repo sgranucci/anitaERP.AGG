@@ -14,10 +14,15 @@
     $titulo = ($etiquetasColumnas ?? [])[$key] ?? ($titulos[$key] ?? $key);
     $ordenables = array_keys(\App\Support\Stock\ArticuloFerliListadoFiltros::camposOrdenables());
     $esOrdenable = in_array($key, $ordenables, true) && $key !== 'canal';
-    $claseCol = 'lw-th-drag';
+    $claseCol = 'lw-col lw-th-drag';
     $titleTh = $titulo.' — arrastrá para mover · × para ocultar (con confirmación)';
+    $styleAttr = trim((string) ($styleCol ?? ''));
 @endphp
-<th class="{{ $claseCol }}" title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true">
+<th class="{{ $claseCol }}"
+    @if ($styleAttr !== '') style="{{ $styleAttr }}" @endif
+    title="{{ $titleTh }}"
+    data-col-key="{{ $key }}"
+    draggable="true">
     <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
     @if ($esOrdenable)
         <a href="{{ $urlOrdenProducto($key) }}" class="text-dark lw-sort-link" draggable="false"><span class="lw-th-label">{{ $titulo }}</span>{{ $marcaOrdenProducto($key) }}</a>

@@ -42,7 +42,7 @@
     };
 @endphp
 <div class="card-body py-2 border-bottom bg-white">
-    <div class="d-flex flex-wrap align-items-center" data-listado-filtros-externos>
+    <div class="d-flex flex-wrap align-items-center" style="gap:.35rem;" data-listado-filtros-externos>
         <div class="mr-4 mb-1">
             <span class="text-muted small mr-2"><i class="fa fa-filter"></i> Estado
                 @if ($mostrarCanal && $canalActual === 'LOCAL')
@@ -107,5 +107,12 @@
                 </a>
             </div>
         </div>
+        <span class="ml-auto mb-1">
+            @include('includes.exportar-tabla-queryparams', [
+                'ruta' => 'lista_producto_ferli',
+                'queryparams' => $filtrosQuery ?? [],
+                'variant' => 'compact',
+            ])
+        </span>
     </div>
 </div>

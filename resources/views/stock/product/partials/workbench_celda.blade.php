@@ -1,21 +1,40 @@
+@php
+    use App\Support\Listado\ListadoGrillaConfigSupport;
+    use App\Support\Stock\ArticuloFerliListadoColumnas;
+
+    $cfg = $cfg ?? null;
+    $alinea = is_array($cfg) ? ($cfg['alinea'] ?? 'izquierda') : 'izquierda';
+    $cls = trim(ListadoGrillaConfigSupport::claseAlineacion($alinea).' lw-col');
+    $titleTexto = ArticuloFerliListadoColumnas::valorCelda($articulo, $key);
+@endphp
 @switch ($key)
     @case('sku')
-        <td>{{ $articulo->stkm_articulo ?? '' }}</td>
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $articulo->stkm_articulo ?? '' }}</span>
+        </td>
         @break
     @case('descripcion')
-        <td>{{ $articulo->stkm_desc ?? '' }}</td>
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $articulo->stkm_desc ?? '' }}</span>
+        </td>
         @break
     @case('categoria')
-        <td>{{ $articulo->stkm_agrupacion ?? '' }}</td>
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $articulo->stkm_agrupacion ?? '' }}</span>
+        </td>
         @break
     @case('marca')
-        <td>{{ $articulo->stkm_marca ?? '' }}</td>
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $articulo->stkm_marca ?? '' }}</span>
+        </td>
         @break
     @case('linea')
-        <td>{{ $articulo->stkm_linea ?? '' }}</td>
+        <td class="{{ $cls }}" @if ($titleTexto !== '') title="{{ $titleTexto }}" @endif>
+            <span class="lw-celda-texto">{{ $articulo->stkm_linea ?? '' }}</span>
+        </td>
         @break
     @case('canal')
-        <td class="text-nowrap">
+        <td class="{{ $cls }} text-nowrap">
             @php
                 $codigosCanal = $articulo->relationLoaded('canales')
                     ? $articulo->canales->pluck('codigo')->map(fn ($c) => strtoupper((string) $c))->all()
@@ -32,10 +51,12 @@
         </td>
         @break
     @case('nofactura')
-        <td>{{ \App\Support\Stock\ArticuloNofacturaSupport::etiqueta($articulo->nofactura) }}</td>
+        <td class="{{ $cls }}">
+            <span class="lw-celda-texto">{{ \App\Support\Stock\ArticuloNofacturaSupport::etiqueta($articulo->nofactura) }}</span>
+        </td>
         @break
     @case('estado')
-        <td>
+        <td class="{{ $cls }}">
             @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
                 @php
                     $ef = strtoupper((string) ($articulo->estado_fabrica ?? $articulo->estado ?? ''));
@@ -48,16 +69,20 @@
                     Loc {{ $el === 'ACTIVO' ? 'A' : 'I' }}
                 </span>
             @else
-                {{ $articulo->estado ?? '' }}
+                <span class="lw-celda-texto">{{ $articulo->estado ?? '' }}</span>
             @endif
         </td>
         @break
     @case('fecha_alta')
-        <td>{{ \App\Support\Listado\ListadoQbeSupport::formatearFecha((string) ($articulo->created_at ?? '')) }}</td>
+        <td class="{{ $cls }}">
+            <span class="lw-celda-texto">{{ \App\Support\Listado\ListadoQbeSupport::formatearFecha((string) ($articulo->created_at ?? '')) }}</span>
+        </td>
         @break
     @case('fecha_modificacion')
-        <td>{{ \App\Support\Listado\ListadoQbeSupport::formatearFecha((string) ($articulo->updated_at ?? '')) }}</td>
+        <td class="{{ $cls }}">
+            <span class="lw-celda-texto">{{ \App\Support\Listado\ListadoQbeSupport::formatearFecha((string) ($articulo->updated_at ?? '')) }}</span>
+        </td>
         @break
     @default
-        <td></td>
+        <td class="{{ $cls }}"></td>
 @endswitch
