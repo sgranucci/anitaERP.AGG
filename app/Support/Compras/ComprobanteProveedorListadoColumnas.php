@@ -44,6 +44,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'comprobante_proveedor.id',
             'attr' => 'id',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 56,
         ],
         'empresa' => [
             'label' => 'Empresa',
@@ -54,6 +55,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'empresa.nombre',
             'attr' => 'nombreempresa',
             'group' => self::GRUPO_PARTES,
+            'ancho' => 110,
         ],
         'proveedor' => [
             'label' => 'Proveedor',
@@ -64,6 +66,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'proveedor.nombre',
             'attr' => 'nombre_proveedor_listado',
             'group' => self::GRUPO_PARTES,
+            'ancho' => 220,
         ],
         'tipo' => [
             'label' => 'Tipo',
@@ -74,6 +77,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'tipotransaccion_compra.nombre',
             'attr' => 'nombre_tipo',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 160,
         ],
         'numero' => [
             'label' => 'Número',
@@ -84,6 +88,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => '',
             'attr' => 'numerocomprobante',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 110,
         ],
         'letra' => [
             'label' => 'Letra',
@@ -124,6 +129,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'ordencompra.numeroordencompra',
             'attr' => 'numero_oc',
             'group' => self::GRUPO_PARTES,
+            'ancho' => 56,
         ],
         'fechacomprobante' => [
             'label' => 'Fecha',
@@ -134,9 +140,10 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'comprobante_proveedor.fechacomprobante',
             'attr' => 'fechacomprobante',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 72,
         ],
         'fechaiva' => [
-            'label' => 'F. IVA / contabiliz.',
+            'label' => 'F. IVA',
             'default' => true,
             'export' => true,
             'filterable' => true,
@@ -144,6 +151,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'comprobante_proveedor.fechaiva',
             'attr' => 'fechaiva',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 72,
         ],
         'total' => [
             'label' => 'Total',
@@ -154,6 +162,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'comprobante_proveedor.total',
             'attr' => 'total',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 88,
         ],
         'estado' => [
             'label' => 'Estado',
@@ -164,6 +173,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'comprobante_proveedor.estado',
             'attr' => 'estado',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 108,
         ],
         'fuera_pago' => [
             'label' => 'Fuera de pago',
@@ -175,16 +185,18 @@ final class ComprobanteProveedorListadoColumnas
             'attr' => 'bloqueado_pago',
             'group' => self::GRUPO_COMPROBANTE,
             'alinea' => 'centro',
+            'ancho' => 56,
         ],
         'origen' => [
             'label' => 'Origen',
-            'default' => true,
+            'default' => false,
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
             'source' => 'comprobante_proveedor.origen_entrada',
             'attr' => 'origen_entrada',
             'group' => self::GRUPO_COMPROBANTE,
+            'ancho' => 100,
         ],
         'modo_carga' => [
             'label' => 'Modo carga',

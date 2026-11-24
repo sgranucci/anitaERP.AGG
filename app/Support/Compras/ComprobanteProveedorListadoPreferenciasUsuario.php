@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Cache;
 
 final class ComprobanteProveedorListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'comprobante-proveedor-listado-grilla-estandar-v1';
+    /** v3: anchos por columna del index clásico (sin ellipsis / F. IVA compacta). */
+    private const CACHE_GRILLA = 'comprobante-proveedor-listado-grilla-estandar-v3';
 
     private const CACHE_ORDEN = 'comprobante-proveedor-listado-orden-v1';
 

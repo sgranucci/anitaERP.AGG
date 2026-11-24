@@ -4,8 +4,15 @@
     if ($key === 'fuera_pago') {
         $alineacion = 'text-center';
     }
-    $claseCol = 'lw-th-drag';
+    $claseCol = 'lw-col lw-th-drag';
     $titleTh = $titulo;
+    $compactas = ['id', 'numero', 'oc', 'fechacomprobante', 'fechaiva', 'total', 'estado', 'fuera_pago', 'moneda', 'cotizacion'];
+    $textos = ['empresa', 'proveedor', 'tipo', 'origen', 'modo_carga', 'leyenda', 'cuit'];
+    if (in_array($key, $compactas, true)) {
+        $claseCol .= ' cp-col-compacta';
+    } elseif (in_array($key, $textos, true)) {
+        $claseCol .= ' cp-col-texto';
+    }
     if ($key === 'fechaiva') {
         $titulo = 'F. IVA';
         $claseCol .= ' cp-col-fechaiva';
@@ -41,8 +48,11 @@
             )
         );
     }
+    $styleAttr = trim((string) ($styleCol ?? ''));
 @endphp
-<th class="{{ $alineacion }} {{ $claseCol }}" title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true">
+<th class="{{ $alineacion }} {{ $claseCol }}"
+    @if ($styleAttr !== '') style="{{ $styleAttr }}" @endif
+    title="{{ $titleTh }}" data-col-key="{{ $key }}" draggable="true">
     <span class="lw-th-drag-handle" title="Arrastrar columna" aria-hidden="true"><i class="fa fa-grip-vertical"></i></span>
     @if ($esOrdenable)
         <a href="{{ route('comprobante_proveedor', $qsSort) }}" class="lw-sort-link" draggable="false">

@@ -1328,10 +1328,24 @@ class ComprobanteProveedorAsientoService
     /**
      * Vista solo lectura del asiento del movimiento de caja (origen I/E).
      *
+     * Alcance estricto: solo se llama si origen_entrada = INGRESO_EGRESO.
+     * No escribe BD, no toca asientos Anita/COM/grabados por asiento_id,
+     * ni el circuito de I/E al editar el movimiento de caja.
+     *
      * @return array<string, mixed>
      */
     private function previewAsientoDesdeIngresoEgreso(Comprobante_Proveedor $comprobante): array
     {
+        // Guardia: no correr esta presentación fuera del circuito I/E.
+        if (! ComprobanteProveedorIngresoEgresoEdicionSupport::es($comprobante)) {
+            return [
+                'activo' => false,
+                'es_preview' => false,
+                'avisos' => [],
+                'lineas' => [],
+            ];
+        }
+
         $asiento = ComprobanteProveedorIngresoEgresoEdicionSupport::asientoDelMovimiento($comprobante);
         if (! $asiento) {
             return [
@@ -1350,22 +1364,67 @@ class ComprobanteProveedorAsientoService
             'asiento_movimientos.centrocostos',
         ]);
 
+        // Solo esta factura: sus líneas Debe + contrapartida Haber proporcional.
+        // No se muestra el resto del movimiento I/E (otras facturas del mismo pago).
         $cpId = (int) ($comprobante->id ?? 0);
         $movimientos = $asiento->asiento_movimientos;
-        $filtrados = $movimientos->filter(static function ($mov) use ($cpId) {
+        $deEstaFactura = $movimientos->filter(static function ($mov) use ($cpId) {
             return $cpId > 0 && (int) ($mov->comprobante_proveedor_id ?? 0) === $cpId;
         });
 
-        $usaFiltroCp = $filtrados->isNotEmpty();
-        $preview = $this->previewDesdeAsientoModelo(
-            $asiento,
-            $usaFiltroCp ? $filtrados : $movimientos
-        );
+        if ($deEstaFactura->isEmpty()) {
+            return [
+                'activo' => true,
+                'error' => null,
+                'es_preview' => false,
+                'avisos' => [],
+                'asiento_id' => (int) $asiento->id,
+                'numeroasiento' => (string) $asiento->numeroasiento,
+                'fecha' => optional($asiento->fecha)->format('d/m/Y'),
+                'tipo_asiento' => optional($asiento->tipoasientos)->nombre ?? '',
+                'total_debe' => 0.0,
+                'total_haber' => 0.0,
+                'lineas' => [],
+                'nota_origen' => 'El asiento del movimiento de caja no tiene líneas vinculadas a esta factura.',
+            ];
+        }
+
+        $totalFactura = round($deEstaFactura->sum(static fn ($m) => (float) ($m->monto ?? 0)), 2);
+        $contrapartidas = $movimientos->filter(static function ($mov) {
+            return (int) ($mov->comprobante_proveedor_id ?? 0) <= 0
+                && (float) ($mov->monto ?? 0) < 0;
+        });
+
+        $lineasExtra = [];
+        if ($contrapartidas->isNotEmpty() && abs($totalFactura) > 0.0001) {
+            // Una sola línea Haber con el importe de esta factura (cuenta del banco / caja).
+            $banco = $contrapartidas->first();
+            $banco->loadMissing(['cuentacontables', 'centrocostos']);
+            $lineasExtra[] = [
+                'cuenta_codigo' => optional($banco->cuentacontables)->codigo ?? '—',
+                'cuenta_nombre' => optional($banco->cuentacontables)->nombre ?? '',
+                'centrocosto_codigo' => optional($banco->centrocostos)->codigo ?? '',
+                'centrocosto_id' => (int) ($banco->centrocosto_id ?? 0),
+                'cuentacontable_id' => (int) ($banco->cuentacontable_id ?? 0),
+                'debe' => null,
+                'haber' => abs($totalFactura),
+                'observacion' => trim((string) ($banco->observacion ?? '')).' (parte de esta factura)',
+                'origen' => 'grabado',
+            ];
+        }
+
+        $preview = $this->previewDesdeAsientoModelo($asiento, $deEstaFactura);
+        if ($lineasExtra !== []) {
+            // Contrapartida primero (como en el asiento real: Haber banco + Débitos).
+            $preview['lineas'] = array_merge($lineasExtra, $preview['lineas']);
+            $preview['total_haber'] = round(
+                (float) ($preview['total_haber'] ?? 0) + abs($totalFactura),
+                2
+            );
+        }
         $preview['avisos'] = [];
         unset($preview['error']);
-        $preview['nota_origen'] = $usaFiltroCp
-            ? 'Líneas del asiento del movimiento de caja vinculadas a esta factura.'
-            : 'Asiento completo del movimiento de caja (Ingresos y egresos).';
+        $preview['nota_origen'] = 'Líneas de esta factura en el asiento del movimiento de caja (Ingresos y egresos), con contrapartida que cierra.';
 
         return $preview;
     }

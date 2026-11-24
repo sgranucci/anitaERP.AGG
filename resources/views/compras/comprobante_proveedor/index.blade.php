@@ -7,35 +7,63 @@
 <link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 <style>
-    .lw-workbench.lw-cp-grilla #tabla-paginada thead th {
-        font-size: 0.92rem;
-        padding-top: 0.45rem;
-        padding-bottom: 0.45rem;
+    /*
+     * Index clásico (pre tabla-ancha fixed): tipografía chica, columnas compactas
+     * al contenido (width:1%), textos sin ellipsis. Scroll solo con muchas cols.
+     */
+    .lw-workbench .cp-grilla-ancha {
+        --tabla-ancha-der: 11rem;
     }
-    .lw-workbench.lw-cp-grilla #tabla-paginada tbody td {
-        font-size: 0.95rem;
-        padding-top: 0.4rem;
-        padding-bottom: 0.4rem;
-    }
-    .lw-workbench.lw-cp-grilla #tabla-paginada .badge {
-        font-size: 0.82rem;
-    }
-    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-fechaiva,
-    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-fechaiva,
-    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-fecha,
-    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-fecha,
-    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-numero,
-    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-numero {
-        width: 1%;
-        white-space: nowrap;
-    }
-    .lw-workbench.lw-cp-grilla #tabla-paginada th.cp-col-acciones,
-    .lw-workbench.lw-cp-grilla #tabla-paginada td.cp-col-acciones {
-        width: 11rem;
-        min-width: 11rem;
+    .lw-workbench .cp-grilla-ancha th.lw-col-acciones,
+    .lw-workbench .cp-grilla-ancha td.lw-col-acciones {
+        width: var(--tabla-ancha-der);
+        min-width: var(--tabla-ancha-der);
+        max-width: var(--tabla-ancha-der);
         white-space: nowrap;
         overflow: visible;
         vertical-align: middle;
+        text-align: center;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+    }
+    .lw-workbench .cp-grilla-ancha .lw-acciones-inner form {
+        display: inline-flex;
+        align-items: center;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        flex: 0 0 auto;
+    }
+    .lw-workbench.lw-cp-grilla #tabla-paginada thead th {
+        font-size: 0.78rem;
+        padding: 0.28rem 0.35rem;
+        line-height: 1.15;
+    }
+    .lw-workbench.lw-cp-grilla #tabla-paginada tbody td {
+        font-size: 0.8rem;
+        padding: 0.28rem 0.35rem;
+        line-height: 1.2;
+        vertical-align: middle;
+    }
+    .lw-workbench.lw-cp-grilla #tabla-paginada .badge {
+        font-size: 0.7rem;
+        padding: 0.15em 0.4em;
+    }
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100%;
+        table-layout: auto !important;
+        white-space: normal;
+    }
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha th.cp-col-compacta,
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-compacta {
+        width: 1%;
+        white-space: nowrap;
+    }
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-texto {
+        white-space: normal;
+        word-break: break-word;
     }
 </style>
 @endsection
@@ -224,25 +252,55 @@
             <div class="px-3 pt-2">
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
-            <div class="card-body py-2 border-bottom bg-white">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_comprobante_proveedor',
-                    'queryparams' => $filtrosQuery ?? [],
-                    'variant' => 'compact',
-                ])
-            </div>
-            <div class="tabla-ancha-grilla" data-tabla-ancha>
+            @php
+                use App\Support\Listado\ListadoGrillaConfigSupport as LwGrilla;
+                $layoutPorKey = [];
+                foreach (($grillaLayout ?? []) as $filaLayout) {
+                    $layoutPorKey[$filaLayout['key']] = $filaLayout;
+                }
+                $layoutPantalla = LwGrilla::escalarAnchosParaPantalla($grillaLayout ?? []);
+                $layoutPantallaPorKey = [];
+                foreach ($layoutPantalla as $filaP) {
+                    $layoutPantallaPorKey[$filaP['key']] = $filaP;
+                }
+                $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
+                // Vista estándar (~10 cols): layout auto como el index clásico (sin ellipsis).
+                $usaScrollHorizontal = count($columnasVisibles) > 14
+                    || $sumaAnchosPantalla > (LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 280);
+                $anchoAcciones = 176;
+            @endphp
+            <div class="tabla-ancha-grilla cp-grilla-ancha" data-tabla-ancha>
                 <div class="tabla-ancha-scroll-top" hidden>
                     <div class="tabla-ancha-scroll-top-inner"></div>
                 </div>
-                <div class="tabla-ancha-wrap card-body table-responsive p-0">
-                    <table class="tabla-ancha table table-striped table-bordered table-hover" id="tabla-paginada">
+                <div class="tabla-ancha-wrap card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
+                    <table class="tabla-ancha table table-striped table-bordered table-hover mb-0 lw-tabla-grilla" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             @foreach ($columnasVisibles as $keyColumna)
-                                @include('compras.comprobante_proveedor.partials.workbench_th', ['key' => $keyColumna])
+                                @php
+                                    $cfg = $layoutPorKey[$keyColumna] ?? null;
+                                    $cfgPantalla = $layoutPantallaPorKey[$keyColumna] ?? $cfg;
+                                    $ancho = (int) ($cfgPantalla['ancho'] ?? 100);
+                                    $tituloCol = $etiquetasColumnas[$keyColumna] ?? ($catalogoColumnas[$keyColumna]['label'] ?? $keyColumna);
+                                    $styleCol = '';
+                                    if ($usaScrollHorizontal) {
+                                        $minLegible = LwGrilla::anchoMinimoLegible(
+                                            $keyColumna,
+                                            $catalogoColumnas[$keyColumna] ?? [],
+                                            $tituloCol
+                                        );
+                                        $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
+                                    }
+                                @endphp
+                                @include('compras.comprobante_proveedor.partials.workbench_th', [
+                                    'key' => $keyColumna,
+                                    'styleCol' => $styleCol,
+                                    'cfg' => $cfg,
+                                ])
                             @endforeach
-                            <th class="cp-col-acciones" data-orderable="false">Acciones</th>
+                            <th class="lw-col-acciones" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -263,7 +321,9 @@
                                     'retornoListadoQuery' => $retornoListadoQuery,
                                 ])
                             @endforeach
-                            <td class="cp-col-acciones text-nowrap">
+                            <td class="lw-col-acciones text-nowrap"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                <div class="lw-acciones-inner">
                                 @php
                                     $facturaDeIngresoEgreso = \App\Support\Compras\ComprobanteProveedorOrigenEntrada::esIngresoEgreso($data->origen_entrada ?? null);
                                 @endphp
@@ -323,6 +383,7 @@
                                     </button>
                                 </form>
                                 @endif
+                                </div>
                             </td>
                         </tr>
                         @empty

@@ -13,7 +13,7 @@
 @endphp
 @switch ($key)
     @case ('id')
-        <td class="text-nowrap">
+        <td class="lw-col cp-col-compacta text-nowrap">
             @if ($puedeVerComprobante)
                 <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->id] + $retorno) }}"
                    class="text-primary" title="Ver comprobante">{{ $data->id }}</a>
@@ -31,7 +31,7 @@
                 ], true)
             );
         @endphp
-        <td class="text-nowrap cp-col-numero">
+        <td class="lw-col cp-col-compacta text-nowrap cp-col-numero">
             {{ ComprobanteProveedorListadoColumnas::numeroVisible($data) }}
             @if ($puedeVerComprobante && $tienePdfFactura)
                 <a href="{{ route('comprobante_proveedor_factura_pdf', ['id' => $data->id, 'inline' => 1]) }}"
@@ -47,7 +47,7 @@
             $numeroOc = $data->numero_oc ?? ($data->ordencompras->numeroordencompra ?? null);
             $ordencompraId = (int) ($data->ordencompra_id ?? 0);
         @endphp
-        <td>
+        <td class="lw-col cp-col-compacta">
             @if ($numeroOc !== null && $numeroOc !== '')
                 @if ($ordencompraId > 0 && can('editar-ordencompra', false))
                     <a href="{{ route('editar_ordencompra', ['id' => $ordencompraId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
@@ -61,7 +61,7 @@
         </td>
         @break
     @case ('fuera_pago')
-        <td class="text-center">
+        <td class="lw-col cp-col-compacta text-center">
             @if ((int) ($data->bloqueado_pago ?? 0) === 1)
                 <i class="fa fa-check text-muted" title="{{ $data->bloqueado_pago_motivo ?: 'Fuera del circuito de pago y de la proyección' }}"></i>
             @endif
@@ -77,7 +77,7 @@
                 ? ComprobanteProveedorAnitaSyncEstado::etiquetaBadge($syncEstadoCelda, $data->estado ?? '')
                 : '';
         @endphp
-        <td>
+        <td class="lw-col cp-col-compacta">
             <span class="{{ $badgeEstado['class'] }}">{{ $badgeEstado['label'] }}</span>
             @if (ComprobanteProveedorOrigenEntrada::esIngresoEgreso($data->origen_entrada ?? null))
                 <span class="badge badge-info ml-1" title="Nacida en Ingresos y egresos · solo consulta desde Compras">I/E</span>
@@ -93,7 +93,7 @@
         </td>
         @break
     @case ('origen')
-        <td>
+        <td class="lw-col cp-col-texto">
             @if (ComprobanteProveedorOrigenEntrada::esIngresoEgreso($data->origen_entrada ?? null))
                 <span class="badge badge-info" title="{{ ComprobanteProveedorOrigenEntrada::etiqueta($data->origen_entrada ?? '') }}">I/E</span>
             @else
@@ -102,13 +102,13 @@
         </td>
         @break
     @case ('modo_carga')
-        <td><span class="cp-celda">{{ ComprobanteProveedorModoCarga::etiqueta($data->modo_carga ?? '') }}</span></td>
+        <td class="lw-col cp-col-texto"><span class="cp-celda">{{ ComprobanteProveedorModoCarga::etiqueta($data->modo_carga ?? '') }}</span></td>
         @break
     @case ('fechacomprobante')
-        <td class="text-nowrap cp-col-fecha">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
+        <td class="lw-col cp-col-compacta text-nowrap cp-col-fecha">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
         @break
     @case ('fechaiva')
-        <td class="text-nowrap cp-col-fechaiva">
+        <td class="lw-col cp-col-compacta text-nowrap cp-col-fechaiva">
             @if ($data->fechaiva)
                 <span title="Fecha de contabilización e IVA compras">{{ $data->fechaiva->format('d/m/Y') }}</span>
             @endif
@@ -116,10 +116,10 @@
         @break
     @case ('total')
     @case ('cotizacion')
-        <td class="text-right text-nowrap">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
+        <td class="lw-col cp-col-compacta text-right text-nowrap">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
         @break
     @default
-        <td>
+        <td class="lw-col cp-col-texto">
             @include('includes.listado.celda_enlace', [
                 'filaEnlace' => $data,
                 'metaEnlace' => ComprobanteProveedorListadoColumnas::catalogoActivo()[$key] ?? [],

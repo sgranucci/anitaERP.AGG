@@ -99,5 +99,12 @@
                 </a>
             </div>
         </div>
+        <span class="ml-auto">
+            @include('includes.exportar-tabla-queryparams', [
+                'ruta' => 'lista_comprobante_proveedor',
+                'queryparams' => $filtrosQuery ?? [],
+                'variant' => 'compact',
+            ])
+        </span>
     </div>
 </div>
