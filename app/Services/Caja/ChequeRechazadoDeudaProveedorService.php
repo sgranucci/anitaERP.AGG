@@ -433,19 +433,11 @@ final class ChequeRechazadoDeudaProveedorService
 
     private function leyenda(Cheque $cheque, Venta $ventaNd): string
     {
-        $partes = ['Cheque rechazado'];
-        $nro = trim((string) ($cheque->numerocheque ?? ''));
-        if ($nro !== '') {
-            $partes[] = 'N° '.$nro;
-        }
-        if ($cheque->nro_interno_anita) {
-            $partes[] = 'int. '.$cheque->nro_interno_anita;
-        }
+        $texto = \App\Support\Caja\ChequeRechazoDescripcionSupport::detalleDocumento($cheque);
         $codigo = trim((string) ($ventaNd->codigo ?? ''));
         if ($codigo !== '') {
-            $partes[] = 'ND cliente '.$codigo;
+            $texto .= ' — ND cliente '.$codigo;
         }
-        $texto = implode(' — ', $partes);
 
         return mb_strlen($texto) > 255 ? mb_substr($texto, 0, 255) : $texto;
     }

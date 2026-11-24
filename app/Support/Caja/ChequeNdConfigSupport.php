@@ -169,6 +169,28 @@ final class ChequeNdConfigSupport
         return $id > 0 ? $id : 3;
     }
 
+    /**
+     * Condición de venta de la NDR: Configuración general (default CONTADO).
+     * Si $elegido > 0 y existe, manda el del modal de rechazo.
+     */
+    public static function condicionventaIdParaNotaDebito(?int $elegido = null): int
+    {
+        $id = ($elegido !== null && $elegido > 0) ? $elegido : 0;
+        if ($id <= 0) {
+            $id = ParametroSistemaSupport::ndrChequeCondicionventaId();
+        }
+        if ($id <= 0) {
+            return 0;
+        }
+
+        $ops = ParametroSistemaSupport::opcionesCondicionventaNdrCheque();
+        if (! array_key_exists((string) $id, $ops)) {
+            return ParametroSistemaSupport::ndrChequeCondicionventaId();
+        }
+
+        return $id;
+    }
+
     public static function letraDesdeCliente(?object $cliente): string
     {
         $letra = strtoupper(trim((string) ($cliente?->condicionivas?->letra ?? '')));

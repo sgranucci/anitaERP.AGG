@@ -581,6 +581,7 @@ $catalogo = ChequeListadoColumnas::catalogoActivo();
                 $request->input('fecha'),
                 $request->input('leyenda'),
                 (int) $request->input('puntoventa_id', 0) ?: null,
+                (int) $request->input('condicionventa_id', 0) ?: null,
             );
 
             return response()->json(['mensaje' => 'ok', 'data' => $datos]);
@@ -616,6 +617,7 @@ $catalogo = ChequeListadoColumnas::catalogoActivo();
                 $request->input('motivo_rechazo'),
                 (int) $request->input('puntoventa_id', 0) ?: null,
                 $request->boolean('enviar_cliente_proveedor'),
+                (int) $request->input('condicionventa_id', 0) ?: null,
             );
 
             return response()->json([

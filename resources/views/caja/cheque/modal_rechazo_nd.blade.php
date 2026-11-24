@@ -35,7 +35,12 @@
                         <label for="rechazo_nd_fecha">Fecha ND</label>
                         <input type="date" id="rechazo_nd_fecha" class="form-control form-control-sm" />
                     </div>
-                    <div class="form-group col-md-8">
+                    <div class="form-group col-md-4">
+                        <label for="rechazo_nd_condicionventa_id">Condición de venta</label>
+                        <select id="rechazo_nd_condicionventa_id" class="form-control form-control-sm"></select>
+                        <small class="form-text text-muted">Default de Configuración general (Caja / Cheques). Los rechazos van de contado.</small>
+                    </div>
+                    <div class="form-group col-md-4">
                         <label for="rechazo_nd_leyenda">Leyenda</label>
                         <input type="text" maxlength="255" id="rechazo_nd_leyenda" class="form-control form-control-sm" />
                     </div>

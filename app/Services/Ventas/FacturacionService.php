@@ -3942,6 +3942,19 @@ class FacturacionService
 		else
 			$condicionventa_id = null;
 
+		// NDR cheque rechazado (u otros): condición de venta forzada en el payload.
+		$condicionventaOverride = (int) ($data['condicionventa_id'] ?? 0);
+		if ($condicionventaOverride > 0) {
+			$condicionOverride = Condicionventa::with('condicionventacuotas')->find($condicionventaOverride);
+			if ($condicionOverride) {
+				$condicionventa_id = $condicionOverride->id;
+				$cliente->condicionventa_id = $condicionOverride->id;
+				$cliente->setRelation('condicionventas', $condicionOverride);
+				$clienteGraba->condicionventa_id = $condicionOverride->id;
+				$clienteGraba->setRelation('condicionventas', $condicionOverride);
+			}
+		}
+
 		// Saca letra del comprobante. Si se está recuperando un comprobante ya
 		// autorizado, manda la letra de ARCA y no la condición del cliente local.
 		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
@@ -4174,6 +4187,17 @@ class FacturacionService
 
 				// Arma detalle
 				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero;
+				$detalleContableOverride = trim((string) (
+					is_array($data['opciones_emision'] ?? null)
+						? ($data['opciones_emision']['detalle_contable'] ?? '')
+						: ''
+				));
+				if ($detalleContableOverride !== '') {
+					// Mayor Anita / asiento: texto estándar (ej. Rech.#nro int.banco).
+					$detalleContable = mb_strlen($detalleContableOverride) > 60
+						? mb_substr($detalleContableOverride, 0, 60)
+						: $detalleContableOverride;
+				}
 
 				// Procesa Factura electronica (o NC Villafranca: Anita usa el mismo payload).
 				// La NDR de cheque rechazado sale de un PV manual y igual arma el
@@ -11442,6 +11466,22 @@ class FacturacionService
 			? FacturaBTotalesImpresionSupport::lineas($conceptosTotales)
 			: [];
 
+		$facturaPdfChequeRechazado = null;
+		$chequeNd = \App\Models\Caja\Cheque::query()
+			->with(['bancos', 'proveedores'])
+			->where('venta_nd_id', (int) $venta->id)
+			->first();
+		if ($chequeNd) {
+			$destinatarioNd = \App\Support\Caja\ChequeRechazoDescripcionSupport::destinatarioImpresion($chequeNd);
+			$facturaPdfChequeRechazado = [
+				'es' => true,
+				'detalle_mayor' => \App\Support\Caja\ChequeRechazoDescripcionSupport::detalleMayor($chequeNd),
+				'destinatario_etiqueta' => $destinatarioNd['etiqueta'] ?? null,
+				'destinatario_valor' => $destinatarioNd['valor'] ?? null,
+				'etiqueta_total_items' => 'TOTAL',
+			];
+		}
+
 		return [
 			'venta' => $venta,
 			'conceptosTotales' => $conceptosTotales,
@@ -11457,6 +11497,7 @@ class FacturacionService
 			'pathDir' => $pathDir,
 			'nombreBase' => $venta->codigo.'-'.$nombreCliente,
 			'cliente' => $cliente,
+			'facturaPdfChequeRechazado' => $facturaPdfChequeRechazado,
 		];
 	}
 
@@ -11589,6 +11630,7 @@ class FacturacionService
 			'facturaPdfSoloHojaRemito' => $soloRemito,
 			'facturaPdfSinEnvelope' => $sinEnvelope,
 			'facturaPdfSaltoAntes' => $saltoAntes,
+			'facturaPdfChequeRechazado' => $ctx['facturaPdfChequeRechazado'] ?? null,
 		])->render();
 	}
 

@@ -325,3 +325,21 @@
     </tr>
 </table>
 @endif
+@if (! $esRemitoHoja && ! empty($facturaPdfChequeRechazado['es']))
+<table class="table borderless factura-cheque-rechazado">
+    <tr>
+        <td>
+            @if (! empty($facturaPdfChequeRechazado['destinatario_etiqueta']) && ! empty($facturaPdfChequeRechazado['destinatario_valor']))
+                <strong>{{ $facturaPdfChequeRechazado['destinatario_etiqueta'] }}:</strong>
+                {{ $facturaPdfChequeRechazado['destinatario_valor'] }}
+            @endif
+            @if (! empty($facturaPdfChequeRechazado['detalle_mayor']))
+                @if (! empty($facturaPdfChequeRechazado['destinatario_valor']))
+                    &nbsp;—&nbsp;
+                @endif
+                {{ $facturaPdfChequeRechazado['detalle_mayor'] }}
+            @endif
+        </td>
+    </tr>
+</table>
+@endif

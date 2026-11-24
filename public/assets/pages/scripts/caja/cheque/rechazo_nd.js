@@ -139,9 +139,24 @@
             leyenda: $('#rechazo_nd_leyenda').val(),
             motivo_rechazo: $('#rechazo_nd_motivo').val(),
             puntoventa_id: $('#rechazo_nd_puntoventa_id').val(),
+            condicionventa_id: $('#rechazo_nd_condicionventa_id').val(),
             enviar_cliente_proveedor: $('#rechazo_nd_enviar').is(':checked'),
             lineas: recolectarLineas()
         };
+    }
+
+    function llenarCondicionesVenta(lista, selectedId) {
+        var $sel = $('#rechazo_nd_condicionventa_id').empty();
+        (lista || []).forEach(function (item) {
+            var opt = $('<option>').val(String(item.id)).text(item.nombre || ('#' + item.id));
+            if (selectedId && String(item.id) === String(selectedId)) {
+                opt.prop('selected', true);
+            }
+            $sel.append(opt);
+        });
+        if (!$sel.find('option').length) {
+            $sel.append($('<option>').val('').text('CONTADO'));
+        }
     }
 
     function avisar(msg) {
@@ -223,6 +238,7 @@
             $('#rechazo-nd-modo-fe').text(fija + modoTxt + ws);
             $('#rechazo_nd_fecha').val(d.fecha || '');
             $('#rechazo_nd_leyenda').val(d.leyenda_sugerida || '');
+            llenarCondicionesVenta(d.condicionesventa || [], d.condicionventa_id || 0);
 
             var cuenta = d.cuenta_nominal || null;
             if (cuenta && cuenta.origen === 'error') {

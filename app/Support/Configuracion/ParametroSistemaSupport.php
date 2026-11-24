@@ -7,6 +7,7 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Parametro_Sistema;
 use App\Models\Contable\Cuentacontable;
+use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use Illuminate\Support\Facades\Cache;
@@ -39,6 +40,9 @@ final class ParametroSistemaSupport
     public const CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID = 'ndr_cheque_concepto_ivacompra_id';
 
     public const CLAVE_NDR_CHEQUE_PUNTOVENTA_ID = 'ndr_cheque_puntoventa_id';
+
+    /** Condición de venta de la NDR por cheque rechazado (default CONTADO). */
+    public const CLAVE_NDR_CHEQUE_CONDICIONVENTA_ID = 'ndr_cheque_condicionventa_id';
 
     public const CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID = 'ncp_pronto_pago_cuentacontable_id';
 
@@ -228,6 +232,14 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Punto de venta de esta instalación. En Ferli queda fijo para todas las empresas (sucursal 03333) y el rechazo no lo cambia. En las demás, si el .env tiene un solo punto de venta se propone ese id; si hay uno distinto por empresa, queda vacío y sigue el mapa CHEQUE_ND_PUNTOVENTA_POR_EMPRESA.',
                 'tipo' => 'puntoventa',
                 'orden' => 85,
+            ],
+            self::CLAVE_NDR_CHEQUE_CONDICIONVENTA_ID => [
+                'grupo' => 'Caja / Cheques',
+                'etiqueta' => 'Condición de venta de la NDR por cheque rechazado',
+                'ayuda' => 'La nota de débito por rechazo se reemplaza de contado. Acá se fija la condición (default CONTADO). Al emitir se puede cambiar en el modal, partiendo de este valor; no usa la del cliente.',
+                'tipo' => 'select',
+                'orden' => 87,
+                'opciones' => self::opcionesCondicionventaNdrCheque(),
             ],
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => [
                 'grupo' => 'Caja / Cobranzas',
@@ -458,6 +470,48 @@ final class ParametroSistemaSupport
         }
 
         return max(0, (int) $valor);
+    }
+
+    /**
+     * Condición de venta de la NDR por cheque rechazado (Configuración general).
+     * Default CONTADO: el rechazo no hereda la condición del cliente.
+     */
+    public static function ndrChequeCondicionventaId(): int
+    {
+        $ops = self::opcionesCondicionventaNdrCheque();
+        $valor = (string) (self::mapa()[self::CLAVE_NDR_CHEQUE_CONDICIONVENTA_ID]
+            ?? self::fallbackValor(self::CLAVE_NDR_CHEQUE_CONDICIONVENTA_ID));
+        if ($valor === '' || ! array_key_exists($valor, $ops)) {
+            $valor = (string) self::fallbackValor(self::CLAVE_NDR_CHEQUE_CONDICIONVENTA_ID);
+        }
+        if ($valor === '' || ! array_key_exists($valor, $ops)) {
+            $valor = (string) (array_key_first($ops) ?? '0');
+        }
+
+        return max(0, (int) $valor);
+    }
+
+    /**
+     * @return array<string, string> id => nombre
+     */
+    public static function opcionesCondicionventaNdrCheque(): array
+    {
+        try {
+            $out = [];
+            foreach (
+                Condicionventa::query()->orderBy('nombre')->orderBy('id')->get(['id', 'nombre']) as $fila
+            ) {
+                $id = (int) $fila->id;
+                if ($id <= 0) {
+                    continue;
+                }
+                $out[(string) $id] = (string) ($fila->nombre ?? ('#'.$id));
+            }
+
+            return $out !== [] ? $out : ['0' => 'CONTADO'];
+        } catch (Throwable) {
+            return ['0' => 'CONTADO'];
+        }
     }
 
     /**
@@ -744,6 +798,7 @@ final class ParametroSistemaSupport
             self::CLAVE_RECEPCION_NO_PRECARGAR_CANTIDAD => '0',
             self::CLAVE_NDR_CHEQUE_CONCEPTO_IVACOMPRA_ID => '',
             self::CLAVE_NDR_CHEQUE_PUNTOVENTA_ID => (string) self::ndrChequePuntoventaIdFallback(),
+            self::CLAVE_NDR_CHEQUE_CONDICIONVENTA_ID => (string) self::ndrChequeCondicionventaIdFallback(),
             self::CLAVE_NCP_PRONTO_PAGO_CUENTACONTABLE_ID => '',
             self::CLAVE_PROVEEDOR_ALTA_CUENTACONTABLE_ID => '',
             self::CLAVE_PEDIDO_IMPRIME_IVA_IIBB => '0',
@@ -900,6 +955,23 @@ final class ParametroSistemaSupport
         }
 
         return $id;
+    }
+
+    private static function ndrChequeCondicionventaIdFallback(): int
+    {
+        try {
+            $contado = (int) (Condicionventa::query()
+                ->whereRaw('UPPER(TRIM(nombre)) = ?', ['CONTADO'])
+                ->orderBy('id')
+                ->value('id') ?? 0);
+            if ($contado > 0) {
+                return $contado;
+            }
+
+            return max(0, (int) (Condicionventa::query()->orderBy('id')->value('id') ?? 0));
+        } catch (Throwable) {
+            return 0;
+        }
     }
 
     private static function puntoventaActivoIdPorCodigo(string $codigo): int

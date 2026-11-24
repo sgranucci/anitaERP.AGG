@@ -14,7 +14,9 @@ use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturaMailEnvioService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\ChequeNdConfigSupport;
+use App\Support\Caja\ChequeRechazoDescripcionSupport;
 use App\Support\Caja\ChequeTerceroRechazoAnitaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Ventas\ConceptoVentaMostradorSupport;
 use Exception;
 use InvalidArgumentException;
@@ -70,7 +72,9 @@ final class ChequeRechazadoNotaDebitoService
         $letra = ChequeNdConfigSupport::letraDesdeCliente($cliente);
         $pv = ChequeNdConfigSupport::puntoventaResumen($empresaId);
         $tipoNdId = ChequeNdConfigSupport::tipotransaccionNotaDebitoId($letra);
-        $refCheque = $this->referenciaCheque($cheque);
+        $detalleMayor = ChequeRechazoDescripcionSupport::detalleMayor($cheque);
+        $condicionventaId = ChequeNdConfigSupport::condicionventaIdParaNotaDebito();
+        $condiciones = ParametroSistemaSupport::opcionesCondicionventaNdrCheque();
 
         $lineas = [];
         $configError = null;
@@ -82,7 +86,7 @@ final class ChequeRechazadoNotaDebitoService
                 'rol' => 'cheque',
                 'concepto_venta_id' => $conceptoId,
                 'codigo' => (string) ($concepto->codigo ?? ''),
-                'descripcion' => 'Cheque rechazado — '.$refCheque,
+                'descripcion' => ChequeRechazoDescripcionSupport::detalleDocumento($cheque),
                 'cantidad' => 1.,
                 'precio' => round((float) $cheque->monto, 2),
                 'impuesto_id' => null,
@@ -96,7 +100,7 @@ final class ChequeRechazadoNotaDebitoService
                     'rol' => 'gasto',
                     'concepto_venta_id' => $gastosId,
                     'codigo' => (string) ($gastos->codigo ?? ''),
-                    'descripcion' => 'Gastos bancarios por cheque rechazado — '.$refCheque,
+                    'descripcion' => ChequeRechazoDescripcionSupport::detalleDocumento($cheque, 'Gastos bancarios por cheque rechazado'),
                     'cantidad' => 1.,
                     'precio' => 0.,
                     'impuesto_id' => (int) ($gastos->impuesto_id ?? $impuestoId),
@@ -124,12 +128,19 @@ final class ChequeRechazadoNotaDebitoService
                 'banco' => (string) ($cheque->bancos->nombre ?? ''),
                 'fechapago' => (string) ($cheque->fechapago ?? ''),
                 'letra' => $letra,
+                'detalle_mayor' => $detalleMayor,
             ],
             'puntoventa' => $pv,
             'tipotransaccion_id' => $tipoNdId,
+            'condicionventa_id' => $condicionventaId,
+            'condicionesventa' => collect($condiciones)
+                ->map(static fn (string $nombre, string $id) => [
+                    'id' => (int) $id,
+                    'nombre' => $nombre,
+                ])->values()->all(),
             'lineas' => $lineas,
             'fecha' => date('Y-m-d'),
-            'leyenda_sugerida' => 'ND por cheque rechazado — '.$refCheque,
+            'leyenda_sugerida' => ChequeRechazoDescripcionSupport::detalleDocumento($cheque, 'ND por cheque rechazado'),
             'config_error' => $configError,
             'impuestos' => Impuesto::query()->orderBy('valor')->orderBy('id')->get(['id', 'nombre', 'valor'])
                 ->map(static fn (Impuesto $imp) => [
@@ -164,8 +175,9 @@ final class ChequeRechazadoNotaDebitoService
         ?string $fecha = null,
         ?string $leyendaUsuario = null,
         ?int $puntoventaId = null,
+        ?int $condicionventaId = null,
     ): array {
-        $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId);
+        $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId, $condicionventaId);
         $calculo = $this->facturacionService->calculaFacturaGeneral($sesion['payload']);
         if (isset($calculo['error'])) {
             throw new InvalidArgumentException((string) $calculo['error']);
@@ -198,8 +210,9 @@ final class ChequeRechazadoNotaDebitoService
         ?string $motivoRechazo = null,
         ?int $puntoventaId = null,
         bool $enviarClienteProveedor = false,
+        ?int $condicionventaId = null,
     ): array {
-        $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId);
+        $sesion = $this->prepararSesion($chequeId, $lineas, $fecha, $leyendaUsuario, $puntoventaId, $condicionventaId);
         $cheque = $sesion['cheque'];
         $fechaNd = $sesion['fecha'];
         $payload = $sesion['payload'];
@@ -274,6 +287,7 @@ final class ChequeRechazadoNotaDebitoService
         ?string $fecha,
         ?string $leyendaUsuario,
         ?int $puntoventaId,
+        ?int $condicionventaId = null,
     ): array {
         if (! ChequeNdConfigSupport::habilitado()) {
             throw new InvalidArgumentException('La emisión de ND por cheque rechazado está deshabilitada.');
@@ -311,12 +325,16 @@ final class ChequeRechazadoNotaDebitoService
         $fechaNd = $fecha && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) ? $fecha : date('Y-m-d');
         $lineasNormalizadas = $this->normalizarLineas($cheque, $lineas, $empresaId, $tipoNdId, $fechaNd);
 
-        $refCheque = $this->referenciaCheque($cheque);
+        $detalleMayor = ChequeRechazoDescripcionSupport::detalleMayor($cheque);
         $leyendaManual = trim((string) $leyendaUsuario);
-        $leyendaNd = $leyendaManual !== '' ? $leyendaManual : ('ND por cheque rechazado — '.$refCheque);
+        $leyendaNd = $leyendaManual !== ''
+            ? $leyendaManual
+            : ChequeRechazoDescripcionSupport::detalleDocumento($cheque, 'ND por cheque rechazado');
         if (mb_strlen($leyendaNd) > 255) {
             $leyendaNd = mb_substr($leyendaNd, 0, 255);
         }
+
+        $condicionId = ChequeNdConfigSupport::condicionventaIdParaNotaDebito($condicionventaId);
 
         return [
             'cheque' => $cheque,
@@ -331,6 +349,7 @@ final class ChequeRechazadoNotaDebitoService
                 'leyendafactura' => $leyendaNd,
                 'actividad_arca_id' => ChequeNdConfigSupport::actividadArcaIdParaPuntoventa((int) $puntoventa->id),
                 'cliente_id' => (int) $cheque->cliente_id,
+                'condicionventa_id' => $condicionId,
                 'moneda_id' => (int) ($cheque->moneda_id ?? 1),
                 'listaprecio_id' => 1,
                 'descuentolinea' => 0.,
@@ -349,6 +368,8 @@ final class ChequeRechazadoNotaDebitoService
                 'opciones_emision' => [
                     'forzar_sincronizacion_anita' => true,
                     'omitir_numera_anita_fin' => true,
+                    'detalle_contable' => $detalleMayor,
+                    'cheque_rechazado_id' => (int) $cheque->id,
                 ],
             ],
         ];
@@ -393,7 +414,7 @@ final class ChequeRechazadoNotaDebitoService
                     $nominal,
                     trim((string) ($linea['descripcion'] ?? '')) !== ''
                         ? (string) $linea['descripcion']
-                        : 'Cheque rechazado — '.$this->referenciaCheque($cheque),
+                        : ChequeRechazoDescripcionSupport::detalleDocumento($cheque),
                     $impuestoExentoId,
                     'nogravado',
                     $cuenta,
@@ -649,21 +670,4 @@ final class ChequeRechazadoNotaDebitoService
         return $out;
     }
 
-    private function referenciaCheque(Cheque $cheque): string
-    {
-        $nro = trim((string) ($cheque->numerocheque ?? ''));
-        $banco = trim((string) ($cheque->bancos->nombre ?? ''));
-        $partes = [];
-        if ($nro !== '') {
-            $partes[] = 'N° '.$nro;
-        }
-        if ($banco !== '') {
-            $partes[] = $banco;
-        }
-        if ($cheque->nro_interno_anita) {
-            $partes[] = 'int. '.$cheque->nro_interno_anita;
-        }
-
-        return $partes !== [] ? implode(' / ', $partes) : 'id '.$cheque->id;
-    }
 }

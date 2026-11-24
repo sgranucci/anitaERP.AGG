@@ -66,9 +66,14 @@
         @php $totalCantidad += $paresItem; @endphp
     @endforeach
     @if ($mostrarTotalesFila)
+        @php
+            $etiquetaTotalItemsPdf = ! empty($facturaPdfChequeRechazado['etiqueta_total_items'])
+                ? (string) $facturaPdfChequeRechazado['etiqueta_total_items']
+                : 'TOTAL DE PARES';
+        @endphp
         <tr class="fila-totales-items">
             <td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
-            <td style="{{ $facturaPdfCeldaTotales }}" colspan="2"><strong>TOTAL DE PARES</strong></td>
+            <td style="{{ $facturaPdfCeldaTotales }}" colspan="2"><strong>{{ $etiquetaTotalItemsPdf }}</strong></td>
             <td class="text-center" style="{{ $facturaPdfCeldaTotales }}">
                 <strong>{{ number_format($totalesDocumento['cantidad'] ?? $totalCantidad, $decCant) }}</strong>
             </td>
@@ -150,9 +155,14 @@
         @endphp
     @endforeach
     @if ($mostrarTotalesFila)
+        @php
+            $etiquetaTotalItemsPdfFerli = ! empty($facturaPdfChequeRechazado['etiqueta_total_items'])
+                ? (string) $facturaPdfChequeRechazado['etiqueta_total_items']
+                : 'TOTAL DE PARES';
+        @endphp
         <tr class="fila-totales-items">
             <td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
-            <td style="{{ $facturaPdfCeldaTotales }}"><strong>TOTAL DE PARES</strong></td>
+            <td style="{{ $facturaPdfCeldaTotales }}"><strong>{{ $etiquetaTotalItemsPdfFerli }}</strong></td>
             <td class="text-center" style="{{ $facturaPdfCeldaTotales }}">
                 <strong>{{ number_format($totalesDocumento['cantidad'] ?? $totalCantidad, $decCant) }}</strong>
             </td>
