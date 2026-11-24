@@ -18,9 +18,21 @@ use App\Services\Caja\CobranzaAnularRevertirService;
 use App\Services\Caja\CobranzaService;
 use App\Queries\Caja\CobranzaQueryInterface;
 use App\Exports\Caja\CobranzaExport;
+use App\Support\Caja\CobranzaListadoColumnas;
+use App\Support\Caja\CobranzaListadoFiltros;
+use App\Support\Caja\CobranzaListadoPreferenciasUsuario;
 use App\Support\Caja\CobranzaListadoVisual;
 use App\Support\Caja\CobranzaOrigenFerliSupport;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoLienzoSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoQbeSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use Illuminate\Http\Request;
@@ -109,16 +121,66 @@ class CobranzaController extends Controller
 			$this->cobranzaRepository->sincronizarConAnita();
 
         $filtros = $this->filtrosListado($request);
-        $visual = ListadoVisualSupport::aplicarPedido(
-            [
-                'busqueda' => $filtros['busqueda'],
-                'fecha_desde' => $filtros['fecha_desde'],
-                'fecha_hasta' => $filtros['fecha_hasta'],
-            ],
-            $request,
-            null,
-            CobranzaListadoVisual::campos()
+        // Workbench siempre activo: misma visión por defecto (columnas clásicas),
+        // con mover/ocultar/vistas disponibles sin modo paralelo.
+        $wbActivo = true;
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+
+        [$vistaActiva, $forzarEstandar] = $this->resolverVistaActiva($request, $usuarioId);
+        $vistaJson = ($vistaActiva && is_array($vistaActiva->filtros_json)) ? $vistaActiva->filtros_json : null;
+        $wbFiltros = $this->resolverFiltrosWorkbench($request, $vistaActiva);
+
+        $base = [
+            'busqueda' => $filtros['busqueda'],
+            'fecha_desde' => $filtros['fecha_desde'],
+            'fecha_hasta' => $filtros['fecha_hasta'],
+            'qbe' => $wbFiltros['qbe'],
+            'sort' => $wbFiltros['sort'],
+            'agrupar' => $wbFiltros['agrupar'],
+        ];
+        $visual = ListadoVisualSupport::aplicarPedido($base, $request, $vistaJson, CobranzaListadoVisual::campos());
+
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, ['qbe' => $wbFiltros['qbe']]);
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            ListadoVistaSupport::recordarOrdenYAgrupar($vistaActiva, $wbFiltros['sort'], $wbFiltros['agrupar']);
+        }
+
+        $extra = $this->extraListado($filtros, $wbFiltros['sort']);
+
+        $filtrosQuery = array_merge($filtros['query'], ListadoVisualSupport::paraQueryString($visual));
+        unset($filtrosQuery['wb'], $filtrosQuery['vista_id'], $filtrosQuery['vista_estandar']);
+
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = CobranzaListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = CobranzaListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+
+        $filtrosQuery = array_merge(
+            $filtrosQuery,
+            ListadoQbeSupport::paraQueryString($wbFiltros['qbe']),
+            ListadoOrdenamientoSupport::paraQueryString($wbFiltros['sort']),
+            ListadoAgrupacionSupport::paraQueryString($wbFiltros['agrupar'])
         );
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
+
+        if ($request->boolean('quitar_orden')) {
+            if ($vistaActiva) {
+                ListadoVistaSupport::recordarOrdenYAgrupar($vistaActiva, [], $wbFiltros['agrupar']);
+            }
+            $qsSinOrden = $filtrosQuery;
+            unset($qsSinOrden['sort']);
+
+            return redirect()
+                ->route('cobranza', $qsSinOrden)
+                ->with('mensaje', 'Se quitó el orden de la grilla.');
+        }
 
         $cobranza = $this->cobranzaQuery->leeCobranza(
             $filtros['busqueda'],
@@ -128,8 +190,8 @@ class CobranzaController extends Controller
             $filtros['fecha_hasta'],
             is_array($visual['qbe'] ?? null) ? $visual['qbe'] : null,
             $filtros['origen'],
+            $extra,
         );
-        $filtrosQuery = array_merge($filtros['query'], ListadoVisualSupport::paraQueryString($visual));
         $this->recordarFiltrosListado($request, $filtrosQuery);
         $etiquetas = [];
         foreach (CobranzaListadoVisual::campos() as $key => $meta) {
@@ -144,8 +206,26 @@ class CobranzaController extends Controller
                 'fecha_desde' => $filtros['fecha_desde'],
                 'fecha_hasta' => $filtros['fecha_hasta'],
                 'origen' => $filtros['origen'],
-            ])
+            ] + $extra)
         );
+
+        $filtrosVista = array_merge($filtros, $visual, [
+            'empresa_scope' => $filtros['empresa_scope'],
+            'empresa_id' => $filtros['empresa_id'],
+            'estado' => $filtros['estado'],
+            'qbe' => $wbFiltros['qbe'],
+            'sort' => $wbFiltros['sort'],
+            'agrupar' => $wbFiltros['agrupar'],
+        ]);
+
+        $catalogo = CobranzaListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(CobranzaListadoColumnas::RECURSO, $catalogo);
+        $etiquetasColumnas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+        $camposFiltro = CobranzaListadoFiltros::camposQbe();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetasColumnas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+        $camposOrdenables = CobranzaListadoFiltros::camposOrdenables();
 
         return view('caja.cobranza.index', [
             'cobranza' => $cobranza,
@@ -155,10 +235,279 @@ class CobranzaController extends Controller
             'origen' => $filtros['origen'],
             'muestraFiltroOrigen' => CobranzaOrigenFerliSupport::aplica(),
             'filtrosQuery' => $filtrosQuery,
-            'filtros' => $visual,
+            'filtros' => $filtrosVista,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'wbActivo' => true,
             'graficoSeries' => $graficoSeries,
             'graficoSerie' => $graficoSeries[0] ?? ['labels' => [], 'series' => [], 'tipo' => '', 'titulo' => ''],
+            'vistaActiva' => $vistaActiva,
+            'vistasListado' => ListadoVistaSupport::listarParaUsuario(CobranzaListadoColumnas::RECURSO, $usuarioId),
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetasColumnas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'camposFiltro' => $camposFiltro,
+            'camposOrdenables' => $camposOrdenables,
+            'camposOrdenablesThead' => $camposOrdenables,
+            'ordenActual' => $wbFiltros['sort'],
+            'ordenActualThead' => $wbFiltros['sort'],
+            'retornoListadoQuery' => \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery),
+            'rolesVista' => ListadoVisualSupport::rolesParaInstalacion(),
         ]);
+    }
+
+    /**
+     * Vista guardada del workbench: la pedida por vista_id o, si no hay pedido
+     * explícito (ni QBE/orden/agrupación), la default del usuario / del rol.
+     *
+     * @return array{0: ?\App\Models\Listado\ListadoVista, 1: bool}
+     */
+    private function resolverVistaActiva(Request $request, ?int $usuarioId): array
+    {
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                CobranzaListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('qbe')
+            && ! $request->has('sort')
+            && ! $request->has('group')
+            && ! $request->boolean('aplicar_qbe')
+            && ! $request->boolean('quitar_qbe')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(CobranzaListadoColumnas::RECURSO, $usuarioId)
+                ?? ListadoVistaSupport::defaultDelRol(CobranzaListadoColumnas::RECURSO, (int) session('rol_id'));
+        }
+
+        return [$vistaActiva, $forzarEstandar];
+    }
+
+    /**
+     * QBE / orden / agrupación del workbench: lo que vino en el request manda;
+     * si no vino nada, aplica lo guardado en la vista.
+     *
+     * @return array{qbe: array<string, mixed>, sort: list<array{campo: string, dir: string}>, agrupar: list<string>}
+     */
+    private function resolverFiltrosWorkbench(Request $request, ?\App\Models\Listado\ListadoVista $vista = null): array
+    {
+        $desdeRequest = CobranzaListadoFiltros::resolverDesdeRequest($request, null);
+        $qbe = $desdeRequest['qbe'];
+        $sort = $desdeRequest['sort'];
+        $agrupar = $desdeRequest['agrupar'];
+
+        $json = ($vista && is_array($vista->filtros_json)) ? $vista->filtros_json : null;
+        if ($json !== null) {
+            if (! $request->exists('qbe') && ! ListadoVistaSupport::envioQbeDeVista($request)) {
+                $qbe = CobranzaListadoFiltros::normalizarQbe($json['qbe'] ?? []);
+            }
+            if (! $request->exists('sort')) {
+                $sort = ListadoOrdenamientoSupport::normalizar(
+                    $json['sort'] ?? $json['orden'] ?? [],
+                    CobranzaListadoFiltros::camposOrdenables()
+                );
+            }
+            if (! $request->exists('group')) {
+                $agrupar = ListadoAgrupacionSupport::normalizar(
+                    $json['agrupar'] ?? [],
+                    CobranzaListadoFiltros::camposOrdenables()
+                );
+            }
+        }
+
+        if ($request->boolean('quitar_qbe')) {
+            $qbe = ListadoQbeSupport::vacio();
+        }
+        if ($request->boolean('quitar_orden')) {
+            $sort = [];
+        }
+
+        return [
+            'qbe' => $qbe,
+            'sort' => $sort,
+            'agrupar' => $agrupar,
+        ];
+    }
+
+    /**
+     * Filtros "externos" (empresa / estado) + orden para CobranzaQuery::leeCobranza.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  list<array{campo: string, dir: string}>  $sort
+     * @return array<string, mixed>
+     */
+    private function extraListado(array $filtros, array $sort = []): array
+    {
+        return [
+            'empresa_id' => $filtros['empresa_id'],
+            'empresa_scope' => $filtros['empresa_scope'],
+            'estado' => $filtros['estado'],
+            'sort' => $sort,
+        ];
+    }
+
+    /**
+     * Filtros completos del workbench (base + QBE/orden/agrupación del request) para
+     * preview, guardar vista, columnas y etiquetas.
+     *
+     * @return array<string, mixed>
+     */
+    private function filtrosWorkbenchDesdeRequest(Request $request): array
+    {
+        $filtros = $this->filtrosListado($request);
+        $wb = $this->resolverFiltrosWorkbench($request);
+
+        return array_merge($filtros, $wb);
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-cobranza');
+
+        $filtros = $this->filtrosWorkbenchDesdeRequest($request);
+        $layout = CobranzaListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            CobranzaListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            CobranzaListadoFiltros::camposOrdenables()
+        );
+
+        // Muestra: primera página (10) de leeCobranza; el total sale del paginador.
+        $page = $this->cobranzaQuery->leeCobranza(
+            $filtros['busqueda'],
+            0,
+            true,
+            $filtros['fecha_desde'],
+            $filtros['fecha_hasta'],
+            is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : null,
+            $filtros['origen'],
+            $this->extraListado($filtros, $orden),
+        );
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => CobranzaListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            ['activo' => false]
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-cobranza');
+
+        $filtros = $this->filtrosWorkbenchDesdeRequest($request);
+        $graficosVista = ListadoLienzoSupport::normalizar(
+            $request->input('graficos'),
+            $request->input('grafico'),
+            $request->exists('graficos'),
+            CobranzaListadoVisual::campos()
+        );
+        $layout = CobranzaListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            CobranzaListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => ListadoQbeSupport::tieneCriterios((array) ($filtros['qbe'] ?? [])) ? 'qbe' : 'todos',
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+                'grafico' => ListadoLienzoSupport::primero($graficosVista),
+                'graficos' => $graficosVista,
+                'formato' => ListadoVisualSupport::normalizarFormato($request->input('formato'), CobranzaListadoVisual::campos()),
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('cobranza', CobranzaListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        ListadoVisualSupport::asignarRol($vista, $request, CobranzaListadoColumnas::RECURSO);
+        $qs = CobranzaListadoFiltros::paraQueryString($filtros);
+        $qs['wb'] = 1;
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('cobranza', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-cobranza');
+        $ok = ListadoVistaSupport::eliminar($id, CobranzaListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('cobranza', ['wb' => 1, 'vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-cobranza');
+        $layout = CobranzaListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, CobranzaListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            CobranzaListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->filtrosWorkbenchDesdeRequest($request);
+        $qs = CobranzaListadoFiltros::paraQueryString($filtros);
+        $qs['wb'] = 1;
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('cobranza', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-cobranza');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            CobranzaListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(CobranzaListadoColumnas::catalogoActivo())
+        );
+
+        $qs = CobranzaListadoFiltros::paraQueryString($this->filtrosWorkbenchDesdeRequest($request));
+        $qs['wb'] = 1;
+
+        return redirect()->route('cobranza', $qs)->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -169,6 +518,15 @@ class CobranzaController extends Controller
         ini_set('max_execution_time', '0');
 
         $filtros = $this->filtrosListado($request, $busqueda);
+        // Empresa / estado siempre; QBE y orden del workbench solo si la exportación viene de la grilla avanzada.
+        $extra = $this->extraListado($filtros);
+        if ($filtros['wb']) {
+            $wbFiltros = $this->resolverFiltrosWorkbench($request);
+            $extra['sort'] = $wbFiltros['sort'];
+            if (ListadoQbeSupport::tieneCriterios($wbFiltros['qbe'])) {
+                $extra['qbe'] = $wbFiltros['qbe'];
+            }
+        }
         $subtitulo = CobranzaPromedioPagoSupport::subtituloListado(
             $filtros['busqueda'],
             $filtros['fecha_desde'],
@@ -189,6 +547,7 @@ class CobranzaController extends Controller
                 $filtros['fecha_hasta'],
                 null,
                 $filtros['origen'],
+                $extra,
             );
 
             $view = \View::make('caja.cobranza.listado', compact('cobranza', 'subtitulo'))
@@ -204,11 +563,13 @@ class CobranzaController extends Controller
         case 'EXCEL':
             return (new CobranzaExport($this->cobranzaQuery))
                         ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo, $filtros['origen'])
+                        ->filtrosExtra($extra)
                         ->download('cobranza.xlsx');
 
         case 'CSV':
             return (new CobranzaExport($this->cobranzaQuery))
                         ->parametros($filtros['busqueda'], $filtros['fecha_desde'], $filtros['fecha_hasta'], $subtitulo, $filtros['origen'])
+                        ->filtrosExtra($extra)
                         ->download('cobranza.csv', \Maatwebsite\Excel\Excel::CSV);
         }   
 
@@ -216,18 +577,31 @@ class CobranzaController extends Controller
     }
 
     /**
-     * @return array{busqueda: string, fecha_desde: ?string, fecha_hasta: ?string, origen: string, query: array<string, string>}
+     * @return array{busqueda: string, fecha_desde: ?string, fecha_hasta: ?string, origen: string, empresa_id: ?int, empresa_scope: string, estado: string, wb: bool, vista_id: ?int, query: array<string, mixed>}
      */
     private function filtrosListado(Request $request, $busquedaRuta = null): array
     {
         $busqueda = $request->input('busqueda', $busquedaRuta);
         $busqueda = is_string($busqueda) ? trim($busqueda) : '';
+        // Búsqueda rápida del workbench: el texto del buscador pisa al hidden "busqueda".
+        if ($request->boolean('filtro_busqueda_rapida')) {
+            $busqueda = trim((string) $request->input('filtro_valor', ''));
+        }
         $fechaDesde = $this->fechaFiltro($request->input('fecha_desde'));
         $fechaHasta = $this->fechaFiltro($request->input('fecha_hasta'));
         if ($fechaDesde && $fechaHasta && $fechaDesde > $fechaHasta) {
             [$fechaDesde, $fechaHasta] = [$fechaHasta, $fechaDesde];
         }
         $origen = CobranzaOrigenFerliSupport::normalizar($request->input('origen'));
+
+        // Por defecto TODAS las empresas (no cambia lo que se veía antes de los chips).
+        [$empresaId, $empresaScope] = CobranzaListadoFiltros::resolverEmpresaExterna($request, null);
+        $estado = CobranzaListadoFiltros::normalizarEstado((string) $request->input('estado', ''));
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : null;
+        if ($vistaId !== null && $vistaId <= 0) {
+            $vistaId = null;
+        }
+        $wb = $request->boolean('wb') || $vistaId !== null;
 
         $query = array_filter([
             'busqueda' => $busqueda,
@@ -236,11 +610,31 @@ class CobranzaController extends Controller
             'origen' => $origen,
         ], static fn ($valor) => $valor !== null && $valor !== '');
 
+        // Empresa solo si se eligió explícitamente (el default "todas" no ensucia la URL).
+        if ($request->boolean('empresa_todas') || $request->filled('empresa_id') || $request->input('empresa_scope') === 'todas') {
+            $query = array_merge($query, CobranzaListadoFiltros::paraQueryString([
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
+            ]));
+        }
+        $query = array_merge($query, CobranzaListadoFiltros::paraQueryString(['estado' => $estado]));
+        if ($wb) {
+            $query['wb'] = 1;
+        }
+        if ($vistaId !== null) {
+            $query['vista_id'] = $vistaId;
+        }
+
         return [
             'busqueda' => $busqueda,
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'origen' => $origen,
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
+            'estado' => $estado,
+            'wb' => $wb,
+            'vista_id' => $vistaId,
             'query' => $query,
         ];
     }
@@ -256,6 +650,16 @@ class CobranzaController extends Controller
             'fecha_desde',
             'fecha_hasta',
             'origen',
+            'empresa_id',
+            'empresa_todas',
+            'estado',
+            'wb',
+            'vista_id',
+            'columnas',
+            'qbe',
+            'sort',
+            'group',
+            'vista_estandar',
             'grafico',
             'graficos',
             'grafico_off',
@@ -318,6 +722,26 @@ class CobranzaController extends Controller
         $origen = CobranzaOrigenFerliSupport::normalizar($guardados['origen'] ?? '');
         if ($origen !== '') {
             $limpio['origen'] = $origen;
+        }
+
+        // Empresa / estado / workbench (solo escalares; QBE, orden y columnas no se recuerdan).
+        if (! empty($guardados['empresa_todas'])) {
+            $limpio['empresa_todas'] = 1;
+        } elseif (isset($guardados['empresa_id']) && is_scalar($guardados['empresa_id']) && (int) $guardados['empresa_id'] > 0) {
+            $limpio['empresa_id'] = (int) $guardados['empresa_id'];
+        }
+        $estado = CobranzaListadoFiltros::normalizarEstado(is_scalar($guardados['estado'] ?? null) ? (string) $guardados['estado'] : '');
+        if ($estado !== '') {
+            $limpio['estado'] = $estado;
+        }
+        if (! empty($guardados['wb'])) {
+            $limpio['wb'] = 1;
+        }
+        if (isset($guardados['vista_id']) && is_scalar($guardados['vista_id']) && (int) $guardados['vista_id'] > 0) {
+            $limpio['vista_id'] = (int) $guardados['vista_id'];
+        }
+        if (! empty($guardados['vista_estandar']) && ! isset($limpio['vista_id'])) {
+            $limpio['vista_estandar'] = 1;
         }
 
         foreach (['grafico', 'graficos', 'formato'] as $key) {

@@ -38,6 +38,9 @@ class CobranzaExport implements FromView, WithColumnFormatting, WithColumnWidths
 
     private string $origen = '';
 
+    /** @var array<string, mixed> */
+    private array $extra = [];
+
     private bool $flDesdeIndex = false;
 
     private bool $hayFilaLogos = false;
@@ -70,10 +73,22 @@ class CobranzaExport implements FromView, WithColumnFormatting, WithColumnWidths
         return $this;
     }
 
+    /**
+     * Empresa / estado (y orden) del listado: mismo array $extra que CobranzaQuery::leeCobranza.
+     *
+     * @param  array<string, mixed>  $extra
+     */
+    public function filtrosExtra(array $extra): self
+    {
+        $this->extra = $extra;
+
+        return $this;
+    }
+
     public function view(): View
     {
         $cobranza = $this->flDesdeIndex
-            ? $this->cobranzaQuery->leeCobranza($this->busqueda, 0, false, $this->fechaDesde, $this->fechaHasta, null, $this->origen)
+            ? $this->cobranzaQuery->leeCobranza($this->busqueda, 0, false, $this->fechaDesde, $this->fechaHasta, null, $this->origen, $this->extra)
             : collect();
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($cobranza);

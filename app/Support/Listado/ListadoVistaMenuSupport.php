@@ -63,6 +63,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Ingresos y egresos',
         ],
+        'caja.cobranza' => [
+            'url_base' => 'caja/cobranza',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Cobranzas',
+        ],
         'contable.bien_uso' => [
             'url_base' => 'contable/bien-uso',
             'icono' => 'fa-bookmark',

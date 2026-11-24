@@ -4279,6 +4279,11 @@ Route::post('caja/ingresoegreso/sugerir-detalle-canje-cheque', 'Caja\IngresoEgre
  */
 
 Route::get('caja/cobranza', 'Caja\CobranzaController@index')->name('cobranza');
+Route::post('caja/cobranza/workbench/preview', 'Caja\CobranzaController@previewWorkbench')->name('preview_workbench_cobranza');
+Route::post('caja/cobranza/workbench/vista', 'Caja\CobranzaController@guardarVistaListado')->name('guardar_vista_listado_cobranza');
+Route::delete('caja/cobranza/workbench/vista/{id}', 'Caja\CobranzaController@eliminarVistaListado')->name('eliminar_vista_listado_cobranza')->whereNumber('id');
+Route::post('caja/cobranza/workbench/columnas', 'Caja\CobranzaController@guardarColumnasListado')->name('guardar_columnas_listado_cobranza');
+Route::post('caja/cobranza/workbench/etiquetas', 'Caja\CobranzaController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_cobranza');
 Route::get('caja/cobranza/crear/{venta_id?}/{caja?}', 'Caja\CobranzaController@crear')->name('crear_cobranza');
 Route::post('caja/cobranza', 'Caja\CobranzaController@guardar')->name('guardar_cobranza');
 Route::get('caja/cobranza/{id}/{origen?}/editar', 'Caja\CobranzaController@editar')->name('editar_cobranza');

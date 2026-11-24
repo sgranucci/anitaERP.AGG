@@ -4,11 +4,14 @@ namespace App\Queries\Caja;
 
 use App\Models\Caja\Cobranza;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Support\Caja\CobranzaListadoColumnas;
+use App\Support\Caja\CobranzaListadoFiltros;
 use App\Support\Caja\CobranzaListadoVisual;
 use App\Support\Caja\CobranzaOrigenFerliSupport;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
 use DB;
 
 class CobranzaQuery implements CobranzaQueryInterface
@@ -45,13 +48,24 @@ class CobranzaQuery implements CobranzaQueryInterface
 
     // Lectura para index de cobranzas
 
-    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null, ?array $qbe = null, string $origen = '')
+    public function leeCobranza($busqueda, $caja_id, $flPaginando = null, ?string $fechaDesde = null, ?string $fechaHasta = null, ?array $qbe = null, string $origen = '', array $extra = [])
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $cobranzas = $this->consulta($busqueda, $caja_id, $fechaDesde, $fechaHasta, $qbe, $origen);
-        $cobranzas = $cobranzas->orderby('cobranza.id', 'DESC');
+        $cobranzas = $this->consulta($busqueda, $caja_id, $fechaDesde, $fechaHasta, $qbe, $origen, $extra);
+
+        $sort = is_array($extra['sort'] ?? null) ? $extra['sort'] : [];
+        if ($sort !== []) {
+            ListadoOrdenamientoSupport::aplicar(
+                $cobranzas,
+                $sort,
+                CobranzaListadoColumnas::camposOrdenables(),
+                ['campo' => 'id', 'dir' => ListadoOrdenamientoSupport::DIR_DESC]
+            );
+        } else {
+            $cobranzas = $cobranzas->orderby('cobranza.id', 'DESC');
+        }
 
         if (isset($flPaginando))
         {
@@ -83,7 +97,8 @@ class CobranzaQuery implements CobranzaQueryInterface
                 $filtros['fecha_desde'] ?? null,
                 $filtros['fecha_hasta'] ?? null,
                 is_array($filtros['qbe'] ?? null) ? $filtros['qbe'] : null,
-                (string) ($filtros['origen'] ?? '')
+                (string) ($filtros['origen'] ?? ''),
+                $filtros
             ),
             ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
             $campos,
@@ -95,7 +110,7 @@ class CobranzaQuery implements CobranzaQueryInterface
         );
     }
 
-    private function consulta($busqueda, $caja_id, ?string $fechaDesde, ?string $fechaHasta, ?array $qbe, string $origen = '')
+    private function consulta($busqueda, $caja_id, ?string $fechaDesde, ?string $fechaHasta, ?array $qbe, string $origen = '', array $extra = [])
     {
         $select = ['cobranza.id as id',
                                     'cobranza.empresa_id as empresa',
@@ -108,7 +123,8 @@ class CobranzaQuery implements CobranzaQueryInterface
                                     'cobranza.detalle as detalle',
                                     'cobranza.estado as estado',
                                     'cobranza.monto as monto',
-                                    'cobranza.moneda_id as moneda_id'
+                                    'cobranza.moneda_id as moneda_id',
+                                    'moneda.abreviatura as abreviatura_moneda'
                     ];
 
         $cobranzas = $this->cobranzaModel->select($select)
@@ -154,8 +170,16 @@ class CobranzaQuery implements CobranzaQueryInterface
             $cobranzas = $cobranzas->where('cobranza.fecha', '<=', $fechaHasta);
         }
 
-        CobranzaListadoVisual::aplicarQbe($cobranzas, $qbe);
+        // Un solo recorrido del árbol: claves del workbench (CobranzaListadoColumnas) y,
+        // si no existen, las del click de gráfico (CobranzaListadoVisual) con igualdad exacta.
+        // Aplicar además CobranzaListadoVisual::aplicarQbe duplicaría criterios (estado/moneda
+        // existen en ambos) y rompería los grupos OR/NOT.
+        if ($qbe === null && is_array($extra['qbe'] ?? null)) {
+            $qbe = $extra['qbe'];
+        }
+        CobranzaListadoFiltros::aplicarQbe($cobranzas, $qbe);
         CobranzaOrigenFerliSupport::aplicar($cobranzas, $origen);
+        CobranzaListadoFiltros::aplicarEmpresaEstado($cobranzas, $extra);
 
         return $cobranzas;
     }
