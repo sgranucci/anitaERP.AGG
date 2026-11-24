@@ -258,6 +258,7 @@ return [
                 'Ruta: configuracion/ai-decisiones. Permiso: listar-ai-decisiones (menú Configuración → Gobernanza IA). Aquí se miden aceptación, auto-aplicadas, descartadas y errores, y se ve la salud operativa (flags, mail, batch, cola HITL, RAG, MCP).',
                 'Cada fila de ai_decision representa un ciclo de sugerencia: skill, score, driver, payload recortado, usuario, empresa, entidad. Las acciones típicas son: sugerida → confirmada | editada | auto_aplicada | descartada | error.',
                 'KPIs año 1 recomendados (estilo business case SAP): % de precargas aceptadas sin edición, tiempo medio de carga vs. carga manual, tasa de auto_aplicada estable, backlog de eventos HITL bajo el umbral acordado.',
+                'Botón «Facturas por canal» (configuracion/ai-decisiones/facturas-canal): reporte predefinido para operación. Muestra ingresos por agente/API, scan Anita e IA Anita (mail+batch+PDF), errores de recepción y de la skill de factura. Presets: últimos 7 días, 30 días o mes en curso.',
             ],
             'tabla' => [
                 'caption' => 'Acciones en ai_decision',

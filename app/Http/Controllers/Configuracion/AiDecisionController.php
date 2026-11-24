@@ -8,6 +8,7 @@ use App\Models\Ai\AiDecision;
 use App\Services\Ai\AiDecisionLogger;
 use App\Support\Configuracion\AiDecisionKpisSupport;
 use App\Support\Configuracion\AiDecisionListadoFiltros;
+use App\Support\Configuracion\AiFacturasCanalKpisSupport;
 use App\Support\Configuracion\AiOperacionSaludSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -48,6 +49,31 @@ class AiDecisionController extends Controller
             'skills' => AiDecisionListadoFiltros::skillsEtiquetas(),
             'salud' => AiOperacionSaludSupport::snapshot(),
             'eventosPendientes' => AiOperacionSaludSupport::eventosPendientes(12),
+        ]);
+    }
+
+    /**
+     * Reporte predefinido: facturas/precargas por canal (agente, scan, IA) + errores.
+     */
+    public function facturasCanal(Request $request)
+    {
+        can('listar-ai-decisiones');
+
+        $periodo = AiFacturasCanalKpisSupport::resolverPeriodo(
+            $request->input('preset'),
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+        );
+        $reporte = AiFacturasCanalKpisSupport::calcular(
+            $periodo['fecha_desde'],
+            $periodo['fecha_hasta'],
+            $periodo['preset'],
+        );
+
+        return view('configuracion.ai_decision.facturas_canal', [
+            'reporte' => $reporte,
+            'presets' => AiFacturasCanalKpisSupport::presetsEtiquetas(),
+            'periodo' => $periodo,
         ]);
     }
 

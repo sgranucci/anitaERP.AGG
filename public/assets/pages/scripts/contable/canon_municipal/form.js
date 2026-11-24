@@ -215,17 +215,23 @@
         }
 
         function actualizarBotonConfirmar() {
-            var ok = true;
-            if (!$('#canon-sp-vencimiento').val()) {
-                ok = false;
+            var $btn = $('#canon-sp-btn-confirmar');
+            var faltaVencimiento = !$('#canon-sp-vencimiento').val();
+            var faltaGenerarIgual = !$('#canon-sp-aviso-duplicado').hasClass('d-none')
+                && !$('#canon-sp-generar-igual').is(':checked');
+            var faltaConfirmoDias = !$('#canon-sp-aviso-dias').hasClass('d-none')
+                && !$('#canon-sp-confirmo-dias').is(':checked');
+            var ok = !faltaVencimiento && !faltaGenerarIgual && !faltaConfirmoDias;
+            $btn.prop('disabled', !ok);
+            if (ok) {
+                $btn.removeAttr('title');
+            } else if (faltaVencimiento) {
+                $btn.attr('title', 'Completá la fecha de vencimiento para habilitar el botón.');
+            } else if (faltaGenerarIgual) {
+                $btn.attr('title', 'Marcá «Generar igual» para confirmar pese al aviso de duplicado.');
+            } else {
+                $btn.attr('title', 'Marcá «Confirmo que es correcto» para continuar.');
             }
-            if (!$('#canon-sp-aviso-duplicado').hasClass('d-none') && !$('#canon-sp-generar-igual').is(':checked')) {
-                ok = false;
-            }
-            if (!$('#canon-sp-aviso-dias').hasClass('d-none') && !$('#canon-sp-confirmo-dias').is(':checked')) {
-                ok = false;
-            }
-            $('#canon-sp-btn-confirmar').prop('disabled', !ok);
         }
 
         function abrirModalSolicitud() {

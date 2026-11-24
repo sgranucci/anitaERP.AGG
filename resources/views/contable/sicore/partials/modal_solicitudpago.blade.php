@@ -130,7 +130,8 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success" id="sicore-sp-btn-confirmar" disabled>
+                    <button type="submit" class="btn btn-success" id="sicore-sp-btn-confirmar" disabled
+                            title="Completá la fecha de vencimiento para habilitar el botón.">
                         <i class="fa fa-check"></i> Confirmar y enviar a aprobaci&oacute;n
                     </button>
                 </div>
