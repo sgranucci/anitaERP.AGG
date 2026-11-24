@@ -64,6 +64,12 @@
 @php
     $volverListadoUrl = route('cliente', $filtrosQuery ?? []);
     $retornoCc = \App\Support\Listado\QueryRetornoListado::queryStringDesdeRequestActual();
+    $soloConsulta = ! empty($soloConsulta);
+    $puedeActualizarCliente = ! empty($puedeActualizarCliente);
+    $ocultarVolver = ! empty($ocultarVolver);
+    $soloLecturaConsulta = $soloConsulta && ! $puedeActualizarCliente;
+    // Emite NC se graba por AJAX con permiso propio: no depende de «actualizar-clientes».
+    $puedeModificarEmiteNc = can('modifica-emite-nota-de-credito', false);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -74,7 +80,11 @@
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title mb-0 d-inline-flex align-items-center flex-wrap">
-                    Editar Cliente
+                    @if ($soloLecturaConsulta)
+                        Consultar Cliente
+                    @else
+                        Editar Cliente
+                    @endif
                     @if (!empty($data->nombre))
                         <span class="font-weight-normal">· {{ $data->nombre }}</span>
                     @endif
@@ -88,26 +98,28 @@
                 </h3>
 
                 <div class="card-tools">
-                    @if (can('modifica-emite-nota-de-credito', false))
-                        <button type="button" id="botonemitenc" class="btn btn-info btn-sm border btn-danger">
+                    @if ($puedeModificarEmiteNc)
+                        <button type="button" id="botonemitenc"
+                            class="btn btn-info btn-sm border btn-danger"
+                            title="Clic para habilitar o deshabilitar la emisi&oacute;n de notas de cr&eacute;dito (se guarda al instante)">
                             <i id="iconoemitenc" class="fa fa-times"></i> Emite NC
                         </button>
                     @endif
-                    @if ($tipoalta == config('cliente.tipoalta')['PROVISORIO'][0])
+                    @if (! $soloLecturaConsulta && $tipoalta == config('cliente.tipoalta')['PROVISORIO'][0])
                         <button type="button" id="botontipoalta" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Cambia a DEFINITIVO
                         </button>
                     @endif
-                   	@if (can('suspender-clientes', false))
+                   	@if (! $soloLecturaConsulta && can('suspender-clientes', false))
                         <button type="button" id="botonestado" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
                         </button>
                     @else
-                        <button type="button" id="_" class="btn btn-info btn-sm">
+                        <button type="button" id="_" class="btn btn-info btn-sm" disabled>
                             <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
                         </button>
                     @endif
-                    @if (\App\Support\Ventas\ClienteRegularizacionAbmSupport::usuarioPuedeRegularizar())
+                    @if (! $soloLecturaConsulta && \App\Support\Ventas\ClienteRegularizacionAbmSupport::usuarioPuedeRegularizar())
                         <button type="button" id="btn-regularizar-cliente" class="btn btn-warning btn-sm js-btn-regularizar-cliente" title="Regularizado: facturaci&oacute;n permitida pese a ARCA" style="display: {{ $data->estado === 'R' ? 'none' : 'inline-block' }};">
                             <i class="fa fa-check-circle"></i> Regularizar
                         </button>
@@ -117,14 +129,16 @@
                             <i class="fa fa-folder-open">Cuenta Corriente</i>
                         </a>
                     @endif
-                    @if (isset($urlOrigen))
-                        <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-fw fa-reply-all"></i> Volver atrás
-                        </a>
-                    @else
-                        <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                        </a>
+                    @if (! $ocultarVolver)
+                        @if (isset($urlOrigen))
+                            <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
+                                <i class="fa fa-fw fa-reply-all"></i> Volver atrás
+                            </a>
+                        @else
+                            <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
+                                <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                            </a>
+                        @endif
                     @endif
                 </div>
             </div>
@@ -132,9 +146,13 @@
                 data-cliente-id="{{ $data->id }}"
                 data-puede-habilitar-cliente="{{ \App\Support\Ventas\ClienteHabilitacionAbmSupport::usuarioPuedeHabilitar() ? '1' : '0' }}"
                 data-arca-validar-url="{{ route('validar_cliente_arca_padron', ['id' => $data->id]) }}"
+                @if ($soloLecturaConsulta) onsubmit="return false;" @endif
             >
                 @csrf @method("put")
-                <div class="card-body pt-0 pb-0">
+                @if ($soloConsulta)
+                    <input type="hidden" name="origen" value="modal_consulta">
+                @endif
+                <div class="card-body pt-0 pb-0 @if ($soloLecturaConsulta) pe-none @endif" @if ($soloLecturaConsulta) style="opacity:.92" @endif>
                     <input type="hidden" id="emitenotadecredito" name="emitenotadecredito" value="{{old('emitenotadecredito', $data->emitenotadecredito ?? '')}}" >
                     @include('ventas.cliente.partials.tabs_header', ['mostrarSuitecrm' => config('suitecrm.habilitado')])
                     <div class="tab-content pt-3 px-1">
@@ -159,8 +177,15 @@
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
-                            <button type="submit" onclick="sub()" class="btn botonsubmit btn-success">Actualizar</button>
+                        <div class="col-lg-6 text-center">
+                            @if (! $soloConsulta)
+                                <button type="submit" onclick="sub()" class="btn botonsubmit btn-success">Actualizar</button>
+                            @else
+                                @if ($puedeActualizarCliente)
+                                    <button type="submit" onclick="sub()" class="btn botonsubmit btn-success">Actualizar</button>
+                                @endif
+                                <button type="button" class="btn btn-secondary @if ($puedeActualizarCliente) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>
+                            @endif
                         </div>
                     </div>
                 </div>

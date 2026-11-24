@@ -21,6 +21,7 @@ use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use App\Support\Ventas\AnitaVengravCodigoTasaSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
+use App\Support\Ventas\FacturaLineaPrecioImpresionSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\NotaDebitoReversionNotaCreditoSupport;
 use App\Support\Ventas\AbastoBierzoSupport;
@@ -213,11 +214,7 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		// Calcula las tasas de percepcion para agregar a la tasa de detraccion
-        if ($aplicaPercepcionIva && config('facturacion.USA_DETRACCION') == 'S')
-			$tasaDetraccion += $tasaPercepcionIva;
-
-		// Agrega impuestos provinciales (también en tasa de detracción si aplica)
+		// Percepciones provinciales: tasas para el divisor de precio final (si USA_DETRACCION).
 		$percepcionesIIBB = $this->percepcionesIibbParaVenta(
 			$totalBrutoAuxiliar,
 			$dataCliente,
@@ -231,10 +228,22 @@ class ImpuestoService extends FacturacionService
 			$flGrabaComprobanteDividido
 		);
 
-		if (config('facturacion.USA_DETRACCION') == 'S' && ! $omitirPercepciones)
-		{
-			foreach ($percepcionesIIBB as $percepcion)
-				$tasaDetraccion += $percepcion['tasa'];
+		$usaDetraccion = FacturaLineaPrecioImpresionSupport::usaDetraccionDesdeCliente($dataCliente);
+		if ($usaDetraccion && ! $omitirPercepciones) {
+			foreach ($percepcionesIIBB as $percepcion) {
+				$tasaDetraccion += (float) ($percepcion['tasa'] ?? 0);
+			}
+		}
+
+		// PIVA en el divisor solo si va a liquidarse. Si no, infla el neto tipado
+		// (incluyeimpuesto=1) y el Total no cierra al precio ingresado.
+		if ($aplicaPercepcionIva && $usaDetraccion) {
+			$netoEstPiva = $this->estimaNetoParaDetraccionPiva($dataItem, $flConIva, $tasaDetraccion, $flGrabaComprobanteDividido);
+			$importeEstPiva = round($netoEstPiva * ($tasaPercepcionIva / 100), 2);
+			if (RegimenPercepcionSupport::superaMinimoBase($netoEstPiva, $minimoBasePiva)
+				&& RegimenPercepcionSupport::superaMinimoImporte($importeEstPiva, $minimoImportePiva)) {
+				$tasaDetraccion += $tasaPercepcionIva;
+			}
 		}
 
 		if ($descuentoImportePie != 0.)
@@ -1068,6 +1077,47 @@ class ImpuestoService extends FacturacionService
 			'incluyeimpuesto' => $item['incluyeimpuesto'] ?? 'N',
 			'descuentofinal' => (float) ($item['descuentofinal'] ?? 0),
 		]);
+	}
+
+	/**
+	 * Neto gravado estimado para decidir si la PIVA entra al divisor de precio final.
+	 * Usa IVA de cada renglón + tasas IIBB ya acumuladas en $tasaDetraccion (sin PIVA).
+	 *
+	 * @param  list<array<string, mixed>>  $dataItem
+	 */
+	private function estimaNetoParaDetraccionPiva(
+		array $dataItem,
+		bool $flConIva,
+		float $tasaDetraccionSinPiva,
+		$flGrabaComprobanteDividido
+	): float {
+		$neto = 0.0;
+		foreach ($dataItem as $item) {
+			if (($item['tratamiento_fiscal'] ?? '') === 'nogravado') {
+				continue;
+			}
+			$item = $this->normalizaItemCalculoImpuesto($item);
+			if ((float) $item['cantidad'] == 0.0) {
+				continue;
+			}
+			$tasaIva = 0.0;
+			if ($flConIva) {
+				if ($flGrabaComprobanteDividido) {
+					$tasaIva = (float) ($this->tasaImpuesto ?? 0);
+				} else {
+					$tasaIva = (float) ($this->impuestoDeItem($item)->valor ?? 0);
+				}
+			}
+			$incluye = (string) ($item['incluyeimpuesto'] ?? 'N');
+			$brutoLinea = (float) $item['cantidad'] * (float) $item['precio'];
+			if ($incluye === 'N' || $incluye === '2' || $tasaIva + $tasaDetraccionSinPiva <= 0.00001) {
+				$neto += $brutoLinea;
+			} else {
+				$neto += $brutoLinea / (1 + (($tasaIva + $tasaDetraccionSinPiva) / 100));
+			}
+		}
+
+		return round($neto, 2);
 	}
 
 	public function calculaNetoItem($item, $flGrabaComprobanteDividido, $flConIva, $tasaDetraccion, $porcentajeDescuentoImportePie)

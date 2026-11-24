@@ -14,7 +14,6 @@
         <th>Cliente</th>
         <th>Nombre</th>
         <th class="text-right">Kilos</th>
-        <th class="text-right">Abastos</th>
         <th class="text-right">Gravado</th>
         <th class="text-right">Varios</th>
         <th class="text-right">Total comp.</th>
@@ -83,7 +82,6 @@
             <td>{{ $fila['cliente_nombre'] ?? '' }}</td>
         @endif
         <td class="text-right">{{ $num($fila['kilos'] ?? 0) }}</td>
-        <td class="text-right">{{ $num($fila['abastos'] ?? 0) }}</td>
         <td class="text-right">{{ $num($fila['gravado'] ?? 0) }}</td>
         <td class="text-right">{{ $num($fila['varios_comp'] ?? 0) }}</td>
         <td class="text-right">{{ $num($fila['total_comp'] ?? 0) }}</td>
@@ -96,7 +94,7 @@
     </tr>
 @empty
     <tr>
-        <td colspan="16" class="text-center text-muted">Sin movimientos para el filtro.</td>
+        <td colspan="15" class="text-center text-muted">Sin movimientos para el filtro.</td>
     </tr>
 @endforelse
 </tbody>

@@ -129,8 +129,12 @@
                 <div class="card-tools d-flex flex-wrap align-items-center" style="gap: 4px;">
                     @include('includes.ventas.link_mi_impresora')
                     @if (empty($pedidoTransferido) && $pedido->estadopedido != "Facturado")
-					<button type="button" onclick="pesada()" class="btn btn-success btn-sm">
+					<button type="button" onclick="pesada()" class="btn btn-success btn-sm" title="Pesada por lectura QR de cajas">
                     	<i class="fa fa-fw fa-check"></i> Pesada
+					</button>
+					<button type="button" id="btn-pesada-manual" onclick="pesadaManual()" class="btn btn-success btn-sm" title="F12: foco en la primera pesada · Enter: siguiente · F2: guardar · Esc: salir">
+						<i class="fa fa-fw fa-balance-scale"></i> Pesada manual
+						<small class="ml-1">(F12)</small>
 					</button>
                     @endif
                     @if (!empty($mostrarTransferirDespacho))

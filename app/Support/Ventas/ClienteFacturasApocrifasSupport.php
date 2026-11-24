@@ -5,7 +5,6 @@ namespace App\Support\Ventas;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Tiposuspensioncliente;
 use App\Services\Arca\WsapocConsultaService;
-use App\Traits\Ventas\ClienteTrait;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
@@ -15,8 +14,6 @@ use Throwable;
  */
 final class ClienteFacturasApocrifasSupport
 {
-    use ClienteTrait;
-
     public function __construct(
         private WsapocConsultaService $wsapocService,
     ) {}
@@ -165,7 +162,7 @@ final class ClienteFacturasApocrifasSupport
             'codigo' => (string) ($cliente->codigo ?? ''),
             'nombre' => (string) ($cliente->nombre ?? ''),
             'cuit' => $cuit,
-            'estado' => self::ESTADO_SUSPENDIDO,
+            'estado' => Cliente::ESTADO_SUSPENDIDO,
             'fecha_publicacion' => $pub['fecha_publicacion'] ?? null,
             'fecha_condicion' => $pub['fecha_condicion'] ?? null,
             'descripcion_arca' => $pub['descripcion'] ?? null,
@@ -300,7 +297,7 @@ final class ClienteFacturasApocrifasSupport
                 'codigo' => $ws['codigo'] ?? null,
                 'descripcion' => $ws['descripcion'] ?? null,
             ], JSON_UNESCAPED_UNICODE),
-            'estado' => self::ESTADO_SUSPENDIDO,
+            'estado' => Cliente::ESTADO_SUSPENDIDO,
         ];
 
         if ($tipoId > 0) {

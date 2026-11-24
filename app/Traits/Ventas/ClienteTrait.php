@@ -34,10 +34,16 @@ trait ClienteTrait {
 		'R' => 'Regularizado',
 		];
 
-	/** @return list<string> */
+	/**
+	 * Literales (no self::CONST): en PHP 8.2+ acceder a constantes del trait
+	 * vía TraitName::… o self:: dentro del trait puede fallar con
+	 * "Cannot access trait constant … directly".
+	 *
+	 * @return list<string>
+	 */
 	public static function estadosHabilitadosFacturacion(): array
 	{
-		return [self::ESTADO_ACTIVO, self::ESTADO_REGULARIZADO];
+		return ['0', 'R'];
 	}
 
 	public static function estaHabilitadoParaFacturacion(?string $estado): bool

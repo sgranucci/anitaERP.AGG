@@ -277,30 +277,62 @@
 	                     
         muestraEmiteNotaDeCredito();
 
-        $("#botonemitenc").click(function(){
-            let cliente_id = $('#cliente_id').val();
-            let url = carpetaBase+'/ventas/cliente/emitenc/'+cliente_id;
-
-            $.get(url, function(data, textStatus){
-				if (textStatus == 'success')
-				{
-                    if ($('#botonemitenc').hasClass('btn-danger'))
-                    {
-                        $('#botonemitenc').removeClass('btn-danger').addClass('btn-success'); 
-                        $('#iconoemitenc').removeClass('fa-times').addClass('fa-check');
-                        $('#emitenotadecredito').val('Emite Nota de Credito');
-                    }
-                    else
-                    {
-                        $('#botonemitenc').removeClass('btn-success').addClass('btn-danger'); 
-                        $('#iconoemitenc').removeClass('fa-check').addClass('fa-times');
-                        $('#emitenotadecredito').val('No Emite Nota de Credito');
-                    }                    
-				}
-				else	
-					alert('Ha ocurrido un error modificando el cliente')
-			});
-        });
+        $(document)
+            .off('click.emiteNcCliente', '#botonemitenc')
+            .on('click.emiteNcCliente', '#botonemitenc', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var $btn = $(this);
+                if ($btn.data('emiteNcBusy')) {
+                    return;
+                }
+                var cliente_id = parseInt($('#cliente_id').val() || $('#form-general').attr('data-cliente-id') || '0', 10) || 0;
+                if (cliente_id <= 0) {
+                    alert('No se pudo determinar el cliente para cambiar Emite NC.');
+                    return;
+                }
+                var url = carpetaBase + '/ventas/cliente/emitenc/' + cliente_id;
+                $btn.data('emiteNcBusy', 1).prop('disabled', true);
+                $.getJSON(url)
+                    .done(function (resp) {
+                        var valor = (resp && resp.emitenotadecredito)
+                            ? String(resp.emitenotadecredito)
+                            : '';
+                        var emite = valor.toLowerCase() === 'emite nota de credito';
+                        $btn.removeClass('btn-danger btn-success');
+                        $('#iconoemitenc').removeClass('fa-times fa-check');
+                        if (emite) {
+                            $btn.addClass('btn-success');
+                            $('#iconoemitenc').addClass('fa-check');
+                            $('#emitenotadecredito').val('Emite Nota de Credito');
+                        } else {
+                            $btn.addClass('btn-danger');
+                            $('#iconoemitenc').addClass('fa-times');
+                            $('#emitenotadecredito').val('No Emite Nota de Credito');
+                        }
+                        if (resp && resp.aviso) {
+                            alert(String(resp.aviso));
+                        }
+                    })
+                    .fail(function (xhr) {
+                        var msg = 'No se pudo cambiar Emite NC.';
+                        if (xhr && xhr.status === 403) {
+                            msg = 'No tenés permiso para modificar Emite NC en clientes.';
+                        } else if (xhr && xhr.responseJSON && xhr.responseJSON.message) {
+                            msg = String(xhr.responseJSON.message);
+                        } else if (xhr && xhr.responseText && String(xhr.responseText).indexOf('<') < 0) {
+                            msg = String(xhr.responseText).substring(0, 300);
+                        } else if (xhr && xhr.status === 500) {
+                            msg = 'Error del servidor al actualizar Emite NC. Si el botón no cambió, reintentá en unos segundos.';
+                        } else if (xhr && xhr.status) {
+                            msg += ' (HTTP ' + xhr.status + ')';
+                        }
+                        alert(msg);
+                    })
+                    .always(function () {
+                        $btn.data('emiteNcBusy', 0).prop('disabled', false);
+                    });
+            });
 	                     
         activa_eventos(true);        
 

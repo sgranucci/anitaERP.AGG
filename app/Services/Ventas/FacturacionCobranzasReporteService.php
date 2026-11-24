@@ -122,6 +122,7 @@ class FacturacionCobranzasReporteService
             $empresaTexto !== '' ? 'Empresa: '.$empresaTexto : null,
             FacturacionCobranzasListadoFiltros::formatearPeriodoTexto($filtros),
             FacturacionCobranzasListadoFiltros::formatearOrdenTexto($filtros),
+            FacturacionCobranzasListadoFiltros::formatearRepartoTexto($filtros),
             FacturacionCobranzasListadoFiltros::formatearFuenteTexto($filtros),
         ]);
 
@@ -196,10 +197,10 @@ class FacturacionCobranzasReporteService
 
             $montos = IvaVentasDesgloseSupport::columnasDesdeVenta($venta, $coef);
             $signo = IvaVentasDesgloseSupport::signoVenta($venta);
-            $abastos = $signo * $coef * $this->logisticaDesdeVenta($venta);
             $gravado = (float) ($montos['neto_gravado'] ?? 0);
             $total = (float) ($montos['total'] ?? 0);
-            $varios = round($total - $abastos - $gravado, 2);
+            // Abastos/logística se pliega en Varios (la columna Abastos salió del informe).
+            $varios = round($total - $gravado, 2);
 
             $out[] = $this->filaBase([
                 'tipo_fila' => 'factura',
@@ -211,7 +212,7 @@ class FacturacionCobranzasReporteService
                 'cliente_codigo' => (string) ($venta->clientes?->codigo ?? ''),
                 'cliente_nombre' => (string) ($venta->clientes?->nombre ?? $venta->nombre ?? ''),
                 'kilos' => round((float) ($kilosPorVenta[(int) $venta->id] ?? 0) * $signo, 2),
-                'abastos' => round($abastos, 2),
+                'abastos' => 0.0,
                 'gravado' => round($gravado, 2),
                 'varios_comp' => $varios,
                 'total_comp' => round($total, 2),
@@ -358,10 +359,10 @@ class FacturacionCobranzasReporteService
             }
 
             $signo = $this->signoTipoAnita($tipo);
-            $abastos = $signo * $coef * (float) ($fila['ven_tot_abasto'] ?? 0);
             $gravado = $signo * $coef * ((float) ($fila['ven_gravado'] ?? 0) + (float) ($fila['ven_gravado_ot'] ?? 0));
             $total = $signo * $coef * (float) ($fila['ven_monto'] ?? 0);
-            $varios = round($total - $abastos - $gravado, 2);
+            // Abastos (ven_tot_abasto) se pliega en Varios.
+            $varios = round($total - $gravado, 2);
             $trCodigo = (string) ((int) ($fila['ven_transporte'] ?? 0));
 
             $out[] = $this->filaBase([
@@ -372,7 +373,7 @@ class FacturacionCobranzasReporteService
                 'fecha_ymd' => $fechaIso,
                 'cliente_codigo' => ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoErp((string) ($fila['ven_cliente'] ?? '')),
                 'cliente_nombre' => trim((string) ($fila['ven_nombre_cliente'] ?? '')),
-                'abastos' => round($abastos, 2),
+                'abastos' => 0.0,
                 'gravado' => round($gravado, 2),
                 'varios_comp' => $varios,
                 'total_comp' => round($total, 2),
@@ -471,6 +472,22 @@ class FacturacionCobranzasReporteService
      */
     private function filtrarReparto(array $detalles, array $filtros): array
     {
+        $modo = FacturacionCobranzasListadoFiltros::normalizarRepartoModo($filtros['reparto_modo'] ?? null);
+
+        if ($modo === FacturacionCobranzasListadoFiltros::REPARTO_MODO_PARTICULAR) {
+            $codigos = FacturacionCobranzasListadoFiltros::codigosRepartoParticulares($filtros);
+            if ($codigos === []) {
+                return [];
+            }
+            $set = array_fill_keys($codigos, true);
+
+            return array_values(array_filter($detalles, static function (array $f) use ($set): bool {
+                $cod = (int) ($f['transporte_orden'] ?? 0);
+
+                return $cod > 0 && isset($set[$cod]);
+            }));
+        }
+
         [$desde, $hasta] = FacturacionCobranzasListadoFiltros::rangoRepartoCodigos($filtros);
         if ($desde <= 0 && $hasta >= 999999) {
             return $detalles;
@@ -704,21 +721,6 @@ class FacturacionCobranzasReporteService
             ->pluck('kilos', 'venta_id')
             ->map(fn ($v) => (float) $v)
             ->all();
-    }
-
-    private function logisticaDesdeVenta(Venta $venta): float
-    {
-        foreach ($venta->venta_impuestos ?? [] as $imp) {
-            $concepto = (string) ($imp->concepto ?? '');
-            if (stripos($concepto, 'Logistica') !== false || stripos($concepto, 'Logística') !== false) {
-                return (float) ($imp->importe ?? 0);
-            }
-            if (stripos($concepto, 'Abasto') !== false) {
-                return (float) ($imp->importe ?? 0);
-            }
-        }
-
-        return 0.0;
     }
 
     private function mediosDesdeCobranzaErp(Cobranza $cobranza, float $coef): array

@@ -107,6 +107,8 @@ class FacturacionCobranzasReporteController extends Controller
             'periodo_texto' => FacturacionCobranzasListadoFiltros::formatearPeriodoTexto($filtros),
             'orden_texto' => FacturacionCobranzasListadoFiltros::formatearOrdenTexto($filtros),
             'fuente_texto' => FacturacionCobranzasListadoFiltros::formatearFuenteTexto($filtros),
+            'reparto_texto' => FacturacionCobranzasListadoFiltros::formatearRepartoTexto($filtros),
+            'repartos_iniciales' => $this->metaRepartosParticulares($filtros),
             'empresa_texto' => $this->etiquetaEmpresa((int) ($filtros['empresa_id'] ?? 0), $empresaQuery),
             'puede_ver_venta' => can('editar-factura', false) || can('listar-factura', false),
             'puede_ver_cliente' => can('editar-clientes', false) || can('listar-clientes', false),
@@ -241,6 +243,52 @@ class FacturacionCobranzasReporteController extends Controller
             $tr = Transporte::query()->where('codigo', $codigo)->first(['nombre']);
             $filtros[$nombreKey] = (string) ($tr->nombre ?? '');
         }
+
+        $codigos = FacturacionCobranzasListadoFiltros::codigosRepartoParticulares($filtros);
+        if ($codigos === []) {
+            $filtros['repartos_nombres'] = [];
+
+            return;
+        }
+
+        $nombres = is_array($filtros['repartos_nombres'] ?? null) ? $filtros['repartos_nombres'] : [];
+        $faltan = [];
+        foreach ($codigos as $codigo) {
+            if (trim((string) ($nombres[$codigo] ?? '')) === '') {
+                $faltan[] = $codigo;
+            }
+        }
+        if ($faltan !== []) {
+            $encontrados = Transporte::query()
+                ->whereIn('codigo', $faltan)
+                ->get(['codigo', 'nombre']);
+            foreach ($encontrados as $tr) {
+                $nombres[(int) $tr->codigo] = (string) ($tr->nombre ?? '');
+            }
+        }
+        $filtros['repartos_nombres'] = [];
+        foreach ($codigos as $codigo) {
+            $filtros['repartos_nombres'][$codigo] = (string) ($nombres[$codigo] ?? '');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{codigo:int,nombre:string}>
+     */
+    private function metaRepartosParticulares(array $filtros): array
+    {
+        $codigos = FacturacionCobranzasListadoFiltros::codigosRepartoParticulares($filtros);
+        $nombres = is_array($filtros['repartos_nombres'] ?? null) ? $filtros['repartos_nombres'] : [];
+        $out = [];
+        foreach ($codigos as $codigo) {
+            $out[] = [
+                'codigo' => $codigo,
+                'nombre' => (string) ($nombres[$codigo] ?? ''),
+            ];
+        }
+
+        return $out;
     }
 
     /**

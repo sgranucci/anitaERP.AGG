@@ -28,8 +28,10 @@ final class FacturacionCobranzasReporteCacheSupport
             'solo_totales' => ! empty($filtros['solo_totales']),
             'moneda_origen' => ! empty($filtros['moneda_origen']),
             'moneda_id' => (int) ($filtros['moneda_id'] ?? 1),
+            'reparto_modo' => FacturacionCobranzasListadoFiltros::normalizarRepartoModo($filtros['reparto_modo'] ?? null),
             'reparto_desde' => (string) ($filtros['reparto_desde'] ?? ''),
             'reparto_hasta' => (string) ($filtros['reparto_hasta'] ?? ''),
+            'repartos' => FacturacionCobranzasListadoFiltros::codigosRepartoParticulares($filtros),
         ];
 
         return hash('sha256', (string) json_encode($relevante, JSON_UNESCAPED_UNICODE));

@@ -424,6 +424,10 @@
 			}
 
 			if (actual.classList.contains('pesada')) {
+				if (modoPesadaManualActivo()) {
+					return siguienteCampoPesadaManual(actual);
+				}
+
 				var $descuento = $tr.find('.descuentoventa_id');
 
 				if ($descuento.length && esCampoPedidoEnfocable($descuento[0])) {
@@ -488,6 +492,11 @@
 				flSaltarFocusDescuentoPedido = false;
 			}
 
+			return;
+		}
+
+		if (accion === 'fin-pesada-manual') {
+			enfocarBotonGuardarPedido();
 			return;
 		}
 
@@ -3855,6 +3864,195 @@
 			agregarRenglonPedidoTrasDescuento($(ptr).parents('tr'));
 		}
 	}
+
+	var modoPesadaManual = false;
+
+	function hayBotonPesadaManual() {
+		return !!document.getElementById('btn-pesada-manual');
+	}
+
+	function modoPesadaManualActivo() {
+		return !!modoPesadaManual && hayBotonPesadaManual();
+	}
+
+	function obtenerCamposPesadaManual() {
+		var campos = [];
+
+		$('#itemspedido-table tr.item-pedido').each(function () {
+			var $tr = $(this);
+			var sku = (($tr.find('.codigoarticulo').val() || '') + '').trim();
+			var articuloId = (($tr.find('.articulo_id').val() || '') + '').trim();
+			var estado = (($tr.find('.estados').val() || 'P') + '').trim();
+
+			if (!sku || !articuloId || estado === 'A') {
+				return;
+			}
+
+			var el = $tr.find('.pesada')[0];
+
+			if (esCampoPedidoEnfocable(el)) {
+				campos.push(el);
+			}
+		});
+
+		return campos;
+	}
+
+	function siguienteCampoPesadaManual(actual) {
+		var campos = obtenerCamposPesadaManual();
+		var indice = campos.indexOf(actual);
+
+		if (indice >= 0 && indice < campos.length - 1) {
+			return campos[indice + 1];
+		}
+
+		return 'fin-pesada-manual';
+	}
+
+	function pintarEstadoPesadaManual() {
+		var $btn = $('#btn-pesada-manual');
+		var $tabla = $('#itemspedido-table');
+
+		if (!$btn.length) {
+			return;
+		}
+
+		if (modoPesadaManual) {
+			$btn
+				.addClass('active')
+				.attr('aria-pressed', 'true')
+				.attr('title', 'Modo pesada manual activo · Enter: siguiente · F2: guardar · Esc: salir');
+			$tabla.addClass('pedido-modo-pesada-manual');
+			$('#formgeneral').addClass('pedido-modo-pesada-manual');
+		} else {
+			$btn
+				.removeClass('active')
+				.attr('aria-pressed', 'false')
+				.attr('title', 'F12: foco en la primera pesada · Enter: siguiente · F2: guardar · Esc: salir');
+			$tabla.removeClass('pedido-modo-pesada-manual');
+			$('#formgeneral').removeClass('pedido-modo-pesada-manual');
+		}
+	}
+
+	function enfocarBotonGuardarPedido() {
+		var btn = document.querySelector('#formgeneral button[type="submit"].pedido-carga-bloqueable')
+			|| document.querySelector('button.pedido-carga-bloqueable[type="submit"]')
+			|| document.querySelector('#formgeneral button[type="submit"]');
+
+		if (!btn || btn.disabled) {
+			return;
+		}
+
+		try {
+			btn.focus({ preventScroll: false });
+		} catch (e) {
+			btn.focus();
+		}
+	}
+
+	function grabarPedidoDesdePesadaManual() {
+		if (!modoPesadaManualActivo()) {
+			return;
+		}
+
+		if (typeof window.sub === 'function') {
+			window.sub();
+			return;
+		}
+
+		var form = document.getElementById('formgeneral');
+		var btn = document.querySelector('#formgeneral button[type="submit"].pedido-carga-bloqueable')
+			|| document.querySelector('button.pedido-carga-bloqueable[type="submit"]');
+
+		if (btn && !btn.disabled) {
+			btn.click();
+		} else if (form) {
+			form.requestSubmit ? form.requestSubmit() : form.submit();
+		}
+	}
+
+	function desactivarPesadaManual() {
+		if (!modoPesadaManual) {
+			return;
+		}
+
+		modoPesadaManual = false;
+		pintarEstadoPesadaManual();
+	}
+
+	function activarPesadaManual() {
+		if (!hayBotonPesadaManual()) {
+			return;
+		}
+		if (hayModalPedidoAbierto()) {
+			return;
+		}
+
+		var campos = obtenerCamposPesadaManual();
+
+		if (!campos.length) {
+			alert('No hay ítems con pesada editable en este pedido.');
+			return;
+		}
+
+		modoPesadaManual = true;
+		pintarEstadoPesadaManual();
+
+		var primero = campos[0];
+		focuseCampoPedido(primero);
+
+		try {
+			primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		} catch (e) {
+			// ignore
+		}
+	}
+
+	function pesadaManual() {
+		activarPesadaManual();
+	}
+
+	function onHotkeyPesadaManual(e) {
+		if (!hayBotonPesadaManual()) {
+			return;
+		}
+		if (e.ctrlKey || e.metaKey || e.altKey) {
+			return;
+		}
+		if (hayModalPedidoAbierto()) {
+			return;
+		}
+
+		var key = e.key;
+
+		if (key === 'F12') {
+			e.preventDefault();
+			e.stopPropagation();
+			pesadaManual();
+			return;
+		}
+
+		if (key === 'F2' && modoPesadaManualActivo()) {
+			e.preventDefault();
+			e.stopPropagation();
+			grabarPedidoDesdePesadaManual();
+			return;
+		}
+
+		if (key === 'Escape' && modoPesadaManualActivo()) {
+			e.preventDefault();
+			e.stopPropagation();
+			desactivarPesadaManual();
+		}
+	}
+
+	$(function () {
+		if (!hayBotonPesadaManual()) {
+			return;
+		}
+
+		$(document).off('keydown.pedidoPesadaManual').on('keydown.pedidoPesadaManual', onHotkeyPesadaManual);
+	});
 
 	function pesada()
 	{

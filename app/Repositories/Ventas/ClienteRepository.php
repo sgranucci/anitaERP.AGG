@@ -210,7 +210,13 @@ class ClienteRepository implements ClienteRepositoryInterface
          //   ->update($data);
     }
 
-    public function updateEmiteNc($id)
+    /**
+     * Alterna Emite NC en ERP y sincroniza Anita (Bierzo).
+     * Si Anita tiene el registro bloqueado, el ERP queda grabado y se avisa sin 500.
+     *
+     * @return array{emitenotadecredito: string, aviso: ?string}
+     */
+    public function updateEmiteNc($id): array
     {
         $cliente = $this->model->findOrFail($id);
 
@@ -222,11 +228,53 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$this->model->find($id)->update($emite);
 
-		// Actualiza anita
-		if (config('app.empresa') == "EL BIERZO")
-			$cliente = self::actualizarEmiteNc($emite, $cliente->codigo);
+        $aviso = null;
+		if (EntornoEmpresaSupport::esElBierzo()) {
+            try {
+                $this->actualizarEmiteNcConReintentos($emite, (string) $cliente->codigo);
+            } catch (\Throwable $e) {
+                \Log::warning('cliente.emite_nc.anita_fallo', [
+                    'cliente_id' => (int) $id,
+                    'codigo' => (string) $cliente->codigo,
+                    'valor' => $emite['emitenotadecredito'],
+                    'mensaje' => $e->getMessage(),
+                ]);
+                $aviso = 'Se guardó en el ERP, pero Anita no pudo actualizarse ahora'
+                    .' (registro bloqueado u ocupado). Reintentá Emite NC en unos segundos.';
+            }
+		}
 
-		return $cliente;
+		return [
+            'emitenotadecredito' => $emite['emitenotadecredito'],
+            'aviso' => $aviso,
+        ];
+    }
+
+    /**
+     * Anita Informix a veces responde 263 (record locked). Reintenta antes de fallar.
+     */
+    private function actualizarEmiteNcConReintentos(array $emite, string $codigo, int $intentos = 3): void
+    {
+        $ultimo = null;
+        for ($i = 0; $i < $intentos; $i++) {
+            try {
+                $this->actualizarEmiteNc($emite, $codigo);
+
+                return;
+            } catch (\Throwable $e) {
+                $ultimo = $e;
+                $msg = $e->getMessage();
+                $esLock = stripos($msg, 'Could not lock') !== false
+                    || stripos($msg, '263:') !== false
+                    || stripos($msg, 'record is locked') !== false;
+                if (! $esLock) {
+                    throw $e;
+                }
+                usleep(350000 * ($i + 1));
+            }
+        }
+
+        throw $ultimo ?? new \RuntimeException('No se pudo actualizar Emite NC en Anita.');
     }
 
     public function delete($id)
@@ -3131,12 +3179,13 @@ class ClienteRepository implements ClienteRepositoryInterface
         return $cliente;
     }
 
-	public function consultaCliente($consulta, bool $omitirClienteDespacho = false, string $contexto = 'consultar')
+	public function consultaCliente($consulta, bool $omitirClienteDespacho = false, string $contexto = 'consultar', string $modalidad = 'generica')
     {
 		$columns = ['cliente.id', 'cliente.nombre', 'cliente.codigo', 'cliente.domicilio', 'cliente.numerodocumento', 'provincia.nombre', 'localidad.nombre'];
         $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'numerodocumento', 'provincia', 'localidad'];
 		$colspan = count($columnsOut) + 1;
 		$contexto = ClientePoliticaComercialSupport::normalizarOperacion($contexto);
+		$modalidad = $this->normalizarModalidadConsultaCliente($modalidad);
 
 		$consulta = is_string($consulta) ? trim($consulta) : '';
 		$minLen = preg_match('/^\d+$/', $consulta) ? 1 : 2;
@@ -3183,7 +3232,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 		if (count($vendedores) > 0)
 			$data = $data->where('vendedor_id', $vendedores);
 
-		$data = $data->where(function ($query) use ($count, $consulta, $columns) {
+		if ($modalidad === 'nombre_empieza') {
+			$data = $data->where('cliente.nombre', 'LIKE', $consulta.'%');
+		} else {
+			$data = $data->where(function ($query) use ($count, $consulta, $columns) {
                         			for ($i = 0; $i < $count; $i++) {
                             			$query->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
                             		}
@@ -3195,8 +3247,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 											['%'.$soloDigitos.'%']
 										);
 									}
-                            })
-							->orderBy('cliente.nombre', 'asc')
+                            });
+		}
+
+		$data = $data->orderBy('cliente.nombre', 'asc')
 							->limit(250)
                             ->get();
 
@@ -3204,6 +3258,11 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$output['data'] = '';
         $flSinDatos = true;
         $count = count($columns);
+        $puedeAbrirAbm = function_exists('can') && (
+            can('editar-clientes', false)
+            || can('listar-clientes', false)
+            || can('actualizar-clientes', false)
+        );
 		if (count($data) > 0)
 		{
 			foreach ($data as $row)
@@ -3221,7 +3280,17 @@ class ClienteRepository implements ClienteRepositoryInterface
                     }
                     $output['data'] .= '<td class="'.$columnsOut[$i].'">'.$valor.'</td>';
                 }
-                $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacliente">Elegir</a></td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultacliente" href="javascript:void(0)">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_cliente', [
+                        'id' => (int) $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
                 $output['data'] .= '</tr>';
 			}
 		}
@@ -3246,5 +3315,15 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         return (int) (Usuario::query()->orderBy('id')->value('id') ?? 1);
     }
+
+	/**
+	 * Modal de consulta: genérica (LIKE %x% en varios campos) o nombre empieza con.
+	 */
+	private function normalizarModalidadConsultaCliente(string $modalidad): string
+	{
+		$modalidad = strtolower(trim($modalidad));
+
+		return $modalidad === 'nombre_empieza' ? 'nombre_empieza' : 'generica';
+	}
 
 }

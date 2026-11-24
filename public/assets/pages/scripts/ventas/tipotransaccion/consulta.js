@@ -279,16 +279,36 @@ function resolverTipotransaccionVentaPorAbreviatura(abrev, $ctx, alertar, callba
         });
 }
 
+function enfocarCodigoClienteTrasTipoValido() {
+    if (typeof window.enfocarCodigoClienteFacturaSiTipoValido === 'function') {
+        return !!window.enfocarCodigoClienteFacturaSiTipoValido();
+    }
+    var cliente = document.getElementById('codigocliente');
+    var formFactura = document.getElementById('formgeneral');
+    if (!cliente || cliente.disabled || cliente.readOnly) {
+        return false;
+    }
+    if (!formFactura || !cliente.form || cliente.form !== formFactura) {
+        return false;
+    }
+    try {
+        cliente.focus({ preventScroll: true });
+    } catch (e) {
+        cliente.focus();
+    }
+    if (typeof cliente.select === 'function') {
+        cliente.select();
+    }
+    return true;
+}
+
 function focoSiguienteTrasTipotransaccionVenta(input) {
+    // Facturación mostrador: con tipo válido el siguiente paso es el código de cliente.
+    if (enfocarCodigoClienteTrasTipoValido()) {
+        return;
+    }
     var form = input && input.form;
     if (!form) {
-        var cliente = document.getElementById('codigocliente');
-        if (cliente) {
-            cliente.focus();
-            if (cliente.select) {
-                cliente.select();
-            }
-        }
         return;
     }
     var nodos = form.querySelectorAll('input, select, textarea');
@@ -495,6 +515,9 @@ function activa_eventos_consultatipotransaccionventa() {
                 nombre: $tr.find('.nombre').text().trim(),
             });
             $('#consultatipotransaccionventaModal').modal('hide');
+            setTimeout(function () {
+                enfocarCodigoClienteTrasTipoValido();
+            }, 0);
         });
 
     $('#aceptaconsultatipotransaccionventaModal')

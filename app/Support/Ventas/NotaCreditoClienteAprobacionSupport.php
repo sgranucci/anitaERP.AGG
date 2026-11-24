@@ -44,6 +44,26 @@ class NotaCreditoClienteAprobacionSupport
     }
 
     /**
+     * Config para el JS de facturación mostrador (validación al cargar cliente).
+     *
+     * @return array{exige: bool, mensaje: string, puede_abrir_abm: bool}
+     */
+    public static function payloadFrontend(): array
+    {
+        $puedeAbrirAbm = function_exists('can') && (
+            can('editar-clientes', false)
+            || can('listar-clientes', false)
+            || can('actualizar-clientes', false)
+        );
+
+        return [
+            'exige' => self::exigeAprobacionDelCliente(),
+            'mensaje' => self::mensaje(),
+            'puede_abrir_abm' => $puedeAbrirAbm,
+        ];
+    }
+
+    /**
      * @return array{error: string}|null
      */
     public static function errorSiNoAutoriza(mixed $cliente): ?array

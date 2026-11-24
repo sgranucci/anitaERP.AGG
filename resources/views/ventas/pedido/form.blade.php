@@ -36,6 +36,16 @@
 	.pedido-cabecera-consulta .codigozonavta {
 		max-width: 5.5rem;
 	}
+	#itemspedido-table.pedido-modo-pesada-manual .pesada {
+		background-color: #e8f8f0;
+		border-color: #28a745;
+		box-shadow: 0 0 0 0.1rem rgba(40, 167, 69, 0.25);
+	}
+	#itemspedido-table.pedido-modo-pesada-manual .pesada:focus {
+		background-color: #fff;
+		border-color: #1e7e34;
+		box-shadow: 0 0 0 0.15rem rgba(40, 167, 69, 0.45);
+	}
 </style>
 
 <div class="row pedido-cabecera-consulta">

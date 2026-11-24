@@ -52,7 +52,7 @@ class FacturacionCobranzasListadoExport implements FromView, WithColumnFormattin
     /** @var list<int> */
     private array $filasCorteExcel = [];
 
-    private string $colUltima = 'P';
+    private string $colUltima = 'O';
 
     private string $titulo = 'Facturación y cobranzas';
 
@@ -134,8 +134,7 @@ class FacturacionCobranzasListadoExport implements FromView, WithColumnFormattin
             'L' => '#,##0.00',
             'M' => '#,##0.00',
             'N' => '#,##0.00',
-            'O' => '#,##0.00',
-            'P' => NumberFormat::FORMAT_TEXT,
+            'O' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -148,16 +147,15 @@ class FacturacionCobranzasListadoExport implements FromView, WithColumnFormattin
             'D' => 10,  // Cliente
             'E' => 32,  // Nombre
             'F' => 11,  // Kilos
-            'G' => 12,  // Abastos
-            'H' => 14,  // Gravado
-            'I' => 12,  // Varios
-            'J' => 14,  // Total comp.
-            'K' => 14,  // Efectivo
-            'L' => 15,  // Cheques
-            'M' => 15,  // Valores
-            'N' => 14,  // Varios cobro
-            'O' => 15,  // Total cobro
-            'P' => 8,   // Fuente
+            'G' => 14,  // Gravado
+            'H' => 12,  // Varios (incluye abastos)
+            'I' => 14,  // Total comp.
+            'J' => 14,  // Efectivo
+            'K' => 15,  // Cheques
+            'L' => 15,  // Valores
+            'M' => 14,  // Varios cobro
+            'N' => 15,  // Total cobro
+            'O' => 8,   // Fuente
         ];
     }
 
@@ -257,7 +255,7 @@ class FacturacionCobranzasListadoExport implements FromView, WithColumnFormattin
                 ]);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
 
-                $colsImporte = ['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'];
+                $colsImporte = ['F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
                 $ultimaFila = max($this->filaPrimeraDatosExcel, $sheet->getHighestRow());
                 for ($fila = $this->filaPrimeraDatosExcel; $fila <= $ultimaFila; $fila++) {
                     foreach ($colsImporte as $col) {

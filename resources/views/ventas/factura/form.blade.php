@@ -338,7 +338,7 @@
 			data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}"
 			data-limite-fce="{{ \App\Support\Configuracion\ParametroSistemaSupport::limiteFce() }}">
 			<div class="form-group row tm-fce-referencia-campo">
-				<label for="fce_comprobante_referenciado" id="fce_comprobante_referenciado_label" class="col-lg-3 control-label text-right pr-2" title="Obligatorio en NCE/NDE. En NC/ND FE es optativo (vac&iacute;o = per&iacute;odo ARCA).">Comprobante ref.</label>
+				<label for="fce_comprobante_referenciado" id="fce_comprobante_referenciado_label" class="col-lg-3 control-label text-right pr-2" title="Obligatorio en NCE/NDE. En NCG/NC FE es optativo (vac&iacute;o = per&iacute;odo ARCA).">Comprobante ref.</label>
 				<div class="col-lg-8">
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<button type="button" title="Consulta comprobantes del cliente (F1)" class="btn-accion-tabla consultafacturareferencia tooltipsC flex-shrink-0">
@@ -347,11 +347,12 @@
 						<input type="text" name="fce_comprobante_referenciado" id="fce_comprobante_referenciado"
 							class="form-control"
 							value="{{ $fceComprobanteReferenciado }}"
-							placeholder="FCE A-00008-00001234"
-							title="NCE: FCE obligatoria. NC: opcional (vac&iacute;o = per&iacute;odo ARCA)."
+							placeholder="Vac&iacute;o = per&iacute;odo (NCG) o FCE A-…"
+							title="NCE: FCE obligatoria. NCG/NC: opcional; vac&iacute;o = per&iacute;odo ARCA sin CbteAsoc."
 							autocomplete="off"
 							@if (! empty($flGeneraNotaDeDebito)) readonly @endif>
 					</div>
+					<small class="form-text text-muted">NCG sin factura origen: deje el comprobante vac&iacute;o (ARCA usa per&iacute;odo). NCE s&iacute; exige FCE asociada.</small>
 				</div>
 			</div>
 			@if (empty($flGeneraNotaDeDebito))
@@ -1215,6 +1216,7 @@ window.ncPercepcionesOrigen = @json($ncPercepcionesOrigen);
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
 @include('includes.ventas.modalconsultacliente')
+@include('includes.ventas.modal_aviso_cliente_emite_nc')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultaconceptoventa')

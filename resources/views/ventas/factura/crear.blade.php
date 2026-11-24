@@ -22,6 +22,7 @@
 <script>
     window.FL_FACTURA_LAYOUT_PEDIDO = @json($layoutItemsPedido);
     window.FACTURA_CONCEPTO_OBLIGATORIO_SIN_ARTICULO = @json((bool) config('facturacion.CONCEPTO_OBLIGATORIO_SIN_ARTICULO', false));
+    window.NOTA_CREDITO_CLIENTE = @json(\App\Support\Ventas\NotaCreditoClienteAprobacionSupport::payloadFrontend());
     window.FACTURA_URLS = {
         preferencias: @json(route('factura_preferencias'))
     };

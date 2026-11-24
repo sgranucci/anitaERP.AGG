@@ -1,5 +1,5 @@
 @php
-    $colspan = 16;
+    $colspan = 15;
 @endphp
 <table>
 @if (! empty($reservarFilaLogoExcel))
@@ -31,7 +31,6 @@
             <th>Cliente</th>
             <th>Nombre</th>
             <th>Kilos</th>
-            <th>Abastos</th>
             <th>Gravado</th>
             <th>Varios</th>
             <th>Total comp.</th>

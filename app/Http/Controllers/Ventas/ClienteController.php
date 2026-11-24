@@ -780,7 +780,9 @@ class ClienteController extends Controller
      */
     public function editar(Request $request, $id)
     {
-        if ($request->query('vista') === 'consulta') {
+        $soloConsulta = $request->query('origen') === 'modal_consulta'
+            || $request->query('vista') === 'consulta';
+        if ($soloConsulta) {
             if (! can('editar-clientes', false) && ! can('listar-clientes', false) && ! can('actualizar-clientes', false)) {
                 abort(403);
             }
@@ -812,6 +814,8 @@ class ClienteController extends Controller
         $suitecrmPuedeEditar = can('gestionar-notas-suitecrm-cliente', false)
             || can('actualizar-clientes', false);
         $suitecrmPuedeSincronizarCuenta = SuitecrmPermiso::puedeSincronizarCuenta();
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizarCliente = can('actualizar-clientes', false);
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ClienteListadoFiltros::class);
 
@@ -824,7 +828,8 @@ class ClienteController extends Controller
             'emitecertificado_enum', 'emitenotadecredito_enum', 'agregabonificacion_enum', 'distribuidor_query', 'descuentoventa_query',
             'tipodocumento_query', 'tipopercepcion_enum', 'certificadonoretencion_enum', 'condicioniibb_query',
             'tipoempresa_cliente_query',
-            'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta', 'filtrosQuery'));
+            'suitecrmHabilitado', 'suitecrmPuedeEditar', 'suitecrmPuedeSincronizarCuenta', 'filtrosQuery',
+            'soloConsulta', 'ocultarVolver', 'puedeActualizarCliente'));
     }
 
     /**
@@ -1216,7 +1221,8 @@ class ClienteController extends Controller
         return $this->clienteRepository->consultaCliente(
             $request->consulta,
             $request->boolean('omitir_cliente_despacho'),
-            (string) $request->input('contexto', 'consultar')
+            (string) $request->input('contexto', 'consultar'),
+            (string) $request->input('modalidad', 'generica')
         );
 	}
 
@@ -1292,9 +1298,13 @@ class ClienteController extends Controller
     {
         can('modifica-emite-nota-de-credito');
 
-        $this->clienteRepository->updateEmiteNc($cliente_id);
+        $resultado = $this->clienteRepository->updateEmiteNc($cliente_id);
 
-        return 'success';
+        return response()->json([
+            'ok' => true,
+            'emitenotadecredito' => $resultado['emitenotadecredito'] ?? '',
+            'aviso' => $resultado['aviso'] ?? null,
+        ]);
     }
 
     public function listarCuentaCorriente(Request $request, $cliente_id)
@@ -1638,6 +1648,22 @@ class ClienteController extends Controller
      */
     private function redirectTrasGrabadoCliente(Request $request, string $mensajeBase, ?string $suitecrmAviso = null)
     {
+        if ($request->input('origen') === 'modal_consulta') {
+            $id = (int) ($request->route('id') ?? 0);
+            if ($id <= 0) {
+                $id = (int) $request->input('cliente_id', $request->input('id', 0));
+            }
+            if ($id > 0) {
+                return redirect()
+                    ->route('editar_cliente', [
+                        'id' => $id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ])
+                    ->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));
+            }
+        }
+
         $urlOrigen = (string) ($request->input('urlOrigen') ?? '');
         if ($urlOrigen !== '' && str_contains($urlOrigen, 'ordenventa')) {
             return redirect($urlOrigen)->with($this->flashSuitecrm($suitecrmAviso, $mensajeBase));

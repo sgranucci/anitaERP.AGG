@@ -1,10 +1,42 @@
 var ptrcliente_id;
 var ptrnombrecliente;
+var CONSULTA_CLIENTE_MODALIDAD_STORAGE = 'anitaerp.consulta_cliente_modalidad';
 var ultimaConsultaClienteTermino = '';
+var ultimaConsultaClienteModalidad = 'generica';
 var ultimoDatosClienteHtml = '';
 var consultaClienteModalAbriendo = false;
 var leeClienteEnCursoClave = '';
 var clienteInvalidoAvisadoClave = '';
+
+function normalizarModalidadConsultaCliente(valor) {
+    return String(valor || '').trim() === 'nombre_empieza' ? 'nombre_empieza' : 'generica';
+}
+
+function leerModalidadConsultaClientePersistida() {
+    try {
+        if (window.localStorage) {
+            return normalizarModalidadConsultaCliente(localStorage.getItem(CONSULTA_CLIENTE_MODALIDAD_STORAGE));
+        }
+    } catch (e) {
+        // sin storage
+    }
+    return 'generica';
+}
+
+function persistirModalidadConsultaCliente(modalidad) {
+    var v = normalizarModalidadConsultaCliente(modalidad);
+    ultimaConsultaClienteModalidad = v;
+    try {
+        if (window.localStorage) {
+            localStorage.setItem(CONSULTA_CLIENTE_MODALIDAD_STORAGE, v);
+        }
+    } catch (e) {
+        // sin storage
+    }
+    return v;
+}
+
+ultimaConsultaClienteModalidad = leerModalidadConsultaClientePersistida();
 
 if (typeof window.clienteEstaHabilitadoParaFacturacion !== 'function') {
     window.clienteEstaHabilitadoParaFacturacion = function (estado) {
@@ -71,6 +103,122 @@ function mensajeInicialConsultaCliente() {
     return '<tr><td colspan="7" class="text-muted">Ingrese al menos 2 caracteres para buscar.</td></tr>';
 }
 
+function modalidadConsultaClienteActual() {
+    var $sel = $('#consulta_cliente_modalidad');
+    if (!$sel.length) {
+        return ultimaConsultaClienteModalidad || 'generica';
+    }
+    return normalizarModalidadConsultaCliente($sel.val() || ultimaConsultaClienteModalidad || 'generica');
+}
+
+function aplicarModalidadConsultaClienteEnSelect(modalidad) {
+    var $sel = $('#consulta_cliente_modalidad');
+    if (!$sel.length) {
+        return;
+    }
+    $sel.val(normalizarModalidadConsultaCliente(modalidad || ultimaConsultaClienteModalidad || 'generica'));
+}
+
+function procesoEsNotaCreditoMostrador() {
+    var form = document.getElementById('formgeneral');
+    if (form && form.getAttribute('data-factura-proceso') === 'nc') {
+        return true;
+    }
+    if (typeof window.facturaTipoEsNotaCreditoMostrador === 'function') {
+        return !!window.facturaTipoEsNotaCreditoMostrador();
+    }
+    return false;
+}
+
+function clienteAutorizaNotaCreditoValor(valor) {
+    var t = String(valor == null ? '' : valor).trim().toLowerCase();
+    return t === 'emite nota de credito' || t === 's';
+}
+
+function urlEditarClienteModalConsulta(clienteId) {
+    var id = parseInt(clienteId, 10) || 0;
+    if (id <= 0) {
+        return '';
+    }
+    return carpetaBase + '/ventas/cliente/' + id + '/editar?origen=modal_consulta&vista=consulta';
+}
+
+/**
+ * Modal (no alert) cuando el cliente no tiene «Emite NC»: permite abrir el ABM en solapa.
+ */
+function avisarClienteSinEmiteNc(data, clave) {
+    var cfg = window.NOTA_CREDITO_CLIENTE || {};
+    var mensaje = cfg.mensaje
+        || 'Este cliente no está autorizado a nota de crédito. Hay que habilitar «Emite NC» en la ficha del cliente.';
+    var clienteId = parseInt(data && data.id, 10) || 0;
+    var etiqueta = $.trim(
+        (data && data.codigo ? String(data.codigo) + ' — ' : '')
+        + (data && data.nombre ? String(data.nombre) : '')
+    );
+    var $modal = $('#modalAvisoClienteEmiteNc');
+
+    if (!$modal.length) {
+        avisarClientePolitica(mensaje, clave);
+        return;
+    }
+
+    if (clienteInvalidoAvisadoClave === clave) {
+        return;
+    }
+    clienteInvalidoAvisadoClave = clave;
+    $('#codigocliente').attr('data-cliente-invalido', '1');
+
+    $modal.find('#modal-aviso-emite-nc-mensaje').text(mensaje);
+    $modal.find('#modal-aviso-emite-nc-cliente').text(etiqueta);
+
+    var $abrir = $modal.find('#modal-aviso-emite-nc-abrir');
+    var $ayuda = $modal.find('#modal-aviso-emite-nc-ayuda-abm');
+    var puedeAbrir = !!cfg.puede_abrir_abm && clienteId > 0;
+    var url = puedeAbrir ? urlEditarClienteModalConsulta(clienteId) : '';
+    if (url) {
+        $abrir.attr('href', url).removeClass('d-none');
+        $ayuda.removeClass('d-none');
+    } else {
+        $abrir.attr('href', '#').addClass('d-none');
+        $ayuda.addClass('d-none');
+    }
+
+    if (typeof window.liberarPantallaModalesBloqueados === 'function') {
+        window.liberarPantallaModalesBloqueados();
+    }
+    setTimeout(function () {
+        $modal.off('hidden.bs.modal.emiteNc').one('hidden.bs.modal.emiteNc', function () {
+            $('#codigocliente').trigger('focus');
+        });
+        $modal.modal('show');
+    }, 0);
+}
+
+/**
+ * El Bierzo: al cargar cliente en NC, cortar si no tiene «Emite NC».
+ * @return {boolean} true si puede seguir
+ */
+function validarClienteEmiteNcAlCargar(data, clave) {
+    var cfg = window.NOTA_CREDITO_CLIENTE || {};
+    if (!cfg.exige) {
+        return true;
+    }
+    if (!procesoEsNotaCreditoMostrador()) {
+        return true;
+    }
+    if (clienteAutorizaNotaCreditoValor(data && data.emitenotadecredito)) {
+        return true;
+    }
+    if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
+        window.limpiarSeleccionClienteOperacion();
+    } else if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+        window.invalidarEstadoPadronOperacion();
+    }
+    avisarClienteSinEmiteNc(data, clave);
+    $('#codigocliente').attr('data-cliente-invalido', '1');
+    return false;
+}
+
 function parsearHtmlConsultaCliente(respuesta) {
     const resp = String(respuesta || '').replace(/\\/g, '');
     try {
@@ -81,12 +229,14 @@ function parsearHtmlConsultaCliente(respuesta) {
     }
 }
 
-function guardarUltimaConsultaCliente(termino, html) {
+function guardarUltimaConsultaCliente(termino, html, modalidad) {
     ultimaConsultaClienteTermino = termino;
+    persistirModalidadConsultaCliente(modalidad || modalidadConsultaClienteActual());
     ultimoDatosClienteHtml = html;
 }
 
 function restaurarUltimaConsultaClienteEnModal() {
+    aplicarModalidadConsultaClienteEnSelect(ultimaConsultaClienteModalidad || leerModalidadConsultaClientePersistida());
     if (ultimoDatosClienteHtml) {
         $('#consultacliente').val(ultimaConsultaClienteTermino);
         $('#datoscliente').html(ultimoDatosClienteHtml);
@@ -349,6 +499,7 @@ if (!window.__clienteEnterModalCaptureActivo) {
 
 function buscar_datos_cliente(consulta) {
     var termino = (consulta != null && consulta !== undefined) ? String(consulta).trim() : '';
+    var modalidad = modalidadConsultaClienteActual();
     var token = $('meta[name="csrf-token"]').attr('content')
         || ($('input[name="_token"]').first().val() || '');
 
@@ -361,6 +512,7 @@ function buscar_datos_cliente(consulta) {
     	},
         data: {
             consulta: termino,
+            modalidad: modalidad,
             _token: token,
             omitir_cliente_despacho: window.CLIENTE_DESPACHO_NO_FACTURAR ? 1 : 0,
             contexto: (window.clientePoliticaComercial && window.clientePoliticaComercial.contexto)
@@ -372,7 +524,7 @@ function buscar_datos_cliente(consulta) {
         const html = parsearHtmlConsultaCliente(respuesta);
         $("#datoscliente").html(html);
         if (termino !== '') {
-            guardarUltimaConsultaCliente(termino, html);
+            guardarUltimaConsultaCliente(termino, html, modalidad);
         }
     })
     .fail (function(jqXHR) {
@@ -402,8 +554,21 @@ $(document).on('keyup', '#consultacliente', function () {
     buscar_datos_cliente(valor);
 });
 
+$(document).on('change', '#consulta_cliente_modalidad', function () {
+    persistirModalidadConsultaCliente($(this).val());
+    var valor = String($('#consultacliente').val() || '').trim();
+    ultimoDatosClienteHtml = '';
+    if (valor === '') {
+        $('#datoscliente').html(mensajeInicialConsultaCliente());
+        return;
+    }
+    buscar_datos_cliente(valor);
+});
+
 function activa_eventos_consultacliente()
 {
+    aplicarModalidadConsultaClienteEnSelect(ultimaConsultaClienteModalidad || leerModalidadConsultaClientePersistida());
+
     $(document)
         .off('click.consultaClienteAbrir', '.consultacliente')
         .on('click.consultaClienteAbrir', '.consultacliente', function (event) {
@@ -674,6 +839,9 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                     return;
                 }
                 if (window.bloquearClienteDespachoEnFacturacion(data.id)) {
+                    return;
+                }
+                if (!validarClienteEmiteNcAlCargar(data, clave)) {
                     return;
                 }
                 var politica = data.politica_comercial || null;

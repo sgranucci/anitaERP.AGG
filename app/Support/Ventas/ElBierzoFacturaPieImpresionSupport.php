@@ -5,6 +5,7 @@ namespace App\Support\Ventas;
 /**
  * Pie PDF El Bierzo: el Total ítem ya viene neto de bonificación de línea.
  * El Subtotal es la suma de esos ítems; el Descuento Gral. es solo el % de pie.
+ * Total Abasto: sin tasa unitaria en el pie (solo el importe).
  */
 final class ElBierzoFacturaPieImpresionSupport
 {
@@ -49,6 +50,11 @@ final class ElBierzoFacturaPieImpresionSupport
                 $salida[] = $fila;
                 $descuentoEscrito = true;
                 continue;
+            }
+
+            // Columna de tasa: no mostrar el valor unitario ($/kg) del abasto.
+            if (str_contains($concepto, 'Abasto')) {
+                $fila['tasa'] = 0;
             }
 
             $salida[] = $fila;

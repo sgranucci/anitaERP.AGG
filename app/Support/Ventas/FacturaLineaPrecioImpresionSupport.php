@@ -10,6 +10,13 @@ namespace App\Support\Ventas;
  */
 final class FacturaLineaPrecioImpresionSupport
 {
+    /**
+     * Solo circuito concepto con tilde «Precio neto» destildado: el importe tipado
+     * es el total del comprobante (IVA + percepciones desagregados). No activa la
+     * detracción global de USA_DETRACCION ni otros circuitos (pedido, remito, POS).
+     */
+    public const FLAG_DETRAER_PERCEPCIONES_PRECIO_FINAL = 'detraer_percepciones_precio_final';
+
     public static function precioIncluyeImpuesto(mixed $incluye): bool
     {
         $valor = strtoupper(trim((string) $incluye));
@@ -18,7 +25,47 @@ final class FacturaLineaPrecioImpresionSupport
     }
 
     /**
-     * Tasas que ImpuestoService suma al divisor cuando USA_DETRACCION está activo:
+     * Detracción fiscal: config AGG (USA_DETRACCION=S) o flag acotado a concepto precio final.
+     *
+     * @param  array<string, mixed>  $dataCliente
+     */
+    public static function usaDetraccionDesdeCliente(array $dataCliente): bool
+    {
+        return (string) config('facturacion.USA_DETRACCION') === 'S'
+            || ! empty($dataCliente[self::FLAG_DETRAER_PERCEPCIONES_PRECIO_FINAL]);
+    }
+
+    /**
+     * Impresión Factura A: misma detracción que al calcular si el renglón fue concepto a precio final.
+     *
+     * @param  iterable<int, mixed>  $emisiones
+     */
+    public static function usaDetraccionDesdeEmisiones(iterable $emisiones): bool
+    {
+        if ((string) config('facturacion.USA_DETRACCION') === 'S') {
+            return true;
+        }
+
+        foreach ($emisiones as $emision) {
+            $articuloId = is_array($emision)
+                ? (int) ($emision['articulo_id'] ?? 0)
+                : (int) ($emision->articulo_id ?? 0);
+            if ($articuloId > 0) {
+                continue;
+            }
+            $incluye = is_array($emision)
+                ? ($emision['incluyeimpuesto'] ?? 'N')
+                : ($emision->incluyeimpuesto ?? 'N');
+            if (self::precioIncluyeImpuesto($incluye)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Tasas que ImpuestoService suma al divisor cuando hay detracción:
      * percepciones IIBB (Perc. …) y percepción IVA. No el IVA del renglón ni la
      * percepción de no categorizado, que se calcula después del neto.
      *

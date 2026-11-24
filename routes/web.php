@@ -2972,7 +2972,7 @@ Route::get('ventas/cliente', 'Ventas\ClienteController@index')->name('cliente');
 Route::get('ventas/cliente/crear/{tipoalta?}', 'Ventas\ClienteController@crear')->name('crear_cliente');
 Route::post('ventas/cliente', 'Ventas\ClienteController@guardar')->name('guardar_cliente');
 Route::post('ventas/clienteprovisorio', 'Ventas\ClienteController@guardarClienteProvisorio')->name('guardar_cliente_provisorio');
-Route::get('ventas/cliente/{id}/editar', 'Ventas\ClienteController@editar')->name('editar_cliente');
+Route::get('ventas/cliente/{id}/editar', 'Ventas\ClienteController@editar')->name('editar_cliente')->middleware('modo.consulta');
 Route::post('ventas/cliente/verificar-documento', 'Ventas\ClienteController@verificarDocumentoAlta')->name('verificar_cliente_documento_alta');
 Route::post('ventas/cliente/{id}/validar-arca-padron', 'Ventas\ClienteController@validarArcaPadron')->name('validar_cliente_arca_padron');
 Route::post('ventas/cliente/{id}/validar-arca-apoc', 'Ventas\ClienteController@validarArcaApoc')->name('validar_cliente_arca_apoc');
@@ -2986,7 +2986,7 @@ Route::put('ventas/cliente/{cliente_id}/suitecrm-notas/{nota_id}', 'Ventas\Clien
 Route::delete('ventas/cliente/{cliente_id}/suitecrm-notas/{nota_id}', 'Ventas\ClienteSuitecrmNotaController@destroy')->name('eliminar_cliente_suitecrm_nota');
 Route::get('ventas/auditoria-notas-suitecrm', 'Ventas\SuitecrmNotaAuditoriaController@index')->name('auditoria_notas_suitecrm')->middleware('modo.consulta');
 Route::get('ventas/listar-auditoria-notas-suitecrm/{formato?}', 'Ventas\SuitecrmNotaAuditoriaController@exportar')->name('listar_auditoria_notas_suitecrm');
-Route::put('ventas/cliente/{id}', 'Ventas\ClienteController@actualizar')->name('actualizar_cliente');
+Route::put('ventas/cliente/{id}', 'Ventas\ClienteController@actualizar')->name('actualizar_cliente')->middleware('modo.consulta');
 Route::delete('ventas/cliente/{id}', 'Ventas\ClienteController@eliminar')->name('eliminar_cliente');
 Route::get('ventas/leercliente_entrega/{cliente_id}', 'Ventas\ClienteController@leerCliente_Entrega')->name('leer_cliente_entrega');
 Route::get('ventas/leercliente/{cliente_id}', 'Ventas\ClienteController@leerCliente')->name('leer_cliente');

@@ -135,14 +135,43 @@ function tipoSeleccionadoTieneConceptoAsignado() {
     return $opt.length && parseInt($opt.attr('data-concepto-venta-id') || '0', 10) > 0;
 }
 
+function abreviaturaTipoFacturaSeleccionada() {
+    var $opt = metaTipoFacturaSeleccionada();
+    if (!$opt.length) {
+        return '';
+    }
+    return String($opt.attr('data-abreviatura') || '').toUpperCase();
+}
+
+/**
+ * NC/ND que van por artículos (devolución / mercadería): no forzar concepto
+ * en cabecera ni en renglones vacíos aunque el tipo tenga concepto_venta_id.
+ * El resto de NC/ND con concepto asignado (NCG, NCE, NDB, …) sí usan concepto.
+ * FAC/FCE/etc. sin concepto_venta_id siguen siempre por artículos.
+ */
+var TIPOS_NC_ND_POR_ARTICULOS = {
+    NCD: true
+};
+
 function tipoSeleccionadoEsNcNd() {
     var $opt = metaTipoFacturaSeleccionada();
     if (!$opt.length || !$opt.val()) {
         return false;
     }
-    var abr = String($opt.attr('data-abreviatura') || '').toUpperCase();
+    var abr = abreviaturaTipoFacturaSeleccionada();
     var op = String($opt.attr('data-operacion') || '');
     return op === 'C' || abr.indexOf('ND') === 0;
+}
+
+function tipoSeleccionadoEsNcNdPorArticulos() {
+    return !!TIPOS_NC_ND_POR_ARTICULOS[abreviaturaTipoFacturaSeleccionada()];
+}
+
+function tipoSeleccionadoPropagaConceptoALineas() {
+    if (!tipoSeleccionadoEsNcNd() || !tipoSeleccionadoTieneConceptoAsignado()) {
+        return false;
+    }
+    return !tipoSeleccionadoEsNcNdPorArticulos();
 }
 
 function tipoSeleccionadoUsaConceptoVenta() {
@@ -168,7 +197,7 @@ function dataConceptoDesdeTipoSeleccionado() {
 }
 
 function aplicarConceptoVentaCabeceraALineasVacias() {
-    if (!tipoSeleccionadoEsNcNd()) {
+    if (!tipoSeleccionadoPropagaConceptoALineas()) {
         return;
     }
     var $cab = $('#concepto-venta-comprobante-wrap .tm-concepto-venta-campo');
@@ -222,7 +251,8 @@ function actualizarVisibilidadConceptoCabecera() {
     if (!$wrap.length) {
         return;
     }
-    var mostrar = tipoSeleccionadoTieneConceptoAsignado();
+    var mostrar = tipoSeleccionadoTieneConceptoAsignado()
+        && !tipoSeleccionadoEsNcNdPorArticulos();
     $wrap.toggleClass('d-none', !mostrar);
     $wrap.find('input, select, button').prop('disabled', !mostrar);
     if (!mostrar) {
@@ -234,7 +264,16 @@ function sincronizarConceptoVentaDesdeTipo() {
     actualizarVisibilidadConceptoCabecera();
     var data = dataConceptoDesdeTipoSeleccionado();
     var $cab = $('#concepto-venta-comprobante-wrap .tm-concepto-venta-campo');
-    if (data && $cab.length && tipoSeleccionadoTieneConceptoAsignado()) {
+    // Artículos (FAC sin concepto, NCD, …): limpiar concepto forzado en grilla.
+    if (!tipoSeleccionadoTieneConceptoAsignado() || tipoSeleccionadoEsNcNdPorArticulos()) {
+        if ($cab.length) {
+            limpiarConceptoVentaEnCampo($cab);
+        }
+        limpiarConceptoVentaEnLineasSinArticulo();
+        actualizarAvisoConceptoVentaFactura();
+        return;
+    }
+    if (data && $cab.length) {
         aplicarConceptoVentaEnCampo($cab, data);
     } else if ($cab.length) {
         limpiarConceptoVentaEnCampo($cab);
@@ -341,14 +380,20 @@ function facturaMarcarLineasPideIva() {
     });
 }
 
-function facturaRenglonesTextoSinIva() {
+/**
+ * Renglones de texto/concepto sin alícuota IVA.
+ * @param {boolean} [soloConPrecio=true] true = solo si hay importe (validación al grabar);
+ *   false = también conceptos/detalle sin precio (preview: no pegar alert del backend).
+ */
+function facturaRenglonesTextoSinIva(soloConPrecio) {
+    var exigirPrecio = soloConPrecio !== false;
     var $faltan = $();
     $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').each(function () {
         var $tr = $(this);
         if ($tr.hasClass('nc-linea-excluida')) {
             return;
         }
-        if (!facturaLineaPideIva($tr, true)) {
+        if (!facturaLineaPideIva($tr, exigirPrecio)) {
             return;
         }
         if (!$.trim($tr.find('.factura-iva-linea').val() || '')) {

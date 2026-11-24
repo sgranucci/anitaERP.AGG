@@ -4,16 +4,17 @@
 @endsection
 
 @section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
 <style>
-    #tabla-facturacion-cobranzas thead tr { background-color: #85C1E9; color: #17202A; }
-    #tabla-facturacion-cobranzas thead th { font-weight: 600; border-color: #7fb3d5; white-space: nowrap; }
     #tabla-facturacion-cobranzas { font-size: 0.75rem; }
+    #factycobr-tabla-repartos-seleccionados thead tr { background:#85C1E9; color:#17202A; }
+    .factycobr-seleccion-scroll { max-height: 180px; overflow-y: auto; }
 </style>
 @endsection
 
 @section('scripts')
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/transporte/consulta.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/facturacion_cobranzas/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/facturacion_cobranzas/filtro.js')) }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -53,6 +54,8 @@
                         $orden = \App\Support\Ventas\FacturacionCobranzasListadoFiltros::normalizarOrden($filtros['orden'] ?? null);
                         $fuente = \App\Support\Ventas\FacturacionCobranzasListadoFiltros::normalizarFuente($filtros['fuente'] ?? null);
                         $incluye = \App\Support\Ventas\FacturacionCobranzasListadoFiltros::normalizarIncluye($filtros['incluye'] ?? null);
+                        $repartoModo = \App\Support\Ventas\FacturacionCobranzasListadoFiltros::normalizarRepartoModo($filtros['reparto_modo'] ?? null);
+                        $repartosIniciales = $repartos_iniciales ?? [];
                     @endphp
 
                     <div class="form-group row">
@@ -107,7 +110,32 @@
                         </div>
                     </div>
 
-                    <div class="form-group row" id="bloque-rango-reparto">
+                    <div class="form-group row">
+                        <label class="{{ $colLabel }}">Repartos</label>
+                        <div class="col-lg-8 pt-1">
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" class="custom-control-input" name="reparto_modo" id="reparto_modo_todos"
+                                    value="todos"
+                                    @checked($repartoModo === \App\Support\Ventas\FacturacionCobranzasListadoFiltros::REPARTO_MODO_TODOS)>
+                                <label class="custom-control-label" for="reparto_modo_todos">Todos</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" class="custom-control-input" name="reparto_modo" id="reparto_modo_rango"
+                                    value="rango"
+                                    @checked($repartoModo === \App\Support\Ventas\FacturacionCobranzasListadoFiltros::REPARTO_MODO_RANGO)>
+                                <label class="custom-control-label" for="reparto_modo_rango">Rango</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" class="custom-control-input" name="reparto_modo" id="reparto_modo_particular"
+                                    value="particular"
+                                    @checked($repartoModo === \App\Support\Ventas\FacturacionCobranzasListadoFiltros::REPARTO_MODO_PARTICULAR)>
+                                <label class="custom-control-label" for="reparto_modo_particular">Particulares</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group row" id="bloque-rango-reparto"
+                        @if ($repartoModo !== \App\Support\Ventas\FacturacionCobranzasListadoFiltros::REPARTO_MODO_RANGO) style="display:none" @endif>
                         <label class="{{ $colLabel }}">Rango repartos</label>
                         <div class="col-lg-9">
                             <div class="row">
@@ -117,6 +145,7 @@
                                         <div class="input-group input-group-sm mb-1">
                                             <input type="text" name="reparto_desde" id="reparto_desde"
                                                 class="form-control codigotransporte" autocomplete="off"
+                                                title="Código de reparto. Enter valida y avanza. F1 consulta."
                                                 value="{{ $filtros['reparto_desde'] ?? '' }}">
                                             <div class="input-group-append">
                                                 <button type="button" title="Consulta repartos (F1)"
@@ -135,6 +164,7 @@
                                         <div class="input-group input-group-sm mb-1">
                                             <input type="text" name="reparto_hasta" id="reparto_hasta"
                                                 class="form-control codigotransporte" autocomplete="off"
+                                                title="Código de reparto. Enter valida. F1 consulta."
                                                 value="{{ ($filtros['reparto_hasta'] ?? '') === '999999' ? '' : ($filtros['reparto_hasta'] ?? '') }}">
                                             <div class="input-group-append">
                                                 <button type="button" title="Consulta repartos (F1)"
@@ -148,7 +178,68 @@
                                     </div>
                                 </div>
                             </div>
-                            <small class="text-muted">Vacío en ambos = todos los repartos.</small>
+                            <small class="text-muted">Vacío en ambos = todos los repartos del rango.</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row" id="bloque-particular-reparto"
+                        @if ($repartoModo !== \App\Support\Ventas\FacturacionCobranzasListadoFiltros::REPARTO_MODO_PARTICULAR) style="display:none" @endif>
+                        <label class="{{ $colLabel }}">Repartos particulares</label>
+                        <div class="col-lg-9">
+                            <input type="hidden" name="repartos" id="factycobr_repartos"
+                                value="{{ collect($repartosIniciales)->pluck('codigo')->implode(',') }}">
+                            <input type="hidden" name="repartos_nombres" id="factycobr_repartos_nombres"
+                                value="{{ collect($repartosIniciales)->map(fn ($r) => ($r['codigo'] ?? '').':'.($r['nombre'] ?? ''))->implode('|') }}">
+
+                            <div class="factycobr-reparto-campo factycobr-reparto-puntual mb-2" data-campo="puntual">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" id="reparto_puntual_codigo"
+                                        class="form-control codigotransporte" autocomplete="off"
+                                        placeholder="Código" title="Código. Enter agrega. F1 consulta."
+                                        style="max-width: 110px;">
+                                    <input type="text" class="form-control nombretransporte" id="reparto_puntual_nombre"
+                                        readonly placeholder="Nombre reparto">
+                                    <div class="input-group-append">
+                                        <button type="button" title="Consulta repartos (F1)"
+                                            class="btn btn-outline-secondary consultatransporte tooltipsC">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary" id="factycobr-btn-agregar-reparto"
+                                            title="Agregar reparto a la lista">
+                                            <i class="fa fa-plus"></i> Agregar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive mb-2 factycobr-seleccion-scroll">
+                                <table class="table table-sm table-bordered mb-0" id="factycobr-tabla-repartos-seleccionados">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 90px;">Código</th>
+                                            <th>Nombre</th>
+                                            <th style="width: 70px;" class="text-center"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="factycobr-tbody-repartos-seleccionados">
+                                        @foreach ($repartosIniciales as $rep)
+                                            <tr data-codigo="{{ $rep['codigo'] ?? '' }}">
+                                                <td>{{ $rep['codigo'] ?? '' }}</td>
+                                                <td>{{ $rep['nombre'] ?? '' }}</td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-outline-danger btn-xs factycobr-btn-quitar-reparto" title="Quitar">
+                                                        <i class="fa fa-times"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="text-muted small mb-0" id="factycobr-aviso-sin-repartos"
+                                @if ($repartosIniciales !== []) style="display: none;" @endif>
+                                Agregue uno o más repartos. Enter o F1 en el código; Enter en el modal elige la primera fila.
+                            </p>
                         </div>
                     </div>
 
@@ -238,6 +329,7 @@
                             <strong>Empresa:</strong> {{ $empresa_texto ?? '' }}
                             · <strong>Período:</strong> {{ $periodo_texto ?? '' }}
                             · <strong>Orden:</strong> {{ $orden_texto ?? '' }}
+                            · <strong>Repartos:</strong> {{ $reparto_texto ?? '' }}
                             · <strong>Fuente:</strong> {{ $fuente_texto ?? '' }}
                         </p>
                         @foreach ($avisos ?? [] as $aviso)
@@ -274,15 +366,22 @@
                         </div>
                     @endif
 
-                    <div class="table-responsive tabla-ancha">
-                        <table id="tabla-facturacion-cobranzas" class="table table-striped table-bordered table-hover table-sm mb-0">
-                            @include('ventas.facturacion_cobranzas.partials.tabla_datos', [
-                                'filas' => $filasVista ?? [],
-                                'puede_ver_venta' => $puede_ver_venta ?? false,
-                                'puede_ver_cliente' => $puede_ver_cliente ?? false,
-                                'puede_ver_cobranza' => $puede_ver_cobranza ?? false,
-                            ])
-                        </table>
+                    <div class="px-2 pb-2">
+                        <div class="tabla-ancha-grilla" data-tabla-ancha>
+                            <div class="tabla-ancha-scroll-top" hidden>
+                                <div class="tabla-ancha-scroll-top-inner"></div>
+                            </div>
+                            <div class="tabla-ancha-wrap">
+                                <table id="tabla-facturacion-cobranzas" class="table table-striped table-bordered table-hover table-sm mb-0 tabla-ancha">
+                                    @include('ventas.facturacion_cobranzas.partials.tabla_datos', [
+                                        'filas' => $filasVista ?? [],
+                                        'puede_ver_venta' => $puede_ver_venta ?? false,
+                                        'puede_ver_cliente' => $puede_ver_cliente ?? false,
+                                        'puede_ver_cobranza' => $puede_ver_cobranza ?? false,
+                                    ])
+                                </table>
+                            </div>
+                        </div>
                     </div>
 
                     @if ($filas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)

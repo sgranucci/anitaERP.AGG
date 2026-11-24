@@ -1288,6 +1288,9 @@
 				$('#actividad_arca_id').val(data.actividad_arca_id);
 				$('#actividad_arca_id').attr('readonly', data.actividad_arca_id > 0);
 				sincronizarEmpresaDesdePuntoVenta(data, true);
+				if (typeof window.restaurarFocoInicialFacturaSiCorresponde === 'function') {
+					window.restaurarFocoInicialFacturaSiCorresponde();
+				}
 			});
 		} else if (!esNcFactura && puntoVentaDefault) {
 			selectPuntoVenta.val(puntoVentaDefault);
@@ -1296,6 +1299,9 @@
 				$('#actividad_arca_id').val(data.actividad_arca_id);
 				$('#actividad_arca_id').attr('readonly', data.actividad_arca_id > 0);
 				sincronizarEmpresaDesdePuntoVenta(data, true);
+				if (typeof window.restaurarFocoInicialFacturaSiCorresponde === 'function') {
+					window.restaurarFocoInicialFacturaSiCorresponde();
+				}
 			});
 		}
 
@@ -1605,6 +1611,9 @@
 				if (!window.pedidoSinRemitoObligatorio) {
 					$('#div_peso_neto_exportacion').hide();
 				}
+			}
+			if (typeof window.restaurarFocoInicialFacturaSiCorresponde === 'function') {
+				window.restaurarFocoInicialFacturaSiCorresponde();
 			}
 		});
 	}
@@ -2324,22 +2333,97 @@
 		enfocarCodigoClienteFacturaAlCargar();
     });
 
-	function enfocarCodigoClienteFacturaAlCargar() {
-		window.setTimeout(function () {
-			var el = document.getElementById('codigocliente');
-			if (!el || el.disabled || el.readOnly || el.offsetParent === null) {
-				return;
+	function tipoComprobanteFacturaEsValido() {
+		var id = parseInt(String($('#tipotransaccion_id').val() || '0'), 10) || 0;
+		if (!(id > 0)) {
+			return false;
+		}
+		var $abrev = $('#tipotransaccion_id_abreviatura');
+		if ($abrev.length) {
+			var abrev = $.trim($abrev.val() || '');
+			var ultima = $.trim(String($abrev.data('ultima-valida') || ''));
+			if (abrev === '') {
+				return false;
 			}
-			try {
-				el.focus({ preventScroll: true });
-			} catch (e) {
-				el.focus();
+			if (ultima !== '' && ultima.toUpperCase() !== abrev.toUpperCase()) {
+				return false;
 			}
-			if (typeof el.select === 'function') {
-				el.select();
-			}
-		}, 150);
+		}
+		return true;
 	}
+
+	function enfocarCampoFactura(el) {
+		if (!el || el.disabled || el.readOnly) {
+			return false;
+		}
+		if (el.offsetParent === null && el.type !== 'hidden') {
+			return false;
+		}
+		try {
+			el.focus({ preventScroll: true });
+		} catch (e) {
+			el.focus();
+		}
+		if (typeof el.select === 'function') {
+			el.select();
+		}
+		return true;
+	}
+
+	/**
+	 * Mostrador: con tipo válido → código de cliente; si no → abreviatura del tipo.
+	 * Se reintenta porque leeunpuntoventa / select2 / autofocus de modales
+	 * suelen robar el foco justo después del primer setTimeout.
+	 */
+	function aplicarFocoInicialFacturaMostrador() {
+		if (document.activeElement
+			&& document.activeElement.id === 'codigocliente'
+			&& tipoComprobanteFacturaEsValido()) {
+			return true;
+		}
+		if (tipoComprobanteFacturaEsValido()) {
+			return enfocarCampoFactura(document.getElementById('codigocliente'));
+		}
+		return enfocarCampoFactura(document.getElementById('tipotransaccion_id_abreviatura'));
+	}
+
+	function enfocarCodigoClienteFacturaAlCargar() {
+		window.__facturaFocoInicialHasta = Date.now() + 1200;
+		[80, 200, 450, 800, 1100].forEach(function (ms) {
+			window.setTimeout(function () {
+				if (!window.__facturaFocoInicialHasta || Date.now() > window.__facturaFocoInicialHasta) {
+					return;
+				}
+				// Si el operador ya tipó o cambió de campo a mano, no pelear.
+				if (document.activeElement
+					&& document.activeElement.id
+					&& document.activeElement.id !== 'codigocliente'
+					&& document.activeElement.id !== 'tipotransaccion_id_abreviatura'
+					&& document.activeElement.tagName === 'INPUT'
+					&& document.activeElement.form
+					&& document.activeElement.form.id === 'formgeneral'
+					&& $.trim(String(document.activeElement.value || '')) !== '') {
+					window.__facturaFocoInicialHasta = 0;
+					return;
+				}
+				aplicarFocoInicialFacturaMostrador();
+			}, ms);
+		});
+	}
+
+	window.restaurarFocoInicialFacturaSiCorresponde = function () {
+		if (!window.__facturaFocoInicialHasta || Date.now() > window.__facturaFocoInicialHasta) {
+			return;
+		}
+		aplicarFocoInicialFacturaMostrador();
+	};
+
+	window.enfocarCodigoClienteFacturaSiTipoValido = function () {
+		if (!tipoComprobanteFacturaEsValido()) {
+			return false;
+		}
+		return enfocarCampoFactura(document.getElementById('codigocliente'));
+	};
 
     function agregaRenglon(event, opciones){
 		if (typeof window.formularioVentasBloqueadoPorPadron === 'function' && window.formularioVentasBloqueadoPorPadron()) {
@@ -2848,6 +2932,22 @@
 	var calculaFacturaSeq = 0;
 	var calculaFacturaXhr = null;
 
+	function esErrorAlicuotaIvaFactura(msg) {
+		return /al[ií]cuota de IVA/i.test(String(msg || ''));
+	}
+
+	function marcarLineasSinIvaFacturaSinAlert() {
+		$('#itemspedido-table .factura-iva-linea').removeClass('is-invalid');
+		if (typeof window.facturaRenglonesTextoSinIva === 'function') {
+			var $sin = window.facturaRenglonesTextoSinIva(false);
+			if ($sin.length) {
+				$sin.find('.factura-iva-linea').addClass('is-invalid');
+			}
+		}
+		$('#tbody-tabla-total-factura').empty();
+		$('#montototalfactura').val('');
+	}
+
 	/** Importe del bloque de totales (Concepto/Tasa/Importe): miles con punto, decimales con coma. */
 	function facturaFmtImporteTotal(n) {
 		var x = Number(n);
@@ -2877,18 +2977,15 @@
 		}
 
 		// NC parcial: el IVA sale de la factura origen. No vaciar el total si falta la alícuota en pantalla.
+		// Preview: si falta IVA en renglón de concepto/texto, marcar en silencio (sin alert); el alert es al grabar.
 		var esNcPreview = $('#formgeneral').attr('data-factura-proceso') === 'nc';
 		if (!esNcPreview && typeof window.facturaRenglonesTextoSinIva === 'function') {
-			var $sinIva = window.facturaRenglonesTextoSinIva();
+			var $sinIva = window.facturaRenglonesTextoSinIva(false);
 			$('#itemspedido-table .factura-iva-linea').removeClass('is-invalid');
 			if ($sinIva.length) {
 				$sinIva.find('.factura-iva-linea').addClass('is-invalid');
 				$('#tbody-tabla-total-factura').empty();
 				$('#montototalfactura').val('');
-				var activo = document.activeElement;
-				if (activo && $(activo).is('.precio, .cantidad, .descuento, .kilo')) {
-					$sinIva.first().find('.factura-iva-linea').trigger('focus');
-				}
 				return;
 			}
 		}
@@ -2944,6 +3041,10 @@
 				}
 
 				if (data && data.error) {
+					if (esErrorAlicuotaIvaFactura(data.error)) {
+						marcarLineasSinIvaFacturaSinAlert();
+						return;
+					}
 					alert(data.error);
 					return;
 				}

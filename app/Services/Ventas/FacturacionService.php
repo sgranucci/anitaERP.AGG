@@ -2925,6 +2925,8 @@ class FacturacionService
 		// Lee los items a facturar
 		$dataFactura = [];
 		$totCantidad = 0;
+		// Solo si el tilde de concepto fijó incluyeimpuesto=1 (precio = total final).
+		$detraerPercepcionesConceptoPrecioFinal = false;
 
 		$articulos = $data['articulo_ids'] ?? [];
 		if (! is_array($articulos)) {
@@ -3278,6 +3280,9 @@ class FacturacionService
 			$lineaSinArticulo = (int) ($articulo_id ?? 0) <= 0;
 			if (! $esNcMostrador && $lineaSinArticulo && array_key_exists('concepto_precio_neto', $data)) {
 				$incluyeImpuesto = filter_var($data['concepto_precio_neto'], FILTER_VALIDATE_BOOLEAN) ? 'N' : '1';
+				if ($incluyeImpuesto === '1') {
+					$detraerPercepcionesConceptoPrecioFinal = true;
+				}
 			}
 
 			// Lee el descuento por línea (grilla pedido) o descuento global
@@ -3616,6 +3621,9 @@ class FacturacionService
 					$datosCliente['percepcion_iibb_solo_receptor'] = true;
 				}
 			}
+		}
+		if ($detraerPercepcionesConceptoPrecioFinal) {
+			$datosCliente[FacturaLineaPrecioImpresionSupport::FLAG_DETRAER_PERCEPCIONES_PRECIO_FINAL] = true;
 		}
 		NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
 			$datosCliente,
@@ -11291,7 +11299,7 @@ class FacturacionService
 		$tasaDetraccionImpresion = $netearPrecioImpreso
 			? FacturaLineaPrecioImpresionSupport::tasaDetraccion(
 				$venta->venta_impuestos,
-				(string) config('facturacion.USA_DETRACCION') === 'S'
+				FacturaLineaPrecioImpresionSupport::usaDetraccionDesdeEmisiones($venta->venta_emisiones)
 			)
 			: 0.0;
 		$tasasIvaImpresion = [];
