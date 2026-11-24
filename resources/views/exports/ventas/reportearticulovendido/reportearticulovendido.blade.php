@@ -16,7 +16,8 @@
         <td colspan="9" style="font-size: 10pt; font-family: Arial;">
             <strong>Desde:</strong> {{ date('d/m/Y', strtotime($desdefecha ?? '')) }}&nbsp;&nbsp;
             <strong>Hasta:</strong> {{ date('d/m/Y', strtotime($hastafecha ?? '')) }}&nbsp;&nbsp;
-            <strong>Marca:</strong> {{ $marca }}
+            <strong>Marca:</strong> {{ $marca }}&nbsp;&nbsp;
+            <strong>Sucursal:</strong> {{ $sucursal ?? 'Todas las sucursales' }}
             @if (count($articulos) > 0)
                 &nbsp;&nbsp;<strong>Total pares vendidos:</strong> {{ number_format($totales['cantidad'], 0) }}&nbsp;&nbsp;
                 <strong>Total importe:</strong> ({{ number_format(abs($totales['importe']), 2, '.', ',') }})

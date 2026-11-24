@@ -258,6 +258,8 @@ final class TiendanubePedidoMaestrosSupport
             strtolower(trim((string) ($paymentJson['method'] ?? ''))),
             strtolower(trim((string) ($paymentJson['credit_card_company'] ?? ''))),
         ])));
+        // Boaonda: el gateway API es pago-nube, pero el medio contable del canal es NUBE BOA (PV 26).
+        $keys = self::priorizarAliasesNubeBoa($storeId, $keys);
         foreach ($keys as $key) {
             if ($key === '' || ! array_key_exists($key, $map)) {
                 continue;
@@ -299,7 +301,7 @@ final class TiendanubePedidoMaestrosSupport
             (string) ($paymentJson['method'] ?? ''),
             (string) ($paymentJson['credit_card_company'] ?? ''),
         ]))));
-        $tokens = self::tokensBusquedaGateway($haystackGw);
+        $tokens = self::tokensBusquedaGateway($haystackGw, $storeId);
 
         $mejor = null;
         $mejorScore = 0;
@@ -325,16 +327,57 @@ final class TiendanubePedidoMaestrosSupport
     }
 
     /**
+     * En Boaonda, pago-nube debe resolver a NUBE BOA antes que a Pago Nube (Ferli PV 23).
+     *
+     * @param  list<string>  $keys
      * @return list<string>
      */
-    private static function tokensBusquedaGateway(string $gateway): array
+    public static function priorizarAliasesNubeBoa(?string $storeId, array $keys): array
+    {
+        if (! TiendanubeTiendasSupport::esBoaonda($storeId) || ! self::keysIncluyenPagoNube($keys)) {
+            return array_values(array_unique($keys));
+        }
+
+        return array_values(array_unique(array_merge(['nube boa', 'boa'], $keys)));
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private static function keysIncluyenPagoNube(array $keys): bool
+    {
+        foreach ($keys as $key) {
+            $key = strtolower(trim((string) $key));
+            if ($key === '') {
+                continue;
+            }
+            if (str_contains($key, 'pago-nube')
+                || str_contains($key, 'pago nube')
+                || str_contains($key, 'pago_nube')
+                || str_contains($key, 'nuvempago')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function tokensBusquedaGateway(string $gateway, ?string $storeId = null): array
     {
         $g = strtolower(trim($gateway));
 
         return match (true) {
             $g === '' => [],
             str_contains($g, 'naranja') => ['naranja', 'tarjeta naranja'],
-            // Procesador Pago Nube (antes de mirar credit_card → no confundir con MP)
+            // Boaonda: mismo procesador pago-nube, cuenta NUBE BOA (612 / Facturante medio 5).
+            (str_contains($g, 'pago-nube')
+                || str_contains($g, 'pago nube')
+                || str_contains($g, 'nuvempago'))
+                && TiendanubeTiendasSupport::esBoaonda($storeId) => ['boa', 'nube', '11310112', '612'],
+            // Procesador Pago Nube Ferli (antes de mirar credit_card → no confundir con MP)
             str_contains($g, 'pago-nube')
                 || str_contains($g, 'pago nube')
                 || str_contains($g, 'nuvempago') => ['pago nube', 'nube', '609'],
@@ -350,7 +393,9 @@ final class TiendanubePedidoMaestrosSupport
             // Método sin procesador conocido: preferir Pago Nube (canal TN Ferli)
             str_contains($g, 'credit_card')
                 || str_contains($g, 'debit_card')
-                || str_contains($g, 'wallet') => ['pago nube', 'nube', '609'],
+                || str_contains($g, 'wallet') => TiendanubeTiendasSupport::esBoaonda($storeId)
+                    ? ['boa', 'nube', '11310112', '612']
+                    : ['pago nube', 'nube', '609'],
             default => array_values(array_filter(preg_split('/[\s_\-]+/', $g) ?: [])),
         };
     }

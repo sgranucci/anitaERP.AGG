@@ -33,6 +33,10 @@ class ArticuloVendidoMultiExport implements WithMultipleSheets, WithEvents
 
     private $nombremventa;
 
+    private $puntoventa_id = 0;
+
+    private $nombresucursal = 'Todas las sucursales';
+
     public function __construct($reporteService, $params)
     {
         $this->reporteService = $reporteService;
@@ -46,6 +50,8 @@ class ArticuloVendidoMultiExport implements WithMultipleSheets, WithEvents
         $this->hastalinea_id = $params['hastalinea_id'];
         $this->mventa_id = $params['mventa_id'];
         $this->nombremventa = $params['nombremventa'];
+        $this->puntoventa_id = (int) ($params['puntoventa_id'] ?? 0);
+        $this->nombresucursal = $params['nombresucursal'] ?? 'Todas las sucursales';
     }
 
     public function registerEvents(): array
@@ -74,13 +80,15 @@ class ArticuloVendidoMultiExport implements WithMultipleSheets, WithEvents
                     $this->desdearticulo_id, $this->hastaarticulo_id,
                     $this->desdecliente_id, $this->hastacliente_id,
                     $this->desdelinea_id, $this->hastalinea_id,
-                    $this->mventa_id, $this->nombremventa),
+                    $this->mventa_id, $this->nombremventa,
+                    $this->puntoventa_id, $this->nombresucursal),
             (new ArticuloVendidoExport($this->reporteService))
                 ->parametros('NACIONAL', $this->desdefecha, $this->hastafecha,
                     $this->desdearticulo_id, $this->hastaarticulo_id,
                     $this->desdecliente_id, $this->hastacliente_id,
                     $this->desdelinea_id, $this->hastalinea_id,
-                    $this->mventa_id, $this->nombremventa),
+                    $this->mventa_id, $this->nombremventa,
+                    $this->puntoventa_id, $this->nombresucursal),
         ];
     }
 }

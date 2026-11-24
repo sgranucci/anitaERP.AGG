@@ -36,6 +36,24 @@
         @endforeach
     </select>
 </div>
+@include('ventas.partials.campo_consulta_puntoventa', [
+    'prefix' => 'rep_articulovendido',
+    'layout' => 'form_row',
+    'label' => 'Sucursal',
+    'inputName' => 'puntoventa_id',
+    'inputId' => 'puntoventa_id',
+    'puntoventaId' => old('puntoventa_id', ''),
+    'codigo' => old('puntoventa_codigo', ''),
+    'nombre' => old('puntoventa_nombre', ''),
+    'required' => false,
+    'col_label' => 'col-lg-3 col-form-label',
+    'col_input' => 'col-lg-5',
+])
+<div class="form-group row">
+    <div class="col-lg-5 offset-lg-3">
+        <small class="form-text text-muted mt-0">Vac&iacute;o = todas las sucursales. C&oacute;digo + Enter o lupa (F1).</small>
+    </div>
+</div>
 <div class="row">
     <div class="col-sm-6">
         <div class="form-group row">

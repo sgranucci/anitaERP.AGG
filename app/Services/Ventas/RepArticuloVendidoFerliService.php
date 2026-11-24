@@ -10,13 +10,13 @@ class RepArticuloVendidoFerliService
         $desdearticulo_id, $hastaarticulo_id,
         $desdecliente_id, $hastacliente_id,
         $desdelinea_id, $hastalinea_id,
-        $mventa_id)
+        $mventa_id, $puntoventa_id = 0)
     {
         $data = $this->consultarMovimientos($tipoOrigen, $desdefecha, $hastafecha,
             $desdearticulo_id, $hastaarticulo_id,
             $desdecliente_id, $hastacliente_id,
             $desdelinea_id, $hastalinea_id,
-            $mventa_id);
+            $mventa_id, $puntoventa_id);
 
         $articulos = [];
         $totales = [
@@ -82,7 +82,7 @@ class RepArticuloVendidoFerliService
         $desdearticulo_id, $hastaarticulo_id,
         $desdecliente_id, $hastacliente_id,
         $desdelinea_id, $hastalinea_id,
-        $mventa_id)
+        $mventa_id, $puntoventa_id = 0)
     {
         // El comprobante manda. Hay facturas y remitos sin movimiento de stock
         // (no se grabó el consumo de OT): un inner join contra articulo_movimiento
@@ -173,6 +173,10 @@ class RepArticuloVendidoFerliService
 
         if ($mventa_id != 0) {
             $query = $query->where('articulo.mventa_id', $mventa_id);
+        }
+
+        if ((int) $puntoventa_id > 0) {
+            $query = $query->where('venta.puntoventa_id', (int) $puntoventa_id);
         }
 
         return $query->get();

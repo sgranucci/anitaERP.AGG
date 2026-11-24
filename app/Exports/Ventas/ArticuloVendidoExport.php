@@ -46,6 +46,10 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
 
     private $nombremventa;
 
+    private $puntoventa_id = 0;
+
+    private $nombresucursal = 'Todas las sucursales';
+
     private $logoPath;
 
     private $filaEncabezadoColumnas = 5;
@@ -69,7 +73,8 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
             $this->hastacliente_id,
             $this->desdelinea_id,
             $this->hastalinea_id,
-            $this->mventa_id
+            $this->mventa_id,
+            $this->puntoventa_id
         );
 
         $titulo = $this->tipoOrigen == 'NACIONAL'
@@ -86,6 +91,7 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
             'desdefecha' => $this->desdefecha,
             'hastafecha' => $this->hastafecha,
             'marca' => $this->nombremventa,
+            'sucursal' => $this->nombresucursal,
             'filaEncabezadoColumnas' => $this->filaEncabezadoColumnas,
         ]);
     }
@@ -206,7 +212,8 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
         $desdearticulo_id, $hastaarticulo_id,
         $desdecliente_id, $hastacliente_id,
         $desdelinea_id, $hastalinea_id,
-        $mventa_id, $nombremventa)
+        $mventa_id, $nombremventa,
+        $puntoventa_id = 0, $nombresucursal = 'Todas las sucursales')
     {
         $this->tipoOrigen = $tipoOrigen;
         $this->desdefecha = $desdefecha;
@@ -219,6 +226,8 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
         $this->hastalinea_id = $hastalinea_id;
         $this->mventa_id = $mventa_id;
         $this->nombremventa = $nombremventa;
+        $this->puntoventa_id = (int) $puntoventa_id;
+        $this->nombresucursal = $nombresucursal ?: 'Todas las sucursales';
 
         return $this;
     }

@@ -105,6 +105,27 @@ final class TiendanubeTiendasSupport
     }
 
     /**
+     * Canal Boaonda (PV 26 / NUBE BOA). El procesador TN sigue llamándose pago-nube,
+     * pero la cuenta del medio es NUBE BOA (no Pago Nube de Ferli).
+     */
+    public static function esBoaonda(?string $storeId): bool
+    {
+        $storeId = trim((string) $storeId);
+        if ($storeId === '') {
+            return false;
+        }
+        foreach (self::definidas() as $tienda) {
+            if ($tienda['store_id'] !== $storeId) {
+                continue;
+            }
+
+            return strtolower($tienda['clave']) === 'boaonda';
+        }
+
+        return $storeId === '6250382';
+    }
+
+    /**
      * Datos de pantalla, sin token.
      *
      * @return list<array{clave:string,nombre:string,store_id:string}>

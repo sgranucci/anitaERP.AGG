@@ -4,6 +4,7 @@
 @endsection
 
 @section("scripts")
+<script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/puntoventa/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -32,4 +33,5 @@
         </div>
     </div>
 </div>
+@include('includes.ventas.modalconsultapuntoventa')
 @endsection

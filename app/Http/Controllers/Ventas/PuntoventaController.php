@@ -590,7 +590,8 @@ class PuntoventaController extends Controller
             || can('listar-iva-ventas', false)
             || can('generar-nota-de-debito-cheque', false)
             || can('configurar-facturacion-juego', false)
-            || can('usar-facturacion-juego', false);
+            || can('usar-facturacion-juego', false)
+            || can('listar-reporte-articulos-vendidos', false);
     }
 
     /**

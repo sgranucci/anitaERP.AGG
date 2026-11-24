@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Linea;
 use App\Models\Stock\Mventa;
+use App\Models\Ventas\Puntoventa;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Services\Ventas\RepArticuloVendidoFerliService;
 use Illuminate\Http\Request;
@@ -88,6 +89,19 @@ class RepArticuloVendidoController extends Controller
             }
         }
 
+        $puntoventaId = (int) ($request->puntoventa_id ?? 0);
+        $nombreSucursal = 'Todas las sucursales';
+        if ($puntoventaId > 0) {
+            $puntoventa = Puntoventa::find($puntoventaId);
+            if ($puntoventa) {
+                $codigo = trim((string) ($puntoventa->codigo ?? ''));
+                $nombre = trim((string) ($puntoventa->nombre ?? ''));
+                $nombreSucursal = $codigo !== ''
+                    ? ($nombre !== '' ? $codigo.' — '.$nombre : $codigo)
+                    : ($nombre !== '' ? $nombre : 'Sucursal '.$puntoventaId);
+            }
+        }
+
         $params = [
             'desdefecha' => $request->desdefecha,
             'hastafecha' => $request->hastafecha,
@@ -99,6 +113,8 @@ class RepArticuloVendidoController extends Controller
             'hastalinea_id' => $request->hastalinea_id,
             'mventa_id' => $request->mventa_id,
             'nombremventa' => $nombreMventa,
+            'puntoventa_id' => $puntoventaId,
+            'nombresucursal' => $nombreSucursal,
         ];
 
         if ($request->tipoOrigen == 'AMBOS') {
@@ -118,7 +134,9 @@ class RepArticuloVendidoController extends Controller
                 $request->desdelinea_id,
                 $request->hastalinea_id,
                 $request->mventa_id,
-                $nombreMventa
+                $nombreMventa,
+                $puntoventaId,
+                $nombreSucursal
             )
             ->download('articulos_vendidos.'.$extension);
     }
