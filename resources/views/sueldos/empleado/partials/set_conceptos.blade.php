@@ -14,6 +14,11 @@
             <span class="small text-muted ml-2">N sin l&iacute;mite (Anita trae 3; ac&aacute; se pueden agregar m&aacute;s)</span>
         </div>
         <div class="card-body py-2">
+            <p class="small text-muted mb-2">
+                Acá <strong>asignás o quitás grupos del legajo</strong>. Para cambiar qué conceptos tiene un grupo,
+                editá el maestro en <em>Sueldos → Grupos de conceptos</em>.
+                Los primeros 3 códigos se espejan a Anita (<code>emp_grp*</code>) para las fórmulas.
+            </p>
             <table class="table table-sm table-bordered mb-2">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>

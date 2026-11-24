@@ -34,17 +34,7 @@ Fórmulas de artículos
     use App\Support\Stock\FormulaArticuloListadoFiltros;
     use Illuminate\Support\Facades\Schema;
 
-    $limpiarQ = ['filtro_limpiar' => 1];
-    if (($filtros['estado'] ?? '') !== '') {
-        $limpiarQ['filtro_estado'] = $filtros['estado'];
-    }
-    if (($filtros['articulos'] ?? '') !== '') {
-        $limpiarQ['filtro_articulos'] = $filtros['articulos'];
-    }
-    if (($filtros['con_opcionales'] ?? '') !== '') {
-        $limpiarQ['con_opcionales'] = $filtros['con_opcionales'];
-    }
-    $limpiarUrl = route('consultar_formula_articulo', $limpiarQ);
+    $limpiarUrl = route('consultar_formula_articulo', ['limpiar_filtros' => 1]);
     $camposOrdenablesThead = FormulaArticuloListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -165,7 +155,7 @@ Fórmulas de artículos
                         </button>
                         @if (FormulaArticuloListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if ($ordenActualThead !== [])

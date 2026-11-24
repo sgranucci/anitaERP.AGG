@@ -24,6 +24,7 @@ use App\Support\Caja\CobranzaListadoPreferenciasUsuario;
 use App\Support\Caja\CobranzaListadoVisual;
 use App\Support\Caja\CobranzaOrigenFerliSupport;
 use App\Support\Caja\CobranzaPromedioPagoSupport;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
@@ -690,12 +691,12 @@ class CobranzaController extends Controller
         }
 
         if ($this->filtrosListadoSinCriterio($filtrosQuery)) {
-            session()->forget(self::SESSION_FILTROS_LISTADO);
+            ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS_LISTADO);
 
             return;
         }
 
-        session([self::SESSION_FILTROS_LISTADO => $filtrosQuery]);
+        ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS_LISTADO, $filtrosQuery);
     }
 
     /**
@@ -703,7 +704,7 @@ class CobranzaController extends Controller
      */
     private function filtrosListadoGuardados(): array
     {
-        $guardados = session(self::SESSION_FILTROS_LISTADO, []);
+        $guardados = ListadoFiltrosMemoriaSupport::restaurar(self::SESSION_FILTROS_LISTADO);
         if (! is_array($guardados)) {
             return [];
         }

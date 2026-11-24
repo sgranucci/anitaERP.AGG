@@ -31,7 +31,8 @@ Ver también **`index-listado-paginado-export.mdc`** (paginación server-side, P
 | Panel abierto | Enter (cabecera o panel), lupa o **Aplicar filtros** → criterios del panel (sin búsqueda rápida) |
 | Espejo valor | `#filtro_valor_panel` sincronizado con `#filtro_valor`; sincronizar antes del submit según panel abierto/cerrado |
 | Filtros activos | Borde amarillo en input/botón toggle; icono filtro + **Limpiar filtros** (`filtros_aviso_activos`) solo si `tieneCriteriosAplicados()` |
-| Limpiar | Enlace GET a ruta index **sin query** |
+| Limpiar | Enlace GET con `limpiar_filtros=1` o `filtro_limpiar=1`: olvida la memoria de sesión y vuelve a defaults del módulo (no conservar chips ni QBE) |
+| Memoria | `ListadoFiltrosMemoriaSupport`: con query se persiste en sesión; visita sin query restaura el último filtro; Limpiar hace `olvidar`. No localStorage |
 | Layout | Sin `<form>` en `card-header`; form GET solo envuelve el panel collapse |
 | Export | `exportar-tabla-queryparams` con `$filtrosQuery`; export recibe array `$filtros`, no `busqueda` legacy |
 | Paginación | `->appends($filtrosQuery)` |
@@ -45,6 +46,7 @@ Ver también **`index-listado-paginado-export.mdc`** (paginación server-side, P
 3. Query/Repository: `lee*($filtros, $paginar)`; aplicar filtros **solo** si `tieneCriteriosAplicados()`; compatibilidad `is_string($filtros)` para exports viejos.
 4. Controller index: pasar `filtros`, `filtrosQuery`, `camposFiltro` a la vista.
 5. Controller listar: `resolverDesdeRequest($request, $busquedaRuta)`; export con `$filtros`.
+6. Memoria de sesión: clave por recurso (`filtros_{recurso}`); `ListadoFiltrosMemoriaSupport::persistir/restaurar/olvidar`; al entrar sin query redirect a guardados; al Limpiar `olvidar` + defaults.
 
 ## Coincidencia flexible (tolera errores de tipeo)
 

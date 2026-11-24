@@ -134,6 +134,7 @@
                         <thead style="background-color:#85C1E9; color:#17202A;">
                             <tr>
                                 <th>Tipo</th>
+                                <th>Plus/Adelanto</th>
                                 <th>Desde</th>
                                 <th>Hasta</th>
                                 <th class="text-right">Días</th>
@@ -154,13 +155,18 @@
                                         'fecha_hasta' => optional($a->fecha_hasta)->format('Y-m-d'),
                                         'dias' => (float) $a->dias,
                                         'tipo_dias' => $a->tipo_dias,
+                                        'modalidad_vacaciones' => $a->modalidad_vacaciones,
                                         'estado' => $a->estado,
                                         'observacion' => $a->observacion,
                                         'url' => route('actualizar_ausencia_empleado_sueldos', ['id' => $a->id]),
                                     ];
+                                    $labModalidad = ($a->tipo && $a->tipo->esVacaciones() && $a->modalidad_vacaciones)
+                                        ? (Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES[(int) $a->modalidad_vacaciones] ?? '—')
+                                        : '—';
                                 @endphp
                                 <tr>
                                     <td>{{ $a->tipo->nombre ?? '—' }}</td>
+                                    <td>{{ $labModalidad }}</td>
                                     <td>{{ optional($a->fecha_desde)->format('d/m/Y') }}</td>
                                     <td>{{ optional($a->fecha_hasta)->format('d/m/Y') }}</td>
                                     <td class="text-right">{{ number_format((float) $a->dias, 2, ',', '.') }}</td>
@@ -182,7 +188,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-3">
+                                    <td colspan="9" class="text-center text-muted py-3">
                                         Sin eventos. Abrí <strong>Registrar ausencia</strong>, completá el formulario y pulsá
                                         <strong>Guardar ausencia</strong>; aparece acá.
                                     </td>
@@ -207,12 +213,20 @@
                     <div id="form-ausencia" data-url-crear="{{ route('guardar_ausencia_empleado_sueldos', ['empleado' => $empleado->id]) }}">
                         <input type="hidden" id="ausencia_id" value="">
                         <div class="form-row">
-                            <div class="form-group col-md-4">
+                            <div class="form-group col-md-3">
                                 <label class="small mb-1">Tipo de ausencia</label>
                                 <select id="ausencia_tipo" class="form-control form-control-sm" required
                                         data-tipos='@json($tipos->map(fn ($t) => ["id" => $t->id, "tipo_dias" => $t->tipo_dias, "vacaciones" => $t->esVacaciones()])->values())'>
                                     @foreach ($tipos as $t)
                                         <option value="{{ $t->id }}" data-tipo-dias="{{ $t->tipo_dias }}" data-vacaciones="{{ $t->esVacaciones() ? 1 : 0 }}">{{ $t->nombre }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="form-group col-md-2" id="ausencia_modalidad_wrap">
+                                <label class="small mb-1">Plus / Adelanto</label>
+                                <select id="ausencia_modalidad" class="form-control form-control-sm">
+                                    @foreach (Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES as $cod => $lab)
+                                        <option value="{{ $cod }}" {{ (int) $cod === Empleado_Ausencia_Sueldos::MODALIDAD_VACACIONES_PLUS ? 'selected' : '' }}>{{ $lab }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -224,11 +238,11 @@
                                 <label class="small mb-1">Hasta</label>
                                 <input type="date" id="ausencia_hasta" class="form-control form-control-sm" required>
                             </div>
-                            <div class="form-group col-md-2">
-                                <label class="small mb-1">Tipo de días</label>
+                            <div class="form-group col-md-1">
+                                <label class="small mb-1">Días</label>
                                 <select id="ausencia_tipo_dias" class="form-control form-control-sm">
-                                    <option value="corridos">Corridos</option>
-                                    <option value="habiles">Hábiles</option>
+                                    <option value="corridos">Corr.</option>
+                                    <option value="habiles">Háb.</option>
                                 </select>
                             </div>
                             <div class="form-group col-md-2">

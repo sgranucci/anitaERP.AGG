@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Produccion;
 
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionMovimientoOrdentrabajo;
 use App\Services\Produccion\MovimientoOrdentrabajoService;
@@ -25,6 +26,10 @@ use App\Exports\Produccion\MovimientoOrdentrabajoListadoExport;
 
 class MovimientoOrdentrabajoController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_movimientoordentrabajo';
+
 	private $movimientoOrdentrabajoService;
 	private $tareaRepository;
 	private $operacionRepository;
@@ -50,6 +55,16 @@ class MovimientoOrdentrabajoController extends Controller
     {
         can('listar-movimientos-orden-trabajo');
 
+        // Memoria de filtros solo en el listado general (en el contexto de una OT no se recuerda).
+        $usaMemoria = ! $id && ! $request->filled('ordentrabajo_id');
+        if ($usaMemoria) {
+            $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+            $redir = $this->redirigirMemoriaOLimpiar($request, 'movimientoordentrabajo', [], $forzarEstandar);
+            if ($redir) {
+                return $redir;
+            }
+        }
+
         $otId = (int) ($id ?: $request->input('ordentrabajo_id', 0));
         if ($otId > 0) {
             $request->merge(['ordentrabajo_id' => $otId]);
@@ -65,6 +80,10 @@ class MovimientoOrdentrabajoController extends Controller
         $armado = $this->armarListado($request, $otId > 0 ? $otId : null);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
+        }
+
+        if ($usaMemoria) {
+            $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
         }
 
         return view('produccion.movimientoordentrabajo.index', $armado);

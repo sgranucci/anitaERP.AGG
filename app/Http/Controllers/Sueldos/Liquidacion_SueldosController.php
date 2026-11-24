@@ -322,19 +322,39 @@ class Liquidacion_SueldosController extends Controller
         $totalesVisibles = LiquidacionConfidencialSeguridadSupport::totalesVisiblesCorrida($liq);
         $msg = 'Corrida calculada: '.$totalesVisibles['cantidad'].' recibo(s). Neto total $ '
             .number_format($totalesVisibles['neto'], 2, ',', '.');
+        $egresos = $resumen['egresos_periodo'] ?? [];
+        $avisoEgresos = null;
+        if (is_array($egresos) && $egresos !== []) {
+            $sample = collect($egresos)->take(8)
+                ->map(fn ($e) => 'leg.'.$e['legajo'].' '.$e['fecha_egreso'].' ('.$e['modo'].')')
+                ->implode('; ');
+            $avisoEgresos = count($egresos).' legajo(s) con egreso en el período: '.$sample
+                .(count($egresos) > 8 ? '…' : '')
+                .'. Las bajas provisorias siguen activas hasta confirmar la definitiva.';
+        }
         $errN = (int) ($resumen['errores_formula_count'] ?? 0);
         if ($errN > 0) {
             $sample = collect($resumen['errores_formula'] ?? [])->take(3)
                 ->map(fn ($e) => 'leg.'.$e['legajo'].' conc.'.$e['concepto'])
                 ->implode(', ');
 
-            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+            $redir = redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
                 ->with('mensaje', $msg)
                 ->with('error', $errN.' error(es) de fórmula (concepto omitido con importe 0). Ej: '.$sample);
+            if ($avisoEgresos) {
+                $redir->with('mensaje-aviso', $avisoEgresos);
+            }
+
+            return $redir;
         }
 
-        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+        $redir = redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
             ->with('mensaje', $msg);
+        if ($avisoEgresos) {
+            $redir->with('mensaje-aviso', $avisoEgresos);
+        }
+
+        return $redir;
     }
 
     /**

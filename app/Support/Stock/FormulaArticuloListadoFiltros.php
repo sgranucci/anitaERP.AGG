@@ -7,6 +7,7 @@ namespace App\Support\Stock;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoQbeFormulaSupport;
 use App\Support\Listado\ListadoQbeSupport;
@@ -508,32 +509,7 @@ class FormulaArticuloListadoFiltros
 
     public static function requestTraeFiltros(Request $request): bool
     {
-        foreach ([
-            'filtro_valor',
-            'busqueda',
-            'qbe',
-            'filtro_modo',
-            'filtro_limpiar',
-            'limpiar_filtros',
-            'vista_id',
-            'vista_estandar',
-            'vista_modo',
-            'con_opcionales',
-            'filtro_estado',
-            'filtro_articulos',
-            'sort',
-            'group',
-            'aplicar_qbe',
-            'filtro_busqueda_rapida',
-            'columnas',
-            'quitar_orden',
-        ] as $key) {
-            if ($request->query->has($key) || $request->request->has($key)) {
-                return true;
-            }
-        }
-
-        return (int) $request->query('page', 0) > 1;
+        return ListadoFiltrosMemoriaSupport::requestTraeFiltros($request);
     }
 
     /**
@@ -541,14 +517,7 @@ class FormulaArticuloListadoFiltros
      */
     public static function persistir(array $filtrosQuery): void
     {
-        unset($filtrosQuery['filtro_limpiar'], $filtrosQuery['limpiar_filtros']);
-        if ($filtrosQuery === []) {
-            session()->forget(self::SESSION_FILTROS);
-
-            return;
-        }
-
-        session([self::SESSION_FILTROS => $filtrosQuery]);
+        ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS, $filtrosQuery);
     }
 
     /**
@@ -556,14 +525,12 @@ class FormulaArticuloListadoFiltros
      */
     public static function guardados(): array
     {
-        $guardados = session(self::SESSION_FILTROS, []);
-
-        return is_array($guardados) ? $guardados : [];
+        return ListadoFiltrosMemoriaSupport::restaurar(self::SESSION_FILTROS);
     }
 
     public static function olvidar(): void
     {
-        session()->forget(self::SESSION_FILTROS);
+        ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
     }
 
     /**

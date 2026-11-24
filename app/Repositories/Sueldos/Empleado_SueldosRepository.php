@@ -728,6 +728,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $key = $empresaId.':'.$legajo;
             $feing = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_ing ?? 0);
             $feegr = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_egr ?? 0);
+            // Flag B = definitiva. Fecha egreso con flag vacío/activo = provisoria (estado A + fecha).
             $estado = EmpleadoEstados::desdeFlagAnita($f->emp_flag_estado ?? null);
             $motivoId = $this->fk($maps['motivoegreso_id'], $f->emp_motivoegr ?? null);
             $catCod = $this->normCodigo($f->emp_categoria ?? null);

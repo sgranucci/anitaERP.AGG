@@ -70,7 +70,7 @@ Importaciones
     use App\Support\Compras\ImportacionListadoColumnas;
 
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
-    $limpiarUrl = route('importacion');
+    $limpiarUrl = route('importacion', ['limpiar_filtros' => 1]);
     $columnasVisibles = $columnasVisibles ?? ImportacionListadoColumnas::defaultsVisibles();
     $catalogoColumnas = $catalogoColumnas ?? ImportacionListadoColumnas::catalogoActivo();
     $etiquetasColumnas = $etiquetasColumnas ?? [];
@@ -183,7 +183,7 @@ Importaciones
                             </button>
                         @elseif ($tieneQbe || (($filtros['valor'] ?? '') !== ''))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

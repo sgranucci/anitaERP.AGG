@@ -93,21 +93,7 @@
 
     $columnasVisibles = $columnasVisibles ?? [];
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
-    $limpiarQ = IngresoEgresoListadoFiltros::paraQueryStringEmpresa($filtros ?? []);
-    if (($filtros['tipos'] ?? []) !== []) {
-        $limpiarQ['tipos'] = array_values($filtros['tipos']);
-    }
-    if (($filtros['periodo'] ?? '') !== '') {
-        $limpiarQ['filtro_periodo'] = $filtros['periodo'];
-    }
-    if (($filtros['mail'] ?? '') !== '') {
-        $limpiarQ['mail'] = $filtros['mail'];
-    }
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('ingresoegreso', $limpiarQ);
+    $limpiarUrl = route('ingresoegreso', ['limpiar_filtros' => 1]);
     $camposOrdenablesThead = IngresoEgresoListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -216,7 +202,7 @@
                         </button>
                         @if (IngresoEgresoListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

@@ -24,9 +24,14 @@ use App\Support\Sueldos\EntregaPrendaListadoFiltros;
 use App\Support\Sueldos\EntregaPrendaListadoPreferenciasUsuario;
 use App\Support\Sueldos\EntregaPrendaReporteConsulta;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 
 class Entrega_PrendaReporteController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_entrega_prenda';
+
     public function __construct(
         private EmpresaRepositoryInterface $empresaRepository,
         private EntregaPrendaService $servicio,
@@ -36,6 +41,12 @@ class Entrega_PrendaReporteController extends Controller
     public function index(Request $request)
     {
         can('listar-entrega-prenda');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'entrega_prenda_reporte', ['empresa_todas' => 1], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         [$filtros, $vistaActiva, $forzarEstandar] = $this->filtrosDePantalla($request);
         if ($request->boolean('quitar_orden')) {
@@ -82,6 +93,8 @@ class Entrega_PrendaReporteController extends Controller
         }
 
         $filtrosQuery = $this->queryDeFiltros($filtros, $columnasVisibles, $vistaActiva, $forzarEstandar, $request);
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('sueldos.entrega_prenda.index', [
             'empresa_query' => $this->empresaRepository->allFiltrado(),

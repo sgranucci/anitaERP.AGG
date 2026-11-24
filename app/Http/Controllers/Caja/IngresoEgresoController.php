@@ -60,6 +60,7 @@ use App\Queries\Caja\Caja_MovimientoQueryInterface;
 use App\Exports\Caja\Caja_MovimientoExport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Exception;
@@ -67,6 +68,10 @@ use DB;
 
 class IngresoEgresoController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_ingresoegreso';
+
     private $caja_movimientoRepository;
     private $caja_movimiento_cuentacajaRepository;
     private $caja_movimiento_estadoRepository;
@@ -137,6 +142,12 @@ class IngresoEgresoController extends Controller
     public function index(Request $request)
     {
         can('listar-ingresos-egresos-caja');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'ingresoegreso', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 		
         $hayMovimientosCaja = $this->caja_movimientoQuery->first();
 
@@ -147,6 +158,8 @@ class IngresoEgresoController extends Controller
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('caja.ingresoegreso.index', $armado);
     }

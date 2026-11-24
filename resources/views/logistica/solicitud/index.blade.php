@@ -36,21 +36,7 @@
     $columnasVisibles = $columnasVisibles ?? [];
     $alcanceActual = $filtros['alcance'] ?? 'mias';
     $estadoActual = $filtros['estado'] ?? '';
-    $limpiarQ = [];
-    if ($alcanceActual === 'todas') {
-        $limpiarQ['filtro_alcance'] = 'todas';
-    }
-    if ($estadoActual !== '') {
-        $limpiarQ['filtro_estado'] = $estadoActual;
-    }
-    if (($filtros['plazo'] ?? '') === 'vencidas') {
-        $limpiarQ['filtro_plazo'] = 'vencidas';
-    }
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('logistica_solicitud', $limpiarQ);
+    $limpiarUrl = route('logistica_solicitud', ['limpiar_filtros' => 1]);
     $camposOrdenablesTheadBarra = \App\Support\Logistica\SolicitudLogisticaListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -142,7 +128,7 @@
                         </button>
                         @if (SolicitudLogisticaListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

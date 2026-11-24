@@ -422,7 +422,13 @@ final class EmpleadoSueldosListadoColumnas
         }
 
         if ($key === 'estado') {
-            return EmpleadoEstados::label($data->estado ?? null);
+            $label = EmpleadoEstados::label($data->estado ?? null);
+            $badge = EmpleadoBajaSupport::badgeProvisoria($data);
+            if ($badge !== null) {
+                return $label.' · '.$badge;
+            }
+
+            return $label;
         }
         if ($key === 'cuenta_empresa') {
             $codigo = trim((string) ($data->codigocuentaempresa ?? ''));

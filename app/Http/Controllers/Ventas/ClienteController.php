@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ventas;
 
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Entrega;
@@ -88,6 +89,10 @@ use DB;
 
 class ClienteController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_cliente';
+
 	private $clienteRepository;
 	private $cliente_entregaRepository;
     private $cliente_seguimientoRepository;
@@ -166,6 +171,12 @@ class ClienteController extends Controller
     public function index(Request $request)
     {
         can('listar-clientes');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'cliente', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(ClienteListadoColumnas::RECURSO, $usuarioId);
@@ -289,6 +300,8 @@ class ClienteController extends Controller
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
         }
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('ventas.cliente.index', [
             'clientes' => $clientes,

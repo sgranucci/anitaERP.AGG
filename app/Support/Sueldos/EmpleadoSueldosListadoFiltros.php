@@ -14,7 +14,7 @@ use Illuminate\Http\Request;
 /**
  * Filtros del listado de empleados de sueldos.
  *
- * Estado (default Activo) y empresa (default la primera asignada) son filtros
+ * Estado (default Activo) y empresa (default Todas mis empresas) son filtros
  * externos: quedan por encima del QBE y se combinan con AND. Una vista guardada
  * no los pisa.
  */
@@ -247,7 +247,7 @@ class EmpleadoSueldosListadoFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'empresa_id' => null,
-            'empresa_scope' => 'una',
+            'empresa_scope' => 'todas',
             'estado' => EmpleadoEstados::ACTIVO,
             'qbe' => ListadoQbeSupport::vacio(),
             'sort' => [],

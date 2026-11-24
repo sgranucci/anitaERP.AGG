@@ -74,9 +74,14 @@ use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Models\Stock\Recepcion_Proveedor;
 use Auth;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use RuntimeException;
 class OrdencompraController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_ordencompra';
+
     public function __construct(
         private OrdencompraRepositoryInterface $ordencompraRepository,
         private OrdencompraGestionService $ordencompraGestionService,
@@ -105,6 +110,12 @@ class OrdencompraController extends Controller
     {
         can('listar-ordencompra');
 
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'consultar_ordencompra', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
+
         if (filter_var(env('ORDENCOMPRA_SYNC_ANITA_INDEX', false), FILTER_VALIDATE_BOOLEAN)
             && ! $this->ordencompraRepository->existeRegistro()) {
             $this->ordencompraAnitaSyncService->sincronizarConAnita((int) Auth::id());
@@ -114,6 +125,8 @@ class OrdencompraController extends Controller
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('compras.ordencompra.index', $armado);
     }

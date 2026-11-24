@@ -37,10 +37,16 @@ use App\Support\Ventas\PedidoInterformingNumeracionSupport;
 use App\Support\Ventas\PedidoInterformingSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use Maatwebsite\Excel\Excel;
 
 class PedidoInterformingController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_pedido_interforming';
+
     private PedidoInterformingService $pedidoService;
 
     private PedidoInterformingPdfService $pedidoPdfService;
@@ -67,9 +73,25 @@ class PedidoInterformingController extends Controller
         PedidoInterformingSupport::abortSiNoInterforming();
         can('listar-pedidos');
 
+        // Memoria de filtros solo en el listado general (pedidos_venta / pedidos_exportacion fijan el tipo por ruta).
+        $usaMemoria = $request->route()?->getName() === 'pedido';
+        if ($usaMemoria) {
+            $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+            $tipoPedido = strtoupper(trim((string) $request->input('tipo', '')));
+            $defaultsLimpiar = in_array($tipoPedido, ['PED', 'PEX'], true) ? ['tipo' => $tipoPedido] : [];
+            $redir = $this->redirigirMemoriaOLimpiar($request, 'pedido', $defaultsLimpiar, $forzarEstandar);
+            if ($redir) {
+                return $redir;
+            }
+        }
+
         $armado = $this->armarListado($request);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
+        }
+
+        if ($usaMemoria) {
+            $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
         }
 
         $puedeFacturarIndex = can('crear-factura', false) || can('editar-pedidos', false);
@@ -256,6 +278,7 @@ class PedidoInterformingController extends Controller
     {
         PedidoInterformingSupport::abortSiNoInterforming();
         session()->forget('filtrosPedidosInterforming');
+        ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
 
         return response()->json(['ok' => true]);
     }

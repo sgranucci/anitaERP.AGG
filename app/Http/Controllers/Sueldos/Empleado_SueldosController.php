@@ -34,6 +34,7 @@ use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Reportes\DompdfListadoSupport;
@@ -49,6 +50,8 @@ use InvalidArgumentException;
 
 class Empleado_SueldosController extends Controller
 {
+    private const SESSION_FILTROS = 'filtros_empleado_sueldos';
+
     public function __construct(
         private Empleado_SueldosRepositoryInterface $repository,
         private EmpresaRepositoryInterface $empresaRepository,
@@ -66,11 +69,29 @@ class Empleado_SueldosController extends Controller
             can('listar-empleado-sueldos');
         }
 
+        // Limpiar: olvida memoria y vuelve a Activos + Todas mis empresas
+        if (ListadoFiltrosMemoriaSupport::solicitudLimpia($request)) {
+            ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
+
+            return redirect()->route('consultar_empleado_sueldos', [
+                'empresa_todas' => 1,
+            ]);
+        }
+
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        // Memoria: visita sin query restaura el último filtro
+        if (! ListadoFiltrosMemoriaSupport::requestTraeFiltros($request) && ! $forzarEstandar) {
+            $guardados = ListadoFiltrosMemoriaSupport::restaurar(self::SESSION_FILTROS);
+            if ($guardados !== []) {
+                return redirect()->route('consultar_empleado_sueldos', $guardados);
+            }
+        }
+
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(EmpleadoSueldosListadoColumnas::RECURSO, $usuarioId);
         $vistaActiva = null;
-        $forzarEstandar = $request->boolean('vista_estandar')
-            || $request->input('vista_modo') === 'estandar';
 
         if ($request->filled('vista_id')) {
             $vistaActiva = ListadoVistaSupport::findParaUsuario(
@@ -82,8 +103,6 @@ class Empleado_SueldosController extends Controller
             ! $forzarEstandar
             && ! $request->has('filtro_valor')
             && ! $request->has('qbe')
-            && ! $request->boolean('limpiar_filtros')
-            && ! $request->boolean('filtro_limpiar')
             && ! $request->has('filtro_estado')
             && ! $request->has('empresa_id')
             && ! $request->has('empresa_todas')
@@ -172,13 +191,18 @@ class Empleado_SueldosController extends Controller
         $filtrosQuery = EmpleadoSueldosListadoFiltros::paraQueryString($filtros);
         $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
-        if ($request->boolean('filtro_limpiar')) {
-            $filtrosQuery['filtro_limpiar'] = 1;
-        }
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
+        }
+
+        $page = (int) $request->input('page', 0);
+        if ($page > 1) {
+            $filtrosQuery['page'] = $page;
+        }
+        if (ListadoFiltrosMemoriaSupport::requestTraeFiltros($request)) {
+            ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS, $filtrosQuery);
         }
 
         return view('sueldos.empleado.index', [
@@ -247,12 +271,11 @@ class Empleado_SueldosController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
-
+        // Sin empresa_id en la request → Todas mis empresas (no la primera asignada).
         return EmpleadoSueldosListadoFiltros::resolverDesdeRequest(
             $request,
             $busquedaRuta,
-            $empresaDefault ? (int) $empresaDefault : null
+            null
         );
     }
 
@@ -606,6 +629,11 @@ class Empleado_SueldosController extends Controller
 
     public function darBaja(Request $request, $id)
     {
+        return $this->confirmarBajaDefinitiva($request, $id);
+    }
+
+    public function programarBaja(Request $request, $id)
+    {
         can('baja-empleado-sueldos');
         $request->validate([
             'fecha_egreso' => 'required|date',
@@ -615,7 +643,35 @@ class Empleado_SueldosController extends Controller
 
         try {
             $emp = $this->repository->findOrFail($id);
-            $this->ingresoService->darDeBaja(
+            $this->ingresoService->programarBaja(
+                $emp,
+                $request->input('fecha_egreso'),
+                $request->input('motivoegreso_id') ? (int) $request->input('motivoegreso_id') : null,
+                $request->input('comentario_baja')
+            );
+            $emp = $this->repository->findOrFail($id);
+            $this->sincronizarSaldosVacaciones($emp);
+            $this->moduloAvisoService->enviar('sueldos', 'empleado_baja_provisoria', (int) $emp->id);
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('editar_empleado_sueldos', ['id' => $id])
+            ->with('mensaje', 'Baja provisoria programada. El legajo sigue activo; se avisó a los destinatarios configurados.');
+    }
+
+    public function confirmarBajaDefinitiva(Request $request, $id)
+    {
+        can('baja-empleado-sueldos');
+        $request->validate([
+            'fecha_egreso' => 'required|date',
+            'motivoegreso_id' => 'nullable|integer|exists:motivoegreso_sueldos,id',
+            'comentario_baja' => 'nullable|string|max:80',
+        ]);
+
+        try {
+            $emp = $this->repository->findOrFail($id);
+            $this->ingresoService->confirmarBajaDefinitiva(
                 $emp,
                 $request->input('fecha_egreso'),
                 $request->input('motivoegreso_id') ? (int) $request->input('motivoegreso_id') : null,
@@ -627,7 +683,24 @@ class Empleado_SueldosController extends Controller
         }
 
         return redirect()->route('editar_empleado_sueldos', ['id' => $id])
-            ->with('mensaje', 'Baja registrada. Se actualizó la historia de ingresos/egresos.');
+            ->with('mensaje', 'Baja definitiva registrada. Se actualizó la historia de ingresos/egresos.');
+    }
+
+    public function anularBajaProvisoria(Request $request, $id)
+    {
+        can('baja-empleado-sueldos');
+        $request->validate(['comentario' => 'nullable|string|max:80']);
+
+        try {
+            $emp = $this->repository->findOrFail($id);
+            $this->ingresoService->anularBajaProvisoria($emp, $request->input('comentario'));
+            $this->sincronizarSaldosVacaciones($this->repository->findOrFail($id));
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('editar_empleado_sueldos', ['id' => $id])
+            ->with('mensaje', 'Baja provisoria anulada. El legajo quedó activo sin fecha de egreso.');
     }
 
     public function reincorporar(Request $request, $id)

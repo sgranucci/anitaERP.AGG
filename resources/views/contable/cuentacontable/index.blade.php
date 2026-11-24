@@ -88,7 +88,6 @@
 @endsection
 
 @section("scripts")
-@if ($vistaArbol ?? false)
 @php
     $pcUrlInspector = str_replace('999999991', '__ID__', route('actualizar_inspector_cuentacontable', ['id' => 999999991]));
     $pcUrlFicha = str_replace('999999991', '__ID__', route('editar_cuentacontable', ['id' => 999999991] + ($filtrosQuery ?? [])));
@@ -98,13 +97,15 @@ window.pcWorkbench = {
     puedeEditar: @json((bool) ($puedeEditarArbol ?? false)),
     urlInspector: @json($pcUrlInspector),
     urlFicha: @json($pcUrlFicha),
-    cuentaInicial: @json((int) request('cuenta', 0))
+    cuentaInicial: @json((int) request('cuenta', 0)),
+    empresaId: @json((int) ($filtros['empresa_id'] ?? 0)),
+    vistaArbol: @json((bool) ($vistaArbol ?? false))
 };
 </script>
-@endif
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/index.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -126,7 +127,7 @@ window.pcWorkbench = {
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => CuentacontableListadoFiltros::tieneCriteriosTexto($filtros ?? []),
                         'limpiarUrl' => $limpiarUrl,
-                        'placeholder' => 'Buscar código o nombre…',
+                        'placeholder' => 'Buscar código o nombre… (F1)',
                         'toggleTarget' => '#panel-filtros-cuentacontable',
                         'toggleId' => 'btn-toggle-filtros-cuentacontable',
                         'inputId' => 'filtro_valor',
@@ -157,4 +158,5 @@ window.pcWorkbench = {
 @if (! ($vistaArbol ?? false) && isset($cuentacontables) && method_exists($cuentacontables, 'links'))
     {{ $cuentacontables->appends($filtrosQuery ?? [])->links() }}
 @endif
+@include('includes.contable.modalconsultacuentacontable')
 @endsection

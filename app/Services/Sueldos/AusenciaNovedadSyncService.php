@@ -2,6 +2,7 @@
 
 namespace App\Services\Sueldos;
 
+use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Novedad_Sueldos;
@@ -33,8 +34,8 @@ class AusenciaNovedadSyncService
             return null;
         }
 
-        $conceptoId = (int) ($tipo->concepto_id ?? 0);
-        $debeGenerar = $conceptoId > 0
+        [$conceptoId, $codigo] = $this->resolverConceptoNovedad($ausencia, $tipo);
+        $debeGenerar = $conceptoId > 0 && $codigo > 0
             && in_array((string) $ausencia->estado, self::ESTADOS_GENERAN, true);
 
         $existente = Novedad_Sueldos::query()->where('ausencia_id', $ausencia->id)->first();
@@ -47,12 +48,6 @@ class AusenciaNovedadSyncService
                 ]);
             }
 
-            return $existente;
-        }
-
-        $concepto = $tipo->concepto;
-        $codigo = (int) ($concepto->codigo ?? 0);
-        if ($codigo <= 0) {
             return $existente;
         }
 
@@ -102,13 +97,43 @@ class AusenciaNovedadSyncService
             ]);
     }
 
+    /**
+     * Vacaciones: modalidad plus→422 / adelanto→420. Otros tipos: concepto del catálogo.
+     *
+     * @return array{0:int,1:int} [concepto_id, codigo]
+     */
+    private function resolverConceptoNovedad(Empleado_Ausencia_Sueldos $ausencia, Tipo_Ausencia_Sueldos $tipo): array
+    {
+        if ($tipo->esVacaciones()) {
+            $modalidad = (int) ($ausencia->modalidad_vacaciones ?? Empleado_Ausencia_Sueldos::MODALIDAD_VACACIONES_PLUS);
+            $codigo = $modalidad === Empleado_Ausencia_Sueldos::MODALIDAD_VACACIONES_ADELANTO ? 420 : 422;
+            $concepto = Concepto_Sueldos::query()->where('codigo', $codigo)->first(['id', 'codigo']);
+            if ($concepto) {
+                return [(int) $concepto->id, (int) $concepto->codigo];
+            }
+        }
+
+        $conceptoId = (int) ($tipo->concepto_id ?? 0);
+        $codigo = (int) (optional($tipo->concepto)->codigo ?? 0);
+
+        return [$conceptoId, $codigo];
+    }
+
     private function observacion(Empleado_Ausencia_Sueldos $ausencia, ?string $extra = null): string
     {
         $tipo = optional($ausencia->tipo)->nombre ?? 'Ausencia';
+        $modalidad = '';
+        if (optional($ausencia->tipo)->esVacaciones() && $ausencia->modalidad_vacaciones) {
+            $lab = Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES[(int) $ausencia->modalidad_vacaciones] ?? '';
+            if ($lab !== '') {
+                $modalidad = ' · '.$lab;
+            }
+        }
         $txt = sprintf(
-            'Desde ausencia #%d · %s · %s a %s · %s días',
+            'Desde ausencia #%d · %s%s · %s a %s · %s días',
             (int) $ausencia->id,
             $tipo,
+            $modalidad,
             Carbon::parse($ausencia->fecha_desde)->format('d/m/Y'),
             Carbon::parse($ausencia->fecha_hasta)->format('d/m/Y'),
             rtrim(rtrim(number_format((float) $ausencia->dias, 2, '.', ''), '0'), '.')

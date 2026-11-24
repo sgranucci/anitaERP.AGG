@@ -36,6 +36,8 @@ use App\Support\Ticket\AdministracionTicketListadoPreferenciasUsuario;
 use App\Support\Ticket\AdministracionTicketListadoResumen;
 use App\Support\Ticket\TicketEmpresaSupport;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use DB;
@@ -43,6 +45,10 @@ use Exception;
 
 class Administracion_TicketController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_administracion_ticket';
+
 	private $categoria_ticketRepository;
     private $subcategoria_ticketRepository;
     private $areadestinoRepository;
@@ -90,10 +96,18 @@ class Administracion_TicketController extends Controller
     {
         can('listar-ticket');
 
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'consulta_administracion_ticket', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
+
         $armado = $this->armarListado($request);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('ticket.administracion_ticket.index', $armado);
     }
@@ -693,6 +707,8 @@ class Administracion_TicketController extends Controller
     }
 
     public function limpiafiltro(Request $request) {
+        ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
+
         return redirect()->route('consulta_administracion_ticket');
 	}
 

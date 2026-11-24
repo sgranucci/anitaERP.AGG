@@ -54,9 +54,13 @@ Export: Pdf, Excel, Csv, con los filtros y el orden activos.
 
 Index de diseño (`ArticuloFerliController`), distinto del estándar. Workbench propio (`RECURSO = stock.producto_ferli`): QBE, diseñador, vistas y cortes. Conserva chips de estado, canal y estado de combinación, y las acciones de fila (combinaciones, diseño, técnica, contable, QR, precios). No comparte vistas ni etiquetas con el index estándar.
 
+### Memoria de filtros (sesión)
+
+Todo workbench recuerda la última consulta del usuario con `ListadoFiltrosMemoriaSupport` (clave por recurso). Visita sin query → redirect a lo guardado. Botón **Limpiar filtros** → `olvidar` + defaults del módulo (chips + QBE). No localStorage ni meter chips externos en `listado_vista`.
+
 ### Empleados de sueldos (`sueldos/empleado`)
 
-Los chips de **Estado** (Activos por defecto, Provisorios, Bajas, Todos) y **Empresa** (una empresa o Todas mis empresas) quedan **por encima** del QBE y se combinan con AND. No los reemplaza la consulta avanzada. Al cambiar de vista, limpiar el QBE o exportar, se conservan `filtro_estado`, `empresa_id` y `empresa_todas`. Una vista guardada no pisa esos filtros.
+Los chips de **Estado** (Activos por defecto, Provisorios, Bajas, Todos) y **Empresa** (una empresa o Todas mis empresas) quedan **por encima** del QBE y se combinan con AND. No los reemplaza la consulta avanzada. Al cambiar de vista, limpiar el QBE o exportar, se conservan `filtro_estado`, `empresa_id` y `empresa_todas`. Una vista guardada no pisa esos filtros. Sin memoria previa, empresa default = **Todas mis empresas** (no la primera empresa asignada). Limpiar filtros vuelve a Activos + Todas mis empresas y olvida la sesión.
 
 Barra propia: **Nuevo empleado**. La sincronización desde Anita y el vínculo de domicilios no van en pantalla: se corren por consola (`sueldos:sincronizar-empleados-anita` y `sueldos:vincular-domicilios`) si hacen falta. Grilla por defecto: Legajo, Nombre, CUIL, Empresa, Estado, Categoría, Ingreso, acciones al final. El diseñador puede mostrar el resto (documento, centro de costo, lugar, fechas, sueldo básico, etc.).
 

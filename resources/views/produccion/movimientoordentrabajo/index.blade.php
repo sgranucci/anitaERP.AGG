@@ -45,9 +45,10 @@
     $accionListado = $otId > 0
         ? route('consultamovimientoordentrabajo', ['id' => $otId])
         : route('movimientoordentrabajo');
+    // Listado general: limpia y olvida la memoria de filtros. En el contexto de una OT no hay memoria (se mantiene el reset previo).
     $limpiarUrl = $otId > 0
         ? route('consultamovimientoordentrabajo', ['id' => $otId] + $limpiarQ)
-        : route('movimientoordentrabajo', $limpiarQ);
+        : route('movimientoordentrabajo', ['limpiar_filtros' => 1]);
     $camposOrdenablesTheadBarra = MovimientoOrdentrabajoListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -141,7 +142,7 @@
                         </button>
                         @if (MovimientoOrdentrabajoListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

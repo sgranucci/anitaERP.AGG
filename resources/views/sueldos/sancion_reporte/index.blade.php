@@ -152,11 +152,7 @@
     use App\Support\Sueldos\SancionReporteListadoFiltros;
     $columnasVisibles = $columnasVisibles ?? [];
     $qbeAbierto = \App\Support\Listado\ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? []);
-    $limpiarQ = ['filtro_limpiar' => 1];
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarUrl = route('sancion_reporte_sueldos', $limpiarQ);
+    $limpiarUrl = route('sancion_reporte_sueldos', ['limpiar_filtros' => 1]);
     $camposOrdenablesTheadBarra = \App\Support\Sueldos\SancionReporteListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -214,26 +210,18 @@
                         'col_body' => 'col-lg-10',
                     ])
                     <div class="form-row">
-                        <div class="form-group col-md-2">
-                            <label class="small mb-0">Desde</label>
-                            <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] ?? '' }}">
-                        </div>
-                        <div class="form-group col-md-2">
-                            <label class="small mb-0">Hasta</label>
-                            <input type="date" name="fecha_hasta" class="form-control form-control-sm" value="{{ $filtros['fecha_hasta'] ?? '' }}">
-                        </div>
-                        <div class="form-group col-md-3">
+                        <div class="form-group col-md-4">
                             <label class="small mb-0">Apellido / nombre</label>
                             <input type="search" name="apellido" class="form-control form-control-sm" value="{{ $filtros['apellido'] ?? '' }}" placeholder="Apellido o nombre" autocomplete="off">
                         </div>
-                        <div class="form-group col-md-2">
+                        <div class="form-group col-md-3">
                             <label class="small mb-0">Legajo desde / hasta</label>
                             <div class="d-flex">
                                 <input type="number" name="legajo_desde" class="form-control form-control-sm mr-1" value="{{ $filtros['legajo_desde'] ?? '' }}" placeholder="Desde">
                                 <input type="number" name="legajo_hasta" class="form-control form-control-sm" value="{{ $filtros['legajo_hasta'] ?? '' }}" placeholder="Hasta">
                             </div>
                         </div>
-                        <div class="form-group col-md-3">
+                        <div class="form-group col-md-5">
                             <label class="small mb-0">Estado</label>
                             <select name="estado" class="form-control form-control-sm">
                                 <option value="">Todos</option>
@@ -316,11 +304,9 @@
                         <button type="button" id="btn-lw-buscar-rapida" class="btn btn-sm btn-primary">
                             <i class="fa fa-search"></i>
                         </button>
-                        @if ($hayTexto)
-                            <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
-                            </a>
-                        @endif
+                        <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning" title="Quita todos los filtros">
+                            <i class="fa fa-eraser"></i> Limpiar filtros
+                        </a>
                         @if (($ordenActualThead ?? []) !== [])
                             <a href="{{ $urlQuitarOrden }}" class="btn btn-sm btn-outline-secondary" title="Vuelve al orden de instalación y lo saca de la vista">
                                 <i class="fa fa-undo"></i> Orden estándar

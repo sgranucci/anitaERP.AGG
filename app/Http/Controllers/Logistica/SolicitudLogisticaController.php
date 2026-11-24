@@ -33,18 +33,31 @@ use App\Support\Logistica\SolicitudLogisticaListadoPreferenciasUsuario;
 use App\Support\Logistica\SolicitudLogisticaListadoQuery;
 use App\Support\Reportes\DompdfListadoSupport;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use Illuminate\Support\Facades\Storage;
 
 class SolicitudLogisticaController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_logistica_solicitud';
+
     public function index(Request $request)
     {
         $this->puedeEntrar();
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'logistica_solicitud', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $armado = $this->armarListado($request);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('logistica.solicitud.index', $armado + [
             'puedeCrear' => can('crear-logistica-solicitud', false),

@@ -6,6 +6,7 @@ namespace App\Support\Compras;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoQbeFormulaSupport;
 use App\Support\Listado\ListadoQbeSupport;
@@ -126,13 +127,7 @@ final class OrdencompraLegajoBandejaFiltros
      */
     public static function persistir(array $filtrosQuery): void
     {
-        if ($filtrosQuery === []) {
-            session()->forget(self::SESSION_FILTROS);
-
-            return;
-        }
-
-        session([self::SESSION_FILTROS => $filtrosQuery]);
+        ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS, $filtrosQuery);
     }
 
     /**
@@ -140,14 +135,12 @@ final class OrdencompraLegajoBandejaFiltros
      */
     public static function guardados(): array
     {
-        $guardados = session(self::SESSION_FILTROS, []);
-
-        return is_array($guardados) ? $guardados : [];
+        return ListadoFiltrosMemoriaSupport::restaurar(self::SESSION_FILTROS);
     }
 
     public static function olvidar(): void
     {
-        session()->forget(self::SESSION_FILTROS);
+        ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
     }
 
     /**

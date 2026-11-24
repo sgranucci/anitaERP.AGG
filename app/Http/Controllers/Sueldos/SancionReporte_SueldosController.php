@@ -11,6 +11,7 @@ use App\Repositories\Sueldos\Empleado_Sancion_SueldosRepositoryInterface;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
 use App\Support\Listado\ListadoLienzoSupport;
 use App\Support\Listado\ListadoOrdenamientoSupport;
@@ -26,6 +27,8 @@ use Illuminate\Http\Request;
 
 class SancionReporte_SueldosController extends Controller
 {
+    private const SESSION_FILTROS = 'filtros_sancion_reporte_sueldos';
+
     public function __construct(
         private Empleado_Sancion_SueldosRepositoryInterface $repository,
         private EmpresaRepositoryInterface $empresaRepository,
@@ -35,6 +38,25 @@ class SancionReporte_SueldosController extends Controller
     public function index(Request $request)
     {
         can('listar-sancion-reporte-sueldos');
+
+        if (ListadoFiltrosMemoriaSupport::solicitudLimpia($request)) {
+            ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
+            $permitidos = $this->empresaRepository->allFiltrado()->pluck('id')->map(fn ($id) => (int) $id)->all();
+            ReportePreferenciasUsuario::persistir(SancionReporteListadoFiltros::PREFERENCIAS_CLAVE, [
+                'empresa_ids' => $permitidos,
+                'consolidar_empresas' => true,
+            ]);
+
+            return redirect()->route('sancion_reporte_sueldos', ['consultar' => 1]);
+        }
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        if (! ListadoFiltrosMemoriaSupport::requestTraeFiltros($request) && ! $forzarEstandar) {
+            $guardados = ListadoFiltrosMemoriaSupport::restaurar(self::SESSION_FILTROS);
+            if ($guardados !== []) {
+                return redirect()->route('sancion_reporte_sueldos', $guardados);
+            }
+        }
 
         [$filtros, $vistaActiva, $forzarEstandar] = $this->filtrosDePantalla($request);
         if ($request->boolean('quitar_orden')) {
@@ -82,6 +104,13 @@ class SancionReporte_SueldosController extends Controller
         }
 
         $filtrosQuery = $this->queryDeFiltros($filtros, $columnasVisibles, $vistaActiva, $forzarEstandar, $request);
+        $page = (int) $request->input('page', 0);
+        if ($page > 1) {
+            $filtrosQuery['page'] = $page;
+        }
+        if (ListadoFiltrosMemoriaSupport::requestTraeFiltros($request)) {
+            ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS, $filtrosQuery);
+        }
         $tipoSel = ! empty($filtros['tipo_sancion_id'])
             ? Tipo_Sancion_Sueldos::query()->find((int) $filtros['tipo_sancion_id'])
             : null;
@@ -388,10 +417,11 @@ class SancionReporte_SueldosController extends Controller
     {
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $envio = $request->exists('fecha_desde')
-            || $request->has('empresa_ids')
+        $envio = $request->has('empresa_ids')
             || $request->exists('consolidar_empresas')
-            || $request->boolean('consultar');
+            || $request->boolean('consultar')
+            || $request->has('apellido')
+            || $request->has('estado');
 
         if (! $request->exists('consolidar_empresas')) {
             $filtros['consolidar_empresas'] = ReportePreferenciasUsuario::leerBool(
@@ -435,9 +465,6 @@ class SancionReporte_SueldosController extends Controller
         $filtrosQuery = SancionReporteListadoFiltros::paraQueryString($filtros, true);
         $filtrosQuery = array_merge($filtrosQuery, ListadoVisualSupport::paraQueryString($filtros));
         $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
-        if ($request->boolean('filtro_limpiar')) {
-            $filtrosQuery['filtro_limpiar'] = 1;
-        }
         if ($vistaActiva) {
             $filtrosQuery['vista_id'] = $vistaActiva->id;
         } elseif ($forzarEstandar) {

@@ -26,6 +26,7 @@ use App\Services\Solicitudpago\SolicitudpagoPaqueteMailPdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Listado\ListadoFiltrosMemoriaSupport;
 use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
@@ -213,7 +214,7 @@ class SolicitudpagoController extends Controller
 
         // Limpiar filtros de texto: borra recuerdo de sesión y conserva empresa externa
         if ($request->boolean('limpiar_filtros')) {
-            session()->forget(self::SESSION_FILTROS);
+            ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
             $filtrosEmpresa = SolicitudpagoListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
 
             return redirect()->route(
@@ -239,7 +240,7 @@ class SolicitudpagoController extends Controller
             $filtros = $this->filtrosWorkbench($request, $empresaDefault, $vistaActiva);
             $filtrosQuery = $this->queryWorkbench($filtros, $vistaActiva, $forzarEstandar);
             if ($request->boolean('quitar_orden')) {
-                session([self::SESSION_FILTROS => $filtrosQuery]);
+                ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS, $filtrosQuery);
                 return redirect()
                     ->route('consultar_solicitudpago', $filtrosQuery)
                     ->with('mensaje', 'Se volvió al orden estándar.');
@@ -255,12 +256,12 @@ class SolicitudpagoController extends Controller
                 || $page > 1
                 || $vistaActiva
             ) {
-                session([self::SESSION_FILTROS => $filtrosQuery]);
+                ListadoFiltrosMemoriaSupport::persistir(self::SESSION_FILTROS, $filtrosQuery);
             } else {
-                session()->forget(self::SESSION_FILTROS);
+                ListadoFiltrosMemoriaSupport::olvidar(self::SESSION_FILTROS);
             }
         } else {
-            $guardados = session(self::SESSION_FILTROS, []);
+            $guardados = ListadoFiltrosMemoriaSupport::restaurar(self::SESSION_FILTROS);
             if (is_array($guardados) && $guardados !== [] && ! $forzarEstandar) {
                 return redirect()->route('consultar_solicitudpago', $guardados);
             }

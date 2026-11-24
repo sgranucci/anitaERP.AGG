@@ -86,9 +86,7 @@ $(function () {
     $salaActual = (int) ($filtros['sala_id'] ?? 0);
     $presupuestoActivo = (string) ($filtros['presupuesto'] ?? '');
     $estadoActual = (string) ($filtros['estado'] ?? '');
-    $limpiarQ = OrdencompraListadoFiltros::paraQueryStringExternos($filtros ?? []);
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('consultar_ordencompra', $limpiarQ);
+    $limpiarUrl = route('consultar_ordencompra', ['limpiar_filtros' => 1]);
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $camposOrdenablesThead = OrdencompraListadoFiltros::camposOrdenables();
     $ordenActualThead = ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], $camposOrdenablesThead);
@@ -291,7 +289,7 @@ $(function () {
                         </button>
                         @if (OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

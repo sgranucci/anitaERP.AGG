@@ -93,22 +93,8 @@
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $columnasVisibles = $columnasVisibles ?? [];
     $estadoActual = $filtros['estado'] ?? EmpleadoEstados::ACTIVO;
-    $limpiarQ = [];
-    if ($estadoActual === '') {
-        $limpiarQ['filtro_estado'] = 'TODOS';
-    } elseif ($estadoActual !== EmpleadoEstados::ACTIVO) {
-        $limpiarQ['filtro_estado'] = $estadoActual;
-    }
-    if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
-        $limpiarQ['empresa_todas'] = 1;
-    } elseif (! empty($filtros['empresa_id'])) {
-        $limpiarQ['empresa_id'] = (int) $filtros['empresa_id'];
-    }
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('consultar_empleado_sueldos', $limpiarQ);
+    // Limpiar total: olvida sesión + Activos + Todas mis empresas
+    $limpiarUrl = route('consultar_empleado_sueldos', ['limpiar_filtros' => 1]);
     $camposOrdenablesTheadBarra = \App\Support\Sueldos\EmpleadoSueldosListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -199,8 +185,8 @@
                             <i class="fa fa-search"></i>
                         </button>
                         @if (EmpleadoSueldosListadoFiltros::tieneCriteriosTexto($filtros ?? []))
-                            <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                            <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning" title="Quita todos los filtros y vuelve a Activos + Todas mis empresas">
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

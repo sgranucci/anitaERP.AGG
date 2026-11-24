@@ -113,7 +113,7 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                         'formId' => 'form-filtros-administracion-ticket',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => AdministracionTicketListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('consulta_administracion_ticket'),
+                        'limpiarUrl' => route('consulta_administracion_ticket', ['limpiar_filtros' => 1]),
                         'placeholder' => 'Búsqueda rápida (ID, título, comentario, técnico…)',
                         'toggleTarget' => '#panel-filtros-administracion-ticket',
                         'toggleId' => 'btn-toggle-filtros-administracion-ticket',

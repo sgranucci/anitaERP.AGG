@@ -125,7 +125,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $retornoImpresionNd = \App\Support\Ventas\ComprobanteImpresionSesionUrlSupport::retornoRequestActual();
-    $limpiarUrl = route('cheque', ChequeListadoFiltros::paraQueryStringExternos($filtros ?? []));
+    $limpiarUrl = route('cheque', ['limpiar_filtros' => 1]);
     $camposOrdenablesThead = ChequeListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -288,7 +288,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                         </button>
                         @if (ChequeListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

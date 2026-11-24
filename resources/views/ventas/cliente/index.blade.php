@@ -38,7 +38,7 @@ Clientes
 
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $retornoCc = \App\Support\Listado\QueryRetornoListado::queryStringDesdeRequestActual();
-    $limpiarUrl = route('cliente');
+    $limpiarUrl = route('cliente', ['limpiar_filtros' => 1]);
     $esBierzo = EntornoEmpresaSupport::esElBierzo();
     $filtroCodigo = trim((string) ($filtros['codigo'] ?? ''));
     $filtroNombre = trim((string) ($filtros['nombre'] ?? ''));
@@ -161,7 +161,7 @@ Clientes
                         </button>
                         @if ($tieneQbe || (($filtros['valor'] ?? '') !== '') || $filtroCodigo !== '' || $filtroNombre !== '')
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

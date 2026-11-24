@@ -36,7 +36,7 @@ Proveedores
     use App\Support\Compras\ProveedorListadoColumnas;
 
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
-    $limpiarUrl = route('proveedor');
+    $limpiarUrl = route('proveedor', ['limpiar_filtros' => 1]);
     $filtroEmpresaActivo = ProveedorListadoFiltros::filtroEmpresaActivo();
     $filtroCodigo = trim((string) ($filtros['codigo'] ?? ''));
     $columnasVisibles = $columnasVisibles ?? ProveedorListadoColumnas::defaultsVisibles();
@@ -151,7 +151,7 @@ Proveedores
                             </button>
                         @elseif ($tieneQbe || (($filtros['valor'] ?? '') !== '') || $filtroCodigo !== '')
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

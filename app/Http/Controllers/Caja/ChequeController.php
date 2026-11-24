@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Caja;
 
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionCheque;
@@ -59,6 +60,10 @@ use InvalidArgumentException;
 
 class ChequeController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_cheque';
+
 	private $repository;
     private $cuentacajaRepository;
     private $chequeraRepository;
@@ -104,6 +109,12 @@ class ChequeController extends Controller
     public function index(Request $request)
     {
         can('listar-cheque');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'cheque', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(ChequeListadoColumnas::RECURSO, $usuarioId);
@@ -212,6 +223,8 @@ $catalogo = ChequeListadoColumnas::catalogoActivo();
             && ChequeNdConfigSupport::habilitado();
         $puede_depositar_cheque = can('editar-cheque', false) || can('actualizar-cheque', false);
         $puede_traer_cheque_anita = $this->puedeTraerChequeAnita();
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('caja.cheque.index', [
             'datas' => $datas,

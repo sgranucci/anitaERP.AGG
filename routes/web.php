@@ -6341,6 +6341,9 @@ Route::delete('sueldos/empleado/{id}', 'Sueldos\Empleado_SueldosController@elimi
 Route::post('sueldos/empleado/{id}/autorizar', 'Sueldos\Empleado_SueldosController@autorizar')->name('autorizar_empleado_sueldos');
 Route::get('sueldos/empleado/{id}/autorizar-aviso', 'Sueldos\Empleado_SueldosController@autorizarDesdeAviso')->name('autorizar_empleado_sueldos_desde_aviso');
 Route::post('sueldos/empleado/{id}/baja', 'Sueldos\Empleado_SueldosController@darBaja')->name('baja_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/baja-provisoria', 'Sueldos\Empleado_SueldosController@programarBaja')->name('baja_provisoria_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/baja-definitiva', 'Sueldos\Empleado_SueldosController@confirmarBajaDefinitiva')->name('baja_definitiva_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/anular-baja-provisoria', 'Sueldos\Empleado_SueldosController@anularBajaProvisoria')->name('anular_baja_provisoria_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/reincorporar', 'Sueldos\Empleado_SueldosController@reincorporar')->name('reincorporar_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/bases', 'Sueldos\Empleado_SueldosController@guardarBase')->name('guardar_base_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/bases/vigencias', 'Sueldos\Empleado_SueldosController@guardarVigenciasLote')->name('guardar_vigencias_empleado_sueldos');

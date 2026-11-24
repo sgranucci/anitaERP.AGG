@@ -38,11 +38,16 @@ use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Reportes\DompdfListadoSupport;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class ImportacionController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_importacion';
+
     public function __construct(
         private readonly ImportacionRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
@@ -55,6 +60,12 @@ class ImportacionController extends Controller
     public function index(Request $request)
     {
         can('listar-importacion');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'importacion', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $recurso = ImportacionListadoColumnas::RECURSO;
@@ -164,6 +175,8 @@ class ImportacionController extends Controller
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
         }
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('compras.importacion.index', [
             'datas' => $datas,

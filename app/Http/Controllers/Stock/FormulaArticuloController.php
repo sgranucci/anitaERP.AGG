@@ -19,6 +19,7 @@ use App\Services\Stock\FormulaArticuloVinculoService;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoExportPresentacionSupport;
@@ -42,6 +43,10 @@ use Illuminate\Support\Facades\Log;
 
 class FormulaArticuloController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = FormulaArticuloListadoFiltros::SESSION_FILTROS;
+
     public function __construct(
         private Formula_ArticuloRepositoryInterface $formulaArticuloRepository,
         private FormulaArticuloQueryInterface $formulaArticuloQuery,
@@ -56,25 +61,26 @@ class FormulaArticuloController extends Controller
     {
         can('listar-formula-articulo');
 
-        if (! FormulaArticuloListadoFiltros::requestTraeFiltros($request)) {
-            $guardados = FormulaArticuloListadoFiltros::guardados();
-            if ($guardados !== []) {
-                $redirect = redirect()->route('consultar_formula_articulo', $guardados);
-                foreach (['mensaje', 'errores', 'error'] as $flash) {
-                    $valor = session($flash);
-                    if ($valor) {
-                        $redirect->with($flash, $valor);
-                    }
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'consultar_formula_articulo', [], $forzarEstandar);
+        if ($redir) {
+            // Conserva flashes (mensaje/errores) a través del redirect de restauración/limpieza.
+            foreach (['mensaje', 'errores', 'error'] as $flash) {
+                $valor = session($flash);
+                if ($valor) {
+                    $redir->with($flash, $valor);
                 }
-
-                return $redirect;
             }
+
+            return $redir;
         }
 
         $armado = $this->armarListado($request);
         if ($armado instanceof RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('stock.formula_articulo.index', $armado);
     }
@@ -766,17 +772,6 @@ class FormulaArticuloController extends Controller
             $filtrosQuery['vista_id'] = $vistaActiva->id;
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
-        }
-
-        if ($request->boolean('filtro_limpiar')) {
-            FormulaArticuloListadoFiltros::olvidar();
-        } elseif (FormulaArticuloListadoFiltros::requestTraeFiltros($request)) {
-            $page = (int) $request->query('page', 0);
-            $guardar = $filtrosQuery;
-            if ($page > 1) {
-                $guardar['page'] = $page;
-            }
-            FormulaArticuloListadoFiltros::persistir($guardar);
         }
 
         return [

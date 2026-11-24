@@ -95,6 +95,7 @@ use Auth;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -103,6 +104,10 @@ use Mail;
 
 class ArticuloController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_articulo';
+
     private $articuloRepository;
 
     private $articulo_cajaRepository;
@@ -216,6 +221,12 @@ class ArticuloController extends Controller
     public function index(Request $request)
     {
         can('listar-articulos');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'articulo', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(ArticuloListadoColumnas::RECURSO, $usuarioId);
@@ -344,6 +355,8 @@ class ArticuloController extends Controller
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
         }
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('stock.articulo.index', [
             'articulos' => $articulos,

@@ -119,6 +119,14 @@ class Empleado_AusenciaSueldosController extends Controller
             $anioImputacion = (int) $desde->year;
         }
 
+        $modalidad = null;
+        if ($tipo->esVacaciones()) {
+            $modalidadRaw = (int) $request->input('modalidad_vacaciones', Empleado_Ausencia_Sueldos::MODALIDAD_VACACIONES_PLUS);
+            $modalidad = isset(Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES[$modalidadRaw])
+                ? $modalidadRaw
+                : Empleado_Ausencia_Sueldos::MODALIDAD_VACACIONES_PLUS;
+        }
+
         return [
             'empleado_id' => $empleado->id,
             'tipo_ausencia_id' => $tipo->id,
@@ -127,6 +135,7 @@ class Empleado_AusenciaSueldosController extends Controller
             'fecha_hasta' => $hasta->toDateString(),
             'dias' => (float) $dias,
             'tipo_dias' => $tipoDias,
+            'modalidad_vacaciones' => $modalidad,
             'estado' => $request->input('estado'),
             'observacion' => $request->input('observacion'),
             'usuario_id' => $this->usuarioId(),

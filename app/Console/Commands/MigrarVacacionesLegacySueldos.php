@@ -13,13 +13,13 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Migra el consumo real de vacaciones desde Anita (vacliq) al ledger del ERP.
+ * Completa el consumo de vacaciones desde Anita (vacliq) cuando NO hay vacempl.
  *
- * Criterio confirmado: vacliq es la fuente de la verdad de los días efectivamente
- * tomados/liquidados (una fila por tramo/liquidación → soporta vacaciones fraccionadas).
- * El devengamiento (saldo teórico) se recalcula por antigüedad (LCT) en el mismo paso.
+ * Preferir `sueldos:importar-plan-vacaciones-anita --ejecutar` (fechas reales vía vacempl).
+ * Este comando solo cubre períodos anteriores a AnitaVacacionPlanImportService::ANIO_DESDE
+ * o huecos sin plan, con fechas sintéticas (1/1 del año).
  *
- * Idempotente: borra las ausencias migradas previas (marca MIGRACION) antes de reinsertar.
+ * Idempotente: borra las ausencias con marca vacliq antes de reinsertar.
  * Solo lectura contra Anita.
  */
 class MigrarVacacionesLegacySueldos extends Command
@@ -93,7 +93,7 @@ class MigrarVacacionesLegacySueldos extends Command
             if ($legajo <= 0 || $dias <= 0) {
                 continue;
             }
-            // 2026 en adelante entra por el plan (vacempl) con la fecha real de salida.
+            // Desde ANIO_DESDE el plan vacempl trae tramos con fecha real.
             if ($this->anioDesdePeriodo($periodo) >= AnitaVacacionPlanImportService::ANIO_DESDE) {
                 continue;
             }

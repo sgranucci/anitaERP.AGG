@@ -18,6 +18,7 @@ return [
      */
     'programados' => [
         'sueldos.libreta_sanitaria_pendiente' => 'sueldos:avisar-libreta-sanitaria',
+        'sueldos.empleado_baja_provisoria' => 'sueldos:avisar-baja-provisoria',
         'caja.cheques_aging' => 'caja:avisar-cheques-aging',
         'compras.ordencompra_alertas_abiertas' => 'compras:alertas-ordencompra-abiertas',
         'compras.entrega_dia_sin_recepcion' => 'compras:avisar-entrega-dia-sin-recepcion',
@@ -101,6 +102,7 @@ return [
     */
     'acciones_tipadas' => [
         'sueldos.libreta_sanitaria_pendiente' => 'comando_artisan',
+        'sueldos.empleado_baja_provisoria' => 'comando_artisan',
         'caja.cheques_aging' => 'comando_artisan',
         'compras.ordencompra_alertas_abiertas' => 'comando_artisan',
         'compras.entrega_dia_sin_recepcion' => 'comando_artisan',
@@ -203,6 +205,7 @@ return [
         'contable.bien_uso_provisorio' => App\Services\Configuracion\Handlers\ContableBienUsoProvisorioAvisoHandler::class,
         'uif.cliente_alta' => App\Services\Configuracion\Handlers\UifClienteAltaAvisoHandler::class,
         'sueldos.empleado_alta_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoAltaProvisoriaAvisoHandler::class,
+        'sueldos.empleado_baja_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoBajaProvisoriaAvisoHandler::class,
         'sueldos.libreta_sanitaria_pendiente' => App\Services\Configuracion\Handlers\SueldosLibretaSanitariaAvisoHandler::class,
         'caja.cheques_aging' => App\Services\Configuracion\Handlers\CajaChequesAgingAvisoHandler::class,
         'ticket.alta_tecnologia' => App\Services\Configuracion\Handlers\TicketAltaTecnologiaAvisoHandler::class,

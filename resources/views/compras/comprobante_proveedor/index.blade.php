@@ -75,14 +75,7 @@
     $empresaScope = $filtros['empresa_scope'] ?? 'una';
     $empresaActual = (int) ($filtros['empresa_id'] ?? 0);
     $estadoActual = (string) ($filtros['estado'] ?? ComprobanteProveedorEstados::FILTRO_TODOS);
-    $limpiarQ = ComprobanteProveedorListadoFiltros::paraQueryStringExternos($filtros ?? []);
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    } elseif (! empty($filtros['vista_estandar'])) {
-        $limpiarQ['vista_estandar'] = 1;
-    }
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('comprobante_proveedor', $limpiarQ);
+    $limpiarUrl = route('comprobante_proveedor', ['limpiar_filtros' => 1]);
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $puedeVerComprobante = can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false);
     $camposOrdenablesThead = ComprobanteProveedorListadoFiltros::camposOrdenables();
@@ -191,7 +184,7 @@
                         </button>
                         @if (ComprobanteProveedorListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

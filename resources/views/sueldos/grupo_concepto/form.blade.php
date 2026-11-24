@@ -5,6 +5,15 @@
     $sel = array_map('intval', $sel);
 @endphp
 
+<div class="alert alert-light border small mb-3">
+    <strong>Cómo se modifican los grupos</strong>
+    <ul class="mb-0 pl-3">
+        <li>Acá se edita el <strong>maestro</strong>: código, descripción y qué conceptos incluye el grupo.</li>
+        <li>Qué grupos tiene cada empleado se asigna en el legajo (solapa <strong>Liquidación</strong> → Grupos de conceptos).</li>
+        <li>Las fórmulas Anita leen solo los <strong>primeros 3 códigos</strong> del legajo (<code>emp_grp1..3</code>); el resto suma al set de liquidación pero no al espejo Anita.</li>
+    </ul>
+</div>
+
 @include('includes.form-empresa-asignada', [
     'empresa_query' => $empresa_query ?? collect(),
     'empresa_id' => old('empresa_id', $d->empresa_id ?? null),

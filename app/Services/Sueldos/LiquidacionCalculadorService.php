@@ -13,6 +13,7 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use App\Support\Sueldos\ConceptoTipo;
+use App\Support\Sueldos\EmpleadoBajaSupport;
 use App\Support\Sueldos\EmpleadoEstados;
 use App\Support\Sueldos\Formula\ContextoLiquidacion;
 use App\Support\Sueldos\Formula\EvaluadorFormula;
@@ -83,12 +84,19 @@ class LiquidacionCalculadorService
         $overrides = $this->overridesConceptoAcumulador();
         $empleados = $this->empleados($liquidacion);
         $parametros = $this->parametros($liquidacion);
+        $egresosAviso = $this->egresosEnPeriodoParaAviso($empleados, $liquidacion);
 
         if ($conceptos->isEmpty()) {
-            return ['recibos' => 0, 'total_neto' => 0.0, 'total_remunerativo' => 0.0, 'sin_conceptos' => true];
+            return [
+                'recibos' => 0,
+                'total_neto' => 0.0,
+                'total_remunerativo' => 0.0,
+                'sin_conceptos' => true,
+                'egresos_periodo' => $egresosAviso,
+            ];
         }
 
-        return DB::transaction(function () use ($liquidacion, $conceptos, $acumDefs, $overrides, $empleados, $parametros) {
+        return DB::transaction(function () use ($liquidacion, $conceptos, $acumDefs, $overrides, $empleados, $parametros, $egresosAviso) {
             // Regenera toda la corrida (motor + eventual import auxconf de paridad).
             EloquentAuditDeleteSupport::each(
                 Liquidacion_Detalle_Sueldos::query()->where('liquidacion_id', $liquidacion->id)
@@ -230,8 +238,44 @@ class LiquidacionCalculadorService
                 'sin_conceptos' => false,
                 'errores_formula' => $erroresFormula,
                 'errores_formula_count' => count($erroresFormula),
+                'egresos_periodo' => $egresosAviso,
             ];
         });
+    }
+
+    /**
+     * Legajos del universo con fecha de egreso en el período (provisoria o definitiva).
+     *
+     * @param  \Illuminate\Support\Collection<int, Empleado_Sueldos>  $empleados
+     * @return list<array{legajo:int|string, nombre:string, fecha_egreso:string, modo:string}>
+     */
+    private function egresosEnPeriodoParaAviso($empleados, Liquidacion_Sueldos $liq): array
+    {
+        $desde = $liq->periodo_desde;
+        $hasta = $liq->periodo_hasta;
+        if (! $desde || ! $hasta) {
+            if ($liq->periodo_anio && $liq->periodo_mes) {
+                $desde = Carbon::create((int) $liq->periodo_anio, (int) $liq->periodo_mes, 1)->toDateString();
+                $hasta = Carbon::parse($desde)->endOfMonth()->toDateString();
+            } else {
+                return [];
+            }
+        }
+
+        $out = [];
+        foreach ($empleados as $emp) {
+            if (! EmpleadoBajaSupport::egresoEnPeriodo($emp, $desde, $hasta)) {
+                continue;
+            }
+            $out[] = [
+                'legajo' => $emp->legajo,
+                'nombre' => (string) ($emp->nombre ?? ''),
+                'fecha_egreso' => Carbon::parse($emp->fecha_egreso)->format('d/m/Y'),
+                'modo' => EmpleadoBajaSupport::esBajaProvisoria($emp) ? 'provisoria' : 'definitiva',
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -1069,13 +1113,10 @@ class LiquidacionCalculadorService
             ->with(['categoria', 'motivoegreso'])
             ->orderBy('legajo');
 
-        // Liquidacion final: empleados dados de baja (o con fecha de egreso) en el periodo.
-        // El resto de corridas: solo activos.
+        // Liquidacion final: egreso en el período (provisoria A+fecha o definitiva B).
+        // Resto: activos (incluye baja provisoria: siguen en nómina hasta confirmar definitiva).
         if ($liq->tipo === 'final') {
-            $query->where(function ($q) {
-                $q->where('estado', EmpleadoEstados::BAJA)
-                    ->orWhereNotNull('fecha_egreso');
-            });
+            $query->whereNotNull('fecha_egreso');
             if ($liq->periodo_desde && $liq->periodo_hasta) {
                 $query->whereBetween('fecha_egreso', [$liq->periodo_desde, $liq->periodo_hasta]);
             } elseif ($liq->periodo_anio && $liq->periodo_mes) {

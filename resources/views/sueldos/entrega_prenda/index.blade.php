@@ -101,19 +101,8 @@
     use App\Support\Sueldos\EntregaPrendaListadoFiltros;
     $columnasVisibles = $columnasVisibles ?? [];
     $qbeAbierto = \App\Support\Listado\ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? []);
-    // Conserva empresa (chip) y vista; limpia año, fechas, agrupamiento, texto y QBE.
-    $limpiarQ = ['filtro_limpiar' => 1, 'consultar' => 1, 'anio' => ''];
-    if (($filtros['empresa_scope'] ?? '') === 'todas') {
-        $limpiarQ['empresa_todas'] = 1;
-    } elseif (! empty($filtros['empresa_id'])) {
-        $limpiarQ['empresa_id'] = (int) $filtros['empresa_id'];
-    } else {
-        $limpiarQ['empresa_todas'] = 1;
-    }
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarUrl = route('entrega_prenda_reporte', $limpiarQ);
+    // Limpia año, fechas, agrupamiento, texto y QBE, y olvida la memoria de filtros (vuelve a Todas mis empresas).
+    $limpiarUrl = route('entrega_prenda_reporte', ['limpiar_filtros' => 1]);
     $camposOrdenablesTheadBarra = \App\Support\Sueldos\EntregaPrendaListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -205,7 +194,7 @@
                             <button type="submit" class="btn btn-primary btn-sm"><i class="fa fa-search"></i> Consultar</button>
                             @if ($mostrarLimpiar)
                                 <a href="{{ $limpiarUrl }}" class="btn btn-outline-warning btn-sm" title="Limpiar año, fechas, agrupamiento y búsqueda">
-                                    <i class="fa fa-eraser"></i> Limpiar
+                                    <i class="fa fa-eraser"></i> Limpiar filtros
                                 </a>
                             @endif
                         </div>
@@ -252,7 +241,7 @@
                         </button>
                         @if ($mostrarLimpiar)
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning" title="Limpiar año, fechas, agrupamiento y búsqueda">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

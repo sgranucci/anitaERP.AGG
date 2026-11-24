@@ -179,13 +179,9 @@ class SancionReporteListadoFiltros
             $empresaIds = [(int) $request->input('empresa_id')];
         }
 
-        $envio = $request->exists('fecha_desde') || $request->exists('fecha_hasta') || $request->has('empresa_ids') || $request->filled('empresa_id');
-        $fechaDesde = $envio
-            ? trim((string) $request->input('fecha_desde', ''))
-            : date('Y-01-01');
-        $fechaHasta = $envio
-            ? trim((string) $request->input('fecha_hasta', ''))
-            : date('Y-m-d');
+        // Fechas opcionales: vacías = sin restringir (ya no hay Desde/Hasta en la consulta).
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
 
         $estado = trim((string) $request->input('estado', ''));
         if ($estado !== '' && ! isset(EmpleadoSancionSupport::ESTADOS[$estado])) {
@@ -246,8 +242,8 @@ class SancionReporteListadoFiltros
             'busqueda' => '',
             'empresa_ids' => [],
             'consolidar_empresas' => true,
-            'fecha_desde' => date('Y-01-01'),
-            'fecha_hasta' => date('Y-m-d'),
+            'fecha_desde' => '',
+            'fecha_hasta' => '',
             'apellido' => '',
             'tipo_sancion_id' => null,
             'motivo_sancion_id' => null,
@@ -268,10 +264,15 @@ class SancionReporteListadoFiltros
     public static function paraQueryString(array $filtros, bool $consultar = false): array
     {
         $params = [
-            'fecha_desde' => $filtros['fecha_desde'] ?? '',
-            'fecha_hasta' => $filtros['fecha_hasta'] ?? '',
             'consolidar_empresas' => ! empty($filtros['consolidar_empresas']) ? 1 : 0,
         ];
+        // Solo propagar fechas si vienen (p. ej. QBE/export legacy); la UI ya no las pide.
+        if (($filtros['fecha_desde'] ?? '') !== '') {
+            $params['fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (($filtros['fecha_hasta'] ?? '') !== '') {
+            $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
         foreach ($filtros['empresa_ids'] ?? [] as $empresaId) {
             $params['empresa_ids'][] = (int) $empresaId;
         }

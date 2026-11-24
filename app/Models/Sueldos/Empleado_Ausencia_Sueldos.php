@@ -20,6 +20,7 @@ class Empleado_Ausencia_Sueldos extends Model implements Auditable
         'fecha_hasta',
         'dias',
         'tipo_dias',
+        'modalidad_vacaciones',
         'estado',
         'liquidacion_id',
         'certificado_archivo',
@@ -36,6 +37,7 @@ class Empleado_Ausencia_Sueldos extends Model implements Auditable
         'fecha_desde' => 'date',
         'fecha_hasta' => 'date',
         'dias' => 'decimal:2',
+        'modalidad_vacaciones' => 'integer',
         'liquidacion_id' => 'integer',
         'aprobado_at' => 'datetime',
     ];
@@ -47,6 +49,13 @@ class Empleado_Ausencia_Sueldos extends Model implements Auditable
         'liquidada' => 'Liquidada',
         'anulada' => 'Anulada',
     ];
+
+    /** Anita LVAC: 1 = plus (concepto 422), 2 = adelanto (concepto 420). */
+    public const MODALIDAD_VACACIONES_PLUS = Liquidacion_Sueldos::TIPO_VACACIONES_PLUS;
+
+    public const MODALIDAD_VACACIONES_ADELANTO = Liquidacion_Sueldos::TIPO_VACACIONES_ADELANTO;
+
+    public const MODALIDADES_VACACIONES = Liquidacion_Sueldos::TIPOS_VACACIONES;
 
     /** Estados que efectivamente consumen saldo de vacaciones. */
     public const ESTADOS_CONSUMEN = ['tomada', 'liquidada'];

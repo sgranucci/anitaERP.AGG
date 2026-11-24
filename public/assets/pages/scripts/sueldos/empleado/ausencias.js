@@ -54,6 +54,7 @@
             } else {
                 host().html(resp.html);
             }
+            toggleModalidadVacaciones();
         }
         aviso(resp && resp.mensaje ? resp.mensaje : null, 'ok');
     }
@@ -65,6 +66,7 @@
         }
         $.get(url).done(function (resp) {
             host().html(resp.html || '');
+            toggleModalidadVacaciones();
             if (typeof window.focusSolapaEmpleado === 'function') {
                 window.focusSolapaEmpleado('#tab-ausencias');
             }
@@ -82,9 +84,20 @@
             fecha_hasta: $('#ausencia_hasta').val(),
             dias: $('#ausencia_dias').val(),
             tipo_dias: $('#ausencia_tipo_dias').val(),
+            modalidad_vacaciones: $('#ausencia_modalidad_wrap').is(':visible')
+                ? $('#ausencia_modalidad').val()
+                : '',
             estado: $('#ausencia_estado').val(),
             observacion: $('#ausencia_obs').val()
         };
+    }
+
+    function toggleModalidadVacaciones() {
+        var esVac = String($('#ausencia_tipo option:selected').data('vacaciones') || '0') === '1';
+        $('#ausencia_modalidad_wrap').toggle(esVac);
+        if (!esVac) {
+            $('#ausencia_modalidad').val('1');
+        }
     }
 
     function resetForm() {
@@ -96,6 +109,7 @@
         $('#ausencia_anio').val('');
         $('#ausencia_obs').val('');
         $('#ausencia_estado').val('tomada');
+        $('#ausencia_modalidad').val('1');
         $('#ausencia-form-titulo').text('Registrar ausencia');
         $('#btn-cancelar-ausencia').addClass('d-none');
         $('#ausencia_tipo').trigger('change');
@@ -196,6 +210,7 @@
         if (td) {
             $('#ausencia_tipo_dias').val(td);
         }
+        toggleModalidadVacaciones();
         autoDias();
     });
 
@@ -221,8 +236,10 @@
         $('#ausencia_hasta').val(a.fecha_hasta || '');
         $('#ausencia_dias').val(a.dias || '');
         $('#ausencia_tipo_dias').val(a.tipo_dias || 'corridos');
+        $('#ausencia_modalidad').val(a.modalidad_vacaciones || '1');
         $('#ausencia_estado').val(a.estado || 'tomada');
         $('#ausencia_obs').val(a.observacion || '');
+        $('#ausencia_tipo').trigger('change');
         $('#ausencia-form-titulo').text('Editar ausencia #' + a.id);
         $('#btn-cancelar-ausencia').removeClass('d-none');
 

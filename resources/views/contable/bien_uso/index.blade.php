@@ -63,25 +63,7 @@
     $qsQuitarOrden['quitar_orden'] = 1;
     $urlQuitarOrden = route('bien_uso', $qsQuitarOrden);
     $estadoActual = $filtros['estado'] ?? 'A';
-    $limpiarQ = [];
-    if ($estadoActual === '') {
-        $limpiarQ['filtro_estado'] = 'TODOS';
-    } elseif ($estadoActual !== 'A') {
-        $limpiarQ['filtro_estado'] = $estadoActual;
-    }
-    if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
-        $limpiarQ['empresa_todas'] = 1;
-    } elseif (! empty($filtros['empresa_id'])) {
-        $limpiarQ['empresa_id'] = (int) $filtros['empresa_id'];
-    }
-    if (! empty($filtros['centrocosto_id'])) {
-        $limpiarQ['filtro_centrocosto_id'] = (int) $filtros['centrocosto_id'];
-    }
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('bien_uso', $limpiarQ);
+    $limpiarUrl = route('bien_uso', ['limpiar_filtros' => 1]);
 @endphp
 
 @section('contenido')
@@ -166,7 +148,7 @@
                         </button>
                         @if (BienUsoListadoFiltros::tieneCriteriosTexto($filtros ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

@@ -196,8 +196,8 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                             <i class="fa fa-search"></i>
                         </button>
                         @if (ArticuloListadoFiltros::tieneCriteriosTexto($filtros ?? []))
-                            <a href="{{ route('articulo') }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                            <a href="{{ route('articulo', ['limpiar_filtros' => 1]) }}" class="btn btn-sm btn-outline-warning">
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

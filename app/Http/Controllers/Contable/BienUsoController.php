@@ -28,9 +28,14 @@ use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\BienUsoAsignacionSupport;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 
 class BienUsoController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_bien_uso';
+
     private BienUsoRepositoryInterface $repository;
 
     private EmpresaRepositoryInterface $empresaRepository;
@@ -44,6 +49,12 @@ class BienUsoController extends Controller
     public function index(Request $request)
     {
         can('listar-bien-uso');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'bien_uso', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $usuarioId = auth()->id() ? (int) auth()->id() : null;
         $vistas = ListadoVistaSupport::listarParaUsuario(BienUsoListadoColumnas::RECURSO, $usuarioId);
@@ -158,6 +169,8 @@ class BienUsoController extends Controller
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
         }
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('contable.bien_uso.index', [
             'datas' => $datas,

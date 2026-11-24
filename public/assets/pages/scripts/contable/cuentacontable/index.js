@@ -1,6 +1,9 @@
 $(function () {
     var $arbol = $('#pc-arbol');
     var cfg = window.pcWorkbench || null;
+    var irACuentaEnArbol = null;
+
+    $('#filtro_valor').attr('title', 'F1: consulta de cuenta · Enter: filtrar listado');
 
     if ($arbol.length) {
         $arbol.on('click', '.pc-nodo__toggle', function (e) {
@@ -28,9 +31,11 @@ $(function () {
         });
 
         if (cfg) {
-            iniciarInspector($arbol, cfg);
+            irACuentaEnArbol = iniciarInspector($arbol, cfg);
         }
     }
+
+    activarConsultaF1PlanCuentas(cfg, irACuentaEnArbol);
 
     $(document).on('click', '.eliminar-cuentacontable', function (e) {
         e.preventDefault();
@@ -119,15 +124,25 @@ $(function () {
             guardarInspector();
         });
 
-        if (cfg.cuentaInicial) {
-            var $ini = $arbol.find('.pc-nodo[data-id="' + cfg.cuentaInicial + '"]').first();
-            if ($ini.length) {
-                expandirHasta($ini);
-                abrirInspector($ini);
-                if ($ini[0].scrollIntoView) {
-                    $ini[0].scrollIntoView({ block: 'center' });
-                }
+        function irACuenta(cuentaId) {
+            var id = String(cuentaId || '');
+            if (!id) {
+                return false;
             }
+            var $nodo = $arbol.find('.pc-nodo[data-id="' + id + '"]').first();
+            if (!$nodo.length) {
+                return false;
+            }
+            expandirHasta($nodo);
+            abrirInspector($nodo);
+            if ($nodo[0] && typeof $nodo[0].scrollIntoView === 'function') {
+                $nodo[0].scrollIntoView({ block: 'center' });
+            }
+            return true;
+        }
+
+        if (cfg.cuentaInicial) {
+            irACuenta(cfg.cuentaInicial);
         }
 
         function tokenCsrf() {
@@ -377,6 +392,111 @@ $(function () {
                 $baja.prop('hidden', true);
             }
         }
+
+        return irACuenta;
+    }
+
+    function empresaIdPlanCuentas(cfg) {
+        var desdeCfg = cfg && cfg.empresaId ? parseInt(cfg.empresaId, 10) || 0 : 0;
+        if (desdeCfg > 0) {
+            return desdeCfg;
+        }
+        return parseInt($('#empresa_id').val() || $('#consultaempresa_id').val() || '0', 10) || 0;
+    }
+
+    function asegurarEmpresaConsulta(empresaId) {
+        if (empresaId <= 0) {
+            return;
+        }
+        var $emp = $('#empresa_id');
+        if (!$emp.length) {
+            $('<input>', { type: 'hidden', id: 'empresa_id', value: empresaId }).appendTo('#form-filtros-cuentacontable');
+            return;
+        }
+        if (!(parseInt($emp.val(), 10) > 0)) {
+            $emp.val(empresaId);
+        }
+    }
+
+    function recargarArbolEnCuenta(cuentaId) {
+        var next = new URL(window.location.href);
+        next.searchParams.set('vista', 'arbol');
+        next.searchParams.set('cuenta', String(cuentaId));
+        next.searchParams.delete('filtro_valor');
+        next.searchParams.delete('page');
+        window.location.href = next.toString();
+    }
+
+    function activarConsultaF1PlanCuentas(cfg, irACuentaEnArbol) {
+        if (typeof abrirModalConsultaCuentaContableDesdeContexto !== 'function') {
+            return;
+        }
+
+        function esTeclaF1(e) {
+            return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+        }
+
+        function modalConsultaAbierto() {
+            var $modal = $('#consultacuentaModal');
+            return $modal.length > 0 && ($modal.hasClass('show') || $modal.hasClass('in') || $modal.is(':visible'));
+        }
+
+        function abrirConsultaPlanCuentas() {
+            var empresaId = empresaIdPlanCuentas(cfg);
+            if (empresaId <= 0) {
+                alert('Seleccioná una empresa para consultar cuentas.');
+                return;
+            }
+            asegurarEmpresaConsulta(empresaId);
+            $('#consultaempresa_id').val(empresaId);
+            var texto = String($('#filtro_valor').val() || '').trim();
+            $('#consultacuentacontable').val(texto);
+            window.__pcPlanCuentasConsultaActiva = true;
+            abrirModalConsultaCuentaContableDesdeContexto(null);
+        }
+
+        document.addEventListener('keydown', function (e) {
+            if (!esTeclaF1(e)) {
+                return;
+            }
+            var target = e.target;
+            if (target && (
+                (target.classList && target.classList.contains('codigocuentacontable'))
+                || target.id === 'codigocuentacontable'
+            )) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (modalConsultaAbierto()) {
+                return;
+            }
+            abrirConsultaPlanCuentas();
+        }, true);
+
+        $('#consultacuentaModal')
+            .off('hidden.bs.modal.pcPlanCuentas')
+            .on('hidden.bs.modal.pcPlanCuentas', function () {
+                window.__pcPlanCuentasConsultaActiva = false;
+            });
+
+        $(document)
+            .off('click.pcPlanCuentasElige', '.eligeconsultacuentacontable')
+            .on('click.pcPlanCuentasElige', '.eligeconsultacuentacontable', function () {
+                if (!window.__pcPlanCuentasConsultaActiva) {
+                    return;
+                }
+                var $tr = $(this).closest('tr');
+                var cuentaId = $.trim($tr.find('.cuentacontable_id').first().text());
+                if (!cuentaId) {
+                    return;
+                }
+                window.__pcPlanCuentasConsultaActiva = false;
+                if (typeof irACuentaEnArbol === 'function' && irACuentaEnArbol(cuentaId)) {
+                    return;
+                }
+                recargarArbolEnCuenta(cuentaId);
+            });
     }
 
     function eliminarCuenta(url, $fila, $nodo) {

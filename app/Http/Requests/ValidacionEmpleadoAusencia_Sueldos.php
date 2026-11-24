@@ -22,6 +22,11 @@ class ValidacionEmpleadoAusencia_Sueldos extends FormRequest
             'fecha_hasta' => 'required|date|after_or_equal:fecha_desde',
             'dias' => 'nullable|numeric|min:0|max:999',
             'tipo_dias' => ['nullable', 'string', Rule::in(['corridos', 'habiles'])],
+            'modalidad_vacaciones' => [
+                'nullable',
+                'integer',
+                Rule::in(array_keys(Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES)),
+            ],
             'estado' => ['required', Rule::in(array_keys(Empleado_Ausencia_Sueldos::ESTADOS))],
             'observacion' => 'nullable|string|max:255',
         ];
@@ -35,6 +40,7 @@ class ValidacionEmpleadoAusencia_Sueldos extends FormRequest
             'fecha_desde' => 'fecha desde',
             'fecha_hasta' => 'fecha hasta',
             'tipo_dias' => 'tipo de días',
+            'modalidad_vacaciones' => 'plus o adelanto',
         ];
     }
 }

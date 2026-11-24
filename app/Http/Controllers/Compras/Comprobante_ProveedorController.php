@@ -85,6 +85,7 @@ use App\Services\Arca\ConstanciaInscripcionService;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -92,6 +93,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class Comprobante_ProveedorController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_comprobante_proveedor';
+
     public function __construct(
         private Comprobante_ProveedorRepositoryInterface $comprobanteRepository,
         private EmpresaRepositoryInterface $empresaRepository,
@@ -121,12 +126,20 @@ class Comprobante_ProveedorController extends Controller
     {
         can('listar-comprobante-proveedor');
 
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'comprobante_proveedor', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
+
         ComprobanteProveedorTipoCargaSesion::olvidar();
 
         $armado = $this->armarListado($request);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('compras.comprobante_proveedor.index', $armado + [
             'empresa_query' => $this->empresaRepository->allFiltrado(),

@@ -56,15 +56,7 @@ Pedidos Interforming
         'PEX' => 'Pedidos de exportación',
         default => 'Pedidos de clientes',
     };
-    $limpiarQ = [];
-    if (in_array($tipoActual, ['PED', 'PEX'], true)) {
-        $limpiarQ['tipo'] = $tipoActual;
-    }
-    if ($vistaActiva ?? null) {
-        $limpiarQ['vista_id'] = $vistaActiva->id;
-    }
-    $limpiarQ['filtro_limpiar'] = 1;
-    $limpiarUrl = route('pedido', $limpiarQ);
+    $limpiarUrl = route('pedido', (in_array($tipoActual, ['PED', 'PEX'], true) ? ['tipo' => $tipoActual] : []) + ['limpiar_filtros' => 1]);
     $camposOrdenablesThead = PedidoInterformingListadoFiltros::camposOrdenables();
     $ordenActualThead = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
         $filtros['sort'] ?? [],
@@ -156,7 +148,7 @@ Pedidos Interforming
                         </button>
                         @if (PedidoInterformingListadoFiltros::tieneCriteriosTexto($filtros ?? []) || \App\Support\Listado\ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? []))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
-                                <i class="fa fa-eraser"></i> Limpiar
+                                <i class="fa fa-eraser"></i> Limpiar filtros
                             </a>
                         @endif
                         @if (($ordenActualThead ?? []) !== [])

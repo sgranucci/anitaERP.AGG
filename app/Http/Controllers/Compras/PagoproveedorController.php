@@ -53,12 +53,17 @@ use App\Support\Listado\ListadoVisualSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PagoproveedorController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_pagoproveedor';
+
     private const MAIL_LISTADO_MAX_FILAS = 2000;
     public function __construct(
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
@@ -82,10 +87,18 @@ class PagoproveedorController extends Controller
     {
         can('listar-pagoproveedor');
 
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'pagoproveedor', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
+
         $armado = $this->armarListado($request);
         if ($armado instanceof \Illuminate\Http\RedirectResponse) {
             return $armado;
         }
+
+        $armado['filtrosQuery'] = $this->recordarFiltrosListadoSiCorresponde($request, $armado['filtrosQuery'] ?? []);
 
         return view('compras.pagoproveedor.index', $armado);
     }

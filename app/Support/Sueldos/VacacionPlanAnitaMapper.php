@@ -30,7 +30,8 @@ class VacacionPlanAnitaMapper
             return null;
         }
         $anioSalida = (int) substr($desde, 0, 4);
-        if ($anioSalida < 2000 || $anioSalida > 2100) {
+        // Histórico Anita puede traer salidas desde ~2009; piso 1990 alineado al período.
+        if ($anioSalida < 1990 || $anioSalida > 2100) {
             return null;
         }
 

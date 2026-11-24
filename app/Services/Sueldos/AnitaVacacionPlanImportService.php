@@ -10,23 +10,49 @@ use App\Support\Sueldos\VacacionPlanAnitaMapper;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Trae el plan de vacaciones cargado en Anita (vacempl) al legajo del ERP.
- * Cubre los períodos desde ANIO_DESDE: la migración de vacliq no los trae
- * y, cuando ya están liquidados, usa la fecha real de salida.
+ * Trae el plan / gozadas de Anita (vacempl) al legajo del ERP, con fecha real de salida.
+ *
+ * Por defecto importa desde ANIO_DESDE (histórico). La migración vacliq solo
+ * completa períodos sin filas vacempl (fechas sintéticas).
  */
 class AnitaVacacionPlanImportService
 {
-    public const ANIO_DESDE = 2026;
+    /** Año mínimo del histórico vacempl (fechas reales). */
+    public const ANIO_DESDE = 2000;
 
     public const MARCA = 'Plan Anita vacempl';
 
+    public const MARCA_VACLIQ = 'Migración Anita vacliq';
+
     /**
-     * @return array{leidas:int, importadas:int, empleados:int, liquidadas:int, tablas:int, sin_empleado:int, errores:list<string>}
+     * @return array{
+     *   leidas:int,
+     *   importadas:int,
+     *   empleados:int,
+     *   liquidadas:int,
+     *   tablas:int,
+     *   sin_empleado:int,
+     *   vacliq_reemplazadas:int,
+     *   huecos_vacliq:int,
+     *   anio_desde:int,
+     *   anio_hasta:int,
+     *   dry_run:bool,
+     *   errores:list<string>
+     * }
      */
-    public function importar(): array
+    public function importar(?int $anioDesde = null, ?int $anioHasta = null, bool $dryRun = false): array
     {
-        ini_set('max_execution_time', '600');
-        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '0');
+        ini_set('memory_limit', '-1');
+
+        $anioDesde = $anioDesde ?? self::ANIO_DESDE;
+        $anioHasta = $anioHasta ?? ((int) date('Y') + 2);
+        if ($anioDesde < 1990) {
+            $anioDesde = 1990;
+        }
+        if ($anioHasta < $anioDesde) {
+            $anioHasta = $anioDesde;
+        }
 
         $res = [
             'leidas' => 0,
@@ -35,6 +61,11 @@ class AnitaVacacionPlanImportService
             'liquidadas' => 0,
             'tablas' => 0,
             'sin_empleado' => 0,
+            'vacliq_reemplazadas' => 0,
+            'huecos_vacliq' => 0,
+            'anio_desde' => $anioDesde,
+            'anio_hasta' => $anioHasta,
+            'dry_run' => $dryRun,
             'errores' => [],
         ];
 
@@ -62,14 +93,14 @@ class AnitaVacacionPlanImportService
         }
 
         $api = new ApiAnita();
-        $desde = self::ANIO_DESDE * 100;
-        $hasta = (self::ANIO_DESDE + 5) * 100;
+        $desdePeriodo = $anioDesde * 100;
+        $hastaPeriodo = ($anioHasta + 1) * 100;
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => 'vacempl',
             'campos' => 'vace_empresa, vace_legajo, vace_periodo, vace_sale_vac, vace_dias_tomados, vace_tabla_vac, vace_dias_atomar',
-            'whereArmado' => ' WHERE vace_periodo >= '.$desde.' AND vace_periodo < '.$hasta,
+            'whereArmado' => ' WHERE vace_periodo >= '.$desdePeriodo.' AND vace_periodo < '.$hastaPeriodo,
             'orderBy' => 'vace_empresa, vace_legajo, vace_periodo, vace_sale_vac',
         ]));
         if (! empty($parsed['error_lectura'])) {
@@ -83,7 +114,7 @@ class AnitaVacacionPlanImportService
             'sistema' => 'sueldos',
             'tabla' => 'vacliq',
             'campos' => 'vacl_empresa, vacl_legajo, vacl_periodo, vacl_dias_tomados',
-            'whereArmado' => ' WHERE vacl_periodo >= '.$desde.' AND vacl_periodo < '.$hasta,
+            'whereArmado' => ' WHERE vacl_periodo >= '.$desdePeriodo.' AND vacl_periodo < '.$hastaPeriodo,
         ]));
         if (! empty($liq['error_lectura'])) {
             $res['errores'][] = 'Lectura vacliq: '.$liq['error_lectura'];
@@ -153,6 +184,7 @@ class AnitaVacacionPlanImportService
         $filas = [];
         $empleadosConEvento = [];
         $recalcular = [];
+        $periodosConVacempl = [];
         foreach ($porPeriodo as $periodoKey => $lista) {
             usort($lista, fn ($a, $b) => [$a['sale'], $a['periodo']] <=> [$b['sale'], $b['periodo']]);
             $restanteLiquidado = $diasLiquidados[$periodoKey] ?? 0.0;
@@ -185,6 +217,7 @@ class AnitaVacacionPlanImportService
                     'created_at' => $ahora,
                     'updated_at' => $ahora,
                 ];
+                $periodosConVacempl[$periodoKey] = true;
                 $empleadosConEvento[$tramo['empleado_id']] = true;
                 if (in_array($evento['estado'], Empleado_Ausencia_Sueldos::ESTADOS_CONSUMEN, true)) {
                     $recalcular[$tramo['empleado_id']] = true;
@@ -195,18 +228,81 @@ class AnitaVacacionPlanImportService
             }
         }
 
-        DB::transaction(function () use ($filas) {
+        // Huecos: vacliq con días y sin ningún tramo vacempl → sintético (1/1 del año).
+        $huecosVacliq = 0;
+        foreach ($diasLiquidados as $periodoKey => $diasLiq) {
+            if ($diasLiq <= 0 || isset($periodosConVacempl[$periodoKey])) {
+                continue;
+            }
+            [$empresaId, $legajo, $periodo] = array_map('intval', explode(':', $periodoKey));
+            $empKey = $empresaId.':'.$legajo;
+            $empleadoId = $idPorKey[$empKey]['id'] ?? null;
+            if ($empleadoId === null) {
+                continue;
+            }
+            $anio = (int) substr((string) $periodo, 0, 4);
+            if ($anio < $anioDesde || $anio > $anioHasta || $anio < 1990) {
+                continue;
+            }
+            $desde = sprintf('%04d-01-01', $anio);
+            $hasta = \Carbon\Carbon::parse($desde)->addDays(max(0, (int) ceil($diasLiq) - 1))->toDateString();
+            $filas[] = [
+                'empleado_id' => $empleadoId,
+                'tipo_ausencia_id' => (int) $tipo->id,
+                'anio_imputacion' => $anio,
+                'fecha_desde' => $desde,
+                'fecha_hasta' => $hasta,
+                'dias' => round($diasLiq, 2),
+                'tipo_dias' => 'corridos',
+                'estado' => 'liquidada',
+                'observacion' => self::MARCA_VACLIQ.' (sin vacempl)',
+                'created_at' => $ahora,
+                'updated_at' => $ahora,
+            ];
+            $huecosVacliq++;
+            $empleadosConEvento[$empleadoId] = true;
+            $recalcular[$empleadoId] = true;
+            $res['liquidadas']++;
+        }
+        $res['huecos_vacliq'] = $huecosVacliq;
+
+        $res['importadas'] = count($filas);
+        $res['empleados'] = count($empleadosConEvento);
+
+        if ($dryRun) {
+            $res['vacliq_reemplazadas'] = (int) DB::table('empleado_ausencia_sueldos')
+                ->where(function ($q) {
+                    $q->where('observacion', self::MARCA_VACLIQ)
+                        ->orWhere('observacion', 'like', self::MARCA_VACLIQ.'%');
+                })
+                ->where('anio_imputacion', '>=', $anioDesde)
+                ->where('anio_imputacion', '<=', $anioHasta)
+                ->count();
+
+            return $res;
+        }
+
+        DB::transaction(function () use ($filas, $anioDesde, $anioHasta, &$res) {
+            // Quita sintéticos vacliq del rango: vacempl trae los tramos con fecha real.
+            $res['vacliq_reemplazadas'] = (int) DB::table('empleado_ausencia_sueldos')
+                ->where(function ($q) {
+                    $q->where('observacion', self::MARCA_VACLIQ)
+                        ->orWhere('observacion', 'like', self::MARCA_VACLIQ.'%');
+                })
+                ->where('anio_imputacion', '>=', $anioDesde)
+                ->where('anio_imputacion', '<=', $anioHasta)
+                ->delete();
+
             DB::table('empleado_ausencia_sueldos')
                 ->where('observacion', 'like', self::MARCA.'%')
-                ->where('anio_imputacion', '>=', self::ANIO_DESDE)
+                ->where('anio_imputacion', '>=', $anioDesde)
+                ->where('anio_imputacion', '<=', $anioHasta)
                 ->delete();
+
             foreach (array_chunk($filas, 400) as $chunk) {
                 DB::table('empleado_ausencia_sueldos')->insert($chunk);
             }
         });
-
-        $res['importadas'] = count($filas);
-        $res['empleados'] = count($empleadosConEvento);
 
         foreach ($tablaPorEmpleado as $empKey => $codigo) {
             $vacacionId = $vacacionPorCodigo[$codigo] ?? null;
@@ -223,7 +319,7 @@ class AnitaVacacionPlanImportService
 
         if ($recalcular !== []) {
             $devengar = app(DevengamientoVacacionesService::class);
-            foreach (Empleado_Sueldos::query()->whereIn('id', array_keys($recalcular))->get() as $empleado) {
+            foreach (Empleado_Sueldos::query()->whereIn('id', array_keys($recalcular))->cursor() as $empleado) {
                 $devengar->recalcularEmpleado($empleado);
             }
         }

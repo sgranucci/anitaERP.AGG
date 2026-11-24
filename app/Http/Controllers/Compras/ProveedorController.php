@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Compras;
 
 use Illuminate\Http\Request;
+use App\Support\Listado\RecuerdaFiltrosListado;
 use App\Http\Controllers\Controller;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Exclusion;
@@ -95,6 +96,10 @@ use DB;
 
 class ProveedorController extends Controller
 {
+    use RecuerdaFiltrosListado;
+
+    private const SESSION_FILTROS = 'filtros_proveedor';
+
 	private $proveedorRepository;
 	private $proveedor_exclusionRepository;
 	private $proveedor_archivoRepository;
@@ -213,6 +218,12 @@ class ProveedorController extends Controller
     public function index(Request $request)
     {
         can('listar-proveedor');
+
+        $forzarEstandar = $request->boolean('vista_estandar') || $request->input('vista_modo') === 'estandar';
+        $redir = $this->redirigirMemoriaOLimpiar($request, 'proveedor', [], $forzarEstandar);
+        if ($redir) {
+            return $redir;
+        }
 
         $hay_proveedores = $this->proveedorQuery->first();
 
@@ -349,6 +360,8 @@ class ProveedorController extends Controller
         } elseif ($forzarEstandar) {
             $filtrosQuery['vista_estandar'] = 1;
         }
+
+        $filtrosQuery = $this->recordarFiltrosListadoSiCorresponde($request, $filtrosQuery);
 
         return view('compras.proveedor.index', [
             'proveedores' => $proveedores,
