@@ -10,6 +10,7 @@ namespace App\Support\Contable\Sicore;
  * - NC (03): base = retención anulada / diferencia (no la base de la operación).
  * - ERP ganancias acumuladas (078/094/escalas): base del pago = retenible actual − retenible previo.
  * - Ret.GC Anita: neto sin IVA − MNI − lo ya sujeto del mes.
+ * - OP anuladas: preferir detalle ERP (incluye REVERTIDA/BAJA); Anita sin seed puede restar MNI de más.
  */
 final class SicoreBaseCalculoExportSupport
 {

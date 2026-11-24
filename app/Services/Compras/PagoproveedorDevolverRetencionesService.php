@@ -208,38 +208,22 @@ final class PagoproveedorDevolverRetencionesService
             ]);
 
             $clonesAnita = [];
+            $paraClonar = [];
             foreach ($seleccion as $item) {
                 /** @var Pagoproveedor_Retencion $origenRet */
                 $origenRet = $item['retencion'];
-                $importe = (float) $item['importe'];
-                $det = is_array($origenRet->detalle_calculo) ? $origenRet->detalle_calculo : [];
-                $det['origen_retencion_id'] = (int) $origenRet->id;
-                $det['devolucion'] = true;
-
-                Pagoproveedor_Retencion::query()->create([
-                    'pagoproveedor_id' => (int) $hija->id,
-                    'tiporetencion' => (string) $origenRet->tiporetencion,
-                    'retencionganancia_id' => $origenRet->retencionganancia_id,
-                    'retencioniva_id' => $origenRet->retencioniva_id,
-                    'retencionsuss_id' => $origenRet->retencionsuss_id,
-                    'provincia_id' => $origenRet->provincia_id,
-                    'codigo_regimen' => $origenRet->codigo_regimen,
-                    'codigo_retencion' => $origenRet->codigo_retencion,
-                    // SICORE NC (A.1): base = retención devuelta, no la base de la operación original.
-                    'base_calculo' => abs($importe),
-                    'alicuota' => (float) $origenRet->alicuota,
-                    'importe' => -abs($importe),
-                    'nro_certificado' => $origenRet->nro_certificado,
-                    'moneda_id' => (int) ($origenRet->moneda_id ?: $pago->moneda_id ?: 1),
-                    'cotizacion' => (float) ($origenRet->cotizacion ?: $pago->cotizacion ?: 1),
-                    'detalle_calculo' => $det,
-                    'motivo' => 'devolucion_retencion',
-                ]);
+                $importe = round((float) $item['importe'], 2);
+                $paraClonar[] = ['retencion' => $origenRet, 'importe' => $importe];
 
                 $clone = $origenRet->replicate();
                 $clone->importe = abs($importe);
                 $clonesAnita[] = $clone;
             }
+            PagoproveedorDevolucionRetencionSupport::clonarComoDevolucionEnPago(
+                $hija,
+                $paraClonar,
+                'devolucion_retencion',
+            );
 
             $caja = $this->crearCajaYMedio(
                 $hija,

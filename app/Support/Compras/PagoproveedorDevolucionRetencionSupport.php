@@ -29,6 +29,63 @@ final class PagoproveedorDevolucionRetencionSupport
     }
 
     /**
+     * Clona retenciones positivas como líneas negativas en el pago destino
+     * (AOP de reversión o OP de DEV RET). SICORE las exporta como NC (03).
+     *
+     * @param  iterable<Pagoproveedor_Retencion|array{retencion: Pagoproveedor_Retencion, importe?: float}>  $retencionesOrigen
+     * @return list<Pagoproveedor_Retencion>
+     */
+    public static function clonarComoDevolucionEnPago(
+        Pagoproveedor $destino,
+        iterable $retencionesOrigen,
+        string $motivo = 'reverso_op',
+    ): array {
+        $creadas = [];
+        foreach ($retencionesOrigen as $item) {
+            if (is_array($item)) {
+                $origenRet = $item['retencion'] ?? null;
+                $importeOverride = array_key_exists('importe', $item) ? (float) $item['importe'] : null;
+            } else {
+                $origenRet = $item;
+                $importeOverride = null;
+            }
+            if (! $origenRet instanceof Pagoproveedor_Retencion) {
+                continue;
+            }
+            $importe = round($importeOverride ?? (float) $origenRet->importe, 2);
+            if ($importe <= 0.001) {
+                continue;
+            }
+
+            $det = is_array($origenRet->detalle_calculo) ? $origenRet->detalle_calculo : [];
+            $det['origen_retencion_id'] = (int) $origenRet->id;
+            $det['devolucion'] = true;
+
+            $creadas[] = Pagoproveedor_Retencion::query()->create([
+                'pagoproveedor_id' => (int) $destino->id,
+                'tiporetencion' => (string) $origenRet->tiporetencion,
+                'retencionganancia_id' => $origenRet->retencionganancia_id,
+                'retencioniva_id' => $origenRet->retencioniva_id,
+                'retencionsuss_id' => $origenRet->retencionsuss_id,
+                'provincia_id' => $origenRet->provincia_id,
+                'codigo_regimen' => $origenRet->codigo_regimen,
+                'codigo_retencion' => $origenRet->codigo_retencion,
+                // SICORE NC: base = retención anulada, no la base de la operación.
+                'base_calculo' => abs($importe),
+                'alicuota' => (float) $origenRet->alicuota,
+                'importe' => -abs($importe),
+                'nro_certificado' => $origenRet->nro_certificado,
+                'moneda_id' => (int) ($origenRet->moneda_id ?: $destino->moneda_id ?: 1),
+                'cotizacion' => (float) ($origenRet->cotizacion ?: $destino->cotizacion ?: 1),
+                'detalle_calculo' => $det,
+                'motivo' => $motivo,
+            ]);
+        }
+
+        return $creadas;
+    }
+
+    /**
      * @return list<array{
      *     id: int,
      *     tiporetencion: string,

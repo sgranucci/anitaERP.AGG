@@ -21,6 +21,7 @@ use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
+use App\Support\Compras\PagoproveedorDevolucionRetencionSupport;
 use App\Support\Compras\PagoproveedorOpaSobranteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -304,14 +305,18 @@ class PagoproveedorAnularRevertirService
 
             $this->registrarEstado($pago, 'REVERTIDA', $leyenda.' (compensatorio OP '.$reverso->id.')');
 
-            // Las retenciones de la OP original NO se borran: la tabla no tiene softdeletes
-            // ni auditoría, así que el borrado perdía sin rastro los certificados ya emitidos
-            // al proveedor. SICORE, IIBB y SUSS filtran por estado CONFIRMADA, de modo que al
-            // quedar la OP en REVERTIDA esas filas salen solas de las presentaciones.
+            // Las retenciones de la OPP original NO se borran (certificados ya emitidos).
+            // En el AOP se clonan en negativo para que SICORE/IIBB/SUSS armen la NC (03)
+            // desde el ERP, sin depender de retmov Anita.
+            PagoproveedorDevolucionRetencionSupport::clonarComoDevolucionEnPago(
+                $reverso,
+                $retencionesOrigen,
+                'reverso_op',
+            );
 
             return [
                 'opa_sobrante' => $opaSobrante,
-                'reverso' => $reverso,
+                'reverso' => $reverso->fresh(['pagoproveedor_retenciones']),
                 'caja_reverso' => $cajaReverso,
                 'retenciones_origen' => $retencionesOrigen,
                 'cheques_devueltos' => $chequesDevueltos,

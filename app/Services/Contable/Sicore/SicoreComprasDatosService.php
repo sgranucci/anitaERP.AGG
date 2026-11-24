@@ -45,24 +45,33 @@ final class SicoreComprasDatosService
     }
 
     /**
-     * Ganancias: retenciones del ERP. Anita (retmov) solo si el pago todavía no está subido.
+     * Ganancias: retenciones del ERP.
+     * Anita (retmov) solo si config('sicore.complemento_anita') está activo.
      *
      * @return list<array<string, mixed>>
      */
     private function desdeRetmov(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
     {
         $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'G');
-        $anita = SicoreErpComplementoSupport::descartarSinBaseCubiertos(
-            $this->registrosRetmovPeriodoAnita($empresaId, $fechaDesde, $fechaHasta, $config, $erp),
-            $erp,
-        );
-        $anita = SicoreErpComplementoSupport::soloNuevos($anita, $erp);
+        $anita = [];
+        if ($this->complementoAnitaHabilitado()) {
+            $anita = SicoreErpComplementoSupport::descartarSinBaseCubiertos(
+                $this->registrosRetmovPeriodoAnita($empresaId, $fechaDesde, $fechaHasta, $config, $erp),
+                $erp,
+            );
+            $anita = SicoreErpComplementoSupport::soloNuevos($anita, $erp);
+        }
 
         return array_map(static function (array $reg): array {
             unset($reg['_neto_pago_sicore']);
 
             return $reg;
         }, array_merge($erp, $anita));
+    }
+
+    private function complementoAnitaHabilitado(): bool
+    {
+        return (bool) config('sicore.complemento_anita', false);
     }
 
     /**
@@ -81,13 +90,21 @@ final class SicoreComprasDatosService
             return [];
         }
 
+        // Incluye OP anuladas (REVERTIDA/BAJA): la retención original (06) debe
+        // exportarse con la base del ERP. Si solo sale por Anita, B.2 recalcula
+        // desde bruto y puede restar de más el MNI (p.ej. OP 125567 / 125608).
+        $estadosSicore = array_values(array_unique(array_merge(
+            PagoproveedorImputacionApSupport::ESTADOS_ACTIVOS,
+            PagoproveedorImputacionApSupport::ESTADOS_ANULADOS,
+        )));
+
         $filas = \App\Models\Compras\Pagoproveedor_Retencion::query()
             ->where('tiporetencion', $tipoRetencion)
             ->where('importe', '!=', 0)
-            ->whereHas('pagoproveedores', function ($q) use ($empresaId, $fechaDesde, $fechaHasta) {
+            ->whereHas('pagoproveedores', function ($q) use ($empresaId, $fechaDesde, $fechaHasta, $estadosSicore) {
                 $q->where('empresa_id', $empresaId)
                     ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
-                    ->whereIn('estado', PagoproveedorImputacionApSupport::ESTADOS_ACTIVOS);
+                    ->whereIn('estado', $estadosSicore);
             })
             ->with(['pagoproveedores.proveedores', 'pagoproveedores.pagoproveedor_origen'])
             ->get();
@@ -425,6 +442,15 @@ final class SicoreComprasDatosService
      */
     private function desdeRetimov(int $empresaId, string $fechaDesde, string $fechaHasta, Sicore_Config $config): array
     {
+        $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'I');
+        if (! $this->complementoAnitaHabilitado()) {
+            return array_map(static function (array $reg): array {
+                unset($reg['_neto_pago_sicore']);
+
+                return $reg;
+            }, $erp);
+        }
+
         $filasRaw = $this->listarRetimov($empresaId, $fechaDesde, $fechaHasta);
         $this->proveedorSupport->precargar(array_map(
             static fn (array $row) => (string) ($row['retiv_proveedor'] ?? ''),
@@ -485,7 +511,6 @@ final class SicoreComprasDatosService
             ];
         }
 
-        $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'I');
         $out = SicoreErpComplementoSupport::descartarSinBaseCubiertos($out, $erp);
 
         return array_merge($erp, SicoreErpComplementoSupport::soloNuevos($out, $erp));

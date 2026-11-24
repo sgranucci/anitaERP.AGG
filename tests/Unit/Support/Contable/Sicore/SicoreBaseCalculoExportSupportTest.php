@@ -82,6 +82,55 @@ class SicoreBaseCalculoExportSupportTest extends TestCase
         $this->assertSame(210743.85, $base);
     }
 
+    public function test_op_anulada_125567_exporta_base_del_pago_no_mni_doble(): void
+    {
+        // OP 125567 REVERTIDA: Anita B.2 sin acum. previo daba 428.915,84 (MNI de más).
+        // Con detalle ERP (neto previo del mes) la base del pago es 652.915,84.
+        $base = SicoreBaseCalculoExportSupport::baseDesdeRetencionErp(13058.31, 1572173.6, [
+            'base_retenible' => 1572173.6,
+            'neto_pago' => 652915.84,
+            'neto_acumulado_previo' => 1143257.76,
+            'monto_excedente' => 224000.0,
+            'inscripto' => true,
+            'forma_calculo' => 'S',
+        ]);
+        $this->assertSame(652915.84, $base);
+
+        $anitaSinSeed = [];
+        $anitaMal = SicoreBaseCalculoExportSupport::baseDesdeBrutoAnita(
+            790028.17,
+            224000.0,
+            true,
+            'cuit|78|2026-10',
+            $anitaSinSeed,
+        );
+        $this->assertSame(428915.84, $anitaMal);
+    }
+
+    public function test_op_anulada_125608_exporta_retenible_erp_no_bruto_anita(): void
+    {
+        // OP 125608: bruto OP/1.21 − MNI = 734.180,37 (mal). ERP neto − MNI = 688.849,57.
+        $base = SicoreBaseCalculoExportSupport::baseDesdeRetencionErp(13776.99, 688849.57, [
+            'base_retenible' => 688849.57,
+            'neto_pago' => 912849.57,
+            'neto_acumulado_previo' => 0,
+            'monto_excedente' => 224000.0,
+            'inscripto' => true,
+            'forma_calculo' => 'S',
+        ]);
+        $this->assertSame(688849.57, $base);
+
+        $anitaSinSeed = [];
+        $anitaMal = SicoreBaseCalculoExportSupport::baseDesdeBrutoAnita(
+            1159398.25,
+            224000.0,
+            true,
+            'cuit|78|2026-10',
+            $anitaSinSeed,
+        );
+        $this->assertSame(734180.37, $anitaMal);
+    }
+
     public function test_certificado_nc_plan_b_usa_nro_op_si_falta(): void
     {
         $this->assertSame(23936, SicoreBaseCalculoExportSupport::nroCertificadoNc(23936, 125457));

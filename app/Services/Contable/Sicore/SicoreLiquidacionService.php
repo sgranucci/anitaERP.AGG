@@ -7,6 +7,7 @@ namespace App\Services\Contable\Sicore;
 use App\Models\Configuracion\Empresa;
 use App\Support\Contable\Sicore\SicoreCriteriosSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
+use App\Support\Contable\Sicore\SicoreLiquidacionAutocontrolSupport;
 use App\Support\Contable\Sicore\SicoreLiquidacionCuadroSupport;
 use App\Support\Contable\Sicore\SicoreLiquidacionQuincenasSupport;
 use App\Support\Contable\Sicore\SicoreLiquidacionTipoSupport;
@@ -91,12 +92,15 @@ final class SicoreLiquidacionService
             $sueldosHasta,
         );
 
-        $autocontrol = $this->autocontrol(
+        $autocontrol = SicoreLiquidacionAutocontrolSupport::evaluar(
             [
                 '767' => ['part' => $part767, 'conciliacion' => $resCompras['conciliacion'] ?? []],
                 '217' => ['part' => $part217, 'conciliacion' => $resCompras['conciliacion'] ?? []],
                 '787' => ['part' => $part787, 'conciliacion' => $resSueldos['conciliacion'] ?? []],
             ],
+            $tipo,
+            $safIng['saf'],
+            $safIng['ingresos'],
         );
 
         $empresa = Empresa::query()->find($empresaId);
@@ -262,53 +266,6 @@ final class SicoreLiquidacionService
             }
         }
         $zip->close();
-    }
-
-    /**
-     * @param  array<string, array{part: array, conciliacion: array}>  $porCodigo
-     * @return array{ok: bool, items: list<array<string, mixed>>}
-     */
-    private function autocontrol(array $porCodigo): array
-    {
-        $items = [];
-        $okGlobal = true;
-        foreach ($porCodigo as $cod => $data) {
-            $part = $data['part'];
-            $totalDetalle = (float) ($part['total'] ?? 0);
-            $itemConc = $this->itemConciliacionPorCodigo($data['conciliacion'], (int) $cod);
-            $totalSicore = (float) ($itemConc['total_sicore'] ?? $totalDetalle);
-            $totalMayor = (float) ($itemConc['total_mayor'] ?? 0);
-            $estado = ! empty($itemConc['cuadra']) ? 'OK' : 'Diferencia';
-            $okDet = SicoreFormatoV8Support::cuadra($totalDetalle, $totalSicore);
-            $okMay = $itemConc === [] || SicoreFormatoV8Support::cuadraConciliacion($totalSicore, $totalMayor);
-            $ok = $okDet && $okMay;
-            $okGlobal = $okGlobal && $ok;
-            $items[] = [
-                'codigo' => $cod,
-                'total_detalle' => $totalDetalle,
-                'total_sicore' => $totalSicore,
-                'total_mayor' => $totalMayor,
-                'estado' => $estado,
-                'ok' => $ok,
-            ];
-        }
-
-        return ['ok' => $okGlobal, 'items' => $items];
-    }
-
-    /**
-     * @param  array<string, mixed>  $conciliacion
-     * @return array<string, mixed>
-     */
-    private function itemConciliacionPorCodigo(array $conciliacion, int $codigo): array
-    {
-        foreach ($conciliacion['items'] ?? [] as $item) {
-            if ((int) ($item['codigo_impuesto'] ?? 0) === $codigo) {
-                return $item;
-            }
-        }
-
-        return [];
     }
 
     private function etiquetaEmpresa(?Empresa $empresa): string
