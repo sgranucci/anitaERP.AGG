@@ -79,6 +79,9 @@
         @endphp
         <td>
             <span class="{{ $badgeEstado['class'] }}">{{ $badgeEstado['label'] }}</span>
+            @if (ComprobanteProveedorOrigenEntrada::esIngresoEgreso($data->origen_entrada ?? null))
+                <span class="badge badge-info ml-1" title="Nacida en Ingresos y egresos · solo consulta desde Compras">I/E</span>
+            @endif
             @if ((int) ($data->bloqueado_pago ?? 0) === 1)
                 <span class="badge badge-light border ml-1" title="{{ $data->bloqueado_pago_motivo ?: 'Fuera del circuito de pago y de la proyección' }}">Fuera de pago</span>
             @endif
@@ -90,7 +93,13 @@
         </td>
         @break
     @case ('origen')
-        <td><span class="cp-celda">{{ ComprobanteProveedorOrigenEntrada::etiqueta($data->origen_entrada ?? '') }}</span></td>
+        <td>
+            @if (ComprobanteProveedorOrigenEntrada::esIngresoEgreso($data->origen_entrada ?? null))
+                <span class="badge badge-info" title="{{ ComprobanteProveedorOrigenEntrada::etiqueta($data->origen_entrada ?? '') }}">I/E</span>
+            @else
+                <span class="cp-celda">{{ ComprobanteProveedorOrigenEntrada::etiqueta($data->origen_entrada ?? '') }}</span>
+            @endif
+        </td>
         @break
     @case ('modo_carga')
         <td><span class="cp-celda">{{ ComprobanteProveedorModoCarga::etiqueta($data->modo_carga ?? '') }}</span></td>

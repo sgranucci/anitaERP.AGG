@@ -1832,13 +1832,14 @@ class Comprobante_ProveedorController extends Controller
             }
 
             $asientoPreview = $this->asientoService->previewParaVista($data);
-            $tieneAsientoGrabado = (int) ($data->asiento_id ?? 0) > 0;
+            $tieneAsientoGrabado = (int) ($data->asiento_id ?? 0) > 0
+                || (int) ($asientoPreview['asiento_id'] ?? 0) > 0;
             $asientoImportAnita = $tieneAsientoGrabado
                 && (string) ($data->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT;
-            // Con asiento enganchado (p. ej. import Anita): mostrar el real, sin avisos de borrador COM/provisión.
-            if ($bloqueadoEdicion || $tieneAsientoGrabado) {
+            // Con asiento enganchado (import Anita / I/E): mostrar el real, sin avisos de borrador COM/provisión.
+            if ($bloqueadoEdicion || $tieneAsientoGrabado || $origenIngresoEgreso) {
                 $asientoPreview = $this->asientoPreviewSoloLectura($asientoPreview);
-                if ($asientoImportAnita) {
+                if ($asientoImportAnita || $origenIngresoEgreso) {
                     $asientoPreview['avisos'] = [];
                     unset($asientoPreview['error']);
                 }
@@ -2062,7 +2063,10 @@ class Comprobante_ProveedorController extends Controller
         if ($tipoIdForm <= 0) {
             $generaAsientoTipo = true;
         }
-        $mostrarSolapaAsiento = $generaAsientoTipo || (int) ($data->asiento_id ?? 0) > 0;
+        $mostrarSolapaAsiento = $generaAsientoTipo
+            || (int) ($data->asiento_id ?? 0) > 0
+            || $origenIngresoEgreso
+            || (int) (($asientoPreview['asiento_id'] ?? 0)) > 0;
 
         return array_merge($prefill, [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
@@ -2103,15 +2107,16 @@ class Comprobante_ProveedorController extends Controller
                 : [],
             'bloqueado_edicion' => $bloqueadoEdicion,
             // Evita que el JS reemplace el asiento grabado por un preview de regeneración.
+            // ANITA_IMPORT contabilizado sin asiento_id (import sin cuenta de neto): NO congelar —
+            // hay que poder indicar la cuenta/CC y refrescar el preview; si no, Actualizar
+            // tampoco sincroniza la cuenta elegida a los conceptos (incidente FAC Clara Huevo).
             'congelar_preview_asiento' => $bloqueadoEdicion
-                || (int) ($data?->asiento_id ?? 0) > 0
-                || (
-                    $contabilizado
-                    && (string) ($data?->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT
-                ),
+                || (int) ($data?->asiento_id ?? 0) > 0,
             'puede_actualizar' => $puedeActualizar,
             'puede_excluir_circuito_pago' => can('excluir-circuito-pago-comprobante-proveedor', false),
-            'mostrarSolapaCom' => ! ($comPolitica['sin_com_por_tipo'] ?? false)
+            // Origen I/E: sin solapas de COM/OC/artículos (circuito de caja, no de compras).
+            'mostrarSolapaCom' => ! $origenIngresoEgreso
+                && ! ($comPolitica['sin_com_por_tipo'] ?? false)
                 && ! (($comPolitica['contrato_vigente'] ?? false) && ! ($comPolitica['contrato_requiere_recepcion'] ?? true))
                 && (
                     $comObligatoria
@@ -2121,9 +2126,9 @@ class Comprobante_ProveedorController extends Controller
                     || ($comPolitica['bloquea_sin_com'] ?? false)
                     || (string) ($data->modo_carga ?? '') === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
                 ),
-            'mostrarSolapaOc' => (int) ($data?->ordencompra_id ?? 0) > 0,
+            'mostrarSolapaOc' => ! $origenIngresoEgreso && (int) ($data?->ordencompra_id ?? 0) > 0,
             // Match SKU/precio off en AGG: ocultar solapa vacía; mostrar si hay líneas (OCR) o flags activos.
-            'mostrarSolapaArticulos' => $this->mostrarSolapaArticulosFormulario(
+            'mostrarSolapaArticulos' => ! $origenIngresoEgreso && $this->mostrarSolapaArticulosFormulario(
                 (int) ($data->empresa_id ?? 0),
                 $prefill['articulos'] ?? collect()
             ),

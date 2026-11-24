@@ -111,6 +111,9 @@
                             $badgeEstadoForm = \App\Support\Compras\ComprobanteProveedorEstados::badge($data->estado ?? '');
                         @endphp
                         <span class="{{ $badgeEstadoForm['class'] }} ml-2">{{ $badgeEstadoForm['label'] }}</span>
+                        @if (! empty($origen_ingreso_egreso))
+                        <span class="badge badge-info ml-1" title="Nacida en Ingresos y egresos · solo consulta">I/E</span>
+                        @endif
                         @if (\App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::esErrorPersistente($syncAnita))
                         <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">
                             {{ \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::etiquetaBadge($syncAnita, $data->estado ?? '') }}
@@ -228,7 +231,7 @@
                 @if ($esEdicion && ($data->id ?? null))
                 data-comprobante-id="{{ (int) $data->id }}"
                 @endif
-                {{-- Asiento grabado / import Anita: no pisar la solapa con preview AJAX --}}
+                {{-- Asiento grabado (asiento_id): no pisar la solapa con preview AJAX. Import Anita sin asiento sigue editable. --}}
                 data-contabilizado="{{ ! empty($congelar_preview_asiento) ? '1' : '0' }}"
                 data-preview-url="{{ ($esEdicion && ($data->id ?? null)) ? route('preview_asiento_comprobante_proveedor', ['id' => $data->id]) : route('preview_asiento_comprobante_proveedor_nuevo') }}"
                 data-puede-editar-concepto-iva="{{ can('editar-concepto-iva-compra', false) ? '1' : '0' }}"
@@ -330,9 +333,9 @@
                             <a class="nav-link cp-tab-solapa" id="cp-boton-asiento-contable" data-toggle="tab"
                                href="#cp-solapa-asiento-contable" role="tab" aria-controls="cp-solapa-asiento-contable" aria-selected="false">
                                 <i class="fa fa-calculator"></i> Asiento contable
-                                @if(! empty($asientoPreview['error']) || ! empty($asientoPreview['avisos'] ?? []))
+                                @if(empty($origen_ingreso_egreso) && (! empty($asientoPreview['error']) || ! empty($asientoPreview['avisos'] ?? [])))
                                 <span class="badge badge-warning cp-badge-asiento-error" title="Revise el cuadre antes de contabilizar">!</span>
-                                @elseif(! empty($data->asiento_id))
+                                @elseif(! empty($data->asiento_id) || ! empty($asientoPreview['asiento_id'] ?? null))
                                 <span class="badge badge-success">OK</span>
                                 @endif
                             </a>
@@ -357,9 +360,24 @@
                 <div class="card-body">
                     @include('compras.comprobante_proveedor.partials.panel_importacion')
                     @include('compras.contrato_validacion_abono.partials.banner')
+                    @if ($esEdicion && ! empty($origen_ingreso_egreso))
+                    <div class="alert alert-info py-2 mb-3" role="status">
+                        <i class="fa fa-info-circle"></i>
+                        Origen: Ingresos y egresos
+                        @if (! empty($numero_ingreso_egreso))
+                            · movimiento {{ $numero_ingreso_egreso }}
+                        @endif
+                        · solo consulta.
+                        @if (! empty($url_ingreso_egreso))
+                            <a href="{{ $url_ingreso_egreso }}" class="alert-link">Abrir el movimiento</a>
+                        @endif
+                    </div>
+                    @endif
                     @php
-                        $avisosIniciales = $asientoPreview['avisos'] ?? [];
-                        $errorInicial = $asientoPreview['error'] ?? null;
+                        // Origen I/E: no mostrar avisos de regeneración COM (proveedor eventual, etc.).
+                        $silenciarAvisosAsientoIe = $esEdicion && ! empty($origen_ingreso_egreso);
+                        $avisosIniciales = $silenciarAvisosAsientoIe ? [] : ($asientoPreview['avisos'] ?? []);
+                        $errorInicial = $silenciarAvisosAsientoIe ? null : ($asientoPreview['error'] ?? null);
                         $hayAvisosIniciales = ! empty($avisosIniciales) || ! empty($errorInicial);
                     @endphp
                     <div id="cp-asiento-avisos-banner" class="alert alert-warning py-2 mb-3 cp-asiento-ui{{ ($mostrarSolapaAsiento ?? false) && $hayAvisosIniciales ? '' : ' d-none' }}" role="status" aria-live="polite">
@@ -415,7 +433,7 @@
                     <div class="tab-content">
                         <div class="tab-pane fade show active cp-solapa" id="cp-solapa-principal" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_datos')
-                            @if (! ($mostrarSolapaCom ?? false) && ! ($com_politica['sin_com_por_tipo'] ?? false))
+                            @if (empty($origen_ingreso_egreso) && ! ($mostrarSolapaCom ?? false) && ! ($com_politica['sin_com_por_tipo'] ?? false))
                                 {{-- Sin solapa dedicada: bloque embebido por si el modo cambia a ASIGNA_RECEPCION --}}
                                 <div id="cp-solapa-recepciones-com-inline" class="cp-solapa-inline mt-3">
                                     @include('compras.comprobante_proveedor.partials.solapa_recepciones_com')
@@ -460,19 +478,7 @@
                     </div>
                 </div>
 
-                @if ($esEdicion && ! empty($origen_ingreso_egreso))
-                    <div class="alert alert-warning mx-3 mt-3">
-                        <i class="fa fa-lock"></i>
-                        Esta factura se cargó desde Ingresos y egresos
-                        @if (! empty($numero_ingreso_egreso))
-                            (movimiento {{ $numero_ingreso_egreso }})
-                        @endif
-                        . Acá solo se consulta. Para cambiarla, abrí ese ingreso o egreso.
-                        @if (! empty($url_ingreso_egreso))
-                            <a href="{{ $url_ingreso_egreso }}" class="alert-link">Abrir el movimiento</a>
-                        @endif
-                    </div>
-                @elseif ($esEdicion && ($tiene_pagos ?? false))
+                @if ($esEdicion && empty($origen_ingreso_egreso) && ($tiene_pagos ?? false))
                     <div class="alert alert-warning mx-3 mt-3">
                         <i class="fa fa-lock"></i>
                         Comprobante con pagos aplicados: no se puede modificar ni borrar.
@@ -483,7 +489,7 @@
                             @endif
                         @endif
                     </div>
-                @elseif ($esEdicion && ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+                @elseif ($esEdicion && empty($origen_ingreso_egreso) && ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
                     <div class="alert alert-info mx-3 mt-3">
                         Contabilizado sin pagos. Asiento #{{ $data->asiento_id ?? '—' }}
                         @if ($data->anita_nro_interno)

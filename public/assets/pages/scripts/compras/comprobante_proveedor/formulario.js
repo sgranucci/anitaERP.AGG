@@ -3639,11 +3639,14 @@ $(function () {
             alert(avisoFechas);
             return;
         }
+        // Siempre volcar cuenta/CC del preview a los conceptos ocultos antes de enviar.
+        // En import Anita contabilizado sin asiento el form podía venir congelado
+        // (data-contabilizado=1) y el return temprano descartaba la cuenta del neto.
+        sincronizarCuentasAsientoAConceptos();
+        sincronizarDebeGastoHiddenDesdeTabla();
         if (contabilizado) {
             return;
         }
-        sincronizarCuentasAsientoAConceptos();
-        sincronizarDebeGastoHiddenDesdeTabla();
 
         if (estadoRepartoGastoPantalla() === 'si') {
             var resumenGasto = resumenSumaDebeGasto();

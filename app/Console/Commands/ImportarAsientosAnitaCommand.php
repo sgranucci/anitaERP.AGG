@@ -22,7 +22,8 @@ class ImportarAsientosAnitaCommand extends Command
                             {--ejecutar : Persiste en ERP (no escribe Anita)}
                             {--reemplazar-diferentes : En --ejecutar, reemplaza duplicados con diferencias}
                             {--solo-documentos : En --ejecutar solo completa factura y OC por renglón. No crea ni reescribe asientos}
-                            {--importar-resumen-sin-detalle : Importa el resumen V/C/T cuando no hay detalle del sistema en el mes (verificar antes: el detalle puede estar en otro mes)}';
+                            {--importar-resumen-sin-detalle : Importa el resumen V/C/T cuando no hay detalle del sistema en el mes (verificar antes: el detalle puede estar en otro mes)}
+                            {--numeros= : Solo estos numeroasiento (coma-separados; nro_operacion / ctamov)}';
 
     protected $description = 'Importa asientos Anita (ctamov + subdiario/subhist) a ERP. Excluye ctamov resumen V/C/T (no P/PER).';
 
@@ -52,10 +53,14 @@ class ImportarAsientosAnitaCommand extends Command
             'intval',
             explode(',', (string) $this->option('empresas')),
         )));
+        $soloNumeros = array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) ($this->option('numeros') ?? '')),
+        )));
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Rango %s → %s | empresas %s | bloque %d mes(es) | %s%s%s',
+            'Rango %s → %s | empresas %s | bloque %d mes(es) | %s%s%s%s',
             $desde,
             $hasta,
             implode(',', $empresas),
@@ -63,6 +68,7 @@ class ImportarAsientosAnitaCommand extends Command
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
             $soloDocumentos ? ' +solo-documentos' : '',
             $reemplazar ? ' +reemplazar-diferentes' : '',
+            $soloNumeros !== [] ? ' +numeros='.implode(',', $soloNumeros) : '',
         ));
         $this->line('Exclusión ctamov: sistemas '.implode(',', AnitaAsientoImportService::SISTEMAS_CIERRE_SUBDIARIO)
             .' con asi_mon_ref≠'.AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP
@@ -86,6 +92,8 @@ class ImportarAsientosAnitaCommand extends Command
                 fn (string $m) => $this->line($m),
                 $resumenSinDetalle,
                 $soloDocumentos,
+                true,
+                $soloNumeros,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());

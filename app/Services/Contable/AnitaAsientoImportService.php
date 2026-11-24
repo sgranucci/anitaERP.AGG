@@ -84,6 +84,10 @@ final class AnitaAsientoImportService
      * @param  list<int>  $empresasAnita
      * @return array<string, mixed>
      */
+    /**
+     * @param  list<int>  $empresasAnita
+     * @param  list<int>  $soloNumeros  Si no vacío, solo procesa esos numeroasiento (nro_operacion / ctamov).
+     */
     public function importarRango(
         string $desdeYmd,
         string $hastaYmd,
@@ -96,6 +100,7 @@ final class AnitaAsientoImportService
         bool $importarResumenSinDetalle = false,
         bool $soloDocumentos = false,
         bool $completarDocumentosLinea = true,
+        array $soloNumeros = [],
     ): array {
         $desde = Carbon::createFromFormat('Y-m-d', $desdeYmd)->startOfDay();
         $hasta = Carbon::createFromFormat('Y-m-d', $hastaYmd)->endOfDay();
@@ -168,6 +173,7 @@ final class AnitaAsientoImportService
                     $importarResumenSinDetalle,
                     $soloDocumentos,
                     $completarDocumentosLinea,
+                    $soloNumeros,
                 );
 
                 $this->mergeResumen($resumen, $bloque);
@@ -181,6 +187,7 @@ final class AnitaAsientoImportService
 
     /**
      * @param  array<string, int>  $mapaTipo
+     * @param  list<int>  $soloNumeros
      * @return array<string, mixed>
      */
     private function procesarBloque(
@@ -197,6 +204,7 @@ final class AnitaAsientoImportService
         bool $importarResumenSinDetalle = false,
         bool $soloDocumentos = false,
         bool $completarDocumentosLinea = true,
+        array $soloNumeros = [],
     ): array {
         $out = $this->resumenVacio();
         $data = $this->bridgeReader->cargarBloque($empresaAnita, $fechaDesdeYmd, $fechaHastaYmd);
@@ -226,6 +234,26 @@ final class AnitaAsientoImportService
             $importarResumenSinDetalle,
             $out,
         );
+
+        $soloNumerosMap = [];
+        foreach ($soloNumeros as $nroFiltro) {
+            $nroFiltro = (int) $nroFiltro;
+            if ($nroFiltro > 0) {
+                $soloNumerosMap[$nroFiltro] = true;
+            }
+        }
+        if ($soloNumerosMap !== []) {
+            $antes = count($planes);
+            $planes = array_values(array_filter(
+                $planes,
+                static fn (array $p) => isset($soloNumerosMap[(int) ($p['plan']['numeroasiento'] ?? 0)]),
+            ));
+            $this->log($logger, sprintf(
+                '  filtro --numeros: %d → %d plan(es)',
+                $antes,
+                count($planes),
+            ));
+        }
 
         $numeros = array_values(array_unique(array_map(
             static fn (array $p) => (int) $p['plan']['numeroasiento'],

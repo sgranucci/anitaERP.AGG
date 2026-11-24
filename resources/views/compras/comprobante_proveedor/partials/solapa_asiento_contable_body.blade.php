@@ -19,6 +19,11 @@
     $cantDebeGastoUi = $lineasDebeGastoUi->count();
 @endphp
 
+@if(! empty($preview['nota_origen']))
+<div class="alert alert-secondary py-2 mb-2">
+    <i class="fa fa-info-circle"></i> {{ $preview['nota_origen'] }}
+</div>
+@endif
 @if(empty($preview['activo']))
 <div class="alert alert-secondary mb-0">
     La vista previa del asiento no está disponible.

@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Contable\Asiento;
 use Illuminate\Database\Eloquent\Model;
 use RuntimeException;
 
@@ -40,5 +41,25 @@ final class ComprobanteProveedorIngresoEgresoEdicionSupport
             'id' => $cajaId,
             'origen' => 'ingresoegreso',
         ]);
+    }
+
+    /**
+     * Asiento contable del movimiento de caja (no vive en comprobante_proveedor.asiento_id).
+     */
+    public static function asientoDelMovimiento(object $comprobante): ?Asiento
+    {
+        if (! self::es($comprobante)) {
+            return null;
+        }
+
+        $cajaId = (int) ($comprobante->caja_movimiento_id ?? 0);
+        if ($cajaId <= 0) {
+            return null;
+        }
+
+        return Asiento::query()
+            ->where('caja_movimiento_id', $cajaId)
+            ->orderByDesc('id')
+            ->first();
     }
 }

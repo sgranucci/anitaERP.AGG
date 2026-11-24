@@ -176,18 +176,37 @@
             'col_label' => $cpColLabel,
             'col_input' => $cpColInput,
         ])
+        @php
+            $nombreProveedorForm = ($data ?? null)?->proveedores?->nombre;
+            $codigoProveedorForm = ($data ?? null)?->proveedores?->codigo;
+            if (($nombreProveedorForm === null || $nombreProveedorForm === '')
+                && filled(($data ?? null)?->proveedor_nombre_eventual ?? null)
+            ) {
+                $nombreProveedorForm = (string) $data->proveedor_nombre_eventual;
+                $codigoProveedorForm = $codigoProveedorForm ?: 'EVT';
+            }
+        @endphp
         @include('includes.compras.campo_proveedor_consulta', [
             'proveedor_id' => ($data ?? null)?->proveedor_id,
-            'codigo_proveedor' => ($data ?? null)?->proveedores?->codigo,
-            'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
+            'codigo_proveedor' => $codigoProveedorForm,
+            'nombre_proveedor' => $nombreProveedorForm,
             'estado_proveedor' => ($data ?? null)?->proveedores?->estado,
-            'requerido' => true,
-            'mostrar_aviso_cuenta' => true,
-            'mostrar_aviso_suspendido' => true,
+            'requerido' => empty($origen_ingreso_egreso),
+            'mostrar_aviso_cuenta' => empty($origen_ingreso_egreso),
+            'mostrar_aviso_suspendido' => empty($origen_ingreso_egreso),
+            'solo_lectura_codigo' => ! empty($bloqueado_edicion) || ! empty($origen_ingreso_egreso),
             'autofocus' => ! ($esEdicion ?? false),
             'col_label' => $cpColLabel,
             'col_input' => $cpColInput,
         ])
+        @if (! empty($origen_ingreso_egreso) && filled(($data ?? null)?->proveedor_documento_eventual ?? null))
+        <div class="form-group row">
+            <label class="{{ $cpColLabel }}">CUIT eventual</label>
+            <div class="{{ $cpColInput }}">
+                <input type="text" class="form-control" readonly value="{{ $data->proveedor_documento_eventual }}">
+            </div>
+        </div>
+        @endif
         @include('compras.partials.campo_consulta_tipotransaccion_compra', [
             'prefix' => 'comprobante_proveedor',
             'tipoId' => $tipoSelId,
@@ -260,7 +279,12 @@
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC;
                     }
                 @endphp
-                @if ($sinComPorTipo)
+                @if (! empty($origen_ingreso_egreso))
+                    <input type="hidden" name="modo_carga" id="modo_carga" value="{{ $modoActual ?: \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION }}">
+                    <input type="text" class="form-control" readonly
+                        value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta($modoActual ?: \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION) }}">
+                    <small class="form-text text-muted">Factura fiscal nacida en Ingresos y egresos (sin circuito OC/COM).</small>
+                @elseif ($sinComPorTipo)
                     <input type="hidden" name="modo_carga" id="modo_carga" value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION }}">
                     <input type="text" class="form-control" readonly
                         value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION) }}">

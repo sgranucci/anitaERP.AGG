@@ -34,8 +34,10 @@ use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
+use App\Models\Contable\Asiento;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
@@ -1205,6 +1207,12 @@ class ComprobanteProveedorAsientoService
             return $this->previewAsientoGrabado($comprobante);
         }
 
+        // Factura nacida en I/E: el asiento vive en el movimiento de caja, no en asiento_id.
+        // No regenerar borrador COM (falla con proveedor eventual y muestra avisos falsos).
+        if (ComprobanteProveedorIngresoEgresoEdicionSupport::es($comprobante)) {
+            return $this->previewAsientoDesdeIngresoEgreso($comprobante);
+        }
+
         if (! \App\Support\Compras\TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
             return [
                 'activo' => false,
@@ -1251,6 +1259,11 @@ class ComprobanteProveedorAsientoService
             && (int) ($existente->asiento_id ?? 0) > 0
             && (string) ($existente->origen_entrada ?? '') === ComprobanteProveedorOrigenEntrada::ANITA_IMPORT) {
             return $this->previewAsientoGrabado($existente);
+        }
+
+        // Origen I/E: asiento del movimiento de caja; no regenerar borrador COM.
+        if ($existente && ComprobanteProveedorIngresoEgresoEdicionSupport::es($existente)) {
+            return $this->previewAsientoDesdeIngresoEgreso($existente);
         }
 
         if (! \App\Support\Compras\TipotransaccionCompraAsientoSupport::generaDesdeComprobante($comprobante)) {
@@ -1304,13 +1317,69 @@ class ComprobanteProveedorAsientoService
                 'activo' => true,
                 'error' => 'El comprobante indica asiento id '.(int) $comprobante->asiento_id.' pero no se encontró en el ERP.',
                 'es_preview' => false,
+                'avisos' => [],
                 'lineas' => [],
             ];
         }
 
+        return $this->previewDesdeAsientoModelo($asiento);
+    }
+
+    /**
+     * Vista solo lectura del asiento del movimiento de caja (origen I/E).
+     *
+     * @return array<string, mixed>
+     */
+    private function previewAsientoDesdeIngresoEgreso(Comprobante_Proveedor $comprobante): array
+    {
+        $asiento = ComprobanteProveedorIngresoEgresoEdicionSupport::asientoDelMovimiento($comprobante);
+        if (! $asiento) {
+            return [
+                'activo' => true,
+                'error' => null,
+                'es_preview' => false,
+                'avisos' => [],
+                'lineas' => [],
+                'nota_origen' => 'Esta factura se contabilizó con el asiento del movimiento de caja. Todavía no hay asiento vinculado.',
+            ];
+        }
+
+        $asiento->loadMissing([
+            'tipoasientos',
+            'asiento_movimientos.cuentacontables',
+            'asiento_movimientos.centrocostos',
+        ]);
+
+        $cpId = (int) ($comprobante->id ?? 0);
+        $movimientos = $asiento->asiento_movimientos;
+        $filtrados = $movimientos->filter(static function ($mov) use ($cpId) {
+            return $cpId > 0 && (int) ($mov->comprobante_proveedor_id ?? 0) === $cpId;
+        });
+
+        $usaFiltroCp = $filtrados->isNotEmpty();
+        $preview = $this->previewDesdeAsientoModelo(
+            $asiento,
+            $usaFiltroCp ? $filtrados : $movimientos
+        );
+        $preview['avisos'] = [];
+        unset($preview['error']);
+        $preview['nota_origen'] = $usaFiltroCp
+            ? 'Líneas del asiento del movimiento de caja vinculadas a esta factura.'
+            : 'Asiento completo del movimiento de caja (Ingresos y egresos).';
+
+        return $preview;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Asiento_Movimiento>|null  $movimientos
+     * @return array<string, mixed>
+     */
+    private function previewDesdeAsientoModelo(Asiento $asiento, $movimientos = null): array
+    {
+        $movimientos = $movimientos ?? $asiento->asiento_movimientos;
         $lineas = [];
         $totales = ['debe' => 0.0, 'haber' => 0.0];
-        foreach ($asiento->asiento_movimientos as $mov) {
+        foreach ($movimientos as $mov) {
             $monto = (float) ($mov->monto ?? 0);
             $debe = $monto > 0 ? $monto : null;
             $haber = $monto < 0 ? abs($monto) : null;
@@ -1324,24 +1393,28 @@ class ComprobanteProveedorAsientoService
                 'cuenta_codigo' => optional($mov->cuentacontables)->codigo ?? '—',
                 'cuenta_nombre' => optional($mov->cuentacontables)->nombre ?? '',
                 'centrocosto_codigo' => optional($mov->centrocostos)->codigo ?? '',
+                'centrocosto_id' => (int) ($mov->centrocosto_id ?? 0),
+                'cuentacontable_id' => (int) ($mov->cuentacontable_id ?? 0),
                 'debe' => $debe,
                 'haber' => $haber,
                 'observacion' => (string) ($mov->observacion ?? ''),
+                'origen' => 'grabado',
             ];
         }
 
         return [
-                'activo' => true,
-                'error' => null,
-                'es_preview' => false,
-                'asiento_id' => (int) $asiento->id,
-                'numeroasiento' => (string) $asiento->numeroasiento,
-                'fecha' => optional($asiento->fecha)->format('d/m/Y'),
-                'tipo_asiento' => optional($asiento->tipoasientos)->nombre ?? '',
-                'total_debe' => round($totales['debe'], 2),
-                'total_haber' => round($totales['haber'], 2),
-                'lineas' => $lineas,
-            ];
+            'activo' => true,
+            'error' => null,
+            'es_preview' => false,
+            'avisos' => [],
+            'asiento_id' => (int) $asiento->id,
+            'numeroasiento' => (string) $asiento->numeroasiento,
+            'fecha' => optional($asiento->fecha)->format('d/m/Y'),
+            'tipo_asiento' => optional($asiento->tipoasientos)->nombre ?? '',
+            'total_debe' => round($totales['debe'], 2),
+            'total_haber' => round($totales['haber'], 2),
+            'lineas' => $lineas,
+        ];
     }
 
     /**
