@@ -214,12 +214,10 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('actividad_arca', 'actividad_arca.id', '=', 'venta.actividad_arca_id')
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
             ->leftJoin('condicioniva', 'condicioniva.id', '=', 'venta.condicioniva_id')
-            ->where('puntoventa.empresa_id', $empresaId)
-            ->where('tt.abreviatura', '<>', 'IZV');
+            ->where('puntoventa.empresa_id', $empresaId);
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
-        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
-        LibroIvaDigitalVentasPeriodoSupport::aplicarExcluirTuriva($query);
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroPoblacionIvaVentas($query, 'venta', 'puntoventa', 'tt');
 
         if ($soloNotasCredito) {
             $query->where('tt.signo', '<', 0);
@@ -301,14 +299,12 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('actividad_arca', 'actividad_arca.id', '=', 'venta.actividad_arca_id')
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->where('tt.abreviatura', '<>', 'IZV')
             ->where(function ($q): void {
                 $q->whereNull('tt.signo')->orWhere('tt.signo', '>=', 0);
             });
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
-        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
-        LibroIvaDigitalVentasPeriodoSupport::aplicarExcluirTuriva($query);
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroPoblacionIvaVentas($query, 'venta', 'puntoventa', 'tt');
 
         $exentos = $query
             ->selectRaw("

@@ -155,8 +155,9 @@ final class LibroIvaDigitalMapeosSupport
     }
 
     /**
-     * Comprobantes internos sin CAE que sí van al Libro IVA Digital / IVA Simple.
-     * IZV queda excluido (interno gastronómico no informable).
+     * Internos que, sin CAE, usan desglose de Factura B en el armado del registro.
+     * La población del Libro / IVA Simple ya no se filtra por CAE: manda el tilde
+     * «Va al IVA ventas» (igual que el reporte IVA ventas).
      *
      * @return list<string>
      */

@@ -15,6 +15,9 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeRead
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
+use App\Support\Ventas\IvaVentasListadoFiltros;
+use App\Support\Ventas\TipotransaccionIvaVentasSupport;
+use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
@@ -258,25 +261,8 @@ class LibroIvaDigitalVentasGenerador
             ->where('pv_lid.empresa_id', $empresaId);
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
-        LibroIvaDigitalVentasPeriodoSupport::aplicarExcluirTuriva($query);
-
-        $tiposSinCae = DB::table('tipotransaccion')
-            ->whereIn('abreviatura', LibroIvaDigitalMapeosSupport::abreviaturasSinCaeInformables())
-            ->whereNull('deleted_at')
-            ->pluck('id')
-            ->map(static fn ($id): int => (int) $id)
-            ->filter(static fn (int $id): bool => $id > 0)
-            ->values()
-            ->all();
-
-        $query->where(function ($filtro) use ($tiposSinCae): void {
-            $filtro->where(function ($cae): void {
-                $cae->whereNotNull('venta.cae')->where('venta.cae', '<>', '');
-            });
-            if ($tiposSinCae !== []) {
-                $filtro->orWhereIn('venta.tipotransaccion_id', $tiposSinCae);
-            }
-        });
+        // Misma población que el reporte IVA ventas (tilde PV/tipo; sin exigir CAE).
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroPoblacionIvaVentas($query, 'venta', 'pv_lid');
 
         return $query;
     }
@@ -286,24 +272,25 @@ class LibroIvaDigitalVentasGenerador
      */
     private function armarRegistroVenta(Venta $venta, bool $porFechaJornada): ?array
     {
-        // IZV interno gastronómico: no informa Libro IVA. RMV / FBI / FSL sí (sin CAE).
         $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
-        if ($abrev === 'IZV') {
+        if ($abrev === 'PRE') {
+            return null;
+        }
+        if (! TipotransaccionIvaVentasSupport::vaAlIvaVentas($venta->tipotransacciones)) {
+            return null;
+        }
+        if (VentaNumerocomprobanteUnicidadSupport::esEspejoAnitaCedido((string) $venta->codigo)) {
             return null;
         }
 
         $esRmv = LibroIvaDigitalMapeosSupport::esRmv($abrev);
         $esSinCaeInformable = LibroIvaDigitalMapeosSupport::esSinCaeInformable($abrev);
         $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
-        // TurIVA (195/196/197): sección propia; fuera del archivo de ventas ordinario.
-        if (LibroIvaDigitalMapeosSupport::esLetraTuriva($letra)) {
+        if (! IvaVentasListadoFiltros::pasaSubdiario($letra, IvaVentasListadoFiltros::SUBDIARIO_VENTAS_A_B)) {
             return null;
         }
         $codigoBase = (string) ($venta->tipotransacciones->codigo ?? '001');
         $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoBase, $letra, $abrev);
-        if (LibroIvaDigitalMapeosSupport::esTipoTuriva($tipoComprobante)) {
-            return null;
-        }
         $puntoVenta = (int) ($venta->puntoventas->codigo ?? 0);
         $numero = (int) $venta->numerocomprobante;
 
@@ -482,6 +469,12 @@ class LibroIvaDigitalVentasGenerador
                 continue;
             }
             if (IvaVentasDesgloseSupport::esConceptoGravado($concepto)) {
+                // «Gravado» agregado (import Anita Crown) sin «al X%»: no meter el total
+                // en un bucket de tasa (suele venir forzado a 21). El neto por alícuota
+                // sale de baseimponible de las líneas «Iva …» (21 / 27 / 10,5).
+                if (stripos($concepto, 'Gravado al') === false) {
+                    continue;
+                }
                 $tasa = round((float) $imp->tasa, 3);
                 $alicuotas[$tasa]['neto'] = ($alicuotas[$tasa]['neto'] ?? 0) + $importe;
                 $alicuotas[$tasa]['tasa'] = $tasa;

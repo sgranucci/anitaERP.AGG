@@ -601,8 +601,10 @@
                         Período {{ $resultado['periodo']['etiqueta'] ?? '' }}.
                         Importaciones y ajustes manuales DJ se cargan en las tablas auxiliares
                         (<code>libro_iva_importacion_*</code>, <code>libro_iva_ajuste_dj</code>).
-                        Las Facturas T (TurIVA, tipos 195/196/197) se excluyen del archivo de ventas;
-                        la sección TurIVA aún no se genera.
+                        Las ventas del Libro / IVA Simple usan el mismo filtro que el reporte
+                        <strong>IVA ventas</strong> (punto de venta y tipo con tilde
+                        &laquo;Va al IVA ventas&raquo;; no exige CAE; incluye letra T / TurIVA
+                        cuando el tipo va al IVA ventas).
                     </p>
                 @elseif ($consultado)
                     <p class="text-muted">No se generaron datos para los filtros indicados.</p>
