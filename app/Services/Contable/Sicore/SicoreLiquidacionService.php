@@ -103,6 +103,20 @@ final class SicoreLiquidacionService
             $safIng['ingresos'],
         );
 
+        // Mismas restas SAF/ingresos en las tablas "Conciliación SICORE vs mayor" del PDF (solo DJ).
+        $resCompras['conciliacion'] = SicoreLiquidacionAutocontrolSupport::ajustarConciliacion(
+            $resCompras['conciliacion'] ?? [],
+            $tipo,
+            $safIng['saf'],
+            $safIng['ingresos'],
+        );
+        $resSueldos['conciliacion'] = SicoreLiquidacionAutocontrolSupport::ajustarConciliacion(
+            $resSueldos['conciliacion'] ?? [],
+            $tipo,
+            $safIng['saf'],
+            $safIng['ingresos'],
+        );
+
         $empresa = Empresa::query()->find($empresaId);
         $empresaLabel = $this->etiquetaEmpresa($empresa);
         $empresaCorta = SicoreLiquidacionTipoSupport::empresaCorta((string) ($empresa->nombre ?? ''));

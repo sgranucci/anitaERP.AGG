@@ -13,8 +13,6 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
-use App\Repositories\Contable\Usuario_CuentacontableRepositoryInterface;
-use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\CuentacontableArbolSupport;
 use App\Support\Contable\CuentacontableConsultaSupport;
 use App\Support\Contable\CuentacontableGemeloSupport;
@@ -37,22 +35,18 @@ class CuentacontableController extends Controller
 
     private $centrocostoRepository;
 
-    private $usuario_cuentacontableRepository;
-
     public function __construct(
         ConceptogastoRepositoryInterface $conceptogastorepository,
         CuentacontableRepositoryInterface $cuentacontablerepository,
         EmpresaRepositoryInterface $empresarepository,
         CentrocostoRepositoryInterface $centrocostorepository,
-        Cuentacontable_CentrocostoRepositoryInterface $cuentacontable_centrocostorepository,
-        Usuario_CuentaContableRepositoryInterface $usuario_cuentacontablerepository
+        Cuentacontable_CentrocostoRepositoryInterface $cuentacontable_centrocostorepository
     ) {
         $this->conceptogastoRepository = $conceptogastorepository;
         $this->cuentacontableRepository = $cuentacontablerepository;
         $this->empresaRepository = $empresarepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->cuentacontable_centrocostoRepository = $cuentacontable_centrocostorepository;
-        $this->usuario_cuentacontableRepository = $usuario_cuentacontablerepository;
     }
 
     public function index(Request $request)
@@ -350,17 +344,10 @@ class CuentacontableController extends Controller
         $output['data'] = '';
         $flSinDatos = true;
         $puedeConsultar = can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false);
-        $usuarioTieneRestriccion = AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
 
+        // La whitelist usuario_cuentacontable aplica solo al guardar asientos
+        // (aprobación), no al buscador compartido usado por mayores y reportes.
         foreach ($rows as $row) {
-            $usuario_cuentacontable = $this->usuario_cuentacontableRepository
-                ->leePorUsuarioCuenta(auth()->id(), $row['cuentacontable_id']);
-
-            $cuentaPermitida = ! $usuarioTieneRestriccion || count($usuario_cuentacontable) > 0;
-            if (! $cuentaPermitida) {
-                continue;
-            }
-
             $flSinDatos = false;
             $output['data'] .= '<tr>';
             for ($i = 0; $i < $count; $i++) {

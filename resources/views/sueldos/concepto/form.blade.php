@@ -221,25 +221,90 @@ use App\Support\Sueldos\RubroCostoLaboral;
 <hr>
 <h5 class="mb-2">F&oacute;rmulas de c&aacute;lculo</h5>
 <p class="text-muted small">Se eval&uacute;an con el parser de sueldos (variables como <code>SUELDO</code>, <code>ANTIG</code>, <code>CANTVAC</code>, <code>Bn</code>, <code>Iconcepto</code>). La <em>f&oacute;rmula</em> es el importe final; opcionalmente separe <em>cantidad</em> y <em>valor unitario</em>.</p>
+@php
+    $resaltarPos = (int) request('resaltar_pos', -1);
+    $resaltarCampo = (string) request('campo', 'formula');
+    if (! in_array($resaltarCampo, ['formula', 'formula_cantidad', 'formula_valor'], true)) {
+        $resaltarCampo = 'formula';
+    }
+    $resaltarDesdeLiq = request('origen') === 'liquidacion' || request()->filled('liquidacion_id');
+@endphp
+@if ($resaltarPos >= 0)
+    <div class="alert alert-danger" id="aviso-error-formula-pos">
+        <strong>Error de f&oacute;rmula en posici&oacute;n {{ $resaltarPos }}</strong>
+        (campo <code>{{ $resaltarCampo }}</code>).
+        El cursor y el resaltado marcan d&oacute;nde el parser esperaba <code>)</code> u otro token.
+        @if ($resaltarDesdeLiq && request()->filled('liquidacion_id'))
+            <a class="alert-link ml-1"
+               href="{{ route('resultado_liquidacion_sueldos', ['id' => request('liquidacion_id')]) }}#panel-errores-liquidacion">
+                Volver a errores de la corrida
+            </a>
+        @endif
+    </div>
+@endif
 <div class="form-group row">
     <label for="formula" class="col-lg-2 col-form-label">F&oacute;rmula (importe)</label>
     <div class="col-lg-10">
-        <textarea name="formula" id="formula" class="form-control" rows="2" maxlength="2000">{{ old('formula', $data->formula ?? '') }}</textarea>
+        <textarea name="formula" id="formula" class="form-control {{ $resaltarPos >= 0 && $resaltarCampo === 'formula' ? 'border-danger' : '' }}" rows="4" maxlength="8000">{{ old('formula', $data->formula ?? '') }}</textarea>
+        <div id="formula-preview-error" class="small mt-1 p-2 border rounded bg-light" style="display:none;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;"></div>
         <small class="form-text text-muted">En edici&oacute;n pod&eacute;s usar el <em>Debugger de f&oacute;rmulas</em> debajo del formulario.</small>
     </div>
 </div>
 <div class="form-group row">
     <label for="formula_cantidad" class="col-lg-2 col-form-label">F&oacute;rmula cantidad</label>
     <div class="col-lg-10">
-        <textarea name="formula_cantidad" id="formula_cantidad" class="form-control" rows="2" maxlength="2000">{{ old('formula_cantidad', $data->formula_cantidad ?? '') }}</textarea>
+        <textarea name="formula_cantidad" id="formula_cantidad" class="form-control {{ $resaltarPos >= 0 && $resaltarCampo === 'formula_cantidad' ? 'border-danger' : '' }}" rows="2" maxlength="8000">{{ old('formula_cantidad', $data->formula_cantidad ?? '') }}</textarea>
     </div>
 </div>
 <div class="form-group row">
     <label for="formula_valor" class="col-lg-2 col-form-label">F&oacute;rmula valor</label>
     <div class="col-lg-10">
-        <textarea name="formula_valor" id="formula_valor" class="form-control" rows="2" maxlength="2000">{{ old('formula_valor', $data->formula_valor ?? '') }}</textarea>
+        <textarea name="formula_valor" id="formula_valor" class="form-control {{ $resaltarPos >= 0 && $resaltarCampo === 'formula_valor' ? 'border-danger' : '' }}" rows="2" maxlength="8000">{{ old('formula_valor', $data->formula_valor ?? '') }}</textarea>
     </div>
 </div>
+@if ($resaltarPos >= 0)
+<script>
+(function () {
+    var pos = {{ $resaltarPos }};
+    var campo = @json($resaltarCampo);
+    var el = document.getElementById(campo);
+    if (!el) return;
+    function pintar() {
+        var txt = el.value || '';
+        var p = Math.max(0, Math.min(pos, txt.length));
+        var antes = txt.slice(0, p);
+        var marca = txt.slice(p, p + 1) || '∎';
+        var despues = txt.slice(p + 1);
+        var previewId = campo === 'formula' ? 'formula-preview-error' : null;
+        var preview = previewId ? document.getElementById(previewId) : null;
+        if (!preview) {
+            preview = document.createElement('div');
+            preview.className = 'small mt-1 p-2 border rounded bg-light';
+            preview.style.cssText = 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-word;';
+            el.parentNode.insertBefore(preview, el.nextSibling);
+        }
+        preview.style.display = 'block';
+        preview.innerHTML = 'Pos ' + p + ' ▸ '
+            + escapeHtml(antes)
+            + '<mark style="background:#ff6b6b;color:#fff;padding:0 2px;">' + escapeHtml(marca) + '</mark>'
+            + escapeHtml(despues);
+        try {
+            el.focus();
+            el.setSelectionRange(p, Math.min(p + 1, txt.length));
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch (e) {}
+    }
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', pintar);
+    } else {
+        pintar();
+    }
+})();
+</script>
+@endif
 <div class="form-group row">
     <label for="leyenda_recibo" class="col-lg-2 col-form-label">Leyenda recibo</label>
     <div class="col-lg-10">

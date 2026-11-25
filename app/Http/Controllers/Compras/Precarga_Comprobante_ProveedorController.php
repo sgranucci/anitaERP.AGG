@@ -703,6 +703,15 @@ class Precarga_Comprobante_ProveedorController extends Controller
         }
         if ((int) $request->input('proveedor_id') <= 0) {
             $errores[] = 'Indicá el proveedor.';
+        } else {
+            $errores = array_merge(
+                $errores,
+                \App\Support\Compras\ComprobanteProveedorServicioSupport::erroresAsignacion(
+                    $request->input('proveedor_servicio_id'),
+                    (int) $request->input('proveedor_id'),
+                    $request->input('servicio_cliente')
+                )
+            );
         }
         if ((int) $request->input('tipotransaccion_compra_id') <= 0) {
             $errores[] = 'Indicá el tipo de transacción.';
@@ -832,6 +841,13 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $payload['sucursal'] = (int) ($payload['sucursal'] ?? 0);
         $payload['numerocomprobante'] = (int) ($payload['numerocomprobante'] ?? 0);
         $payload['numeroordencompra'] = trim((string) ($payload['numeroordencompra'] ?? ''));
+        $asigServicio = \App\Support\Compras\ComprobanteProveedorServicioSupport::resolverAsignacion(
+            $payload['proveedor_servicio_id'] ?? null,
+            (int) ($payload['proveedor_id'] ?? 0),
+            $payload['servicio_cliente'] ?? null
+        );
+        $payload['proveedor_servicio_id'] = $asigServicio['proveedor_servicio_id'];
+        $payload['servicio_cliente'] = $asigServicio['servicio_cliente'];
 
         $pdf = $request->file('factura_pdf');
         if ($pdf) {

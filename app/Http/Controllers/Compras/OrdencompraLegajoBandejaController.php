@@ -573,6 +573,7 @@ class OrdencompraLegajoBandejaController extends Controller
             && ! $request->has('nro_factura')
             && ! $request->has('nro_com')
             && ! $request->has('nro_op')
+            && ! $request->has('nro_cliente')
             && ! $request->has('presupuesto')
         ) {
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(OrdencompraLegajoBandejaListadoColumnas::RECURSO, $usuarioId)
@@ -834,7 +835,13 @@ class OrdencompraLegajoBandejaController extends Controller
         if (OrdencompraListadoFiltros::tieneCriteriosTexto($filtros)) {
             $partes[] = trim((string) ($filtros['valor'] ?? ''));
         }
-        foreach (['nro_oc' => 'OC', 'nro_factura' => 'FC', 'nro_com' => 'COM', 'nro_op' => 'OP'] as $k => $etq) {
+        foreach ([
+            'nro_oc' => 'OC',
+            'nro_factura' => 'FC',
+            'nro_com' => 'COM',
+            'nro_op' => 'OP',
+            'nro_cliente' => 'Cliente/medidor',
+        ] as $k => $etq) {
             if (! empty($filtros[$k])) {
                 $partes[] = $etq.' '.$filtros[$k];
             }

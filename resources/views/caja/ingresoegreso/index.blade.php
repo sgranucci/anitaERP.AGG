@@ -40,9 +40,6 @@
         min-width: 100% !important;
         max-width: 100%;
     }
-    .lw-workbench .ie-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col {
-        max-width: 0;
-    }
     /* Movimientos: lista compacta sin estirar la grilla. */
     #tabla-paginada td.ie-movimientos-celda {
         white-space: normal;
@@ -313,7 +310,7 @@
                     $layoutPantallaPorKey[$filaP['key']] = $filaP;
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
-                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $usaScrollHorizontal = LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? []);
                 $anchoAcciones = 152; // ~9.5rem: 5 íconos sin hueco vacío
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0

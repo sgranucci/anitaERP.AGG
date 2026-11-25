@@ -19,6 +19,9 @@
           </div>
         </div>
         <div id="consultaproveedor-aviso" class="small text-muted mb-2 d-none"></div>
+        <div class="small text-muted mb-2">
+          En <span class="text-danger font-weight-bold">rojo</span>: proveedor suspendido (no se puede elegir; contactá a Compras).
+        </div>
 
         <div class="table-responsive">
           <table class="table table-sm table-striped table-bordered table-hover" id="tabla-consulta-proveedor">

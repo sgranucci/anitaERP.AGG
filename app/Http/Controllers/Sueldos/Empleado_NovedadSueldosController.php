@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Sueldos;
 use App\Http\Controllers\Controller;
 use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Models\Sueldos\Empleado_Sueldos;
-use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Models\Sueldos\Novedad_Sueldos;
 use App\Repositories\Sueldos\Novedad_SueldosRepositoryInterface;
 use App\Services\Sueldos\NovedadMultiempresaReplicatorService;
@@ -104,6 +103,46 @@ class Empleado_NovedadSueldosController extends Controller
     }
 
     /**
+     * Replica novedades seleccionadas (o todas las no anuladas) a legajos activos del mismo legajo en otras empresas.
+     */
+    public function replicar(Request $request, $empleadoId)
+    {
+        can('actualizar-empleado-sueldos');
+        if (! can('crear-novedad-sueldos', false) && ! can('actualizar-novedad-sueldos', false)) {
+            return response()->json(['message' => 'Sin permiso para replicar novedades.'], 403);
+        }
+
+        $empleado = Empleado_Sueldos::findOrFail($empleadoId);
+        $ids = $request->input('novedad_ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        $resultado = $this->replicator->replicarNovedadesEmpleado($empleado, $ids);
+        if ($resultado['hermanos'] === 0) {
+            return $this->responderPanel(
+                $empleado,
+                'Este legajo no tiene alta activa en otras empresas.'
+            );
+        }
+        if ($resultado['replicadas'] === 0) {
+            return $this->responderPanel(
+                $empleado,
+                'No hay novedades para replicar (seleccioná filas o cargá novedades no anuladas).'
+            );
+        }
+
+        $destino = $resultado['empresas'] !== []
+            ? implode(', ', $resultado['empresas'])
+            : ((string) $resultado['hermanos'].' empresa(s)');
+
+        return $this->responderPanel(
+            $empleado,
+            'Se replicaron '.$resultado['replicadas'].' novedad(es) a: '.$destino.'.'
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function validar(Request $request): array
@@ -131,30 +170,18 @@ class Empleado_NovedadSueldosController extends Controller
             ->limit(200)
             ->get();
 
-        $liquidaciones = Liquidacion_Sueldos::query()
-            ->where('empresa_id', $empleado->empresa_id)
-            ->whereIn('estado', Liquidacion_Sueldos::ESTADOS_EDITABLES)
-            ->orderByDesc('periodo')
-            ->orderByDesc('numero')
-            ->limit(40)
-            ->get(['id', 'numero', 'periodo', 'descripcion', 'estado']);
-
-        // Si no hay abiertas, mostrar últimas corridas igual.
-        if ($liquidaciones->isEmpty()) {
-            $liquidaciones = Liquidacion_Sueldos::query()
-                ->where('empresa_id', $empleado->empresa_id)
-                ->orderByDesc('periodo')
-                ->orderByDesc('numero')
-                ->limit(20)
-                ->get(['id', 'numero', 'periodo', 'descripcion', 'estado']);
-        }
+        $hermanos = $this->replicator->hermanos($empleado)->loadMissing('empresa:id,nombre,codigo');
+        $puedeEditar = EmpleadoLegajoVisualizacion::puedeMutar(
+            can('actualizar-empleado-sueldos', false) && can('crear-novedad-sueldos', false)
+        );
 
         $html = view('sueldos.empleado.partials.novedades', [
             'empleado' => $empleado,
             'novedades' => $novedades,
-            'liquidaciones' => $liquidaciones,
             'estados' => NovedadSueldosCatalogo::ESTADOS,
-            'puedeEditar' => EmpleadoLegajoVisualizacion::puedeMutar(can('actualizar-empleado-sueldos', false) && can('crear-novedad-sueldos', false)),
+            'puedeEditar' => $puedeEditar,
+            'hermanosMultiempresa' => $hermanos,
+            'puedeReplicarMultiempresa' => $puedeEditar && $hermanos->isNotEmpty(),
         ])->render();
 
         return response()->json(['html' => $html, 'mensaje' => $mensaje]);

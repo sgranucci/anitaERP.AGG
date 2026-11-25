@@ -15,7 +15,6 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        @if(session('error'))<div class="alert alert-danger">{!! session('error') !!}</div>@endif
 
         <div class="card card-info">
             <div class="card-header">
@@ -43,6 +42,7 @@
             <div class="card-body">
                 <div class="row text-center mb-2">
                     <div class="col"><small class="text-muted d-block">Empresa</small>{{ optional($liq->empresa)->nombre }}</div>
+                    <div class="col"><small class="text-muted d-block">Tipo</small>{{ $liq->tipoLabel() }}</div>
                     <div class="col"><small class="text-muted d-block">Alcance</small>{{ $liq->alcanceLabel() }}</div>
                     <div class="col"><small class="text-muted d-block">Per&iacute;odo</small>{{ $liq->periodo_mes ? sprintf('%02d/%04d', $liq->periodo_mes, $liq->periodo_anio) : $liq->periodo }}</div>
                     <div class="col"><small class="text-muted d-block">Recibos</small>{{ $totalesVisibles['cantidad'] ?? $liq->cantidad_recibos }}</div>
@@ -51,6 +51,22 @@
                     <div class="col"><small class="text-muted d-block">Descuentos</small>$ {{ number_format((float) ($totalesVisibles['desc'] ?? $liq->total_descuentos), 2, ',', '.') }}</div>
                     <div class="col"><small class="text-muted d-block">Neto</small><strong>$ {{ number_format((float) ($totalesVisibles['neto'] ?? $liq->total_neto), 2, ',', '.') }}</strong></div>
                 </div>
+                @php
+                    $idsFiltro = is_array($liq->filtros_json) ? ($liq->filtros_json['empleado_ids'] ?? []) : [];
+                @endphp
+                @if (is_array($liq->filtros_json) && array_key_exists('empleado_ids', $liq->filtros_json))
+                    <div class="alert alert-info py-1 px-2 small mb-2">
+                        Corrida con <strong>{{ count($idsFiltro) }} empleado(s) seleccionado(s)</strong> (filtro manual).
+                        @if (can('editar-liquidacion-sueldos', false) && $liq->esEditable())
+                            <a href="{{ route('editar_liquidacion_sueldos', $liq->id) }}">Editar selecci&oacute;n</a>
+                        @endif
+                    </div>
+                @elseif ($liq->tipo === 'final')
+                    <div class="alert alert-secondary py-1 px-2 small mb-2">
+                        Liquidaci&oacute;n final: incluye legajos con <strong>fecha de egreso</strong> en el per&iacute;odo
+                        (provisoria o definitiva){{ $liq->motivoegreso_id ? ', filtrados por motivo' : '' }}.
+                    </div>
+                @endif
                 <div class="mb-2 d-flex align-items-center flex-wrap">
                     <div class="custom-control custom-checkbox mr-3">
                         <input type="checkbox" class="custom-control-input" id="chk-multiempresa-emision"
@@ -76,9 +92,34 @@
                 </div>
 
                 @include('sueldos.liquidacion.partials.asiento')
+                @include('sueldos.liquidacion.partials.errores')
+
+                <form method="get" action="{{ route('resultado_liquidacion_sueldos', ['id' => $liq->id]) }}" class="form-inline mb-2" id="form-buscar-recibos-liq">
+                    <label for="q-recibos-liq" class="sr-only">Buscar empleado</label>
+                    <div class="input-group input-group-sm" style="max-width: 28rem;">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text"><i class="fa fa-search"></i></span>
+                        </div>
+                        <input type="search" name="q" id="q-recibos-liq" class="form-control"
+                               value="{{ request('q') }}"
+                               placeholder="Buscar legajo, nombre, CUIL o N° recibo…"
+                               autocomplete="off">
+                        <div class="input-group-append">
+                            <button type="submit" class="btn btn-outline-secondary">Buscar</button>
+                            @if (request()->filled('q'))
+                                <a href="{{ route('resultado_liquidacion_sueldos', ['id' => $liq->id]) }}" class="btn btn-outline-secondary" title="Limpiar">
+                                    <i class="fa fa-times"></i>
+                                </a>
+                            @endif
+                        </div>
+                    </div>
+                    @if (request()->filled('q'))
+                        <small class="text-muted ml-2">Filtrado: «{{ request('q') }}»</small>
+                    @endif
+                </form>
 
                 <div class="table-responsive p-0">
-                    <table class="table table-sm table-bordered table-hover">
+                    <table class="table table-sm table-bordered table-hover" id="tabla-recibos-liq">
                         <thead>
                             <tr style="background-color:#85C1E9;color:#17202A;">
                                 <th style="width:60px">Recibo</th>
@@ -105,6 +146,9 @@
                                         {{ $rec->apellido_nombre }}
                                         @if (! empty($rec->confidencial) || ! empty(optional($rec->empleado)->confidencial))
                                             <span class="badge badge-warning ml-1">Conf.</span>
+                                        @endif
+                                        @if (isset($empleadoIdsConError) && $empleadoIdsConError->has($rec->empleado_id))
+                                            <span class="badge badge-danger ml-1" title="Tiene errores de fórmula u omisiones en esta corrida">Err</span>
                                         @endif
                                     </td>
                                     <td>{{ $rec->cuil }}</td>
@@ -155,6 +199,19 @@
                                            class="btn btn-xs btn-outline-secondary" target="_blank" rel="noopener" title="Depurar cálculo paso a paso">
                                             <i class="fa fa-bug"></i>
                                         </a>
+                                        @if (can('editar-liquidacion-sueldos', false) && $liq->esEditable())
+                                            <form action="{{ route('eliminar_recibo_liquidacion_sueldos', ['id' => $liq->id, 'reciboId' => $rec->id]) }}"
+                                                  method="POST" class="d-inline form-eliminar-recibo-liq"
+                                                  data-legajo="{{ $rec->legajo }}"
+                                                  data-nombre="{{ $rec->apellido_nombre }}">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="btn btn-xs btn-outline-danger"
+                                                        title="Quitar este empleado de la corrida (sin recalcular al resto)">
+                                                    <i class="fa fa-user-minus"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </td>
                                 </tr>
                                 <tr class="collapse" id="det-{{ $rec->id }}">
@@ -186,7 +243,16 @@
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="10" class="text-center text-muted">La corrida no tiene recibos calculados. Use el bot&oacute;n Calcular.</td></tr>
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted">
+                                        @if (request()->filled('q'))
+                                            Ningún recibo coincide con «{{ request('q') }}».
+                                            <a href="{{ route('resultado_liquidacion_sueldos', ['id' => $liq->id]) }}">Ver todos</a>
+                                        @else
+                                            La corrida no tiene recibos calculados. Use el bot&oacute;n Calcular.
+                                        @endif
+                                    </td>
+                                </tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -207,5 +273,5 @@
 
 @include('sueldos.liquidacion.partials.modal_import_confidencial')
 
-<script src="{{ asset('assets/pages/scripts/sueldos/liquidacion/resultado.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/liquidacion/resultado.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/liquidacion/resultado.js')) ?: time() }}"></script>
 @endsection

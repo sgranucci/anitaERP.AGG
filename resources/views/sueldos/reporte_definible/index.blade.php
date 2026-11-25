@@ -6,6 +6,19 @@
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script>
+(function ($) {
+    $(function () {
+        if (!window.ListadoFiltros) {
+            return;
+        }
+        ListadoFiltros.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
+        ListadoFiltros.initSubmitBusquedaRapida($('#form-filtros-reporte-sueldos-definible'), {
+            selectorPanel: '#panel-filtros-reporte-sueldos-definible'
+        });
+    });
+})(jQuery);
+</script>
 @endsection
 
 @section('contenido')

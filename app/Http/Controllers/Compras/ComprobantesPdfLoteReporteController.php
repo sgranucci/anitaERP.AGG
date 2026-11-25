@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Compras\Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\ComprobantesPdfLoteReporteService;
+use App\Support\Compras\ComprobanteProveedorServicioSupport;
 use App\Support\Compras\ComprobantesPdfLoteFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
@@ -65,14 +66,33 @@ class ComprobantesPdfLoteReporteController extends Controller
             $filas->appends($filtrosQuery);
         }
 
+        $serviciosOpciones = ComprobanteProveedorServicioSupport::opcionesParaProveedores(
+            $filtros['proveedor_ids'] ?? []
+        );
+
         return view('compras.comprobantes_pdf_lote.index', [
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'empresa_query' => $empresaQuery,
             'proveedores_iniciales' => $proveedoresIniciales,
+            'servicios_opciones' => $serviciosOpciones,
             'consultado' => $consultado,
             'filas' => $filas,
             'puede_editar' => true,
+        ]);
+    }
+
+    /**
+     * Medidores/clientes de los proveedores elegidos (para el select del reporte).
+     */
+    public function servicios(Request $request)
+    {
+        can('listar-comprobantes-pdf-lote');
+
+        $ids = ComprobantesPdfLoteFiltros::idsDesdeTexto((string) $request->input('proveedor_ids', ''));
+
+        return response()->json([
+            'servicios' => ComprobanteProveedorServicioSupport::opcionesParaProveedores($ids),
         ]);
     }
 

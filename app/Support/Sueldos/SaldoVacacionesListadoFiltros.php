@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 /**
  * Filtros del reporte de saldos de vacaciones.
  *
- * Externos: empresa (default primera asignada, empresa_scope=todas), estado (default Activo),
+ * Externos: empresas (checkboxes multiempresa), estado (default Activo),
  * año de período (opcional), texto (legajo/nombre) y solo con saldo positivo.
  */
 class SaldoVacacionesListadoFiltros
@@ -23,14 +23,26 @@ class SaldoVacacionesListadoFiltros
             $estado = EmpleadoEstados::ACTIVO;
         }
 
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
         $empresaScope = 'una';
         $empresaId = null;
-        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+        if ($empresaIds !== []) {
+            $empresaId = $empresaIds[0];
+            $empresaScope = count($empresaIds) > 1 ? 'todas' : 'una';
+        } elseif ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
             $empresaScope = 'todas';
         } elseif ($request->filled('empresa_id')) {
             $empresaId = (int) $request->input('empresa_id');
+            $empresaIds = [$empresaId];
         } elseif ($empresaDefault !== null && $empresaDefault > 0) {
             $empresaId = $empresaDefault;
+            $empresaIds = [$empresaId];
         }
 
         $anio = $request->input('anio');
@@ -40,7 +52,11 @@ class SaldoVacacionesListadoFiltros
 
         return [
             'empresa_id' => $empresaId,
+            'empresa_ids' => $empresaIds,
             'empresa_scope' => $empresaScope,
+            'consolidar_empresas' => $request->exists('consolidar_empresas')
+                ? $request->boolean('consolidar_empresas')
+                : true,
             'estado' => $estado,
             'anio' => $anio,
             'valor' => $valor,
@@ -49,15 +65,25 @@ class SaldoVacacionesListadoFiltros
     }
 
     /**
-     * @return array<string, string|int>
+     * @return array<string, string|int|list<int>>
      */
     public static function paraQueryString(array $filtros): array
     {
         $params = [];
-        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+        $empresaIds = collect($filtros['empresa_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+        if ($empresaIds !== []) {
+            $params['empresa_ids'] = $empresaIds;
+        } elseif (($filtros['empresa_scope'] ?? 'una') === 'todas') {
             $params['empresa_todas'] = 1;
         } elseif (! empty($filtros['empresa_id'])) {
             $params['empresa_id'] = (int) $filtros['empresa_id'];
+        }
+        if (array_key_exists('consolidar_empresas', $filtros) && ! $filtros['consolidar_empresas']) {
+            $params['consolidar_empresas'] = 0;
         }
         $estado = $filtros['estado'] ?? EmpleadoEstados::ACTIVO;
         if ($estado === 'TODOS') {

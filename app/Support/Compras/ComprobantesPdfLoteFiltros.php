@@ -29,6 +29,7 @@ final class ComprobantesPdfLoteFiltros
             'fecha_desde' => self::fecha($request->input('fecha_desde'), date('Y-m-01')),
             'fecha_hasta' => self::fecha($request->input('fecha_hasta'), date('Y-m-d')),
             'proveedor_ids' => $ids,
+            'nro_cliente' => mb_substr(trim((string) $request->input('nro_cliente', '')), 0, 255),
             'tipos' => self::tiposDesdeRequest($request),
         ];
     }
@@ -52,7 +53,7 @@ final class ComprobantesPdfLoteFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        return [
+        $params = [
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),
@@ -60,6 +61,12 @@ final class ComprobantesPdfLoteFiltros
             'tipos' => array_values($filtros['tipos'] ?? []),
             'tipos_enviados' => 1,
         ];
+        $nroCliente = trim((string) ($filtros['nro_cliente'] ?? ''));
+        if ($nroCliente !== '') {
+            $params['nro_cliente'] = $nroCliente;
+        }
+
+        return $params;
     }
 
     /**

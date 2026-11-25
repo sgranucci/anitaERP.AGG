@@ -35,9 +35,6 @@ Art&iacute;culos
     min-width: 100% !important;
     max-width: 100%;
 }
-.lw-workbench .producto-ferli-grilla .lw-table-fit .tabla-ancha td.lw-col {
-    max-width: 0;
-}
 .lw-workbench .producto-ferli-grilla #tabla-paginada .lw-acciones-inner {
     gap: 0;
 }
@@ -271,7 +268,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
                 // Vista estándar Ferli (~8 cols): fit. Sticky Acciones solo si hay overflow.
                 $usaScrollHorizontal = count($columnasVisibles ?? []) > 14
-                    || $sumaAnchosPantalla > (LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 200);
+                    || LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? [], LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 200);
                 $anchoAcciones = 240;
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0

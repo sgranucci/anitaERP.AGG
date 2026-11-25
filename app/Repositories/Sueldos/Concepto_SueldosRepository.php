@@ -527,6 +527,218 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
     }
 
     /**
+     * Re-trae habformula desde Anita y actualiza líneas + traducción ERP.
+     * A diferencia de sincronizarConAnita(), no omite conceptos que ya tienen líneas:
+     * sirve para refrescar valores fijos / implícitos embebidos (ej. 3299 ART 1839→2010).
+     *
+     * @return array{
+     *     en_anita_con_formula: int,
+     *     procesados: int,
+     *     actualizados: int,
+     *     sin_cambio: int,
+     *     traducidos: int,
+     *     pendientes_traduccion: int,
+     *     no_en_erp: int,
+     *     errores: list<string>,
+     *     ejemplos_cambio: list<string>
+     * }
+     */
+    public function actualizarFormulasDesdeAnita()
+    {
+        ini_set('max_execution_time', '600');
+        ini_set('memory_limit', '-1');
+
+        $resultado = [
+            'en_anita_con_formula' => 0,
+            'procesados' => 0,
+            'actualizados' => 0,
+            'sin_cambio' => 0,
+            'traducidos' => 0,
+            'pendientes_traduccion' => 0,
+            'no_en_erp' => 0,
+            'errores' => [],
+            'ejemplos_cambio' => [],
+        ];
+
+        $api = new ApiAnita();
+        $parsedFormulas = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'sueldos',
+            'tabla' => $this->tablaHabformula,
+            'campos' => 'habf_concepto, habf_linea, habf_formula',
+            'orderBy' => 'habf_concepto, habf_linea',
+        ]));
+        if (! empty($parsedFormulas['error_lectura'])) {
+            $resultado['errores'][] = 'habformula: '.(string) $parsedFormulas['error_lectura'];
+
+            return $resultado;
+        }
+
+        /** @var array<int, list<array{linea: int, formula: string}>> $formulasPorCodigo */
+        $formulasPorCodigo = [];
+        foreach ($parsedFormulas['filas'] as $fila) {
+            $concepto = (int) ($fila->habf_concepto ?? 0);
+            if ($concepto <= 0) {
+                continue;
+            }
+            $texto = ConceptoAnitaMapeo::textoFormula($fila->habf_formula ?? null);
+            if ($texto === null) {
+                continue;
+            }
+            $formulasPorCodigo[$concepto][] = [
+                'linea' => (int) ($fila->habf_linea ?? 0),
+                'formula' => $texto,
+            ];
+        }
+
+        // Solo habformula: la cabecera hab_formula suele ser leyenda (ej. «FFEP (ART)»)
+        // y no debe pisar fórmulas reales al refrescar montos implícitos.
+        $codigos = array_keys($formulasPorCodigo);
+        sort($codigos);
+        $resultado['en_anita_con_formula'] = count($codigos);
+
+        $traductor = new AnitaFormulaTraductor();
+
+        Concepto_Sueldos::withoutAuditing(function () use (
+            $codigos,
+            $formulasPorCodigo,
+            $traductor,
+            &$resultado
+        ) {
+            Concepto_Formula_Sueldos::withoutAuditing(function () use (
+                $codigos,
+                $formulasPorCodigo,
+                $traductor,
+                &$resultado
+            ) {
+                foreach ($codigos as $codigo) {
+                    $lineasTexto = $this->lineasTextoDesdeAnita($formulasPorCodigo[$codigo] ?? [], null);
+                    if ($lineasTexto === []) {
+                        continue;
+                    }
+
+                    $concepto = $this->findPorCodigo($codigo);
+                    if ($concepto === null) {
+                        $resultado['no_en_erp']++;
+
+                        continue;
+                    }
+
+                    $resultado['procesados']++;
+
+                    $lineasAnteriores = Concepto_Formula_Sueldos::query()
+                        ->where('concepto_id', $concepto->id)
+                        ->orderBy('nro_linea')
+                        ->pluck('formula')
+                        ->map(fn ($t) => trim((string) $t))
+                        ->filter(fn ($t) => $t !== '')
+                        ->values()
+                        ->all();
+
+                    $formulaAntes = (string) ($concepto->formula ?? '');
+                    $cantAntes = (string) ($concepto->formula_cantidad ?? '');
+                    $valorAntes = (string) ($concepto->formula_valor ?? '');
+
+                    $formula = null;
+                    $formulaCantidad = null;
+                    $formulaValor = null;
+                    $ok = false;
+                    $requiereRevision = true;
+
+                    try {
+                        $trad = $traductor->traducirConcepto($lineasTexto);
+                        $ok = $trad->traducible
+                            && ($trad->formula !== null || $trad->formulaCantidad !== null || $trad->formulaValor !== null);
+                        if ($ok) {
+                            $formula = $trad->formula;
+                            $formulaCantidad = $trad->formulaCantidad;
+                            $formulaValor = $trad->formulaValor;
+                            $requiereRevision = (bool) $trad->requiereRevision;
+                        }
+                    } catch (\Throwable $e) {
+                        $resultado['pendientes_traduccion']++;
+                        $resultado['errores'][] = 'código '.$codigo.': '.$e->getMessage();
+                    }
+
+                    if ($ok && ! $requiereRevision) {
+                        $resultado['traducidos']++;
+                    } else {
+                        $resultado['pendientes_traduccion']++;
+                    }
+
+                    $cambioLineas = $lineasAnteriores !== $lineasTexto;
+                    $cambioTrad = $formulaAntes !== (string) ($formula ?? '')
+                        || $cantAntes !== (string) ($formulaCantidad ?? '')
+                        || $valorAntes !== (string) ($formulaValor ?? '');
+
+                    if (! $cambioLineas && ! $cambioTrad) {
+                        $resultado['sin_cambio']++;
+
+                        continue;
+                    }
+
+                    Concepto_Formula_Sueldos::where('concepto_id', $concepto->id)->delete();
+                    $this->persistirLineasFormula((int) $concepto->id, $lineasTexto);
+                    $concepto->update([
+                        'formula' => $ok ? $formula : null,
+                        'formula_cantidad' => $ok ? $formulaCantidad : null,
+                        'formula_valor' => $ok ? $formulaValor : null,
+                    ]);
+
+                    $resultado['actualizados']++;
+                    if (count($resultado['ejemplos_cambio']) < 12) {
+                        $detalle = $cambioLineas
+                            ? 'líneas Anita'
+                            : 'traducción ERP';
+                        if ($cambioLineas && $formulaAntes !== '' && $formulaAntes !== (string) ($formula ?? '')) {
+                            $detalle = 'líneas+traducción';
+                        }
+                        $resultado['ejemplos_cambio'][] = $codigo.' ('.$detalle.')';
+                    }
+                }
+            });
+        });
+
+        return $resultado;
+    }
+
+    /**
+     * @param  list<array{linea: int, formula: string}>  $lineasHabformula
+     * @return list<string>
+     */
+    private function lineasTextoDesdeAnita(array $lineasHabformula, ?object $rowHaberes): array
+    {
+        $lineasTexto = [];
+        usort($lineasHabformula, static fn ($a, $b) => $a['linea'] <=> $b['linea']);
+        foreach ($lineasHabformula as $l) {
+            $lineasTexto[] = $l['formula'];
+        }
+
+        if ($lineasTexto !== [] || $rowHaberes === null) {
+            return $lineasTexto;
+        }
+
+        foreach ([
+            ConceptoAnitaMapeo::textoFormula($rowHaberes->hab_formula ?? null),
+            ConceptoAnitaMapeo::textoFormula($rowHaberes->hab_formula_cant ?? null),
+            ConceptoAnitaMapeo::textoFormula($rowHaberes->hab_formula_valor ?? null),
+        ] as $idx => $cab) {
+            if ($cab === null) {
+                continue;
+            }
+            if ($idx === 1) {
+                $lineasTexto[] = 'CA := '.$cab;
+            } elseif ($idx === 2) {
+                $lineasTexto[] = 'VA := '.$cab;
+            } else {
+                $lineasTexto[] = $cab;
+            }
+        }
+
+        return $lineasTexto;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */

@@ -8,6 +8,7 @@ use App\Http\Requests\ValidacionEmpleado_Sueldos;
 use App\Models\Contable\Centrocosto;
 use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Art_Sueldos;
+use App\Models\Sueldos\Categoria_Base_Sueldos;
 use App\Models\Sueldos\Categoria_Sueldos;
 use App\Models\Sueldos\Empleado_Base_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
@@ -296,6 +297,7 @@ class Empleado_SueldosController extends Controller
             'mensaje',
             'Sincronización con Anita: '.$r['importados'].' empleados nuevos, '.$r['ya_existia'].' ya existentes, '
                 .($r['actualizados_egreso'] ?? 0).' egreso/estado actualizados, '
+                .($r['actualizados_sueldo'] ?? 0).' sueldos/jornales actualizados, '
                 .($r['actualizados_datos'] ?? 0).' datos organizativos actualizados (CC, categoría, etc.), '
                 .$r['sin_empresa'].' sin empresa ERP (de '.$r['en_anita'].' en Anita). '
                 .'Historia: '.$r['historia'].' · Leyendas: '.$r['leyendas'].' · Bases: '.$r['bases'].'.'
@@ -555,17 +557,33 @@ class Empleado_SueldosController extends Controller
             ? CategoriaOrigenBases::usaTablaCategoria($data->categoria->origen_bases)
             : true;
 
-        $basesGrilla = $usaTabla && $data->categoria_id
-            ? $this->categoriaBaseService->resumenBasesGrilla((int) $data->categoria_id)
-            : $this->baseService->resumenBasesGrilla((int) $data->id);
+        $basesGrilla = $this->basesGrillaEfectivas($data);
+
+        $valoresCategoriaRemuneracion = [];
+        if ($usaTabla) {
+            foreach ($basesGrilla as $base) {
+                if (($base['origen'] ?? '') !== 'categoria') {
+                    continue;
+                }
+                $cod = (int) ($base['nombrebase_codigo'] ?? 0);
+                if (in_array($cod, [1, 2, 3], true) && $base['valor'] !== null) {
+                    $valoresCategoriaRemuneracion[$cod] = (float) $base['valor'];
+                }
+            }
+        }
+
+        $nombrebaseIdsCategoria = $this->nombrebaseIdsDeCategoria($data);
 
         return view('sueldos.empleado.editar', array_merge($this->datosFormulario(), [
             'data' => $data,
             'usaTabla' => $usaTabla,
             'basesGrilla' => $basesGrilla,
+            'valoresCategoriaRemuneracion' => $valoresCategoriaRemuneracion,
             'nombrebases' => Nombrebase_Sueldos::query()->orderBy('codigo')->get(),
+            'nombrebaseIdsCategoria' => $nombrebaseIdsCategoria,
             'puedeBorrarVigencia' => ! $soloVisualizacion && can('borrar-vigencia-empleado-sueldos', false),
             'puedeBaja' => ! $soloVisualizacion && can('baja-empleado-sueldos', false),
+            'puedeBorrarHistoria' => ! $soloVisualizacion && can('borrar-historia-empleado-sueldos', false),
             'puedeAutorizar' => ! $soloVisualizacion && can('autorizar-empleado-sueldos', false),
             'soloVisualizacion' => $soloVisualizacion,
             'qVista' => $soloVisualizacion ? ['vista' => EmpleadoLegajoVisualizacion::VISTA] : [],
@@ -590,7 +608,21 @@ class Empleado_SueldosController extends Controller
     {
         can('borrar-empleado-sueldos');
         if ($request->ajax()) {
-            return response()->json(['mensaje' => $this->repository->delete($id) ? 'ok' : 'ng']);
+            try {
+                $ok = $this->repository->delete($id);
+
+                return response()->json(['mensaje' => $ok ? 'ok' : 'ng']);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => $e->getMessage(),
+                ], 422);
+            } catch (\Illuminate\Database\QueryException $e) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'error' => 'No se puede eliminar el empleado porque tiene movimientos relacionados (pérdida de personal, recibos u otros).',
+                ], 422);
+            }
         }
         abort(404);
     }
@@ -686,6 +718,34 @@ class Empleado_SueldosController extends Controller
             ->with('mensaje', 'Baja definitiva registrada. Se actualizó la historia de ingresos/egresos.');
     }
 
+    public function modificarBajaProvisoria(Request $request, $id)
+    {
+        can('baja-empleado-sueldos');
+        $request->validate([
+            'fecha_egreso' => 'required|date',
+            'motivoegreso_id' => 'nullable|integer|exists:motivoegreso_sueldos,id',
+            'comentario_baja' => 'nullable|string|max:80',
+        ]);
+
+        try {
+            $emp = $this->repository->findOrFail($id);
+            $this->ingresoService->modificarBajaProvisoria(
+                $emp,
+                $request->input('fecha_egreso'),
+                $request->input('motivoegreso_id') ? (int) $request->input('motivoegreso_id') : null,
+                $request->input('comentario_baja')
+            );
+            $emp = $this->repository->findOrFail($id);
+            $this->sincronizarSaldosVacaciones($emp);
+            $this->moduloAvisoService->enviar('sueldos', 'empleado_baja_provisoria', (int) $emp->id);
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('editar_empleado_sueldos', ['id' => $id])
+            ->with('mensaje', 'Baja provisoria actualizada. Se avisó a los destinatarios configurados.');
+    }
+
     public function anularBajaProvisoria(Request $request, $id)
     {
         can('baja-empleado-sueldos');
@@ -701,6 +761,21 @@ class Empleado_SueldosController extends Controller
 
         return redirect()->route('editar_empleado_sueldos', ['id' => $id])
             ->with('mensaje', 'Baja provisoria anulada. El legajo quedó activo sin fecha de egreso.');
+    }
+
+    public function eliminarHistoria(Request $request, $id, $ingresoId)
+    {
+        can('borrar-historia-empleado-sueldos');
+
+        try {
+            $emp = $this->repository->findOrFail($id);
+            $this->ingresoService->eliminarHistoria($emp, (int) $ingresoId);
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('editar_empleado_sueldos', ['id' => $id])
+            ->with('mensaje', 'Registro de historia eliminado.');
     }
 
     public function reincorporar(Request $request, $id)
@@ -720,13 +795,12 @@ class Empleado_SueldosController extends Controller
             ->with('mensaje', 'Reincorporación registrada.');
     }
 
-    // --- Bases AJAX (solo cuando categoría origen = empleado) ---
+    // --- Bases AJAX (legajo; con categoría T no se tocan códigos de la tabla) ---
 
     public function guardarBase(Request $request, $id)
     {
         can('actualizar-empleado-sueldos');
         $emp = $this->repository->findOrFail($id);
-        $this->assertBasesEditables($emp);
 
         $request->validate([
             'nombrebase_id' => 'required|integer|exists:nombrebase_sueldos,id',
@@ -734,38 +808,65 @@ class Empleado_SueldosController extends Controller
             'fecha_vigencia' => 'required|date',
         ]);
 
+        $nombrebaseId = (int) $request->input('nombrebase_id');
+        $this->assertNombrebaseEditableEnLegajo($emp, $nombrebaseId);
+
         $resultado = $this->baseService->guardarBase(
             (int) $emp->id,
-            (int) $request->input('nombrebase_id'),
+            $nombrebaseId,
             (float) $request->input('valor'),
             $request->input('fecha_vigencia'),
             Auth::id()
         );
 
-        return response()->json(['ok' => true, 'creo_version' => $resultado['creo_version']]);
+        return response()->json([
+            'mensaje' => 'ok',
+            'creo_version' => $resultado['creo_version'],
+            'bases' => $this->basesGrillaEfectivas($emp),
+        ]);
     }
 
     public function guardarVigenciasLote(Request $request, $id)
     {
         can('actualizar-empleado-sueldos');
         $emp = $this->repository->findOrFail($id);
-        $this->assertBasesEditables($emp);
 
-        $request->validate([
+        $datos = $request->validate([
             'nombrebase_id' => 'required|integer|exists:nombrebase_sueldos,id',
             'items' => 'nullable|array',
-            'eliminar_ids' => 'nullable|array',
+            'items.*.id' => 'nullable|integer',
+            'items.*.valor' => 'required_with:items|numeric',
+            'items.*.fecha' => 'required_with:items|date',
+            'eliminar' => 'nullable|array',
+            'eliminar.*' => 'integer',
         ]);
+
+        $nombrebaseId = (int) $datos['nombrebase_id'];
+        $this->assertNombrebaseEditableEnLegajo($emp, $nombrebaseId);
+
+        $eliminar = $datos['eliminar'] ?? [];
+        if ($eliminar !== [] && ! can('borrar-vigencia-empleado-sueldos', false)) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'No tiene permiso para eliminar vigencias.'], 403);
+        }
 
         $resultado = $this->baseService->guardarVigenciasLote(
             (int) $emp->id,
-            (int) $request->input('nombrebase_id'),
-            $request->input('items', []),
-            $request->input('eliminar_ids', []),
+            $nombrebaseId,
+            $datos['items'] ?? [],
+            $eliminar,
             Auth::id()
         );
 
-        return response()->json($resultado);
+        if (empty($resultado['ok'])) {
+            return response()->json(['mensaje' => 'ng', 'error' => $resultado['error'] ?? 'No se pudo guardar.'], 422);
+        }
+
+        return response()->json([
+            'mensaje' => 'ok',
+            'nombrebase_id' => $nombrebaseId,
+            'historial' => $this->baseService->historial((int) $emp->id, $nombrebaseId),
+            'bases' => $this->basesGrillaEfectivas($emp),
+        ]);
     }
 
     public function bases($id)
@@ -774,7 +875,7 @@ class Empleado_SueldosController extends Controller
         $emp = $this->repository->findOrFail($id);
 
         return response()->json([
-            'grilla' => $this->baseService->resumenBasesGrilla((int) $emp->id),
+            'grilla' => $this->basesGrillaEfectivas($emp),
         ]);
     }
 
@@ -842,13 +943,24 @@ class Empleado_SueldosController extends Controller
         $emp = $this->repository->findOrFail($id);
         $nb = $request->input('nombrebase_id') ? (int) $request->input('nombrebase_id') : null;
 
-        // Con bases por tabla de categoría, la grilla y el modal muestran las vigencias
-        // de la categoría (solo lectura); el empleado no tiene filas propias.
         $usaTabla = $emp->categoria
             ? CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases)
             : true;
 
-        $historial = $usaTabla && $emp->categoria_id
+        // Categoría T: vigencias de códigos de la tabla → categoría; el resto → legajo.
+        $usarCategoria = false;
+        if ($usaTabla && $emp->categoria_id) {
+            if ($nb === null || $nb <= 0) {
+                $usarCategoria = true;
+            } else {
+                $usarCategoria = Categoria_Base_Sueldos::query()
+                    ->where('categoria_id', (int) $emp->categoria_id)
+                    ->where('nombrebase_id', $nb)
+                    ->exists();
+            }
+        }
+
+        $historial = $usarCategoria
             ? $this->categoriaBaseService->historial((int) $emp->categoria_id, $nb)
             : $this->baseService->historial((int) $emp->id, $nb);
 
@@ -861,8 +973,16 @@ class Empleado_SueldosController extends Controller
     {
         can('actualizar-empleado-sueldos');
         $emp = $this->repository->findOrFail($id);
-        $this->assertBasesEditables($emp);
         $request->validate(['valor' => 'required|numeric', 'fecha_vigencia' => 'required|date']);
+
+        $base = Empleado_Base_Sueldos::query()
+            ->where('id', (int) $baseId)
+            ->where('empleado_id', (int) $emp->id)
+            ->first();
+        if ($base === null) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'Vigencia no encontrada.'], 404);
+        }
+        $this->assertNombrebaseEditableEnLegajo($emp, (int) $base->nombrebase_id);
 
         $resultado = $this->baseService->actualizarVigencia(
             (int) $baseId,
@@ -871,24 +991,53 @@ class Empleado_SueldosController extends Controller
             Auth::id()
         );
 
-        return response()->json($resultado);
+        if (empty($resultado['ok'])) {
+            return response()->json(['mensaje' => 'ng', 'error' => $resultado['error'] ?? 'No se pudo actualizar.'], 422);
+        }
+
+        return response()->json([
+            'mensaje' => 'ok',
+            'historial' => $this->baseService->historial((int) $emp->id, (int) $base->nombrebase_id),
+            'bases' => $this->basesGrillaEfectivas($emp),
+        ]);
     }
 
     public function eliminarBase($id, $baseId)
     {
         can('borrar-vigencia-empleado-sueldos');
-        $this->repository->findOrFail($id);
+        $emp = $this->repository->findOrFail($id);
 
-        return response()->json(['ok' => $this->baseService->eliminarBase((int) $baseId)]);
+        $base = Empleado_Base_Sueldos::query()
+            ->where('id', (int) $baseId)
+            ->where('empleado_id', (int) $emp->id)
+            ->first();
+        if ($base === null) {
+            return response()->json(['mensaje' => 'ng', 'error' => 'Vigencia no encontrada.'], 404);
+        }
+        $this->assertNombrebaseEditableEnLegajo($emp, (int) $base->nombrebase_id);
+
+        $nombrebaseId = (int) $base->nombrebase_id;
+        $ok = $this->baseService->eliminarBase((int) $baseId);
+
+        return response()->json([
+            'mensaje' => $ok ? 'ok' : 'ng',
+            'historial' => $ok ? $this->baseService->historial((int) $emp->id, $nombrebaseId) : [],
+            'bases' => $this->basesGrillaEfectivas($emp),
+        ]);
     }
 
     public function eliminarBaseCompleta($id, $nombrebaseId)
     {
         can('borrar-vigencia-empleado-sueldos');
         $emp = $this->repository->findOrFail($id);
+        $this->assertNombrebaseEditableEnLegajo($emp, (int) $nombrebaseId);
         $cant = $this->baseService->eliminarBaseCompleta((int) $emp->id, (int) $nombrebaseId);
 
-        return response()->json(['ok' => true, 'eliminados' => $cant]);
+        return response()->json([
+            'mensaje' => $cant > 0 ? 'ok' : 'ng',
+            'eliminados' => $cant,
+            'bases' => $this->basesGrillaEfectivas($emp),
+        ]);
     }
 
     /** @return array<string, mixed> */
@@ -906,14 +1055,129 @@ class Empleado_SueldosController extends Controller
             'arts' => Art_Sueldos::query()->orderBy('codigo')->get(),
             'motivosegreso' => Motivoegreso_Sueldos::query()->orderBy('codigo')->get(),
             'estadosLabels' => EmpleadoEstados::LABELS,
+            // B(1)/B(2)/B(3) del legajo: nombres de negocio desde nombase (no los
+            // nombres técnicos Anita emp_jornal_dia / emp_jornal_hora).
+            'etiquetasRemuneracion' => $this->etiquetasRemuneracionLegajo(),
         ];
     }
 
-    private function assertBasesEditables($emp): void
+    /**
+     * @return array{1: string, 2: string, 3: string}
+     */
+    private function etiquetasRemuneracionLegajo(): array
     {
-        if ($emp->categoria && CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases)) {
-            abort(422, 'Las bases se heredan de la categoría (tabla).');
+        $porCodigo = Nombrebase_Sueldos::query()
+            ->whereIn('codigo', [1, 2, 3])
+            ->pluck('descripcion', 'codigo')
+            ->map(fn ($d) => trim((string) $d))
+            ->all();
+
+        $pick = static function (array $map, int $codigo, string $fallback): string {
+            $txt = trim((string) ($map[$codigo] ?? ''));
+
+            return $txt !== '' ? $txt : $fallback;
+        };
+
+        return [
+            1 => $pick($porCodigo, 1, 'Sueldo básico'),
+            2 => $pick($porCodigo, 2, 'Base 2 (jornal día)'),
+            3 => $pick($porCodigo, 3, 'Base 3 (jornal hora)'),
+        ];
+    }
+
+    /**
+     * Con categoría T solo se pueden mutar bases del legajo que no viven en la
+     * tabla de la categoría (ej. mutual B7, horas B11). Con C, todas.
+     */
+    private function assertNombrebaseEditableEnLegajo($emp, int $nombrebaseId): void
+    {
+        if ($nombrebaseId <= 0) {
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                response()->json(['mensaje' => 'ng', 'error' => 'Base inválida.'], 422)
+            );
         }
+
+        if (! $emp->categoria || ! CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases)) {
+            return;
+        }
+
+        $enTabla = Categoria_Base_Sueldos::query()
+            ->where('categoria_id', (int) $emp->categoria_id)
+            ->where('nombrebase_id', $nombrebaseId)
+            ->exists();
+
+        if ($enTabla) {
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                response()->json([
+                    'mensaje' => 'ng',
+                    'error' => 'Esa base pertenece a la categoría (tabla). Modificala en el ABM de categorías.',
+                ], 422)
+            );
+        }
+    }
+
+    /**
+     * Ids de nombrebase que ya están en la tabla de la categoría (solo lectura en legajo).
+     *
+     * @return list<int>
+     */
+    private function nombrebaseIdsDeCategoria($emp): array
+    {
+        if (! $emp->categoria_id
+            || ! $emp->categoria
+            || ! CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases)) {
+            return [];
+        }
+
+        return Categoria_Base_Sueldos::query()
+            ->where('categoria_id', (int) $emp->categoria_id)
+            ->distinct()
+            ->pluck('nombrebase_id')
+            ->map(static fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Grilla efectiva: categoría T = bases de categoría + bases del legajo que no
+     * están en la tabla (ej. mutual B7, horas B11). Categoría C = solo legajo.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function basesGrillaEfectivas(Empleado_Sueldos $emp): array
+    {
+        $usaTabla = $emp->categoria
+            && CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases);
+
+        if (! $usaTabla) {
+            return array_map(static function (array $b): array {
+                $b['origen'] = 'empleado';
+                $b['origen_label'] = 'Legajo';
+
+                return $b;
+            }, $this->baseService->resumenBasesGrilla((int) $emp->id));
+        }
+
+        $porCodigo = [];
+        if ($emp->categoria_id) {
+            foreach ($this->categoriaBaseService->resumenBasesGrilla((int) $emp->categoria_id) as $b) {
+                $b['origen'] = 'categoria';
+                $b['origen_label'] = 'Categoría';
+                $porCodigo[(int) $b['nombrebase_codigo']] = $b;
+            }
+        }
+        foreach ($this->baseService->resumenBasesGrilla((int) $emp->id) as $b) {
+            $cod = (int) $b['nombrebase_codigo'];
+            if (isset($porCodigo[$cod])) {
+                continue;
+            }
+            $b['origen'] = 'empleado';
+            $b['origen_label'] = 'Legajo';
+            $porCodigo[$cod] = $b;
+        }
+        ksort($porCodigo, SORT_NUMERIC);
+
+        return array_values($porCodigo);
     }
 
     /** Actualiza el ledger de vacaciones (devengado + consumos) del empleado. */

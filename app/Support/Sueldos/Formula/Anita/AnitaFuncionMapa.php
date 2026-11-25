@@ -42,7 +42,7 @@ class AnitaFuncionMapa
         'F' => ['erp' => 'factor', 'exacto' => true, 'nota' => 'factor (hab_factor) del concepto'],
         'ANT' => ['erp' => 'antiguedad_tabla', 'exacto' => false, 'nota' => '% de antigüedad por tabla (distinto de antiguedad())'],
         'DIAS' => ['erp' => 'dias_del_mes', 'exacto' => false, 'nota' => 'días del mes indicado'],
-        'REDON' => ['erp' => null, 'exacto' => false, 'especial' => 'REDON', 'nota' => 'redondeo final por tabla; se aproxima a redondear(x, 2)'],
+        'REDON' => ['erp' => null, 'exacto' => true, 'especial' => 'REDON', 'nota' => 'ajuste al peso entero: redondear(techo(x) - x, 2)'],
         'SQR' => ['erp' => null, 'exacto' => true, 'especial' => 'SQR', 'nota' => 'x^2'],
         'B' => ['erp' => null, 'exacto' => false, 'especial' => 'B', 'nota' => 'base de cálculo B(n)'],
 
@@ -129,7 +129,7 @@ class AnitaFuncionMapa
         'BR' => ['tipo' => 'acum', 'erp' => 'REM', 'exacto' => true, 'nota' => 'bruto con aportes Anita (REM; no rem+norem)'],
         'DE' => ['tipo' => 'acum', 'erp' => 'DESC', 'exacto' => false, 'nota' => 'total descuentos (según acumulador DESC)'],
         'AS' => ['tipo' => 'acum', 'erp' => 'ASIG', 'exacto' => false, 'nota' => 'asignaciones familiares'],
-        'TG' => ['tipo' => 'acum', 'erp' => 'NETO', 'exacto' => false, 'nota' => 'total general / neto'],
+        'TG' => ['tipo' => 'acum', 'erp' => 'NETO', 'exacto' => true, 'nota' => 'total general / neto (acum NETO virtual)'],
         'RE' => ['tipo' => 'acum', 'erp' => 'DESC', 'exacto' => false, 'nota' => 'otras deducciones'],
         'SD' => ['tipo' => 'acum', 'erp' => 'APOR', 'exacto' => false, 'nota' => 'total aportes'],
         'AN' => ['tipo' => 'var', 'erp' => 'empleado.antiguedad_anios', 'exacto' => false, 'nota' => 'antigüedad en años'],

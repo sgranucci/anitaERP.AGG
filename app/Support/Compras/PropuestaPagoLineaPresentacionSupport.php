@@ -5,6 +5,7 @@ namespace App\Support\Compras;
 use App\Models\Compras\PropuestaPago;
 use App\Models\Compras\PropuestaPagoLinea;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportFormapagoSupport;
 use Carbon\Carbon;
 
 /**
@@ -68,24 +69,29 @@ class PropuestaPagoLineaPresentacionSupport
         }
 
         // Fallback: OC del comprobante proveedor
+        $comp = $cc->comprobante_proveedores;
         if ($ordencompraId === null) {
-            $comp = $cc->comprobante_proveedores;
             if ($comp && $comp->ordencompra_id) {
                 $ordencompraId = (int) $comp->ordencompra_id;
                 $nroRefer = (string) $ordencompraId;
             }
         }
 
-        if ($medio === '' && $formapagoId) {
-            $fp = \App\Models\Ventas\Formapago::query()->find($formapagoId);
-            $medio = (string) ($fp->abreviatura ?? $fp->nombre ?? '');
-        }
+        // Efectivo suele ser el default erróneo: preferir OC/proveedor no-Efectivo.
+        $proveedorId = (int) ($cc->proveedor_id ?: $comp?->proveedor_id ?: 0) ?: null;
+        $formapagoId = ComprobanteProveedorAnitaImportFormapagoSupport::normalizarId(
+            $formapagoId,
+            $proveedorId,
+            $ordencompraId,
+        );
+        $fp = \App\Models\Ventas\Formapago::query()->find($formapagoId);
+        $medio = (string) ($fp->abreviatura ?? $fp->nombre ?? $medio);
 
         // Anita muestra abreviaturas cortas (Cheque, Transf, Efect.)
         $medioCorto = self::abreviaturaAnita($medio);
 
         return [
-            'formapago_id' => $formapagoId,
+            'formapago_id' => $formapagoId > 0 ? $formapagoId : null,
             'medio_pago' => $medioCorto !== '' ? $medioCorto : $medio,
             'detalle_pago' => $detalle,
             'ordencompra_id' => $ordencompraId,
@@ -113,6 +119,9 @@ class PropuestaPagoLineaPresentacionSupport
         }
         if (str_contains($u, 'REGIST')) {
             return 'Regist';
+        }
+        if (str_contains($u, 'TARJET') || $u === 'TC') {
+            return 'Tarjeta';
         }
 
         return mb_substr($nombreOAbrev, 0, 6);

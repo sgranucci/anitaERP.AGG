@@ -49,17 +49,17 @@
         font-size: 0.7rem;
         padding: 0.15em 0.4em;
     }
-    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha {
-        width: 100% !important;
-        min-width: 100% !important;
-        max-width: 100%;
-        table-layout: auto !important;
-        white-space: normal;
-    }
+    /*
+     * Fit global = tabla al 100% sin scroll H. Compactas/número en nowrap
+     * (no partir A8813-14379); textos (proveedor/tipo) pueden wrap.
+     */
     .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha th.cp-col-compacta,
-    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-compacta {
-        width: 1%;
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-compacta,
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha th.cp-col-empresa,
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-empresa,
+    .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-numero {
         white-space: nowrap;
+        word-break: normal;
     }
     .lw-workbench .cp-grilla-ancha .lw-table-fit .tabla-ancha td.cp-col-texto {
         white-space: normal;
@@ -266,7 +266,7 @@
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
                 // Vista estándar (~10 cols): layout auto como el index clásico (sin ellipsis).
                 $usaScrollHorizontal = count($columnasVisibles) > 14
-                    || $sumaAnchosPantalla > (LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 280);
+                    || LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? [], LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 280);
                 $anchoAcciones = 176;
             @endphp
             <div class="tabla-ancha-grilla cp-grilla-ancha" data-tabla-ancha>

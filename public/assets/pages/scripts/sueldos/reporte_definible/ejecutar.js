@@ -21,6 +21,27 @@
                 if (form.checkValidity()) mostrarOverlay();
             });
         }
+        // Al cambiar empresas (combo o checkboxes), revalidar liquidaciones por número.
+        function revalidarLiquidacionesPorEmpresa() {
+            if (!window.jQuery || typeof window.resolverLiquidacionSueldos !== 'function') {
+                return;
+            }
+            window.jQuery('#form-ejecutar-rsd .numeroliquidacion_sueldos').each(function () {
+                var $input = window.jQuery(this);
+                var numero = String($input.val() || '').trim();
+                if (!numero) {
+                    return;
+                }
+                var $campo = $input.closest('.tm-liquidacion-sueldos-campo');
+                if ($campo.length) {
+                    window.resolverLiquidacionSueldos($campo, null, numero, false);
+                }
+            });
+        }
+        if (window.jQuery) {
+            window.jQuery('#empresa_id').on('change.rsdEmpresaLiq', revalidarLiquidacionesPorEmpresa);
+            window.jQuery(document).on('reporte-empresas-cambiadas', '.reporte-empresas-checkboxes', revalidarLiquidacionesPorEmpresa);
+        }
         document.querySelectorAll('a[href*="listar-reporte-sueldos-definible"]').forEach(function (a) {
             a.addEventListener('click', function () {
                 var sub = document.getElementById('rsd-overlay-subtitulo');

@@ -15,7 +15,7 @@ use App\Models\Configuracion\Provincia;
 class Precarga_Comprobante_Proveedor extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['empresa_id', 'provincia_destino_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'codigo_afip', 'clave_unicidad_cuit', 'letra', 'sucursal',
+    protected $fillable = ['empresa_id', 'provincia_destino_id', 'proveedor_id', 'proveedor_servicio_id', 'servicio_cliente', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'codigo_afip', 'clave_unicidad_cuit', 'letra', 'sucursal',
                             'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail',
                             'fechavencimientocaicae', 'fechavencimiento', 'numerocae', 'tipo_autorizacion', 'numeroordencompra', 'rutaalmacenamiento',
                             'pararevisar', 'marca_error', 'aviso_error', 'subtotal', 'total', 'estado', 'anita_nro_interno', 'anita_scan_documento_id',
@@ -87,6 +87,11 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     public function proveedores()
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function proveedor_servicios()
+    {
+        return $this->belongsTo(Proveedor_Servicio::class, 'proveedor_servicio_id');
     }
 
     public function monedas()

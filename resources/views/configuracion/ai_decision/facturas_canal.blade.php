@@ -25,9 +25,11 @@
                 <div class="card-header">
                     <h3 class="card-title">Facturas por canal — reporte predefinido</h3>
                     <div class="card-tools">
-                        <a href="{{ route('ai_decision') }}" class="btn btn-sm btn-outline-secondary">
-                            <i class="fa fa-arrow-left"></i> Gobernanza IA
-                        </a>
+                        @if (can('listar-ai-decisiones', false))
+                            <a href="{{ route('ai_decision') }}" class="btn btn-sm btn-outline-secondary">
+                                <i class="fa fa-arrow-left"></i> Gobernanza IA
+                            </a>
+                        @endif
                         <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
                             <i class="fa fa-print"></i> Imprimir
                         </button>
@@ -155,10 +157,19 @@
                                                 <th class="text-right">Anuladas</th>
                                                 <th class="text-right">Para revisar</th>
                                                 <th class="text-right">Con error</th>
+                                                <th class="text-center">Detalle</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             @foreach ($reporte['por_origen'] as $fila)
+                                                @php
+                                                    $detalleUrl = route('ai_decision_facturas_canal_detalle', array_filter([
+                                                        'origen' => $fila['origen'],
+                                                        'fecha_desde' => $periodo['fecha_desde'] ?? null,
+                                                        'fecha_hasta' => $periodo['fecha_hasta'] ?? null,
+                                                        'preset' => $periodo['preset'] ?? null,
+                                                    ], static fn ($v) => $v !== null && $v !== ''));
+                                                @endphp
                                                 <tr>
                                                     <td>
                                                         {{ $fila['etiqueta'] }}
@@ -171,6 +182,17 @@
                                                     <td class="text-right">{{ $fila['anuladas'] }}</td>
                                                     <td class="text-right">{{ $fila['para_revisar'] }}</td>
                                                     <td class="text-right">{{ $fila['con_error'] }}</td>
+                                                    <td class="text-center">
+                                                        @if ((int) $fila['total'] > 0)
+                                                            <a href="{{ $detalleUrl }}"
+                                                               class="btn btn-xs btn-primary"
+                                                               title="Ver las {{ (int) $fila['total'] }} precargas de este origen">
+                                                                <i class="fa fa-list"></i> Ver
+                                                            </a>
+                                                        @else
+                                                            <span class="text-muted">—</span>
+                                                        @endif
+                                                    </td>
                                                 </tr>
                                             @endforeach
                                         </tbody>

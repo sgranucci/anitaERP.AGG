@@ -145,4 +145,70 @@ class SicoreLiquidacionAutocontrolSupportTest extends TestCase
         $sinAjuste = SicoreLiquidacionAutocontrolSupport::evaluar($porCodigo, '1q');
         $this->assertFalse($sinAjuste['ok']);
     }
+
+    public function test_ajustar_conciliacion_dj_deja_ok_como_pide_guillermo(): void
+    {
+        $conciliacion = [
+            'habilitada' => true,
+            'items' => [
+                [
+                    'codigo_impuesto' => 217,
+                    'total_sicore' => 12444760.39,
+                    'total_mayor' => 7041911.77,
+                    'total_mayor_periodo' => 12444760.39,
+                    'diferencia' => 5402848.62,
+                    'cuadra' => false,
+                    'diferencia_periodo' => 0.0,
+                    'cuadra_periodo' => true,
+                ],
+                [
+                    'codigo_impuesto' => 767,
+                    'total_sicore' => 121800.00,
+                    'total_mayor' => 60900.00,
+                    'total_mayor_periodo' => 121800.00,
+                    'diferencia' => 60900.00,
+                    'cuadra' => false,
+                    'diferencia_periodo' => 0.0,
+                    'cuadra_periodo' => true,
+                ],
+                [
+                    'codigo_impuesto' => 787,
+                    'total_sicore' => 14453532.31,
+                    'total_mayor' => 14115280.57,
+                    'total_mayor_periodo' => 14453532.31,
+                    'diferencia' => 338251.74,
+                    'cuadra' => false,
+                    'diferencia_periodo' => 0.0,
+                    'cuadra_periodo' => true,
+                ],
+            ],
+        ];
+        $saf = ['217' => 0.0, '767' => 0.0, '787' => 338251.74];
+        $ingresos = [
+            '217' => ['importe' => 5402848.60],
+            '767' => ['importe' => 60900.00],
+            '787' => ['importe' => 14453532.31],
+        ];
+
+        $aj = SicoreLiquidacionAutocontrolSupport::ajustarConciliacion($conciliacion, 'dj', $saf, $ingresos);
+
+        $this->assertTrue($aj['ajustada_dj']);
+        $this->assertSame(7041911.79, $aj['items'][0]['total_sicore']);
+        $this->assertSame(12444760.39, $aj['items'][0]['total_sicore_bruto']);
+        $this->assertTrue($aj['items'][0]['cuadra']);
+        $this->assertEqualsWithDelta(0.02, $aj['items'][0]['diferencia'], 0.001);
+
+        $this->assertSame(60900.00, $aj['items'][1]['total_sicore']);
+        $this->assertTrue($aj['items'][1]['cuadra']);
+        $this->assertSame(0.0, $aj['items'][1]['diferencia']);
+
+        $this->assertSame(14115280.57, $aj['items'][2]['total_sicore']);
+        $this->assertTrue($aj['items'][2]['cuadra']);
+        $this->assertSame(0.0, $aj['items'][2]['diferencia']);
+
+        // 1Q no toca.
+        $igual = SicoreLiquidacionAutocontrolSupport::ajustarConciliacion($conciliacion, '1q', $saf, $ingresos);
+        $this->assertArrayNotHasKey('ajustada_dj', $igual);
+        $this->assertFalse($igual['items'][0]['cuadra']);
+    }
 }

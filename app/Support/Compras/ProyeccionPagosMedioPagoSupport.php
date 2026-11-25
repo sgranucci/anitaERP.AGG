@@ -9,6 +9,9 @@ namespace App\Support\Compras;
  * Si no hay vínculo, el medio queda vacío. El import Anita resuelve el medio
  * vía OC/proveedor (ComprobanteProveedorAnitaImportFormapagoSupport); el
  * fallback Efectivo del config solo aplica si no hay ninguno.
+ *
+ * Efectivo en OC/cuota se trata como default no confirmado: si hay otro medio
+ * en cuota o en la OC del documento, se prefiere ese (igual que el backfill).
  */
 final class ProyeccionPagosMedioPagoSupport
 {
@@ -25,16 +28,20 @@ final class ProyeccionPagosMedioPagoSupport
         ?string $origenEntrada,
     ): string {
         $vinculada = self::texto($abreviaturaOcVinculada, $nombreOcVinculada);
-        if ($vinculada !== '') {
-            return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($vinculada);
-        }
-
         $deCuota = self::texto($abreviaturaCuota, $nombreCuota);
         $deDocumento = self::texto($abreviaturaOcDocumento, $nombreOcDocumento);
         $esCredito = $signoTipo < 0;
         $importada = strtoupper(trim((string) $origenEntrada)) === self::ORIGEN_IMPORTADO;
 
+        if ($vinculada !== '' && ! self::esEfectivo($vinculada)) {
+            return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($vinculada);
+        }
+
         if ($esCredito && $importada) {
+            if ($deDocumento !== '' && ! self::esEfectivo($deDocumento)) {
+                return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($deDocumento);
+            }
+
             if ($deDocumento !== '') {
                 return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($deDocumento);
             }
@@ -42,6 +49,18 @@ final class ProyeccionPagosMedioPagoSupport
             if (self::esEfectivo($deCuota)) {
                 return '';
             }
+        }
+
+        if ($deCuota !== '' && ! self::esEfectivo($deCuota)) {
+            return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($deCuota);
+        }
+
+        if ($deDocumento !== '' && ! self::esEfectivo($deDocumento)) {
+            return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($deDocumento);
+        }
+
+        if ($vinculada !== '') {
+            return PropuestaPagoLineaPresentacionSupport::abreviaturaAnita($vinculada);
         }
 
         if ($deCuota !== '') {

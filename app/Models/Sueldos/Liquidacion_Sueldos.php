@@ -75,6 +75,7 @@ class Liquidacion_Sueldos extends Model implements Auditable
         'fecha_pago' => 'date',
         'simulacion' => 'boolean',
         'acumula_novedades' => 'boolean',
+        'filtros_json' => 'array',
         'fecha_ultimo_deposito' => 'date',
         'cantidad_recibos' => 'integer',
         'total_bruto' => 'decimal:2',
@@ -160,6 +161,11 @@ class Liquidacion_Sueldos extends Model implements Auditable
     public function detalles()
     {
         return $this->hasMany(Liquidacion_Detalle_Sueldos::class, 'liquidacion_id');
+    }
+
+    public function errores()
+    {
+        return $this->hasMany(Liquidacion_Error_Sueldos::class, 'liquidacion_id');
     }
 
     public function asiento()

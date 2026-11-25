@@ -52,6 +52,15 @@
             'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
             'requerido' => true,
         ])
+        @include('compras.partials.campo_proveedor_servicio', [
+            'data' => $data ?? null,
+            'proveedor_id' => ($data ?? null)?->proveedor_id,
+            'proveedor_servicio_id' => ($data ?? null)?->proveedor_servicio_id,
+            'servicio_cliente' => ($data ?? null)?->servicio_cliente,
+            'solo_lectura' => $soloLectura ?? false,
+            'col_label' => 'col-lg-3',
+            'col_input' => 'col-lg-8',
+        ])
         @include('compras.partials.campo_provincia_destino', [
             'data' => $data ?? null,
             'col_label' => 'col-lg-3 control-label text-right pr-2',

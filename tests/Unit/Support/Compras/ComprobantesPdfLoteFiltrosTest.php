@@ -17,13 +17,16 @@ class ComprobantesPdfLoteFiltrosTest extends TestCase
             'fecha_desde' => '2026-01-01',
             'fecha_hasta' => '2026-01-31',
             'proveedor_ids' => '10, 12,10,0',
+            'nro_cliente' => ' 86691-1 ',
         ]);
 
         $filtros = ComprobantesPdfLoteFiltros::resolverDesdeRequest($request);
 
         $this->assertSame([10, 12], $filtros['proveedor_ids']);
         $this->assertSame(['fac'], $filtros['tipos']);
+        $this->assertSame('86691-1', $filtros['nro_cliente']);
         $this->assertTrue(ComprobantesPdfLoteFiltros::tieneCriteriosAplicados($filtros));
+        $this->assertSame('86691-1', ComprobantesPdfLoteFiltros::paraQueryString($filtros)['nro_cliente']);
 
         $filtros['fecha_hasta'] = '2025-12-01';
         $this->assertFalse(ComprobantesPdfLoteFiltros::tieneCriteriosAplicados($filtros));

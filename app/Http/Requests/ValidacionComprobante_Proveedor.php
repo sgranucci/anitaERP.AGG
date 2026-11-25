@@ -8,6 +8,7 @@ use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorServicioSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use Illuminate\Foundation\Http\FormRequest;
@@ -88,6 +89,8 @@ class ValidacionComprobante_Proveedor extends FormRequest
         return [
             'empresa_id' => 'required|integer|min:1',
             'proveedor_id' => 'required|integer|min:1',
+            'proveedor_servicio_id' => 'nullable|integer|min:1',
+            'servicio_cliente' => 'nullable|string|max:255',
             'tipotransaccion_compra_id' => 'required|integer|min:1',
             'letra' => 'required|string|size:1',
             'sucursal' => 'required|integer|min:0',
@@ -194,6 +197,14 @@ class ValidacionComprobante_Proveedor extends FormRequest
                 );
             } catch (RuntimeException $e) {
                 $validator->errors()->add('condicionpago_id', $e->getMessage());
+            }
+
+            foreach (ComprobanteProveedorServicioSupport::erroresAsignacion(
+                $this->input('proveedor_servicio_id'),
+                (int) $this->input('proveedor_id', 0),
+                $this->input('servicio_cliente')
+            ) as $msg) {
+                $validator->errors()->add('proveedor_servicio_id', $msg);
             }
         });
     }

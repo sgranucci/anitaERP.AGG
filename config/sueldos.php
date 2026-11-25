@@ -5,9 +5,13 @@ return [
     // Días de validez del link firmado de autorización de alta provisoria de empleado
     'empleado_alta_link_dias' => (int) env('SUELDOS_EMPLEADO_ALTA_LINK_DIAS', 14),
 
-    // Firma pie recibo Anexo III
+    // Firma pie recibo Anexo III (overrideables en Configuración general)
     'recibo_firma_nombre' => env('SUELDOS_RECIBO_FIRMA_NOMBRE', 'ERIKA PEREZ'),
     'recibo_firma_cargo' => env('SUELDOS_RECIBO_FIRMA_CARGO', 'CAPITAL HUMANO'),
+    'recibo_firma_imagen' => env(
+        'SUELDOS_RECIBO_FIRMA_IMAGEN',
+        resource_path('firmas/firma_erika_perez.png')
+    ),
 
     /**
      * Columna BASE del recibo (solo presentación, no altera importe).

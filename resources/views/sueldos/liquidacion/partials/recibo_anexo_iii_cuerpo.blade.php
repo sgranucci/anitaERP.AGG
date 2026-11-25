@@ -165,15 +165,15 @@
     </tbody>
 </table>
 
-<p style="margin:4px 0;">
+<p style="margin:2px 0;">
     COMPOSICION SALARIAL:
     Remunerativo: {{ $fmt($d['tot_rem']) }}
     &nbsp; No Remunerativo: {{ $fmt($d['tot_norem']) }}
     &nbsp; Descuentos: {{ $fmt($d['tot_ded']) }}
 </p>
 <div class="neto-box">SUELDO NETO $ {{ $fmt($d['neto']) }}</div>
-<p>Recibi la suma de: {{ $d['neto_letras'] }}</p>
-<p>
+<p style="margin:1px 0;">Recibi la suma de: {{ $d['neto_letras'] }}</p>
+<p style="margin:1px 0;">
     Depositado en: {{ $d['banco_deposito'] }}
     &nbsp; Cuenta: {{ $d['cuenta'] }}
     &nbsp; CBU: {{ $d['cbu'] }}
@@ -257,8 +257,21 @@
     </tr>
 </table>
 
-<div class="firma">
-    FIRMA DEL EMPLEADOR
-    <strong>{{ $d['firma_nombre'] }}</strong>
-    {{ $d['firma_cargo'] }}
-</div>
+<table class="firma">
+    @if (! empty($d['firma_imagen_uri']))
+        <tr>
+            <td class="firma-celda">
+                <img class="firma-img" src="{{ $d['firma_imagen_uri'] }}" alt="Firma">
+            </td>
+        </tr>
+    @endif
+    <tr>
+        <td class="firma-celda">FIRMA DEL EMPLEADOR</td>
+    </tr>
+    <tr>
+        <td class="firma-celda"><strong>{{ $d['firma_nombre'] }}</strong></td>
+    </tr>
+    <tr>
+        <td class="firma-celda">{{ $d['firma_cargo'] }}</td>
+    </tr>
+</table>

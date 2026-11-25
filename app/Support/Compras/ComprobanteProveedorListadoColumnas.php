@@ -55,7 +55,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'empresa.nombre',
             'attr' => 'nombreempresa',
             'group' => self::GRUPO_PARTES,
-            'ancho' => 110,
+            'ancho' => 88,
         ],
         'proveedor' => [
             'label' => 'Proveedor',
@@ -66,7 +66,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'proveedor.nombre',
             'attr' => 'nombre_proveedor_listado',
             'group' => self::GRUPO_PARTES,
-            'ancho' => 220,
+            'ancho' => 200,
         ],
         'tipo' => [
             'label' => 'Tipo',
@@ -77,7 +77,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => 'tipotransaccion_compra.nombre',
             'attr' => 'nombre_tipo',
             'group' => self::GRUPO_COMPROBANTE,
-            'ancho' => 160,
+            'ancho' => 150,
         ],
         'numero' => [
             'label' => 'Número',
@@ -88,7 +88,7 @@ final class ComprobanteProveedorListadoColumnas
             'source' => '',
             'attr' => 'numerocomprobante',
             'group' => self::GRUPO_COMPROBANTE,
-            'ancho' => 110,
+            'ancho' => 130,
         ],
         'letra' => [
             'label' => 'Letra',

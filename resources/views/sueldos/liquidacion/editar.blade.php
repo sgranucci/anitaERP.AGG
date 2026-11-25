@@ -5,6 +5,9 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/maestro/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/maestro/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/liquidacion/seleccion_empleados.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/liquidacion/seleccion_empleados.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')
@@ -43,4 +46,6 @@
         </div>
     </div>
 </div>
+@include('includes.sueldos.modalconsulta_maestro_sueldos')
+@include('includes.sueldos.modalconsultaempleado_sueldos')
 @endsection

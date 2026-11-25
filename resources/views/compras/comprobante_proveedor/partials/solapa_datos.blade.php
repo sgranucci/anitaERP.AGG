@@ -199,6 +199,15 @@
             'col_label' => $cpColLabel,
             'col_input' => $cpColInput,
         ])
+        @include('compras.partials.campo_proveedor_servicio', [
+            'data' => $data ?? null,
+            'proveedor_id' => ($data ?? null)?->proveedor_id,
+            'proveedor_servicio_id' => ($data ?? null)?->proveedor_servicio_id,
+            'servicio_cliente' => ($data ?? null)?->servicio_cliente,
+            'solo_lectura' => ! empty($bloqueado_edicion) || ! empty($origen_ingreso_egreso),
+            'col_label' => $cpColLabel,
+            'col_input' => $cpColInput,
+        ])
         @if (! empty($origen_ingreso_egreso) && filled(($data ?? null)?->proveedor_documento_eventual ?? null))
         <div class="form-group row">
             <label class="{{ $cpColLabel }}">CUIT eventual</label>

@@ -227,7 +227,7 @@
                     $layoutPantallaPorKey[$filaP['key']] = $filaP;
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
-                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $usaScrollHorizontal = LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? []);
                 $anchoAcciones = LwGrilla::ANCHO_COL_ACCIONES;
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0
@@ -266,7 +266,7 @@
                                         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
                                     } else {
                                         $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
-                                        $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
+                                        $styleCol = 'width:'.$pct.'%;min-width:0;';
                                     }
                                     $esOrdenable = isset($camposOrdenablesThead[$key]);
                                     $dirCol = \App\Support\Listado\ListadoOrdenamientoSupport::direccionDeCampo($ordenActualThead, $key);

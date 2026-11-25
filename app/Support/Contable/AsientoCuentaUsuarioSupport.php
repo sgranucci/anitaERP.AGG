@@ -7,6 +7,9 @@ use App\Models\Contable\Usuario_Cuentacontable;
 
 /**
  * Restricción de cuentas contables por usuario (lista blanca).
+ *
+ * Solo aplica al circuito de asientos (validación / aprobación al guardar).
+ * No debe filtrar consultas ni reportes (mayores, sumas y saldos, etc.).
  */
 class AsientoCuentaUsuarioSupport
 {

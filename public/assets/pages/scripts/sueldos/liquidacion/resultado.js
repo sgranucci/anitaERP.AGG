@@ -206,6 +206,33 @@
             .finally(ocultarOverlay);
     }
 
+    function confirmarQuitarRecibo(ev) {
+        var form = ev.currentTarget;
+        if (!form || !form.classList.contains('form-eliminar-recibo-liq')) return;
+        ev.preventDefault();
+        var legajo = form.getAttribute('data-legajo') || '';
+        var nombre = form.getAttribute('data-nombre') || '';
+        var quien = (legajo ? 'legajo ' + legajo : 'este empleado')
+            + (nombre ? ' (' + nombre + ')' : '');
+        var msg = '¿Quitar ' + quien + ' de esta corrida?\n\n'
+            + 'Se elimina solo su recibo. No se recalcula al resto de la nómina.';
+        if (typeof swal === 'function') {
+            swal({
+                title: 'Quitar empleado de la corrida',
+                text: msg,
+                icon: 'warning',
+                buttons: { cancel: 'Cancelar', confirm: 'Quitar' },
+                dangerMode: true,
+            }).then(function (ok) {
+                if (ok) form.submit();
+            });
+            return;
+        }
+        if (window.confirm(msg)) {
+            form.submit();
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var chk = document.getElementById('chk-multiempresa-emision');
         if (chk) {
@@ -224,6 +251,9 @@
         if (btnEjec) {
             btnEjec.addEventListener('click', ejecutarConfidencial);
         }
+        document.querySelectorAll('form.form-eliminar-recibo-liq').forEach(function (form) {
+            form.addEventListener('submit', confirmarQuitarRecibo);
+        });
         window.addEventListener('pageshow', ocultarOverlay);
         document.addEventListener('keydown', function (ev) {
             if (ev.key === 'Escape') {

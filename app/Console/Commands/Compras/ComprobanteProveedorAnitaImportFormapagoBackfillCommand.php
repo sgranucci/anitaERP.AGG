@@ -6,7 +6,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportFormapagoBack
 use Illuminate\Console\Command;
 
 /**
- * Corrige formapago_id=Efectivo en cuotas importadas desde Anita.
+ * Corrige formapago_id=Efectivo en cuotas (cualquier origen) usando OC/proveedor.
  * Default dry-run; requiere --ejecutar para persistir.
  */
 class ComprobanteProveedorAnitaImportFormapagoBackfillCommand extends Command
@@ -17,7 +17,7 @@ class ComprobanteProveedorAnitaImportFormapagoBackfillCommand extends Command
                             {--empresa_id= : Solo esa empresa ERP}
                             {--ejecutar : Persiste; sin esto solo dry-run}';
 
-    protected $description = 'Corrige cuotas ANITA_IMPORT en Efectivo usando medio de la OC o del proveedor';
+    protected $description = 'Corrige cuotas en Efectivo usando medio de la OC o del proveedor (todos los orígenes)';
 
     public function handle(): int
     {
@@ -43,7 +43,7 @@ class ComprobanteProveedorAnitaImportFormapagoBackfillCommand extends Command
         }
 
         $this->table(['Métrica', 'Cantidad'], [
-            ['Cuotas candidatas (ANITA_IMPORT + Efectivo)', $stats['candidatas']],
+            ['Cuotas candidatas (Efectivo, todos los orígenes)', $stats['candidatas']],
             ['A actualizar', $stats['a_actualizar']],
             ['  vía OC', $stats['via_oc']],
             ['  vía proveedor', $stats['via_proveedor']],

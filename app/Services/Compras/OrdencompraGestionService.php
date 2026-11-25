@@ -44,6 +44,7 @@ use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
 use App\Support\Compras\OrdencompraSolicitanteSupport;
 use App\Support\Compras\OrdencompraUiConfigSupport;
+use App\Support\Compras\ProveedorOperativoComprasSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\SuscripcionSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
@@ -423,6 +424,7 @@ class OrdencompraGestionService
 
         try {
             $this->validarProveedorObligatorioDesdeRequisicion($payload);
+            ProveedorOperativoComprasSupport::assertIdOperativo($payload['proveedor_id'] ?? null);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -589,6 +591,7 @@ class OrdencompraGestionService
 
         try {
             $this->validarOrigenPrecioDesdeRequisicion($payload);
+            ProveedorOperativoComprasSupport::assertIdOperativo($payload['proveedor_id'] ?? null);
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }

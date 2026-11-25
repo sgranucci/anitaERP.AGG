@@ -20,6 +20,7 @@ use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\OrdencompraLegajoNcImputacionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\ComprobanteProveedorServicioSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -112,6 +113,7 @@ class ComprobanteProveedorPrefillService
             ->with([
                 'empresas',
                 'proveedores.condicionivas',
+                'proveedor_servicios',
                 'tipotransaccion_compras',
                 'monedas',
                 'precarga_comprobante_proveedor_conceptos',
@@ -192,9 +194,30 @@ class ComprobanteProveedorPrefillService
             ]);
         }
 
+        $asigServicio = ComprobanteProveedorServicioSupport::resolverAsignacion(
+            $precarga->proveedor_servicio_id,
+            (int) $precarga->proveedor_id,
+            $precarga->servicio_cliente
+        );
+        $servicioId = $asigServicio['proveedor_servicio_id'];
+        $servicioCliente = $asigServicio['servicio_cliente'];
+        $leyendaDesdeServicio = null;
+        if ($servicioId) {
+            $serv = $precarga->proveedor_servicios
+                ?? \App\Models\Compras\Proveedor_Servicio::query()->find($servicioId);
+            if ($serv) {
+                $leyendaDesdeServicio = ComprobanteProveedorServicioSupport::leyendaSugerida($serv);
+            }
+        }
+        if ($leyendaDesdeServicio === null) {
+            $leyendaDesdeServicio = ComprobanteProveedorServicioSupport::leyendaDesdeCliente($servicioCliente);
+        }
+
         $data = new Comprobante_Proveedor([
             'empresa_id' => (int) ($ordencompra?->empresa_id ?: $precarga->empresa_id),
             'proveedor_id' => $precarga->proveedor_id,
+            'proveedor_servicio_id' => $servicioId,
+            'servicio_cliente' => $servicioCliente,
             'tipotransaccion_compra_id' => $precarga->tipotransaccion_compra_id,
             'ordencompra_id' => $ordencompra?->id,
             'precarga_comprobante_proveedor_id' => $precarga->id,
@@ -215,6 +238,7 @@ class ComprobanteProveedorPrefillService
             'modo_carga' => $modoCarga,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'es_fce' => false,
+            'leyenda' => $leyendaDesdeServicio,
             'pararevisar' => (bool) $precarga->pararevisar,
             'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::idDesdeRequest(
                 $precarga->provincia_destino_id
@@ -223,6 +247,9 @@ class ComprobanteProveedorPrefillService
 
         $data->setRelation('empresas', $ordencompra?->empresas ?? $precarga->empresas);
         $data->setRelation('proveedores', $precarga->proveedores);
+        if ($precarga->relationLoaded('proveedor_servicios') && $precarga->proveedor_servicios) {
+            $data->setRelation('proveedor_servicios', $precarga->proveedor_servicios);
+        }
         $data->setRelation('tipotransaccion_compras', $precarga->tipotransaccion_compras);
         $data->setRelation('monedas', $precarga->monedas);
         $data->setRelation('ordencompras', $ordencompra);

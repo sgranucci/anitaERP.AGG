@@ -2259,11 +2259,26 @@
         var fp = data.factura_proceso || {};
         var ap = data.asientos_proceso || {};
         var pv = data.puntoventa || {};
+        var desdeGrabacion = !!(data.asientos_desde_grabacion || ap.desde_grabacion);
         var resumen = el('preview-factura-resumen');
         if (resumen) {
-            var txt = 'Asiento 1 (QR no facturado): ' + (fp.cantidad_comandas || 0) + ' comanda(s) · '
-                + fmtMoney(fp.total || 0);
-            txt += ' · Porcentaje: ' + (data.porcentaje != null ? data.porcentaje : porcentajeActual()) + '%';
+            var txt;
+            if (desdeGrabacion) {
+                txt = 'Asientos contables grabados'
+                    + (data.asientos_grabados_en ? (' · ' + formatearFechaIsoLegible(data.asientos_grabados_en)) : '')
+                    + ' · ' + ((ap.asientos || []).length) + ' asiento(s)'
+                    + ' · Porcentaje: ' + (data.porcentaje != null ? data.porcentaje : porcentajeActual()) + '%';
+                if (fp.total) {
+                    txt += ' · Factura proceso: ' + fmtMoney(fp.total || 0);
+                    if (fp.cantidad_comandas) {
+                        txt += ' (' + fp.cantidad_comandas + ' comanda(s))';
+                    }
+                }
+            } else {
+                txt = 'Asiento 1 (QR no facturado): ' + (fp.cantidad_comandas || 0) + ' comanda(s) · '
+                    + fmtMoney(fp.total || 0);
+                txt += ' · Porcentaje: ' + (data.porcentaje != null ? data.porcentaje : porcentajeActual()) + '%';
+            }
             if (pv.codigo) {
                 txt += ' · PV: ' + pv.codigo + (pv.nombre ? ' (' + pv.nombre + ')' : '');
             }
@@ -2272,6 +2287,12 @@
         var advBox = el('preview-factura-advertencias');
         if (advBox) {
             advBox.innerHTML = '';
+            if (desdeGrabacion) {
+                var infoGrab = document.createElement('div');
+                infoGrab.className = 'alert alert-info py-1 mb-1 small';
+                infoGrab.textContent = 'Proceso cerrado: se muestran los asientos reales de ERP (con N° de asiento), no un preview recalculado.';
+                advBox.appendChild(infoGrab);
+            }
             var advertencias = (ap.advertencias || []).concat(fp.advertencias || []);
             advertencias.forEach(function (a) {
                 var d = document.createElement('div');
@@ -2279,7 +2300,7 @@
                 d.textContent = a;
                 advBox.appendChild(d);
             });
-            if ((ap.faltantes || []).length === 0 && advertencias.length === 0) {
+            if (!desdeGrabacion && (ap.faltantes || []).length === 0 && advertencias.length === 0) {
                 var ok = document.createElement('div');
                 ok.className = 'alert alert-success py-1 mb-1 small';
                 ok.textContent = 'Todas las cuentas requeridas están configuradas y resueltas.';
@@ -2333,6 +2354,9 @@
         asientos.forEach(function (asiento, idx) {
             var cardId = 'preview-asiento-' + idx;
             var meta = [];
+            if (asiento.numeroasiento) {
+                meta.push('N° ' + asiento.numeroasiento);
+            }
             if (asiento.cantidad_comandas) {
                 if (asiento.comandas_alcance === 'efectivo_no_facturado') {
                     meta.push(asiento.cantidad_comandas + ' comanda(s) con efectivo no facturado');
@@ -2352,12 +2376,16 @@
             if (asiento.total) {
                 meta.push('Total ' + fmtMoney(asiento.total));
             }
+            var tituloAsiento = asiento.titulo || ('Asiento ' + (asiento.numero || (idx + 1)));
+            if (asiento.numeroasiento && String(tituloAsiento).indexOf('N° ' + asiento.numeroasiento) === -1) {
+                tituloAsiento += ' · N° ' + asiento.numeroasiento;
+            }
             var card = document.createElement('div');
             card.className = 'card mb-2';
             card.innerHTML = '<div class="card-header py-2" id="heading-' + cardId + '">'
                 + '<button class="btn btn-link btn-sm p-0 text-left' + (idx === 0 ? '' : ' collapsed') + '" type="button" '
                 + 'data-toggle="collapse" data-target="#' + cardId + '" aria-expanded="' + (idx === 0 ? 'true' : 'false') + '">'
-                + '<strong>' + escapeHtml(asiento.titulo || ('Asiento ' + (asiento.numero || (idx + 1)))) + '</strong>'
+                + '<strong>' + escapeHtml(tituloAsiento) + '</strong>'
                 + (meta.length ? ' <span class="text-muted small">(' + meta.join(' · ') + ')</span>' : '')
                 + ' — Debe ' + fmtMoney(asiento.resumen_debe) + ' / Haber ' + fmtMoney(asiento.resumen_haber)
                 + '</button></div>'
@@ -2368,7 +2396,7 @@
                 + '<th class="text-right waitry-asiento-col-monto">Debe</th>'
                 + '<th class="text-right waitry-asiento-col-monto">Haber</th>'
                 + '</tr></thead><tbody></tbody></table></div>'
-                + (asiento.comandas_alcance && asiento.cantidad_comandas
+                + (asiento.comandas_alcance && asiento.cantidad_comandas && !desdeGrabacion
                     ? ('<div class="mt-2">'
                         + '<button type="button" class="btn btn-outline-secondary btn-sm btn-preview-asiento-comandas" '
                         + 'data-comandas-alcance="' + escapeHtml(asiento.comandas_alcance) + '">'

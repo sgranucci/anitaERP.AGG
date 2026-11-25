@@ -24,9 +24,6 @@ Importaciones
         min-width: 100% !important;
         max-width: 100%;
     }
-    .lw-workbench .imp-grilla .lw-table-fit .tabla-ancha td.lw-col {
-        max-width: 0;
-    }
     .lw-workbench .imp-grilla .lw-acciones-inner .btn-accion-tabla {
         min-width: 1.45rem;
         padding: 0 0.05rem;
@@ -284,7 +281,7 @@ Importaciones
                     $layoutPantallaPorKey[$filaP['key']] = $filaP;
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
-                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $usaScrollHorizontal = LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? []);
                 $anchoAcciones = 88; // ~5.5rem: editar + eliminar
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0

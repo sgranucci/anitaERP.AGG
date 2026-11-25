@@ -21,6 +21,10 @@ class ConceptoMomentoCorrida
 {
     /**
      * ¿El concepto con este momento se liquida en la corrida? (cheq_momento).
+     *
+     * Liquidación final: mismo filtro que mensual (en Anita tipaban la corrida
+     * como “mensual” para que pasen SIEMPRE / MENSUAL_2q / SQUINCENA) y además
+     * los conceptos con momento final/especial.
      */
     public static function aplica(string $momento, string $tipoCorrida): bool
     {
@@ -29,6 +33,14 @@ class ConceptoMomentoCorrida
 
         if ($momento === 'no_liquida') {
             return false;
+        }
+
+        // Final ≈ mensual + pack exclusivo final/especial (sin mentir el tipo de corrida).
+        if ($tipo === 'final') {
+            if ($momento === 'especial' || $momento === 'final') {
+                return true;
+            }
+            $tipo = 'mensual';
         }
 
         // SIEMPRE: todas las corridas (mensual, vacaciones, SAC, final, …).

@@ -181,7 +181,8 @@ class Categoria_SueldosController extends Controller
         return redirect('sueldos/categoria')->with(
             'mensaje',
             'Sincronización con Anita: '.$r['importados'].' categorías nuevas, '.$r['omitidos'].' ya existentes, '
-                .$r['bases_importadas'].' bases importadas (de '.$r['en_anita'].' en Anita).'
+                .$r['bases_importadas'].' bases importadas, '
+                .($r['bases_actualizadas'] ?? 0).' bases actualizadas (de '.$r['en_anita'].' en Anita).'
         );
     }
 

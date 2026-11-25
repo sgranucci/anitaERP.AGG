@@ -29,7 +29,7 @@ class Comprobante_Proveedor extends Model implements Auditable
     }
 
     protected $fillable = [
-        'empresa_id', 'proveedor_id', 'tipotransaccion_compra_id', 'ordencompra_id',
+        'empresa_id', 'proveedor_id', 'proveedor_servicio_id', 'servicio_cliente', 'tipotransaccion_compra_id', 'ordencompra_id',
         'ordencompra_comprobante_id', 'precarga_comprobante_proveedor_id', 'condicionpago_id',
         'conceptogasto_id', 'provincia_destino_id',
         'letra', 'sucursal', 'numerocomprobante', 'fechacomprobante', 'fechaiva', 'fechavencimiento',
@@ -61,6 +61,11 @@ class Comprobante_Proveedor extends Model implements Auditable
     public function proveedores()
     {
         return $this->belongsTo(Proveedor::class, 'proveedor_id');
+    }
+
+    public function proveedor_servicios()
+    {
+        return $this->belongsTo(Proveedor_Servicio::class, 'proveedor_servicio_id');
     }
 
     public function caja_movimientos()

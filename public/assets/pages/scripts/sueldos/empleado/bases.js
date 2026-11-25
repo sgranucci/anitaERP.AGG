@@ -12,10 +12,19 @@
     var urlEliminarBaseTpl = $panel.data('url-eliminar-base');
     var puedeEditar = String($panel.data('puede-editar')) === '1';
     var puedeBorrar = String($panel.data('puede-borrar')) === '1';
-    var usaTabla = String($panel.data('usa-tabla')) === '1';
     var hoy = $panel.data('hoy');
+    var idsCategoria = String($panel.data('nombrebase-ids-categoria') || '')
+        .split(',')
+        .map(function (s) { return parseInt(s, 10); })
+        .filter(function (n) { return n > 0; });
 
     var modalNombrebaseId = null;
+    var modalEditable = false;
+
+    function esBaseCategoria(nombrebaseId) {
+        var id = parseInt(nombrebaseId, 10);
+        return id > 0 && idsCategoria.indexOf(id) !== -1;
+    }
 
     function formatNumero(valor) {
         var n = parseFloat(valor);
@@ -51,24 +60,35 @@
         var $tbody = $('#tbody-bases-vigentes');
         $tbody.empty();
         if (!bases || !bases.length) {
-            $tbody.append('<tr id="fila-sin-bases"><td colspan="5" class="text-center text-muted">Sin bases cargadas.</td></tr>');
+            $tbody.append('<tr id="fila-sin-bases"><td colspan="6" class="text-center text-muted">Sin bases cargadas.</td></tr>');
             $('#badge-cant-bases').text(0);
             return;
         }
         bases.forEach(function (base) {
+            var origen = base.origen || 'empleado';
+            var esLegajo = origen !== 'categoria';
+            var origenBadge = origen === 'categoria'
+                ? '<span class="badge badge-info">Categoría</span>'
+                : '<span class="badge badge-secondary">Legajo</span>';
             var $tr = $('<tr>')
                 .attr('data-nombrebase-id', base.nombrebase_id)
-                .attr('data-nombrebase-desc', base.nombrebase_descripcion);
+                .attr('data-nombrebase-desc', base.nombrebase_descripcion)
+                .attr('data-origen', origen);
             $tr.append('<td>' + base.nombrebase_codigo + '</td>');
             $tr.append('<td>' + escapeHtml(base.nombrebase_descripcion) + '</td>');
+            $tr.append('<td>' + origenBadge + '</td>');
             $tr.append('<td class="text-right">' + celdaValor(base) + '</td>');
             $tr.append('<td>' + escapeHtml(base.fecha_vigencia_fmt || '—') + '</td>');
+            var puedeEditarFila = puedeEditar && esLegajo;
+            var titulo = puedeEditarFila ? 'Editar vigencias' : 'Ver vigencias';
+            var icono = puedeEditarFila ? 'fa-pencil' : 'fa-eye';
             var acciones = '<button type="button" class="btn-accion-tabla tooltipsC btn-gestionar-vigencias"'
-                + ' title="' + (puedeEditar ? 'Gestionar vigencias' : 'Ver vigencias') + '"'
+                + ' title="' + titulo + '"'
                 + ' data-nombrebase-id="' + base.nombrebase_id + '"'
-                + ' data-nombrebase-desc="' + escapeHtml(base.nombrebase_descripcion) + '">'
-                + '<i class="fa fa-list-ol"></i></button>';
-            if (usaTabla && puedeBorrar) {
+                + ' data-nombrebase-desc="' + escapeHtml(base.nombrebase_descripcion) + '"'
+                + ' data-origen="' + origen + '">'
+                + '<i class="fa ' + icono + '"></i></button>';
+            if (puedeBorrar && esLegajo) {
                 acciones += ' <button type="button" class="btn-accion-tabla tooltipsC text-danger btn-eliminar-base-completa"'
                     + ' title="Eliminar base completa (todas las vigencias)"'
                     + ' data-nombrebase-id="' + base.nombrebase_id + '"'
@@ -108,10 +128,10 @@
             $tr.addClass('table-success');
         }
 
-        var celdaFecha = puedeEditar
+        var celdaFecha = modalEditable
             ? '<input type="date" class="form-control form-control-sm vig-fecha" value="' + h.fecha_vigencia + '">'
             : escapeHtml(h.fecha_vigencia_fmt);
-        var celdaValor = puedeEditar
+        var celdaValor = modalEditable
             ? '<input type="number" step="0.0001" class="form-control form-control-sm text-right vig-valor" value="' + h.valor + '">'
             : formatNumero(h.valor);
 
@@ -120,7 +140,7 @@
         $tr.append('<td>' + estadoBadge(h) + '</td>');
 
         var acc = '';
-        if (puedeBorrar) {
+        if (modalEditable && puedeBorrar) {
             acc = '<button type="button" class="btn btn-sm btn-outline-danger btn-marcar-eliminar" title="Marcar para eliminar"><i class="fa fa-trash"></i></button>';
         }
         $tr.append('<td class="text-nowrap">' + acc + '</td>');
@@ -148,7 +168,7 @@
             $tb.append('<tr class="fila-vacia"><td colspan="4" class="text-center text-muted">Sin vigencias. Usá «Agregar fila» para cargar una.</td></tr>');
         }
 
-        var mostrarAcciones = puedeEditar && !!modalNombrebaseId;
+        var mostrarAcciones = modalEditable && !!modalNombrebaseId;
         $('#btn-agregar-fila-vigencia').toggle(mostrarAcciones);
         $('#btn-guardar-vigencias').toggle(mostrarAcciones);
     }
@@ -167,12 +187,26 @@
         });
     }
 
+    function filtrarOpcionesAlta() {
+        $('#vigencias_nombrebase_id option').each(function () {
+            var $opt = $(this);
+            var val = $opt.attr('value');
+            if (!val) {
+                return;
+            }
+            // Ocultar bases que ya viven en la categoría (solo lectura).
+            $opt.prop('disabled', esBaseCategoria(val)).toggle(!esBaseCategoria(val));
+        });
+    }
+
     function abrirModalVigencias(opts) {
         opts = opts || {};
         mostrarErrorModal('');
 
         if (opts.nueva) {
             modalNombrebaseId = null;
+            modalEditable = puedeEditar;
+            filtrarOpcionesAlta();
             $('#vigencias-select-wrap').show();
             $('#vigencias_nombrebase_id').val('');
             $('#vigencias-base-titulo').text('');
@@ -180,7 +214,9 @@
             $('#btn-agregar-fila-vigencia').hide();
             $('#btn-guardar-vigencias').hide();
         } else {
+            var origen = opts.origen || (esBaseCategoria(opts.nombrebaseId) ? 'categoria' : 'empleado');
             modalNombrebaseId = opts.nombrebaseId;
+            modalEditable = puedeEditar && origen !== 'categoria';
             $('#vigencias-select-wrap').hide();
             $('#vigencias-base-titulo').text(opts.desc ? '· ' + opts.desc : '');
             cargarVigencias(opts.nombrebaseId);
@@ -205,7 +241,8 @@
     $('#tbody-bases-vigentes').on('click', '.btn-gestionar-vigencias', function () {
         abrirModalVigencias({
             nombrebaseId: $(this).data('nombrebase-id'),
-            desc: $(this).data('nombrebase-desc')
+            desc: $(this).data('nombrebase-desc'),
+            origen: $(this).data('origen')
         });
     });
 
@@ -226,11 +263,14 @@
             if (resp && resp.mensaje === 'ok') {
                 renderBases(resp.bases);
             } else {
-                alert('No se pudo eliminar la base.');
+                alert((resp && resp.error) ? resp.error : 'No se pudo eliminar la base.');
                 $btn.prop('disabled', false);
             }
-        }).fail(function () {
-            alert('Error al eliminar la base.');
+        }).fail(function (xhr) {
+            var msg = (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message))
+                ? (xhr.responseJSON.error || xhr.responseJSON.message)
+                : 'Error al eliminar la base.';
+            alert(msg);
             $btn.prop('disabled', false);
         });
     });
@@ -238,8 +278,16 @@
     $('#vigencias_nombrebase_id').on('change', function () {
         var nbId = $(this).val();
         modalNombrebaseId = nbId || null;
+        modalEditable = puedeEditar && !!nbId && !esBaseCategoria(nbId);
         $('#vigencias-base-titulo').text(nbId ? '· ' + $('option:selected', this).text() : '');
         if (nbId) {
+            if (esBaseCategoria(nbId)) {
+                mostrarErrorModal('Esa base pertenece a la categoría. Elegí otra o modificála en el ABM de categorías.');
+                $('#tbody-vigencias').html('<tr><td colspan="4" class="text-center text-muted">Base de categoría (solo lectura).</td></tr>');
+                $('#btn-agregar-fila-vigencia').hide();
+                $('#btn-guardar-vigencias').hide();
+                return;
+            }
             cargarVigencias(nbId);
         } else {
             $('#tbody-vigencias').html('<tr><td colspan="4" class="text-center text-muted">Elegí una base.</td></tr>');
@@ -251,6 +299,7 @@
     // Agregar una fila nueva editable (no persiste hasta Guardar cambios).
     $('#btn-agregar-fila-vigencia').on('click', function () {
         if (!modalNombrebaseId) { mostrarErrorModal('Seleccione una base.'); return; }
+        if (!modalEditable) { mostrarErrorModal('Esta base no se puede editar desde el legajo.'); return; }
         $('#tbody-vigencias .fila-vacia').remove();
         $('#tbody-vigencias').append(filaNueva());
     });
@@ -282,6 +331,7 @@
     // Guardar todos los cambios del modal en una sola operación.
     $('#btn-guardar-vigencias').on('click', function () {
         if (!modalNombrebaseId) { mostrarErrorModal('Seleccione una base.'); return; }
+        if (!modalEditable) { mostrarErrorModal('Esta base no se puede editar desde el legajo.'); return; }
 
         var items = [];
         var eliminar = [];

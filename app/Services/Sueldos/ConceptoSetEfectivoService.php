@@ -24,6 +24,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class ConceptoSetEfectivoService
 {
+    public function __construct(private GrupoLiqFinalResolver $grupoLiqFinal) {}
+
     /**
      * @return array{
      *   conceptos: Collection<int, Concepto_Sueldos>,
@@ -50,26 +52,14 @@ class ConceptoSetEfectivoService
 
         if ($grupos !== []) {
             $modo = ConceptoElegibilidadCatalogo::MODO_GRUPOS;
-            foreach ($grupos as $g) {
-                $items = Grupo_Concepto_Item_Sueldos::query()
-                    ->where('grupo_concepto_id', $g['id'])
-                    ->where('activo', true)
-                    ->pluck('concepto_id')
-                    ->map(fn ($id) => (int) $id)
-                    ->all();
-                if ($momentosGrupo !== null && $items !== []) {
-                    $items = $this->filtrarIdsPorMomentosGrupo($items, $momentosGrupo, $excluidos, $g);
-                }
-                foreach ($items as $cid) {
-                    $candidatosIds[$cid] = true;
-                    if (! isset($meta[$cid])) {
-                        $meta[$cid] = [
-                            'origen' => ConceptoElegibilidadCatalogo::ORIGEN_GRUPO,
-                            'detalle' => 'Grupo '.$g['codigo'].($g['descripcion'] ? ' · '.$g['descripcion'] : '').' (#'.$g['orden'].')',
-                        ];
-                    }
-                }
-            }
+            $this->incorporarItemsDeGrupos(
+                $grupos,
+                $candidatosIds,
+                $meta,
+                $excluidos,
+                $momentosGrupo,
+                ConceptoElegibilidadCatalogo::ORIGEN_GRUPO
+            );
         } elseif ((string) ($empleado->sin_grupo_modo ?? ConceptoElegibilidadCatalogo::SIN_GRUPO_ELEGIBILIDAD)
             === ConceptoElegibilidadCatalogo::SIN_GRUPO_NOVEDADES) {
             // Sin grupo y tilde en la ficha: no arma el catálogo. Más abajo entran
@@ -90,6 +80,30 @@ class ConceptoSetEfectivoService
                     'origen' => ConceptoElegibilidadCatalogo::ORIGEN_SAP,
                     'detalle' => 'Catálogo activo (sin grupo de conceptos)',
                 ];
+            }
+        }
+
+        // Liquidación final: une el grupo según empresa + sindicato + motivo (sin tocar el legajo).
+        // El pack del grupo final entra completo (salvo no_liquida): no se recorta por momento de grupo.
+        $grupoFinal = $this->grupoLiqFinal->resolverParaEmpleado($empleado, $liquidacion);
+        if ($grupoFinal !== null) {
+            $ya = collect($grupos)->contains(fn ($g) => (int) $g['id'] === (int) $grupoFinal['id']);
+            if (! $ya) {
+                $grupos[] = $grupoFinal;
+            }
+            $this->incorporarItemsDeGrupos(
+                [$grupoFinal],
+                $candidatosIds,
+                $meta,
+                $excluidos,
+                null,
+                ConceptoElegibilidadCatalogo::ORIGEN_GRUPO_FINAL,
+                'Grupo liq. final '.$grupoFinal['codigo']
+                    .($grupoFinal['descripcion'] ? ' · '.$grupoFinal['descripcion'] : '')
+            );
+            if ($modo === ConceptoElegibilidadCatalogo::MODO_NOVEDADES
+                || $modo === ConceptoElegibilidadCatalogo::MODO_SAP) {
+                $modo = ConceptoElegibilidadCatalogo::MODO_GRUPOS;
             }
         }
 
@@ -155,14 +169,22 @@ class ConceptoSetEfectivoService
             ->orderBy('codigo')
             ->get();
 
-        // cheq_momento: recorta el set final (novedades SIEMPRE sí pasan en vacaciones).
+        // cheq_momento: recorta el set (novedades SIEMPRE sí pasan en vacaciones).
+        // En final, lo que viene del grupo liq. final (ej. 15) no se recorta por momento
+        // (ya se excluyó no_liquida arriba): es el pack completo de egreso.
         $conceptos = $conceptos->filter(function (Concepto_Sueldos $c) use ($tipoCorrida, &$excluidos, &$meta) {
+            $cid = (int) $c->id;
+            $origen = (string) ($meta[$cid]['origen'] ?? '');
+            if ($tipoCorrida === 'final'
+                && $origen === ConceptoElegibilidadCatalogo::ORIGEN_GRUPO_FINAL) {
+                return true;
+            }
             if (ConceptoMomentoCorrida::aplica((string) $c->momento, $tipoCorrida)) {
                 return true;
             }
-            unset($meta[(int) $c->id]);
+            unset($meta[$cid]);
             $excluidos[] = [
-                'concepto_id' => (int) $c->id,
+                'concepto_id' => $cid,
                 'codigo' => (int) $c->codigo,
                 'descripcion' => (string) $c->descripcion,
                 'motivo' => 'Momento "'.$c->momento.'" no aplica a corrida '.$tipoCorrida,
@@ -476,6 +498,47 @@ class ConceptoSetEfectivoService
         $r = $this->resolver($empleado, $liquidacion);
 
         return $r['conceptos']->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * @param  list<array{id: int, codigo: int, descripcion: ?string, orden?: int}>  $grupos
+     * @param  array<int, true>  $candidatosIds
+     * @param  array<int, array{origen: string, detalle: string}>  $meta
+     * @param  list<array<string, mixed>>  $excluidos
+     * @param  list<string>|null  $momentosGrupo
+     */
+    private function incorporarItemsDeGrupos(
+        array $grupos,
+        array &$candidatosIds,
+        array &$meta,
+        array &$excluidos,
+        ?array $momentosGrupo,
+        string $origen,
+        ?string $detalleFijo = null
+    ): void {
+        foreach ($grupos as $g) {
+            $items = Grupo_Concepto_Item_Sueldos::query()
+                ->where('grupo_concepto_id', $g['id'])
+                ->where('activo', true)
+                ->pluck('concepto_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+            if ($momentosGrupo !== null && $items !== []) {
+                $items = $this->filtrarIdsPorMomentosGrupo($items, $momentosGrupo, $excluidos, $g);
+            }
+            $detalle = $detalleFijo ?? ('Grupo '.$g['codigo']
+                .($g['descripcion'] ? ' · '.$g['descripcion'] : '')
+                .' (#'.($g['orden'] ?? 0).')');
+            foreach ($items as $cid) {
+                $candidatosIds[$cid] = true;
+                if (! isset($meta[$cid]) || ($meta[$cid]['origen'] ?? '') === ConceptoElegibilidadCatalogo::ORIGEN_SAP) {
+                    $meta[$cid] = [
+                        'origen' => $origen,
+                        'detalle' => $detalle,
+                    ];
+                }
+            }
+        }
     }
 
     /**

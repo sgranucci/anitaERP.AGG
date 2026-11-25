@@ -8,6 +8,7 @@ use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Sueldos\NumeroALetrasEs;
 use App\Support\Sueldos\ReciboAnexoIIITortaSvg;
 use App\Support\Sueldos\ReciboBaseCalculoSupport;
+use App\Support\Sueldos\ReciboFirmaEmpleadorSupport;
 use App\Support\Sueldos\RubroCostoLaboral;
 use Carbon\Carbon;
 
@@ -260,8 +261,9 @@ class ReciboAnexoIIIArmadorService
             'tot_scvo' => $rubrosEmp[RubroCostoLaboral::SCVO] ?? 0,
             'torta_uri' => ReciboAnexoIIITortaSvg::dataUri($pieVals, 110),
             'pie_leyenda' => $pieVals,
-            'firma_nombre' => config('sueldos.recibo_firma_nombre', 'ERIKA PEREZ'),
-            'firma_cargo' => config('sueldos.recibo_firma_cargo', 'CAPITAL HUMANO'),
+            'firma_nombre' => ReciboFirmaEmpleadorSupport::nombre($empresa?->id),
+            'firma_cargo' => ReciboFirmaEmpleadorSupport::cargo($empresa?->id),
+            'firma_imagen_uri' => ReciboFirmaEmpleadorSupport::dataUri($empresa?->id),
             'modo_preview' => false,
         ];
     }
@@ -275,9 +277,13 @@ class ReciboAnexoIIIArmadorService
             }
         }
         $num = rtrim(rtrim(number_format($c, 2, ',', '.'), '0'), ',');
-        $u = trim((string) $unidad);
+        $u = strtoupper(trim((string) $unidad));
+        // No mostrar sufijo D/H (días/horas): solo el número. Sí se mantiene % y $.
+        if ($u === '' || $u === 'D' || $u === 'H') {
+            return $num;
+        }
 
-        return $u === '' ? $num : $num.$u;
+        return $num.$u;
     }
 
     private function fmtCuit(string $cuit): string

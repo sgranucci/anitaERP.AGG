@@ -150,7 +150,30 @@ function leerFilaProveedorConsulta($link) {
         nombre: $.trim($tr.find('td.nombreproveedor').first().clone().children().remove().end().text()),
         codigo: $.trim($tr.find('td.codigoproveedor').first().text()),
         estado: $.trim($tr.attr('data-estado') || ''),
+        elegible: String($tr.attr('data-elegible') || '1') !== '0',
     };
+}
+
+function permiteElegirProveedorSuspendido() {
+    return !!window.consultaProveedorIncluirSuspendidos;
+}
+
+function mensajeProveedorSuspendidoConsulta() {
+    return 'El proveedor está suspendido (tiene un problema, p. ej. padrón ARCA). No se puede usar en requisiciones ni órdenes de compra: contactá a Compras.';
+}
+
+/** false = bloqueado (no aplicar en pantalla). */
+function proveedorConsultaPuedeUsarse(data) {
+    if (!data || !data.id) {
+        return true;
+    }
+    if (String(data.estado || '') !== 'Suspendido') {
+        return true;
+    }
+    if (permiteElegirProveedorSuspendido()) {
+        return true;
+    }
+    return false;
 }
 
 function actualizarLinkEditarProveedor(proveedorId) {
@@ -335,6 +358,13 @@ function programarLeeProveedorPorCodigo($input) {
 function aplicarProveedorEnPantalla(data, ctx) {
     if (!data || !data.id) {
         limpiarProveedorEnPantalla();
+        return;
+    }
+
+    if (!proveedorConsultaPuedeUsarse(data)) {
+        marcarProveedorConsultaFallo(data.codigo || '');
+        limpiarProveedorEnPantallaManteniendoCodigo();
+        avisarProveedorNoCargado(mensajeProveedorSuspendidoConsulta());
         return;
     }
 
@@ -545,7 +575,11 @@ $(document).on('keyup', '#consultaproveedor', function (e) {
  */
 function elegirPrimerProveedorDelModal() {
     var $btn = $('#datosproveedor a.eligeconsultaproveedor, #datosproveedor .eligeconsultaproveedor').filter(function () {
-        return $(this).closest('tr').find('td.proveedor_id').text().trim() !== '';
+        var $tr = $(this).closest('tr');
+        if (String($tr.attr('data-elegible') || '1') === '0') {
+            return false;
+        }
+        return $tr.find('td.proveedor_id').text().trim() !== '';
     }).first();
     if (!$btn.length) {
         return false;
@@ -621,6 +655,10 @@ function activa_eventos_consultaproveedor() {
             event.preventDefault();
             var fila = leerFilaProveedorConsulta($(this));
             if (!fila.id) {
+                return;
+            }
+            if (fila.elegible === false || (fila.estado === 'Suspendido' && !permiteElegirProveedorSuspendido())) {
+                avisarProveedorNoCargado(mensajeProveedorSuspendidoConsulta());
                 return;
             }
             if (typeof window.onProveedorElegidoEnConsulta === 'function'

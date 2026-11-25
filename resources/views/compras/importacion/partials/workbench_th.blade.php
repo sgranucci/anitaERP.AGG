@@ -14,7 +14,7 @@
         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
     } else {
         $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
-        $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
+        $styleCol = 'width:'.$pct.'%;min-width:0;';
     }
     $esOrdenable = isset($camposOrdenablesThead[$key]);
     $dirCol = ListadoOrdenamientoSupport::direccionDeCampo($ordenActualThead, $key);

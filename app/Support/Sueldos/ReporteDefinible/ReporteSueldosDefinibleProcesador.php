@@ -49,19 +49,24 @@ class ReporteSueldosDefinibleProcesador
     {
         $this->omitidosConfidencial = 0;
         $seguridad = $this->seguridad ?? app(ReporteSueldosDefinibleSeguridadSupport::class);
-        if (isset($filtros['empresa_id'])) {
-            $seguridad->assertEmpresaAutorizada(
-                ((int) $filtros['empresa_id']) > 0 ? (int) $filtros['empresa_id'] : null
-            );
+        $empresaIds = $this->normalizarEmpresaIds($filtros);
+        foreach ($empresaIds as $empresaIdAuth) {
+            $seguridad->assertEmpresaAutorizada($empresaIdAuth);
         }
         $reporte->load(['columnas.conceptos']);
         $origen = $filtros['origen'] ?? ReporteSueldosDefinibleSupport::ORIGEN_LIQUIDACION;
         $agrupacion = $filtros['agrupacion'] ?? ReporteSueldosDefinibleSupport::AGRUPACION_EMPLEADO;
         $agrupaciones = $this->normalizarAgrupaciones($filtros['agrupaciones'] ?? [$agrupacion]);
         $resumido = (bool) ($filtros['resumido'] ?? false);
-        $empresaId = isset($filtros['empresa_id']) ? (int) $filtros['empresa_id'] : null;
+        $empresaId = $empresaIds[0] ?? (isset($filtros['empresa_id']) ? (int) $filtros['empresa_id'] : null);
         $liquidacionId = isset($filtros['liquidacion_id']) ? (int) $filtros['liquidacion_id'] : null;
         $liquidacionCmp = isset($filtros['liquidacion_id_comparar']) ? (int) $filtros['liquidacion_id_comparar'] : null;
+        $consolidar = array_key_exists('consolidar_empresas', $filtros)
+            ? (bool) $filtros['consolidar_empresas']
+            : true;
+        $filtros['empresa_ids'] = $empresaIds;
+        $filtros['empresa_id'] = $empresaId;
+        $filtros['consolidar_empresas'] = $consolidar;
 
         $columnasMeta = [];
         foreach ($reporte->columnas as $col) {
@@ -88,7 +93,13 @@ class ReporteSueldosDefinibleProcesador
                     'meta' => ['error' => 'Debe indicar liquidación.'],
                 ];
             }
-            $filasBase = $this->filasDesdeLiquidacion($reporte, $liquidacionId, $filtros);
+            $filasBase = $this->filasDesdeLiquidacionesMultiempresa(
+                $reporte,
+                $liquidacionId,
+                $filtros,
+                $empresaIds,
+                $consolidar
+            );
         }
 
         if ($liquidacionCmp > 0 && $origen !== ReporteSueldosDefinibleSupport::ORIGEN_ABM) {
@@ -211,11 +222,46 @@ class ReporteSueldosDefinibleProcesador
             $signos[(int) $concepto->concepto_codigo] = $concepto->signo === '-' ? -1.0 : 1.0;
         }
 
-        return Liquidacion_Detalle_Sueldos::query()
+        $codigosConsulta = $codigos;
+        if (in_array(3013, $codigos, true) && ! in_array(3009, $codigosConsulta, true)) {
+            $codigosConsulta[] = 3009;
+        }
+
+        $lineas = Liquidacion_Detalle_Sueldos::query()
             ->where('recibo_id', $recibo->id)
-            ->whereIn('concepto_codigo', $codigos)
+            ->whereIn('concepto_codigo', $codigosConsulta)
             ->orderBy('nro_linea')
-            ->get()
+            ->get();
+
+        $tiene3013 = $lineas->contains(fn ($d) => (int) $d->concepto_codigo === 3013);
+        if (in_array(3013, $codigos, true) && ! $tiene3013) {
+            $de3009 = $lineas->filter(fn ($d) => (int) $d->concepto_codigo === 3009);
+            $lineas = $lineas->filter(fn ($d) => in_array((int) $d->concepto_codigo, $codigos, true))->values();
+            if ($de3009->isNotEmpty()) {
+                foreach ($de3009 as $d) {
+                    $clone = clone $d;
+                    $clone->concepto_codigo = 3013;
+                    $clone->concepto_descripcion = 'NETO RECIBO';
+                    $lineas->push($clone);
+                }
+            } else {
+                $netoRecibo = (float) ($recibo->neto_a_pagar ?? $recibo->neto ?? 0);
+                if (abs($netoRecibo) > 0.009) {
+                    $lineas->push((object) [
+                        'concepto_codigo' => 3013,
+                        'concepto_descripcion' => 'NETO RECIBO',
+                        'cantidad' => 1.0,
+                        'valor' => $netoRecibo,
+                        'importe' => $netoRecibo,
+                        'columna' => 'informativo',
+                    ]);
+                }
+            }
+        } else {
+            $lineas = $lineas->filter(fn ($d) => in_array((int) $d->concepto_codigo, $codigos, true))->values();
+        }
+
+        return $lineas
             ->map(function ($d) use ($signos) {
                 $signo = $signos[(int) $d->concepto_codigo] ?? 1.0;
 
@@ -243,10 +289,13 @@ class ReporteSueldosDefinibleProcesador
             return [];
         }
 
-        $empresaId = isset($filtros['empresa_id']) ? (int) $filtros['empresa_id'] : null;
-        if ($empresaId !== null && $empresaId > 0 && (int) $liq->empresa_id !== $empresaId) {
-            return [];
-        }
+        // La liquidación define la empresa. No vaciar por mismatch con el combo:
+        // el nro 20261100 se repite en Biyemas/Kandiko/Rebisco y un filtro cruzado
+        // dejaba el listado en blanco. Sí validamos autorización de la liq.
+        $seguridad = $this->seguridad ?? app(ReporteSueldosDefinibleSeguridadSupport::class);
+        $seguridad->assertEmpresaAutorizada(
+            ((int) $liq->empresa_id) > 0 ? (int) $liq->empresa_id : null
+        );
 
         $recibos = Liquidacion_Recibo_Sueldos::query()
             ->where('liquidacion_id', $liquidacionId)
@@ -314,7 +363,10 @@ class ReporteSueldosDefinibleProcesador
         $q = Empleado_Sueldos::query()
             ->with(['categoria:id,descripcion', 'centrocosto:id,nombre,codigo', 'lugartrabajo:id,nombre', 'sindicato:id,descripcion,codigo', 'obrasocial:id,descripcion,codigo', 'agrupamiento:id,descripcion', 'motivoegreso:id,descripcion', 'leyendas:id,empleado_id,linea,leyenda', 'cuentaEmpresa:id,codigo,nombre'])
             ->orderBy('legajo');
-        if ($empresaId) {
+        $empresaIds = $this->normalizarEmpresaIds($filtros);
+        if ($empresaIds !== []) {
+            $q->whereIn('empresa_id', $empresaIds);
+        } elseif ($empresaId) {
             $q->where('empresa_id', $empresaId);
         }
         $estado = $filtros['filtro_estado'] ?? 'activo';
@@ -394,6 +446,8 @@ class ReporteSueldosDefinibleProcesador
             $porCodigo[$cod]['cantidad'] += (float) $d->cantidad;
             $porCodigo[$cod]['valor'] += (float) $d->valor;
         }
+        // Anita 3013 NETO RECIBO: en ERP el neto informativo vive en 3009 (o en el recibo).
+        $porCodigo = $this->aliasNetoReciboAnita($porCodigo, $recibo);
 
         $out = [];
         $numericos = [];
@@ -860,5 +914,100 @@ class ReporteSueldosDefinibleProcesador
         }
 
         return $idErp === $asociado;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    private function normalizarEmpresaIds(array $filtros): array
+    {
+        $ids = collect($filtros['empresa_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($ids === [] && ! empty($filtros['empresa_id']) && (int) $filtros['empresa_id'] > 0) {
+            $ids = [(int) $filtros['empresa_id']];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Con consolidar + varias empresas: misma nro de liquidación en cada empresa.
+     *
+     * @param  list<int>  $empresaIds
+     * @param  array<string, mixed>  $filtros
+     * @return list<array<string, mixed>>
+     */
+    private function filasDesdeLiquidacionesMultiempresa(
+        ReporteSueldosDefinible $reporte,
+        int $liquidacionId,
+        array $filtros,
+        array $empresaIds,
+        bool $consolidar
+    ): array {
+        if (! $consolidar || count($empresaIds) <= 1) {
+            return $this->filasDesdeLiquidacion($reporte, $liquidacionId, $filtros);
+        }
+
+        $base = Liquidacion_Sueldos::query()->find($liquidacionId);
+        if (! $base) {
+            return [];
+        }
+
+        $ids = Liquidacion_Sueldos::query()
+            ->where('numero', $base->numero)
+            ->whereIn('empresa_id', $empresaIds)
+            ->orderBy('empresa_id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        if ($ids === []) {
+            $ids = [$liquidacionId];
+        }
+
+        $filas = [];
+        foreach ($ids as $idLiq) {
+            $filas = array_merge($filas, $this->filasDesdeLiquidacion($reporte, $idLiq, $filtros));
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Listados Anita (p.ej. 69 ACREDITACION) piden 3013 NETO RECIBO.
+     * En corridas ERP ese auxiliar a menudo no se graba (fórmula "0" + va_recibo=0)
+     * y el neto informativo queda en 3009 o en el recibo.
+     *
+     * @param  array<int, array{importe: float, cantidad: float, valor: float}>  $porCodigo
+     * @return array<int, array{importe: float, cantidad: float, valor: float}>
+     */
+    private function aliasNetoReciboAnita(array $porCodigo, ?Liquidacion_Recibo_Sueldos $recibo): array
+    {
+        $neto3013 = (float) ($porCodigo[3013]['importe'] ?? 0);
+        if (abs($neto3013) > 0.009) {
+            return $porCodigo;
+        }
+
+        $neto3009 = (float) ($porCodigo[3009]['importe'] ?? 0);
+        if (abs($neto3009) > 0.009) {
+            $porCodigo[3013] = $porCodigo[3009];
+
+            return $porCodigo;
+        }
+
+        $netoRecibo = (float) ($recibo->neto_a_pagar ?? $recibo->neto ?? 0);
+        if ($recibo && abs($netoRecibo) > 0.009) {
+            $porCodigo[3013] = [
+                'importe' => $netoRecibo,
+                'cantidad' => 1.0,
+                'valor' => $netoRecibo,
+            ];
+        }
+
+        return $porCodigo;
     }
 }

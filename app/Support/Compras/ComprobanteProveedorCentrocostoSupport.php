@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
@@ -121,7 +122,12 @@ final class ComprobanteProveedorCentrocostoSupport
 
     /**
      * Inicial I/D/N del fino origen del concepto IVA en una OC multi-CC.
-     * Null si no hay prorrateo activo o el concepto no es IVA de ese prorrateo.
+     * Null si no hay prorrateo activo.
+     *
+     * Primero busca el id en la plantilla del ítem de la OC (Serv→FNS/FIS…).
+     * Si la factura trae el hermano de otro ítem (Bs.Loc.N/C en OC de servicios),
+     * el tratamiento sale del propio concepto: sin eso el IVA N/C se reparte a
+     * centros Indirecto y revienta la matriz de 521130001.
      */
     public static function inicialTipoIvaConceptoIva(?object $comprobante, int $conceptoIvacompraId): ?string
     {
@@ -166,26 +172,112 @@ final class ComprobanteProveedorCentrocostoSupport
                 return null;
             }
 
-            foreach ($res['conceptos'] ?? [] as $concepto) {
-                if ((int) ($concepto['concepto_ivacompra_id'] ?? 0) !== $conceptoIvacompraId) {
-                    continue;
-                }
-                if (strtoupper(trim((string) ($concepto['tipoconcepto'] ?? ''))) !== 'I') {
-                    continue;
-                }
-                $fino = strtoupper(trim((string) ($concepto['fino_origen'] ?? '')));
-                if (strlen($fino) < 2) {
-                    return null;
-                }
-                $inicial = $fino[1];
-
-                return in_array($inicial, ['I', 'D', 'N'], true) ? $inicial : null;
+            $desdePlantilla = self::inicialDesdeConceptosProrrateo(
+                $res['conceptos'] ?? [],
+                $conceptoIvacompraId,
+            );
+            if ($desdePlantilla !== null) {
+                return $desdePlantilla;
             }
+
+            return self::inicialTipoIvaDesdeConceptoId($conceptoIvacompraId);
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $conceptos
+     */
+    public static function inicialDesdeConceptosProrrateo(array $conceptos, int $conceptoIvacompraId): ?string
+    {
+        foreach ($conceptos as $concepto) {
+            if ((int) ($concepto['concepto_ivacompra_id'] ?? 0) !== $conceptoIvacompraId) {
+                continue;
+            }
+            if (strtoupper(trim((string) ($concepto['tipoconcepto'] ?? ''))) !== 'I') {
+                continue;
+            }
+
+            return self::inicialDesdeFinoOrigen((string) ($concepto['fino_origen'] ?? ''));
+        }
 
         return null;
+    }
+
+    public static function inicialDesdeFinoOrigen(string $fino): ?string
+    {
+        $fino = strtoupper(trim($fino));
+        if (strlen($fino) < 2) {
+            return null;
+        }
+        $inicial = $fino[1];
+
+        return in_array($inicial, ['I', 'D', 'N'], true) ? $inicial : null;
+    }
+
+    /**
+     * Tratamiento I/D/N del concepto IVA de la factura (nombre o cuenta Debe).
+     * Sirve cuando el id no está en la plantilla del ítem de la OC.
+     */
+    public static function inicialTipoIvaDesdeConceptoId(int $conceptoIvacompraId): ?string
+    {
+        if ($conceptoIvacompraId <= 0) {
+            return null;
+        }
+
+        $concepto = Concepto_Ivacompra::query()
+            ->with(['cuentacontablesdebe:id,codigo'])
+            ->find($conceptoIvacompraId, ['id', 'nombre', 'tipoconcepto', 'cuentacontabledebe_id']);
+        if (! $concepto) {
+            return null;
+        }
+        if (strtoupper(trim((string) ($concepto->tipoconcepto ?? ''))) !== 'I') {
+            return null;
+        }
+
+        $desdeNombre = self::inicialTipoIvaDesdeNombre((string) ($concepto->nombre ?? ''));
+        if ($desdeNombre !== null) {
+            return $desdeNombre;
+        }
+
+        $codigoCuenta = (int) ($concepto->cuentacontablesdebe->codigo
+            ?? Cuentacontable::query()->whereKey((int) ($concepto->cuentacontabledebe_id ?? 0))->value('codigo')
+            ?? 0);
+
+        return self::inicialTipoIvaDesdeCodigoCuenta($codigoCuenta);
+    }
+
+    public static function inicialTipoIvaDesdeNombre(string $nombre): ?string
+    {
+        $n = strtoupper(trim($nombre));
+        if ($n === '') {
+            return null;
+        }
+        // N/C = no computable (no confundir con nota de crédito: acá es nombre de concepto IVA).
+        if (str_contains($n, 'N/C')
+            || str_contains($n, 'NO COMPUTABLE')
+            || str_contains($n, 'NO UTILIZ')) {
+            return 'N';
+        }
+        if (str_contains($n, 'INDIRECTO') || preg_match('/\bIND\.?\b/', $n) === 1) {
+            return 'I';
+        }
+        if (str_contains($n, 'DIRECTO') || preg_match('/\bDIR\.?\b/', $n) === 1) {
+            return 'D';
+        }
+
+        return null;
+    }
+
+    public static function inicialTipoIvaDesdeCodigoCuenta(int $codigoCuenta): ?string
+    {
+        return match ($codigoCuenta) {
+            521130001 => 'N',
+            114010002 => 'I',
+            114010001 => 'D',
+            default => null,
+        };
     }
 
     /**

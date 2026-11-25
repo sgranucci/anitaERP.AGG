@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use App\Support\Ventas\Gastronomia\CierreJornadaAnitaCompensacionOverlaySupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaCuadroDetalleSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosGrabadosSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoClasificacionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoGrillaSupport;
@@ -649,38 +650,65 @@ final class GastronomiaCierreJornadaProcesoService
         $porPaginaComandas = max(10, min(500, $porPaginaComandas));
         $paginaComandas = max(1, $paginaComandas);
 
+        $snapshot = $this->snapshotDeJornada($jornadaId);
+        $payloadSnap = is_array($snapshot?->payload) ? $snapshot->payload : [];
+        $grabacion = is_array($payloadSnap['asientos_proceso_grabacion'] ?? null)
+            ? $payloadSnap['asientos_proceso_grabacion']
+            : [];
+        $asientosDesdeGrabacion = ! empty($grabacion['asientos']);
+
         $clasificacion = $this->clasificacionConRedistribucion($jornada, $porcentaje);
         $datosAsientos = $this->prepararDatosAsientosProceso($jornada, $clasificacion);
         $config = $datosAsientos['config'];
         $contextoCuadro = $datosAsientos['contexto_cuadro'];
-        $preview = CierreJornadaProcesoAsientosPreviewSupport::generarPreviewFacturaProceso(
-            $clasificacion['movimientos'],
-            $empresaId,
-            $config,
-        );
-        $previewCompleto = CierreJornadaProcesoAsientosPreviewSupport::generarPreviewCompletoProceso(
-            $clasificacion['movimientos'],
-            $empresaId,
-            $config,
-            $contextoCuadro,
-        );
-        $previewCompleto['asientos'] = CierreJornadaProcesoAsientosPreviewSupport::enriquecerAsientosConEtiquetas(
-            $previewCompleto['asientos'],
-            $empresaId,
-            $config,
-        );
-        $previewCompleto['cuentas_requeridas'] = CierreJornadaProcesoAsientosPreviewSupport::enriquecerCuentasRequeridas(
-            $previewCompleto['cuentas_requeridas'] ?? [],
-            $empresaId,
-            $config,
-        );
-        if ($preview['asiento'] !== null) {
-            $asientoEnriquecido = CierreJornadaProcesoAsientosPreviewSupport::enriquecerAsientosConEtiquetas(
-                [$preview['asiento']],
+
+        if ($asientosDesdeGrabacion) {
+            $previewCompleto = CierreJornadaProcesoAsientosGrabadosSupport::armarPreviewCompleto($grabacion);
+            $preview = $this->facturaProcesoResumenDesdeAsientosGrabados(
+                $previewCompleto['asientos'] ?? [],
+                $payloadSnap,
+            );
+            // Preferir el % con el que se grabó / emitió, no el del formulario actual.
+            if (isset($grabacion['porcentaje'])) {
+                $porcentajeRespuesta = round((float) $grabacion['porcentaje'], 4);
+            } elseif (isset($payloadSnap['factura_proceso_emision']['porcentaje'])) {
+                $porcentajeRespuesta = round((float) $payloadSnap['factura_proceso_emision']['porcentaje'], 4);
+            } else {
+                $porcentajeRespuesta = $clasificacion['porcentaje'];
+            }
+            $objetivoImporte = $clasificacion['objetivo_importe'];
+        } else {
+            $preview = CierreJornadaProcesoAsientosPreviewSupport::generarPreviewFacturaProceso(
+                $clasificacion['movimientos'],
                 $empresaId,
                 $config,
             );
-            $preview['asiento'] = $asientoEnriquecido[0] ?? $preview['asiento'];
+            $previewCompleto = CierreJornadaProcesoAsientosPreviewSupport::generarPreviewCompletoProceso(
+                $clasificacion['movimientos'],
+                $empresaId,
+                $config,
+                $contextoCuadro,
+            );
+            $previewCompleto['asientos'] = CierreJornadaProcesoAsientosPreviewSupport::enriquecerAsientosConEtiquetas(
+                $previewCompleto['asientos'],
+                $empresaId,
+                $config,
+            );
+            $previewCompleto['cuentas_requeridas'] = CierreJornadaProcesoAsientosPreviewSupport::enriquecerCuentasRequeridas(
+                $previewCompleto['cuentas_requeridas'] ?? [],
+                $empresaId,
+                $config,
+            );
+            if ($preview['asiento'] !== null) {
+                $asientoEnriquecido = CierreJornadaProcesoAsientosPreviewSupport::enriquecerAsientosConEtiquetas(
+                    [$preview['asiento']],
+                    $empresaId,
+                    $config,
+                );
+                $preview['asiento'] = $asientoEnriquecido[0] ?? $preview['asiento'];
+            }
+            $porcentajeRespuesta = $clasificacion['porcentaje'];
+            $objetivoImporte = $clasificacion['objetivo_importe'];
         }
 
         $comandasAlcance = CierreJornadaProcesoAsientosPreviewSupport::COMANDAS_ALCANCE_EFECTIVO_NO_FACTURADO === $comandasAlcance
@@ -706,10 +734,12 @@ final class GastronomiaCierreJornadaProcesoService
 
         return [
             'ok' => true,
-            'porcentaje' => $clasificacion['porcentaje'],
-            'objetivo_importe' => $clasificacion['objetivo_importe'],
+            'porcentaje' => $porcentajeRespuesta,
+            'objetivo_importe' => $objetivoImporte,
             'factura_proceso' => $preview,
             'asientos_proceso' => $previewCompleto,
+            'asientos_desde_grabacion' => $asientosDesdeGrabacion,
+            'asientos_grabados_en' => $asientosDesdeGrabacion ? ($grabacion['grabado_en'] ?? null) : null,
             'config_contable' => $config,
             'puntoventa' => CierreJornadaProcesoPuntoventaSupport::resolverParaEmpresa($empresaId),
             'comandas_alcance' => $comandasAlcance,
@@ -722,7 +752,42 @@ final class GastronomiaCierreJornadaProcesoService
                 'total_importe' => $totalImporteComandas,
                 'items' => $this->compactarMovimientosParaCliente($slice),
             ],
-            'jornada_proceso' => $this->contextoJornadaProceso($jornada, $this->snapshotDeJornada($jornadaId)),
+            'jornada_proceso' => $this->contextoJornadaProceso($jornada, $snapshot),
+        ];
+    }
+
+    /**
+     * Resumen de factura del proceso a partir del asiento 1 ya grabado (y datos de emisión).
+     *
+     * @param  list<array<string, mixed>>  $asientos
+     * @param  array<string, mixed>  $payloadSnap
+     * @return array<string, mixed>
+     */
+    private function facturaProcesoResumenDesdeAsientosGrabados(array $asientos, array $payloadSnap): array
+    {
+        $asiento1 = null;
+        foreach ($asientos as $asiento) {
+            if (($asiento['codigo'] ?? '') === 'sin_facturar_qr') {
+                $asiento1 = $asiento;
+                break;
+            }
+        }
+
+        $emision = is_array($payloadSnap['factura_proceso_emision'] ?? null)
+            ? $payloadSnap['factura_proceso_emision']
+            : [];
+
+        $total = $asiento1 !== null
+            ? round((float) ($asiento1['total'] ?? $asiento1['resumen_debe'] ?? 0), 2)
+            : round((float) ($emision['total_factura'] ?? 0), 2);
+        $cantidadComandas = (int) ($emision['cantidad_comandas'] ?? 0);
+
+        return [
+            'asiento' => $asiento1,
+            'cantidad_comandas' => $cantidadComandas,
+            'total' => $total,
+            'advertencias' => [],
+            'desde_grabacion' => true,
         ];
     }
 

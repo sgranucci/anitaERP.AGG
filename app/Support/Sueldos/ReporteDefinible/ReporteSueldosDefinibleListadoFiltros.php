@@ -3,6 +3,7 @@
 namespace App\Support\Sueldos\ReporteDefinible;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
+use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -40,18 +41,23 @@ final class ReporteSueldosDefinibleListadoFiltros
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
     {
         $filtros = self::filtrosVacios();
-        if ($request->has('filtro_valor') || $request->filled('filtro_campo')) {
-            $filtros['filtro_campo'] = $request->input('filtro_campo');
-            $filtros['filtro_operador'] = $request->input('filtro_operador', 'contiene');
-            $filtros['filtro_valor'] = $request->input('filtro_valor');
-            $filtros['filtro_busqueda_rapida'] = $request->input('filtro_busqueda_rapida');
+        $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
+        $busquedaRapida = $request->boolean('filtro_busqueda_rapida')
+            || ($busquedaRuta !== null && $busquedaRuta !== '' && ! $request->has('filtro_valor'));
 
+        if ($valor === '' && ! $request->filled('filtro_campo') && ! $busquedaRapida) {
             return $filtros;
         }
-        if ($busquedaRuta !== null && $busquedaRuta !== '') {
-            $filtros['filtro_valor'] = $busquedaRuta;
-            $filtros['filtro_busqueda_rapida'] = '1';
+
+        $campo = (string) $request->input('filtro_campo', '');
+        if ($busquedaRapida) {
+            $campo = '';
         }
+
+        $filtros['filtro_campo'] = $campo !== '' ? $campo : null;
+        $filtros['filtro_operador'] = $request->input('filtro_operador', 'contiene');
+        $filtros['filtro_valor'] = $valor !== '' ? $valor : null;
+        $filtros['filtro_busqueda_rapida'] = ($busquedaRapida || $campo === '') ? '1' : null;
 
         return $filtros;
     }
@@ -102,6 +108,10 @@ final class ReporteSueldosDefinibleListadoFiltros
                     ->orWhere('codigo', 'like', '%'.$valor.'%')
                     ->orWhere('tipo', 'like', '%'.$valor.'%')
                     ->orWhere('origen', 'like', '%'.$valor.'%');
+                // Código entero: match exacto además del LIKE (búsqueda por nro de listado).
+                if ($valor !== '' && ctype_digit($valor)) {
+                    $q->orWhere('codigo', (int) $valor);
+                }
                 if (in_array('titulo', self::COLUMNAS_COINCIDENCIA_FLEXIBLE, true)) {
                     CoincidenciaFlexibleTexto::aplicar($q, 'titulo', $valor);
                 }

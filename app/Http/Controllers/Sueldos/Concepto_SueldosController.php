@@ -328,6 +328,39 @@ class Concepto_SueldosController extends Controller
     }
 
     /**
+     * Re-pull habformula desde Anita y refresca fórmulas ERP (incluye montos fijos implícitos).
+     */
+    public function actualizarFormulasAnita(Request $request)
+    {
+        can('actualizar-concepto-sueldos');
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $resultado = $this->repository->actualizarFormulasDesdeAnita();
+
+        if (! empty($resultado['errores']) && (int) $resultado['procesados'] === 0) {
+            return redirect()->route('consultar_concepto_sueldos')
+                ->with('error', 'No se pudieron actualizar fórmulas desde Anita: '.implode(' | ', $resultado['errores']));
+        }
+
+        $msg = 'Actualización de fórmulas Anita: '.$resultado['actualizados'].' actualizados, '
+            .$resultado['sin_cambio'].' sin cambio, '
+            .$resultado['traducidos'].' traducidos OK, '
+            .$resultado['pendientes_traduccion'].' pendientes/revisión'
+            .($resultado['no_en_erp'] > 0 ? ', '.$resultado['no_en_erp'].' solo en Anita' : '')
+            .' (procesados '.$resultado['procesados'].' de '.$resultado['en_anita_con_formula'].' con fórmula).';
+
+        if (! empty($resultado['ejemplos_cambio'])) {
+            $msg .= ' Ej.: '.implode(', ', $resultado['ejemplos_cambio']);
+        }
+        if (! empty($resultado['errores'])) {
+            $msg .= ' Errores: '.implode(' | ', array_slice($resultado['errores'], 0, 5));
+        }
+
+        return redirect()->route('consultar_concepto_sueldos')->with('mensaje', $msg);
+    }
+
+    /**
      * Reclasifica papo–uapo: contribución (va recibo) vs informativo (solo reportes),
      * y corrige va_recibo según Anita hab_va_recibo (0=va, 1=no).
      */

@@ -754,6 +754,8 @@ if (! function_exists('puedeVerPrecargaFacturaPdf')) {
             || can('listar-legajo-compra', false)
             || can('listar-ordencompra', false)
             || can('listar-comprobante-proveedor', false)
-            || can('crear-comprobante-proveedor', false);
+            || can('crear-comprobante-proveedor', false)
+            || can('listar-facturas-canal', false)
+            || can('listar-ai-decisiones', false);
     }
 }

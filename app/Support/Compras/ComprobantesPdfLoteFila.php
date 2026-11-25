@@ -24,5 +24,6 @@ final class ComprobantesPdfLoteFila
         public string $pdfEtiqueta,
         public readonly ?string $editarUrl,
         public readonly ?string $pdfUrl,
+        public readonly string $servicioCliente = '',
     ) {}
 }

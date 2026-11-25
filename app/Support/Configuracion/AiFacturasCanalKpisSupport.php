@@ -311,6 +311,94 @@ final class AiFacturasCanalKpisSupport
     }
 
     /**
+     * Listado drill-down: precargas del período con el mismo criterio de origen que el KPI.
+     *
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection
+     */
+    public static function listarPrecargasPorOrigen(
+        string $origen,
+        string $fechaDesde,
+        string $fechaHasta,
+        bool $paginar = true,
+        int $porPagina = 50,
+    ) {
+        $origen = self::normalizarOrigen($origen);
+
+        $tieneParaRevisar = Schema::hasColumn('precarga_comprobante_proveedor', 'pararevisar');
+        $tieneMarcaError = Schema::hasColumn('precarga_comprobante_proveedor', 'marca_error');
+
+        $select = [
+            'precarga_comprobante_proveedor.id',
+            'precarga_comprobante_proveedor.created_at',
+            'precarga_comprobante_proveedor.empresa_id',
+            'precarga_comprobante_proveedor.proveedor_id',
+            'precarga_comprobante_proveedor.letra',
+            'precarga_comprobante_proveedor.sucursal',
+            'precarga_comprobante_proveedor.numerocomprobante',
+            'precarga_comprobante_proveedor.fechafactura',
+            'precarga_comprobante_proveedor.numeroordencompra',
+            'precarga_comprobante_proveedor.total',
+            'precarga_comprobante_proveedor.estado',
+            'precarga_comprobante_proveedor.origen_entrada',
+            'precarga_comprobante_proveedor.rutaalmacenamiento',
+            'empresa.nombre as nombreempresa',
+            'proveedor.nombre as nombreproveedor',
+            'tipotransaccion_compra.abreviatura as abreviaturatipo',
+        ];
+        $select[] = $tieneParaRevisar
+            ? 'precarga_comprobante_proveedor.pararevisar'
+            : DB::raw('0 as pararevisar');
+        $select[] = $tieneMarcaError
+            ? 'precarga_comprobante_proveedor.marca_error'
+            : DB::raw('null as marca_error');
+
+        $query = Precarga_Comprobante_Proveedor::query()
+            ->leftJoin('empresa', 'empresa.id', '=', 'precarga_comprobante_proveedor.empresa_id')
+            ->leftJoin('proveedor', 'proveedor.id', '=', 'precarga_comprobante_proveedor.proveedor_id')
+            ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'precarga_comprobante_proveedor.tipotransaccion_compra_id')
+            ->whereDate('precarga_comprobante_proveedor.created_at', '>=', $fechaDesde)
+            ->whereDate('precarga_comprobante_proveedor.created_at', '<=', $fechaHasta)
+            ->select($select)
+            ->selectSub(function ($sub) {
+                $sub->from('comprobante_proveedor')
+                    ->select('id')
+                    ->whereColumn(
+                        'comprobante_proveedor.precarga_comprobante_proveedor_id',
+                        'precarga_comprobante_proveedor.id'
+                    )
+                    ->orderBy('comprobante_proveedor.id')
+                    ->limit(1);
+            }, 'comprobante_proveedor_id')
+            ->orderByDesc('precarga_comprobante_proveedor.id');
+
+        self::aplicarFiltroOrigen($query, $origen);
+
+        if ($paginar) {
+            return $query->paginate($porPagina);
+        }
+
+        return $query->limit(5000)->get();
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Compras\Precarga_Comprobante_Proveedor>|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function aplicarFiltroOrigen($query, string $origenNormalizado): void
+    {
+        if ($origenNormalizado === PrecargaComprobanteOrigenEntrada::API) {
+            $query->where(function ($q) {
+                $q->where('precarga_comprobante_proveedor.origen_entrada', PrecargaComprobanteOrigenEntrada::API)
+                    ->orWhereNull('precarga_comprobante_proveedor.origen_entrada')
+                    ->orWhere('precarga_comprobante_proveedor.origen_entrada', '');
+            });
+
+            return;
+        }
+
+        $query->where('precarga_comprobante_proveedor.origen_entrada', $origenNormalizado);
+    }
+
+    /**
      * @return array{
      *   total: int,
      *   confirmadas: int,

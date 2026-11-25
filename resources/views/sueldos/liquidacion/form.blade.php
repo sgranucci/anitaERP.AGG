@@ -99,22 +99,35 @@
     </div>
 </div>
 
-<div class="form-group row" id="bloque-motivo-egreso" style="{{ $tipoActual === 'final' ? '' : 'display:none' }}">
-    <label class="col-lg-3 col-form-label text-right">Motivo de egreso</label>
-    <div class="col-lg-6">
-        <select name="motivoegreso_id" class="form-control">
-            <option value="">— Todos los motivos (bajas del per&iacute;odo) —</option>
-            @foreach(($motivosegreso ?? []) as $mot)
-                <option value="{{ $mot->id }}" {{ (int) old('motivoegreso_id', $d->motivoegreso_id ?? 0) === (int) $mot->id ? 'selected' : '' }}>
-                    {{ $mot->codigo }} — {{ $mot->descripcion }}
-                    @if(!empty($mot->clase)) ({{ \App\Support\Sueldos\MotivoEgresoClase::etiqueta($mot->clase) }}) @endif
-                </option>
-            @endforeach
-        </select>
-        <small class="form-text text-muted">
-            Solo aplica a corridas tipo <em>Liquidaci&oacute;n final</em>. Filtra empleados de baja del per&iacute;odo.
-            Las f&oacute;rmulas usan <code>empleado.motivo_egreso_clase</code> de cada legajo.
-        </small>
+@php
+    $motLiqId = (int) old('motivoegreso_id', $d->motivoegreso_id ?? 0);
+    $motLiq = $motLiqId > 0
+        ? (isset($d) && optional($d->motivoegreso)->id === $motLiqId
+            ? $d->motivoegreso
+            : \App\Models\Sueldos\Motivoegreso_Sueldos::query()->find($motLiqId))
+        : null;
+@endphp
+<div id="bloque-motivo-egreso" style="{{ $tipoActual === 'final' ? '' : 'display:none' }}">
+    @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+        'maestro' => 'motivoegreso',
+        'registroId' => $motLiq->id ?? '',
+        'codigo' => $motLiq->codigo ?? '',
+        'descripcion' => $motLiq->descripcion ?? '',
+        'label' => 'Motivo de egreso',
+        'inputName' => 'motivoegreso_id',
+        'inputId' => 'motivoegreso_id',
+        'col_label' => 'col-lg-3',
+        'col_input' => 'col-lg-6',
+    ])
+    <div class="form-group row">
+        <div class="col-lg-3"></div>
+        <div class="col-lg-6">
+            <small class="form-text text-muted mt-n2">
+                Vac&iacute;o = todos los motivos (bajas del per&iacute;odo). Solo aplica a corridas tipo
+                <em>Liquidaci&oacute;n final</em>. Las f&oacute;rmulas usan
+                <code>empleado.motivo_egreso_clase</code> de cada legajo.
+            </small>
+        </div>
     </div>
 </div>
 <script>
@@ -235,6 +248,8 @@ document.addEventListener('DOMContentLoaded', function () {
         </div>
     </div>
 </div>
+
+@include('sueldos.liquidacion.partials.seleccion_empleados')
 
 <div class="card card-outline card-secondary mt-2">
     <div class="card-header py-1"><h3 class="card-title">Dep&oacute;sito bancario (opcional)</h3></div>

@@ -124,10 +124,11 @@ class ProveedorQuery implements ProveedorQueryInterface
         $consulta = trim((string) $consulta);
         $limite = 250;
         $filtroEmpresaAplicado = config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0;
+        // Siempre listamos Suspendido para que el usuario vea que existe (en rojo / no elegible),
+        // salvo pantallas que permiten elegirlos ($incluirSuspendidos = true → CP avisar / CC).
         $estados = Proveedor::estadosHabilitadosOperacion();
-        if ($incluirSuspendidos) {
-            $estados[] = 'Suspendido';
-        }
+        $estados[] = 'Suspendido';
+        $puedeElegirSuspendidos = $incluirSuspendidos;
 
         $query = $this->model->select('proveedor.id as proveedor_id', 'proveedor.codigo as codigoproveedor',
                 'proveedor.nombre as nombreproveedor', 'proveedor.nroinscripcion as cuit',
@@ -171,15 +172,26 @@ class ProveedorQuery implements ProveedorQueryInterface
 			{
                 $flSinDatos = false;
                 $estadoFila = (string) ($row->estado ?? '');
-                $output['data'] .= '<tr data-estado="'.htmlspecialchars($estadoFila, ENT_QUOTES, 'UTF-8').'">';
+                $esSuspendido = $estadoFila === 'Suspendido';
+                $elegible = ! $esSuspendido || $puedeElegirSuspendidos;
+                $trClass = $esSuspendido && ! $elegible ? ' class="text-danger table-danger"' : '';
+                $output['data'] .= '<tr'.$trClass
+                    .' data-estado="'.htmlspecialchars($estadoFila, ENT_QUOTES, 'UTF-8').'"'
+                    .' data-elegible="'.($elegible ? '1' : '0').'">';
                 for ($i = 0; $i < $count; $i++) {
                     $valor = htmlspecialchars((string) ($row[$columnsOut[$i]] ?? ''), ENT_QUOTES, 'UTF-8');
-                    if ($columnsOut[$i] === 'nombreproveedor' && $estadoFila === 'Suspendido') {
-                        $valor .= ' <span class="badge badge-warning">Suspendido</span>';
+                    if ($columnsOut[$i] === 'nombreproveedor' && $esSuspendido) {
+                        $badgeClass = $elegible ? 'badge-warning' : 'badge-danger';
+                        $valor .= ' <span class="badge '.$badgeClass.'">Suspendido</span>';
                     }
                     $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $valor . '</td>';
                 }
-                $output['data'] .= '<td><a href="#" class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';
+                if ($elegible) {
+                    $output['data'] .= '<td><a href="#" class="btn btn-warning btn-sm eligeconsultaproveedor">Elegir</a></td>';
+                } else {
+                    $output['data'] .= '<td class="small font-weight-bold" title="El proveedor tiene un problema (p. ej. padrón ARCA). Contactá a Compras.">'
+                        .'No se puede elegir — avisá a Compras</td>';
+                }
                 $output['data'] .= '<td><a href="#" class="btn btn-info btn-sm consultaproveedor">Consultar</a></td>';
                 $output['data'] .= '</tr>';
 			}

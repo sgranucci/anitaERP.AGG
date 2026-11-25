@@ -19,7 +19,7 @@ Requisiciones
 <script src="{{asset("assets/pages/scripts/presupuesto/partidagasto/consulta.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/presupuesto/capex/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/presupuesto/capex/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endif
-<script src="{{asset("assets/pages/scripts/compras/proveedor/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/articulo_proveedor/operativo.js")}}" type="text/javascript"></script>
 @php
     $estadoPendienteNombre = \App\Models\Compras\Requisicion_Estado::$enumEstado[array_search('P', array_column(\App\Models\Compras\Requisicion_Estado::$enumEstado, 'valor'))]['nombre'] ?? 'PENDIENTE';

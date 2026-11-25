@@ -51,6 +51,12 @@ class ConceptoAnitaMapeo
     /** Excluido de es_contribucion_empleador() en l-recibolargo_anexoIII.fc */
     public const CODIGO_AJUSTE_REDONDEO = 3000;
 
+    /**
+     * Anita `_d:=REDON(tg)` → ajuste al peso entero (techo − neto parcial).
+     * TG se resuelve como acum("NETO") virtual (REM+NOREM+ASIG−DESC).
+     */
+    public const FORMULA_AJUSTE_REDONDEO = 'redondear(techo(acum("NETO")) - acum("NETO"), 2)';
+
     public static function momento(int $habMomento): string
     {
         return self::MOMENTOS[$habMomento] ?? ConceptoTipo::MOMENTO_DEFAULT;

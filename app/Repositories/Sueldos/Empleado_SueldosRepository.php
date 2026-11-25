@@ -13,10 +13,12 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Sueldos\EmpleadoDomicilioVinculador;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Sueldos\CategoriaOrigenBases;
 use App\Support\Sueldos\EmpleadoEstados;
 use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
 use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
 use App\Support\Sueldos\VacacionFechaAnita;
+use App\Models\Sueldos\Categoria_Sueldos;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -252,6 +254,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             unset($data['nombrearchivos'], $data['nombresanteriores'], $data['leyendas'], $data['foto_archivo']);
 
             $data = $this->mapearDomicilioDescripcion($data);
+            $data = $this->omitirRemuneracionSiCategoriaTabla($data, null);
             $data['estado'] = $data['estado'] ?? EmpleadoEstados::PROVISORIO;
             $data['usuario_alta_id'] = Auth::id();
             if (empty($data['legajo'])) {
@@ -295,6 +298,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             unset($data['empresa_id']);
 
             $data = $this->mapearDomicilioDescripcion($data);
+            $data = $this->omitirRemuneracionSiCategoriaTabla($data, $emp);
             $emp->update($this->soloFillable($data));
             $this->sincronizarLeyendas((int) $emp->id, $leyendas);
             $this->sincronizarRevistasLsd((int) $emp->id, $data['lsd_revista'] ?? []);
@@ -315,12 +319,71 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     public function delete($id)
     {
         $emp = $this->findOrFail($id);
+        $bloqueo = $this->mensajeBloqueoEliminacion($emp);
+        if ($bloqueo !== null) {
+            throw new \InvalidArgumentException($bloqueo);
+        }
+
         $dir = 'public/archivos/empleados/'.$emp->id;
         if (Storage::exists($dir)) {
             Storage::deleteDirectory($dir);
         }
 
         return (bool) $emp->delete();
+    }
+
+    /**
+     * Motivos RESTRICT / NO ACTION que impiden borrar el legajo.
+     */
+    private function mensajeBloqueoEliminacion(Empleado_Sueldos $emp): ?string
+    {
+        $motivos = [];
+
+        $ppEmpleado = (int) DB::table('perdida_personal')
+            ->where('empleado_sueldos_id', $emp->id)
+            ->count();
+        if ($ppEmpleado > 0) {
+            $ejemplos = DB::table('perdida_personal')
+                ->where('empleado_sueldos_id', $emp->id)
+                ->orderByDesc('fecha')
+                ->limit(3)
+                ->pluck('numero')
+                ->map(static fn ($n) => (string) $n)
+                ->all();
+            $extra = $ejemplos !== [] ? ' (ej. nro '.implode(', ', $ejemplos).')' : '';
+            $motivos[] = $ppEmpleado.' pérdida(s) de personal como empleado'.$extra;
+        }
+
+        $ppSupervisor = (int) DB::table('perdida_personal')
+            ->where('supervisor_empleado_sueldos_id', $emp->id)
+            ->count();
+        if ($ppSupervisor > 0) {
+            $motivos[] = $ppSupervisor.' pérdida(s) de personal como supervisor';
+        }
+
+        $recibos = (int) DB::table('liquidacion_recibo_sueldos')
+            ->where('empleado_id', $emp->id)
+            ->count();
+        if ($recibos > 0) {
+            $motivos[] = $recibos.' recibo(s) de liquidación';
+        }
+
+        $reemplazos = (int) DB::table('empleado_contrato_sueldos')
+            ->where('empleado_reemplazo_id', $emp->id)
+            ->count();
+        if ($reemplazos > 0) {
+            $motivos[] = $reemplazos.' contrato(s) donde figura como reemplazo';
+        }
+
+        if ($motivos === []) {
+            return null;
+        }
+
+        $legajo = (string) ($emp->legajo ?? $emp->id);
+
+        return 'No se puede eliminar el legajo '.$legajo.': tiene '
+            .implode('; ', $motivos)
+            .'. Eliminá o reasigná esos registros antes de borrar el empleado.';
     }
 
     /** @param  list<string>  $leyendas */
@@ -537,6 +600,30 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     }
 
     /**
+     * Con categoría origen T la remuneración B1–B3 vive en la categoría:
+     * no se graba desde el ABM del legajo (evita pisar con el readonly del form).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function omitirRemuneracionSiCategoriaTabla(array $data, ?Empleado_Sueldos $existente): array
+    {
+        $categoriaId = (int) ($data['categoria_id'] ?? $existente?->categoria_id ?? 0);
+        if ($categoriaId <= 0) {
+            return $data;
+        }
+
+        $origen = Categoria_Sueldos::query()->where('id', $categoriaId)->value('origen_bases');
+        if (! CategoriaOrigenBases::usaTablaCategoria($origen)) {
+            return $data;
+        }
+
+        unset($data['sueldo_basico'], $data['jornal_dia'], $data['jornal_hora']);
+
+        return $data;
+    }
+
+    /**
      * Domicilio vinculado (como proveedores): la descripción de la consulta se guarda
      * en la columna de texto denormalizada (provincia / localidad).
      *
@@ -634,10 +721,11 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     /**
      * Sync desde Anita (sueldos.empleado + emping + empley).
      * Inserta legajos faltantes por (empresa, legajo) y re-sincroniza egreso/estado,
+     * remuneración del legajo (sueldo / jornal día / jornal hora),
      * datos organizativos (centro de costo, categoría, lugar de trabajo, etc.)
      * y el CBU (con cuenta y banco) en los ya existentes. No genera auditoría ni observers.
      *
-     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, actualizados_banco:int, actualizados_cuenta:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
+     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, actualizados_sueldo:int, actualizados_banco:int, actualizados_cuenta:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
      */
     public function sincronizarConAnita(): array
     {
@@ -646,7 +734,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
         $res = [
             'en_anita' => 0, 'importados' => 0, 'ya_existia' => 0, 'actualizados_egreso' => 0,
-            'actualizados_datos' => 0, 'actualizados_banco' => 0, 'actualizados_cuenta' => 0,
+            'actualizados_datos' => 0, 'actualizados_sueldo' => 0, 'actualizados_banco' => 0, 'actualizados_cuenta' => 0,
             'sin_empresa' => 0,
             'omitidos' => 0, 'historia' => 0, 'leyendas' => 0, 'bases' => 0, 'errores' => [],
         ];
@@ -686,7 +774,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         foreach (DB::table('empleado_sueldos')->select(
             'id', 'empresa_id', 'legajo', 'estado', 'fecha_egreso', 'motivoegreso_id',
             'centrocosto_id', 'categoria_id', 'agrupamiento_id', 'lugartrabajo_id',
-            'obrasocial_id', 'sindicato_id', 'art_id', 'cbu', 'cuenta_bancaria', 'banco_codigo'
+            'obrasocial_id', 'sindicato_id', 'art_id', 'cbu', 'cuenta_bancaria', 'banco_codigo',
+            'sueldo_basico', 'jornal_dia', 'jornal_hora'
         )->get() as $e) {
             $existentes[$e->empresa_id.':'.$e->legajo] = [
                 'id' => (int) $e->id,
@@ -703,6 +792,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'cbu' => $this->txt($e->cbu ?? null, 30),
                 'cuenta_bancaria' => $this->txt($e->cuenta_bancaria ?? null, 30),
                 'banco_codigo' => $this->intNull($e->banco_codigo ?? null),
+                'sueldo_basico' => round((float) ($e->sueldo_basico ?? 0), 4),
+                'jornal_dia' => round((float) ($e->jornal_dia ?? 0), 4),
+                'jornal_hora' => round((float) ($e->jornal_hora ?? 0), 4),
             ];
         }
 
@@ -762,14 +854,19 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 ],
             ];
 
+            $sueldoAnita = round((float) ($this->num($f->emp_sueldo ?? null) ?? 0), 4);
+            $jornalDiaAnita = round((float) ($this->num($f->emp_jornal_dia ?? null) ?? 0), 4);
+            $jornalHoraAnita = round((float) ($this->num($f->emp_jornal_hora ?? null) ?? 0), 4);
+
             if (isset($existentes[$key])) {
                 $res['ya_existia']++;
-                // Re-sync: egreso/estado + datos organizativos (Anita es fuente).
+                // Re-sync: egreso/estado + remuneración legajo + datos organizativos (Anita es fuente).
                 $cur = $existentes[$key];
                 $feegrStr = $feegr ? substr((string) $feegr, 0, 10) : null;
                 $patch = [];
                 $tocaEgreso = false;
                 $tocaDatos = false;
+                $tocaSueldo = false;
                 $tocaBanco = false;
                 if ($cur['estado'] !== $estado) {
                     $patch['estado'] = $estado;
@@ -811,6 +908,18 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     $patch['art_id'] = $artId;
                     $tocaDatos = true;
                 }
+                if (abs($cur['sueldo_basico'] - $sueldoAnita) > 0.00005) {
+                    $patch['sueldo_basico'] = $sueldoAnita;
+                    $tocaSueldo = true;
+                }
+                if (abs($cur['jornal_dia'] - $jornalDiaAnita) > 0.00005) {
+                    $patch['jornal_dia'] = $jornalDiaAnita;
+                    $tocaSueldo = true;
+                }
+                if (abs($cur['jornal_hora'] - $jornalHoraAnita) > 0.00005) {
+                    $patch['jornal_hora'] = $jornalHoraAnita;
+                    $tocaSueldo = true;
+                }
                 // CBU vacío en Anita no pisa uno cargado en el ERP.
                 if ($cbuAnita !== null && (
                     $cur['cbu'] !== $cbuAnita
@@ -831,6 +940,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     if ($tocaDatos) {
                         $res['actualizados_datos']++;
                     }
+                    if ($tocaSueldo) {
+                        $res['actualizados_sueldo']++;
+                    }
                     if ($tocaBanco) {
                         $res['actualizados_banco']++;
                     }
@@ -845,6 +957,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                         'obrasocial_id' => array_key_exists('obrasocial_id', $patch) ? $obrasocialId : $cur['obrasocial_id'],
                         'sindicato_id' => array_key_exists('sindicato_id', $patch) ? $sindicatoId : $cur['sindicato_id'],
                         'art_id' => array_key_exists('art_id', $patch) ? $artId : $cur['art_id'],
+                        'sueldo_basico' => array_key_exists('sueldo_basico', $patch) ? $sueldoAnita : $cur['sueldo_basico'],
+                        'jornal_dia' => array_key_exists('jornal_dia', $patch) ? $jornalDiaAnita : $cur['jornal_dia'],
+                        'jornal_hora' => array_key_exists('jornal_hora', $patch) ? $jornalHoraAnita : $cur['jornal_hora'],
                         'cbu' => array_key_exists('cbu', $patch) ? $cbuAnita : $cur['cbu'],
                         'cuenta_bancaria' => array_key_exists('cuenta_bancaria', $patch) ? $cuentaAnita : $cur['cuenta_bancaria'],
                         'banco_codigo' => array_key_exists('banco_codigo', $patch) ? $bancoAnita : $cur['banco_codigo'],
@@ -888,9 +1003,9 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'grupo_concepto_1_codigo' => $this->intNull($f->emp_grp1 ?? null),
                 'grupo_concepto_2_codigo' => $this->intNull($f->emp_grp2 ?? null),
                 'grupo_concepto_3_codigo' => $this->intNull($f->emp_grp3 ?? null),
-                'sueldo_basico' => $this->num($f->emp_sueldo ?? null),
-                'jornal_dia' => $this->num($f->emp_jornal_dia ?? null),
-                'jornal_hora' => $this->num($f->emp_jornal_hora ?? null),
+                'sueldo_basico' => $sueldoAnita,
+                'jornal_dia' => $jornalDiaAnita,
+                'jornal_hora' => $jornalHoraAnita,
                 'codigo_liquidacion' => $this->txt($f->emp_men_quin ?? null, 20),
                 'antiguedad_anterior' => $this->txt($f->emp_antig_ant ?? null, 12),
                 'cbu' => $this->txt($f->emp_cbu ?? null, 30),

@@ -220,7 +220,8 @@ final class ListadoGrillaConfigSupport
 
     /**
      * Anchos preferidos compactos: la vista estándar (~10 cols) entra en pantalla
-     * sin scroll horizontal; textos largos se truncan con ellipsis + title.
+     * sin scroll horizontal. Sin ellipsis en fit (contenido completo); "..." solo
+     * en modo scroll con anchos fijos del diseñador.
      *
      * @param  array<string, mixed>  $meta
      */
@@ -293,7 +294,8 @@ final class ListadoGrillaConfigSupport
         $base = match ($key) {
             'id', 'codigo', 'tipoalta', 'semaforo', 'fuera_pago', 'mail', 'numeroparte', 'ubicacionparte', 'dias' => self::ANCHO_MIN_LEGIBLE,
             'estado', 'apoc', 'fecha', 'unidadmedida', 'nofactura', 'saldo' => 72,
-            'op', 'monto', 'sku', 'tipoarticulo', 'usoarticulo', 'numero' => 84,
+            'op', 'monto', 'sku', 'tipoarticulo', 'usoarticulo' => 84,
+            'numero' => 120,
             'centrocosto', 'sector', 'paquete', 'facturas' => 88,
             'cbu' => 100,
             'numerodocumento', 'alias_cbu' => 72,
@@ -366,6 +368,19 @@ final class ListadoGrillaConfigSupport
         }
 
         return $suma;
+    }
+
+    /**
+     * Scroll H solo si la suma de anchos preferidos (antes de escalar) supera el presupuesto.
+     * Comparar el layout ya escalado contra el presupuesto siempre da "fit" y es incorrecto.
+     *
+     * @param  list<array{key: string, visible: bool, ancho: int, ...}>  $layoutPreferido
+     */
+    public static function debeUsarScrollHorizontal(array $layoutPreferido, ?int $presupuesto = null): bool
+    {
+        $presupuesto = $presupuesto ?? self::ANCHO_PRESUPUESTO_PANTALLA;
+
+        return self::sumaAnchosVisibles($layoutPreferido) > $presupuesto;
     }
 
     /**

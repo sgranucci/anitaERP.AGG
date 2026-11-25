@@ -658,13 +658,10 @@ Bandeja de legajos
         min-width: 100% !important;
         max-width: 100%;
     }
-    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col {
-        max-width: 0;
-    }
-    /* Facturas/OC/paquete: no cortar con ellipsis; el nº de FC tiene que entrar entero. */
-    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col.bandeja-col-facturas,
-    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col.bandeja-col-paquete,
-    .lw-workbench .bandeja-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col.bandeja-col-oc {
+    /* Facturas/OC/paquete: tampoco cortar en modo scroll (nº de FC entero). */
+    .lw-workbench .bandeja-grilla-ancha .lw-table-scroll .tabla-ancha td.lw-col.bandeja-col-facturas,
+    .lw-workbench .bandeja-grilla-ancha .lw-table-scroll .tabla-ancha td.lw-col.bandeja-col-paquete,
+    .lw-workbench .bandeja-grilla-ancha .lw-table-scroll .tabla-ancha td.lw-col.bandeja-col-oc {
         max-width: none;
         overflow: visible;
         text-overflow: clip;
@@ -1250,7 +1247,7 @@ Bandeja de legajos
                     $layoutPantallaPorKey[$filaP['key']] = $filaP;
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
-                $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $usaScrollHorizontal = LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? []);
                 $anchoAcciones = 88; // ~5.5rem: 2 botones por renglón
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0

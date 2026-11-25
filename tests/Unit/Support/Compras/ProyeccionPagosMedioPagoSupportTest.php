@@ -35,19 +35,31 @@ class ProyeccionPagosMedioPagoSupportTest extends TestCase
         );
     }
 
-    public function test_factura_conserva_el_medio_de_la_cuota(): void
+    public function test_factura_con_efectivo_en_cuota_usa_medio_de_la_oc(): void
     {
         $this->assertSame(
-            'Efect.',
+            'Cheque',
             ProyeccionPagosMedioPagoSupport::resolver('E', null, null, null, 'C', null, 1, 'ANITA_IMPORT')
+        );
+        $this->assertSame(
+            'Cheque',
+            ProyeccionPagosMedioPagoSupport::resolver('E', null, null, null, 'C', null, 1, 'LEGAJO')
         );
     }
 
-    public function test_cuota_vinculada_a_la_oc_tiene_prioridad(): void
+    public function test_cuota_vinculada_no_efectivo_tiene_prioridad(): void
     {
         $this->assertSame(
             'Transf',
             ProyeccionPagosMedioPagoSupport::resolver('E', null, 'T', null, 'C', null, -1, 'ANITA_IMPORT')
+        );
+    }
+
+    public function test_oc_vinculada_en_efectivo_no_bloquea_otro_medio(): void
+    {
+        $this->assertSame(
+            'Cheque',
+            ProyeccionPagosMedioPagoSupport::resolver('C', null, 'E', null, 'T', null, 1, 'LEGAJO')
         );
     }
 }

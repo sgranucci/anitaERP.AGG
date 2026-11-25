@@ -27,6 +27,7 @@
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/contratos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/contratos.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/concepto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/liquidacion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/liquidacion/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/planes_cuota.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/planes_cuota.js')) ?: time() }}"></script>
 @if (($soloVisualizacion ?? false) || can('listar-novedad-sueldos', false) || can('editar-empleado-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/novedades.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/novedades.js')) ?: time() }}"></script>
@@ -274,6 +275,7 @@
 @include('includes.sueldos.modalconsultaempleado_sueldos')
 @include('includes.contable.modalconsultacentrocosto')
 @include('includes.sueldos.modalconsultaconcepto_sueldos')
+@include('includes.sueldos.modalconsultaliquidacion_sueldos')
 @include('includes.sueldos.modalconsultatipo_sancion')
 @include('includes.sueldos.modalconsultamotivo_sancion')
 @include('compras.proveedor.arca-cuit-entry-modal')

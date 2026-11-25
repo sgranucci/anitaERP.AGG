@@ -224,9 +224,14 @@ class PartidagastoRepository implements PartidagastoRepositoryInterface
 			$output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
 			$output['data'] .= '<td class="detalle">'.e($row->detalle).'</td>';
 			$output['data'] .= '<td class="concepto">'.e($conceptoTxt).'</td>';
+			$urlConsulta = route('editar_partidagasto', [
+				'id' => $row->id,
+				'origen' => 'modal_consulta',
+				'vista' => 'consulta',
+			]);
 			$output['data'] .= '<td>'
 				.'<a class="btn btn-warning btn-sm eligeconsultapartidagasto">Elegir</a> '
-				.'<a class="btn btn-info btn-sm" href="'.e(url('presupuesto/partidagasto/'.$row->id.'/editar')).'" target="_blank" rel="noopener">Consultar</a>'
+				.'<a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>'
 				.'</td>';
 			$output['data'] .= '</tr>';
 		}

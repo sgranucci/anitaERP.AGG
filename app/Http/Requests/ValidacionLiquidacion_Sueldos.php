@@ -57,7 +57,21 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
             'periodo_deposito' => 'nullable|string|max:15',
             'fecha_ultimo_deposito' => 'nullable|date',
             'observacion' => 'nullable|string|max:2000',
+            'empleados_modo' => ['nullable', 'string', Rule::in(['todos', 'seleccion'])],
+            'empleado_ids' => ['nullable', 'array'],
+            'empleado_ids.*' => ['integer', 'exists:empleado_sueldos,id'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($v) {
+            $modo = (string) $this->input('empleados_modo', 'todos');
+            $ids = array_filter((array) $this->input('empleado_ids', []));
+            if ($modo === 'seleccion' && $ids === []) {
+                $v->errors()->add('empleado_ids', 'Seleccioná al menos un empleado, o usá «Todos los que correspondan».');
+            }
+        });
     }
 
     public function attributes()
@@ -87,6 +101,14 @@ class ValidacionLiquidacion_Sueldos extends FormRequest
             'simulacion' => $this->boolean('simulacion'),
             'acumula_novedades' => $this->has('acumula_novedades') ? $this->boolean('acumula_novedades') : true,
             'alcance' => LiquidacionAlcanceRecibo::normalizar($this->input('alcance')),
+            'empleados_modo' => in_array((string) $this->input('empleados_modo'), ['todos', 'seleccion'], true)
+                ? (string) $this->input('empleados_modo')
+                : 'todos',
+            'empleado_ids' => array_values(array_unique(array_map(
+                'intval',
+                array_filter((array) $this->input('empleado_ids', []))
+            ))),
+            'motivoegreso_id' => $this->filled('motivoegreso_id') ? $this->input('motivoegreso_id') : null,
         ]);
     }
 }

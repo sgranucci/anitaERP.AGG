@@ -1,8 +1,8 @@
 @php
     $puedeEditarBases = empty($soloVisualizacion) && can('actualizar-empleado-sueldos', false);
     $puedeBorrarVigencia = empty($soloVisualizacion) && ($puedeBorrarVigencia ?? can('borrar-vigencia-empleado-sueldos', false));
-    // En empleado: editable cuando la categoría NO usa tabla (origen C)
-    $basesEditables = ! ($usaTabla ?? true);
+    // Con categoría T las de la tabla son solo lectura; las del legajo siempre se gestionan acá.
+    $nombrebaseIdsCategoria = $nombrebaseIdsCategoria ?? [];
 @endphp
 
 <div class="row">
@@ -18,7 +18,8 @@
 @if ($usaTabla)
     <div class="alert alert-info py-2">
         <i class="fa fa-table"></i>
-        Bases desde la <strong>tabla de la categoría</strong> (solo lectura).
+        Bases de la <strong>categoría</strong> (solo lectura) más las del <strong>legajo</strong>
+        (ej. mutual, horas): esas sí se agregan y modifican acá.
     </div>
 @else
     <div class="alert alert-warning py-2">
@@ -29,9 +30,10 @@
 
 <div id="bases-empleado-panel"
      data-empleado-id="{{ $data->id }}"
-     data-usa-tabla="{{ $basesEditables ? 1 : 0 }}"
-     data-puede-editar="{{ ($basesEditables && $puedeEditarBases) ? 1 : 0 }}"
-     data-puede-borrar="{{ ($basesEditables && $puedeBorrarVigencia) ? 1 : 0 }}"
+     data-usa-tabla="{{ ! empty($usaTabla) ? 1 : 0 }}"
+     data-puede-editar="{{ $puedeEditarBases ? 1 : 0 }}"
+     data-puede-borrar="{{ $puedeBorrarVigencia ? 1 : 0 }}"
+     data-nombrebase-ids-categoria="{{ implode(',', $nombrebaseIdsCategoria) }}"
      data-csrf="{{ csrf_token() }}"
      data-hoy="{{ now()->format('Y-m-d') }}"
      data-url-guardar="{{ route('guardar_base_empleado_sueldos', ['id' => $data->id]) }}"
@@ -45,9 +47,14 @@
     <div class="d-flex justify-content-between align-items-center mb-2">
         <small class="text-muted">
             <i class="fa fa-info-circle"></i>
-            Abrí una base ({{ $basesEditables && $puedeEditarBases ? 'gestionar' : 'ver' }} vigencias) con <i class="fa fa-list-ol"></i>.
+            @if ($puedeEditarBases)
+                <i class="fa fa-pencil"></i> editar vigencias del legajo ·
+                <i class="fa fa-eye"></i> ver las de categoría.
+            @else
+                <i class="fa fa-eye"></i> ver vigencias.
+            @endif
         </small>
-        @if ($basesEditables && $puedeEditarBases)
+        @if ($puedeEditarBases)
         <button type="button" id="btn-nueva-base" class="btn btn-primary btn-sm">
             <i class="fa fa-plus-circle"></i> Agregar base
         </button>
@@ -60,6 +67,7 @@
                 <tr>
                     <th class="width20">Cód. base</th>
                     <th>Base</th>
+                    <th class="width80">Origen</th>
                     <th class="text-right">Valor vigente</th>
                     <th class="width20">Vigencia</th>
                     <th class="width80" data-orderable="false"></th>
@@ -67,12 +75,21 @@
             </thead>
             <tbody id="tbody-bases-vigentes">
                 @forelse ($basesGrilla as $base)
+                    @php $origenBase = $base['origen'] ?? ($usaTabla ? 'categoria' : 'empleado'); @endphp
                     <tr data-base-id="{{ $base['id'] }}"
                         data-nombrebase-id="{{ $base['nombrebase_id'] }}"
                         data-nombrebase-desc="{{ $base['nombrebase_descripcion'] }}"
+                        data-origen="{{ $origenBase }}"
                         data-valor="{{ $base['editar_valor'] }}">
                         <td>{{ $base['nombrebase_codigo'] }}</td>
                         <td>{{ $base['nombrebase_descripcion'] }}</td>
+                        <td>
+                            @if ($origenBase === 'categoria')
+                                <span class="badge badge-info">Categoría</span>
+                            @else
+                                <span class="badge badge-secondary">Legajo</span>
+                            @endif
+                        </td>
                         <td class="text-right">
                             @if ($base['tiene_vigente'])
                                 {{ $base['valor_fmt'] }}
@@ -88,13 +105,18 @@
                         </td>
                         <td>{{ $base['fecha_vigencia_fmt'] ?? '—' }}</td>
                         <td class="text-nowrap">
+                            @php
+                                $esLegajo = $origenBase !== 'categoria';
+                                $puedeEditarFila = $puedeEditarBases && $esLegajo;
+                            @endphp
                             <button type="button" class="btn-accion-tabla tooltipsC btn-gestionar-vigencias"
-                                    title="{{ $basesEditables && $puedeEditarBases ? 'Gestionar vigencias' : 'Ver vigencias' }}"
+                                    title="{{ $puedeEditarFila ? 'Editar vigencias' : 'Ver vigencias' }}"
                                     data-nombrebase-id="{{ $base['nombrebase_id'] }}"
-                                    data-nombrebase-desc="{{ $base['nombrebase_descripcion'] }}">
-                                <i class="fa fa-list-ol"></i>
+                                    data-nombrebase-desc="{{ $base['nombrebase_descripcion'] }}"
+                                    data-origen="{{ $origenBase }}">
+                                <i class="fa {{ $puedeEditarFila ? 'fa-pencil' : 'fa-eye' }}"></i>
                             </button>
-                            @if ($basesEditables && $puedeBorrarVigencia)
+                            @if ($puedeBorrarVigencia && $esLegajo)
                                 <button type="button" class="btn-accion-tabla tooltipsC text-danger btn-eliminar-base-completa"
                                         title="Eliminar base completa"
                                         data-nombrebase-id="{{ $base['nombrebase_id'] }}"
@@ -105,7 +127,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr id="fila-sin-bases"><td colspan="5" class="text-center text-muted">Sin bases cargadas.</td></tr>
+                    <tr id="fila-sin-bases"><td colspan="6" class="text-center text-muted">Sin bases cargadas.</td></tr>
                 @endforelse
             </tbody>
         </table>

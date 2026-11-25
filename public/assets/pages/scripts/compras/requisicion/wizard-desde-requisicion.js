@@ -1276,6 +1276,12 @@
 		}
 		e.preventDefault();
 		e.stopImmediatePropagation();
+		var $trWz = $(this).closest('tr');
+		if (String($trWz.attr('data-elegible') || '1') === '0'
+			|| (String($trWz.attr('data-estado') || '') === 'Suspendido' && !window.consultaProveedorIncluirSuspendidos)) {
+			alert('El proveedor está suspendido (tiene un problema, p. ej. padrón ARCA). No se puede usar en requisiciones ni órdenes de compra: contactá a Compras.');
+			return;
+		}
 		var pid = leerProveedorIdDesdeFilaConsulta($(this));
 		if (!Number.isFinite(pid) || pid <= 0) {
 			return;

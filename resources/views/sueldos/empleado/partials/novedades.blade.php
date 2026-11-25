@@ -1,9 +1,39 @@
-@php use App\Support\Sueldos\NovedadSueldosCatalogo; @endphp
+@php
+    use App\Support\Sueldos\NovedadSueldosCatalogo;
+    $hermanosMultiempresa = $hermanosMultiempresa ?? collect();
+    $puedeReplicarMultiempresa = (bool) ($puedeReplicarMultiempresa ?? false);
+@endphp
 <div id="novedades-empleado-panel" data-empleado="{{ $empleado->id }}"
-     data-url="{{ route('novedades_empleado_sueldos', ['empleado' => $empleado->id]) }}">
+     data-url="{{ route('novedades_empleado_sueldos', ['empleado' => $empleado->id]) }}"
+     data-url-replicar="{{ route('replicar_novedades_empleado_sueldos', ['empleado' => $empleado->id]) }}">
     <div class="d-flex flex-wrap align-items-center justify-content-between mb-3">
-        <h5 class="mb-0"><i class="fa fa-bolt"></i> Novedades del per&iacute;odo</h5>
-        <span class="text-muted small">Datos de entrada que consume el motor (<code>novedad()</code> / <code>novedad2()</code>).</span>
+        <div>
+            <h5 class="mb-0"><i class="fa fa-bolt"></i> Novedades del per&iacute;odo</h5>
+            <span class="text-muted small">Datos de entrada que consume el motor (<code>novedad()</code> / <code>novedad2()</code>).</span>
+        </div>
+        @if ($puedeReplicarMultiempresa)
+            @php
+                $empresasHermano = $hermanosMultiempresa->map(function ($h) {
+                    $emp = $h->empresa;
+                    if (! $emp) {
+                        return 'Empresa #'.$h->empresa_id;
+                    }
+                    $codigo = trim((string) ($emp->codigo ?? ''));
+
+                    return $codigo !== '' ? $codigo.' — '.$emp->nombre : (string) $emp->nombre;
+                })->implode(', ');
+            @endphp
+            <div class="text-right">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btn-replicar-novedades-multiempresa"
+                        title="Copia las novedades seleccionadas (o todas las no anuladas) al mismo legajo activo en otras empresas">
+                    <i class="fa fa-copy"></i> Replicar a otras empresas
+                </button>
+                <div class="text-muted small mt-1" id="novedades-multiempresa-destino"
+                     data-empresas="{{ e($empresasHermano) }}">
+                    Activo tambi&eacute;n en: {{ $empresasHermano }}
+                </div>
+            </div>
+        @endif
     </div>
 
     @if ($puedeEditar)
@@ -26,46 +56,50 @@
                         'required' => true,
                     ])
                 </div>
-                <div class="form-group col-md-4 mb-2">
-                    <label class="small mb-0">Corrida</label>
-                    <select name="liquidacion_id" class="form-control form-control-sm">
-                        <option value="">— Sin corrida —</option>
-                        @foreach ($liquidaciones as $liq)
-                            <option value="{{ $liq->id }}">N&deg; {{ $liq->numero }} · {{ $liq->periodo }} · {{ $liq->descripcion }}</option>
-                        @endforeach
-                    </select>
+                <div class="col-md-4 mb-2">
+                    @include('sueldos.partials.campo_consulta_liquidacion_sueldos', [
+                        'label' => 'Corrida',
+                        'labelClass' => 'small mb-0 d-block',
+                        'inputName' => 'liquidacion_id',
+                        'inputId' => 'novedad_empleado_liquidacion_id',
+                        'liquidacionId' => '',
+                        'numero' => '',
+                        'descripcion' => '',
+                        'required' => false,
+                        'empresaIdFiltro' => $empleado->empresa_id,
+                    ])
                 </div>
                 <div class="form-group col-md-1 mb-2">
-                    <label class="small mb-0">Valor 1</label>
-                    <input type="number" step="0.0001" name="valor1" class="form-control form-control-sm" value="0">
+                    <label class="small mb-0" for="novedad_empleado_valor1">Valor 1</label>
+                    <input type="number" step="0.0001" name="valor1" id="novedad_empleado_valor1" class="form-control form-control-sm" value="0">
                 </div>
                 <div class="form-group col-md-1 mb-2">
-                    <label class="small mb-0">Valor 2</label>
-                    <input type="number" step="0.0001" name="valor2" class="form-control form-control-sm" value="0">
+                    <label class="small mb-0" for="novedad_empleado_valor2">Valor 2</label>
+                    <input type="number" step="0.0001" name="valor2" id="novedad_empleado_valor2" class="form-control form-control-sm" value="0">
                 </div>
                 <div class="form-group col-md-2 mb-2">
-                    <label class="small mb-0">Estado</label>
-                    <select name="estado" class="form-control form-control-sm">
+                    <label class="small mb-0" for="novedad_empleado_estado">Estado</label>
+                    <select name="estado" id="novedad_empleado_estado" class="form-control form-control-sm">
                         @foreach ($estados as $cod => $label)
                             <option value="{{ $cod }}">{{ $label }}</option>
                         @endforeach
                     </select>
                 </div>
                 <div class="form-group col-md-2 mb-2">
-                    <label class="small mb-0">Fecha vto.</label>
-                    <input type="date" name="fecha_vto" class="form-control form-control-sm">
+                    <label class="small mb-0" for="novedad_empleado_fecha_vto">Fecha vto.</label>
+                    <input type="date" name="fecha_vto" id="novedad_empleado_fecha_vto" class="form-control form-control-sm">
                 </div>
                 <div class="form-group col-md-2 mb-2">
-                    <label class="small mb-0">Vigente desde</label>
-                    <input type="date" name="fecha_desde" class="form-control form-control-sm" title="Con desde se repite cada mes">
+                    <label class="small mb-0" for="novedad_empleado_fecha_desde">Vigente desde</label>
+                    <input type="date" name="fecha_desde" id="novedad_empleado_fecha_desde" class="form-control form-control-sm" title="Con desde se repite cada mes">
                 </div>
                 <div class="form-group col-md-2 mb-2">
-                    <label class="small mb-0">Vigente hasta</label>
-                    <input type="date" name="fecha_hasta" class="form-control form-control-sm" title="Vacío = sin corte">
+                    <label class="small mb-0" for="novedad_empleado_fecha_hasta">Vigente hasta</label>
+                    <input type="date" name="fecha_hasta" id="novedad_empleado_fecha_hasta" class="form-control form-control-sm" title="Vacío = sin corte">
                 </div>
                 <div class="form-group col-md-4 mb-2">
-                    <label class="small mb-0">Observaci&oacute;n</label>
-                    <input type="text" name="observacion" class="form-control form-control-sm" maxlength="500">
+                    <label class="small mb-0" for="novedad_empleado_observacion">Observaci&oacute;n</label>
+                    <input type="text" name="observacion" id="novedad_empleado_observacion" class="form-control form-control-sm" maxlength="500">
                 </div>
                 <div class="form-group col-md-3 mb-2 text-right">
                     <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btn-novedad-empleado-cancelar">
@@ -82,6 +116,11 @@
         <table class="table table-sm table-bordered table-striped mb-0">
             <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
+                    @if ($puedeReplicarMultiempresa)
+                        <th style="width:36px" class="text-center">
+                            <input type="checkbox" id="novedad-empleado-check-todas" title="Seleccionar todas las no anuladas">
+                        </th>
+                    @endif
                     <th>Corrida</th>
                     <th>Per&iacute;odo</th>
                     <th>Concepto</th>
@@ -95,7 +134,15 @@
             </thead>
             <tbody>
                 @forelse ($novedades as $n)
+                    @php $esAnulada = (string) $n->estado === NovedadSueldosCatalogo::ESTADO_ANULADA; @endphp
                     <tr>
+                        @if ($puedeReplicarMultiempresa)
+                            <td class="text-center">
+                                @if (! $esAnulada)
+                                    <input type="checkbox" class="novedad-empleado-check" value="{{ $n->id }}">
+                                @endif
+                            </td>
+                        @endif
                         <td>{{ optional($n->liquidacion)->numero }}</td>
                         <td>{{ $n->periodo }}</td>
                         <td>{{ optional($n->concepto)->codigo }} — {{ optional($n->concepto)->descripcion }}</td>
@@ -119,6 +166,8 @@
                                         data-concepto-codigo="{{ optional($n->concepto)->codigo }}"
                                         data-concepto-desc="{{ optional($n->concepto)->descripcion }}"
                                         data-liquidacion-id="{{ $n->liquidacion_id }}"
+                                        data-liquidacion-numero="{{ optional($n->liquidacion)->numero }}"
+                                        data-liquidacion-desc="{{ trim((optional($n->liquidacion)->periodo ? optional($n->liquidacion)->periodo.' · ' : '').(optional($n->liquidacion)->descripcion ?? '')) }}"
                                         data-valor1="{{ $n->valor1 }}"
                                         data-valor2="{{ $n->valor2 }}"
                                         data-estado="{{ $n->estado }}"
@@ -136,7 +185,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-3">Sin novedades para este legajo.</td>
+                        <td colspan="{{ $puedeReplicarMultiempresa ? 10 : 9 }}" class="text-center text-muted py-3">Sin novedades para este legajo.</td>
                     </tr>
                 @endforelse
             </tbody>

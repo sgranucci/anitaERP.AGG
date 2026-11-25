@@ -224,14 +224,18 @@
   overflow-y: visible;
 }
 
-/* Vista estándar / pocas columnas: ocupa el ancho útil sin scroll lateral. */
+/*
+ * Vista estándar: TODAS las columnas caben en el viewport (sin scroll H).
+ * Scroll horizontal solo en .lw-table-scroll (el usuario agregó más columnas).
+ */
 .lw-workbench .lw-table-fit {
-  overflow-x: auto; /* solo si el viewport es más chico que el piso legible */
+  overflow-x: hidden;
 }
 .lw-workbench .lw-table-fit .lw-tabla-grilla,
 .lw-workbench .lw-table-fit .tabla-ancha.lw-tabla-grilla {
-  width: 100%;
-  min-width: 100%;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100%;
   table-layout: fixed;
 }
 
@@ -262,27 +266,53 @@
 .lw-workbench #tabla-paginada td.lw-col {
   padding-left: 0.45rem;
   padding-right: 0.45rem;
+}
+
+/*
+ * Fit: anula min-width inline del thead (si no, la suma de pisos > viewport
+ * y Acciones queda afuera). Textos largos hacen wrap; sin "..." en estándar.
+ */
+.lw-workbench .lw-table-fit #tabla-paginada th.lw-col,
+.lw-workbench .lw-table-fit #tabla-paginada td.lw-col {
+  min-width: 0 !important;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.lw-workbench .lw-table-fit #tabla-paginada .lw-celda-texto {
+  display: block;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* Scroll: nowrap + ellipsis (anchos fijos del diseñador). */
+.lw-workbench .lw-table-scroll #tabla-paginada th.lw-col,
+.lw-workbench .lw-table-scroll #tabla-paginada td.lw-col {
   white-space: nowrap;
 }
 
-/* Celdas: ellipsis OK. Encabezados: título completo (regla tabla-ancha / sin comprimir th). */
-.lw-workbench #tabla-paginada td.lw-col {
+.lw-workbench .lw-table-scroll #tabla-paginada td.lw-col {
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 0; /* fuerza ellipsis con table-layout:fixed */
+  max-width: 0;
 }
 
-.lw-workbench #tabla-paginada th.lw-col {
-  overflow: visible;
-  text-overflow: clip;
-  max-width: none;
-}
-
-.lw-workbench #tabla-paginada .lw-celda-texto {
+.lw-workbench .lw-table-scroll #tabla-paginada .lw-celda-texto {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lw-workbench #tabla-paginada th.lw-col {
+  overflow: hidden;
+  text-overflow: clip;
+  max-width: none;
 }
 
 /* 3 acciones en una sola fila (editar + CC + borrar) */

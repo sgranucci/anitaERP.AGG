@@ -6,12 +6,15 @@
     }
     $claseCol = 'lw-col lw-th-drag';
     $titleTh = $titulo;
-    $compactas = ['id', 'numero', 'oc', 'fechacomprobante', 'fechaiva', 'total', 'estado', 'fuera_pago', 'moneda', 'cotizacion'];
-    $textos = ['empresa', 'proveedor', 'tipo', 'origen', 'modo_carga', 'leyenda', 'cuit'];
+    $compactas = ['id', 'empresa', 'numero', 'oc', 'fechacomprobante', 'fechaiva', 'total', 'estado', 'fuera_pago', 'moneda', 'cotizacion'];
+    $textos = ['proveedor', 'tipo', 'origen', 'modo_carga', 'leyenda', 'cuit'];
     if (in_array($key, $compactas, true)) {
         $claseCol .= ' cp-col-compacta';
     } elseif (in_array($key, $textos, true)) {
         $claseCol .= ' cp-col-texto';
+    }
+    if ($key === 'empresa') {
+        $claseCol .= ' cp-col-empresa';
     }
     if ($key === 'fechaiva') {
         $titulo = 'F. IVA';

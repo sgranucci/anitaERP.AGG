@@ -37,7 +37,15 @@ class FalloCuentaCorrienteReporteService
      */
     public function generar(array $filtros): array
     {
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $empresaIds = collect($filtros['empresa_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($empresaIds === [] && (int) ($filtros['empresa_id'] ?? 0) > 0) {
+            $empresaIds = [(int) $filtros['empresa_id']];
+        }
         $desde = Carbon::parse((string) ($filtros['fecha_desde'] ?? date('Y-m-01')))->startOfDay();
         $hasta = Carbon::parse((string) ($filtros['fecha_hasta'] ?? date('Y-m-d')))->endOfDay();
         $orden = (string) ($filtros['orden'] ?? self::ORDEN_LEGAJO);
@@ -55,8 +63,8 @@ class FalloCuentaCorrienteReporteService
             ->where(function ($q) {
                 $q->whereNull('estado')->orWhere('estado', '!=', EmpleadoEstados::BAJA);
             });
-        if ($empresaId > 0) {
-            $empleadosQ->where('empresa_id', $empresaId);
+        if ($empresaIds !== []) {
+            $empleadosQ->whereIn('empresa_id', $empresaIds);
         }
         /** @var Collection<int, Empleado_Sueldos> $empleados */
         $empleados = $empleadosQ->get();

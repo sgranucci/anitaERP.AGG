@@ -55,7 +55,11 @@
     .traza-paso-header { cursor: pointer; background: #f8f9fa; }
     .traza-paso-header:hover { background: #eef6fb; }
     .traza-numero { display: inline-block; min-width: 28px; color: #6c757d; font-weight: 600; }
-    .traza-formula { background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 3px; padding: 5px 7px; overflow-wrap: anywhere; }
+    .traza-formula { background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 3px; padding: 5px 7px; overflow-wrap: anywhere; color: #24292e; }
+    .traza-formula-code { color: #24292e !important; background: transparent; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+    .traza-formula-code-error { color: #24292e !important; }
+    .traza-pos-error { background: #dc3545; color: #fff; padding: 0 2px; border-radius: 2px; font-weight: 700; }
+    .traza-formula-campo-error { border-color: #dc3545; background: #fff5f5; }
     .rastro-panel { background: #fbfcfd; border: 1px solid #e8ecef; border-radius: 3px; padding: 7px; }
     .rastro-tree ul { list-style: none; margin: 0 0 0 1.1rem; padding: 0; border-left: 1px dashed #b7c4cc; }
     .rastro-tree > ul { border-left: none; margin-left: 0; }
@@ -165,6 +169,14 @@
                             $pasoId = 'paso-'.$loop->iteration.'-'.$p['codigo'];
                             $tieneError = ! empty($p['error']);
                             $tieneImporte = abs((float) ($p['importe'] ?? 0)) > 0.0001;
+                            $errorPos = isset($p['formula_pos']) && (int) $p['formula_pos'] >= 0
+                                ? (int) $p['formula_pos']
+                                : \App\Support\Sueldos\Formula\FormulaException::extraerPosicion($p['error'] ?? null);
+                            $errorCampo = (string) ($p['formula_campo'] ?? 'formula');
+                            if (! in_array($errorCampo, ['formula', 'formula_cantidad', 'formula_valor'], true)) {
+                                $errorCampo = 'formula';
+                            }
+                            $conceptoIdPaso = (int) ($p['concepto_id'] ?? 0);
                             $textoBusqueda = strtolower(implode(' ', [
                                 $p['codigo'] ?? '', $p['descripcion'] ?? '', $p['tipo'] ?? '',
                                 $p['formula'] ?? '', $p['formula_cantidad'] ?? '', $p['formula_valor'] ?? '',
@@ -197,8 +209,26 @@
                             <div class="collapse" id="{{ $pasoId }}">
                                 <div class="card-body py-2">
                                     @if ($tieneError)
-                                        <div class="alert alert-danger mb-2">
-                                            <strong>No se pudo evaluar:</strong> {{ $p['error'] }}
+                                        <div class="alert alert-danger mb-2 d-flex flex-wrap justify-content-between align-items-center">
+                                            <div>
+                                                <strong>No se pudo evaluar:</strong> {{ $p['error'] }}
+                                                @if ($errorPos >= 0)
+                                                    <span class="d-block small mt-1">El car&aacute;cter en posici&oacute;n {{ $errorPos }} est&aacute; marcado abajo en rojo (no toda la f&oacute;rmula).</span>
+                                                @endif
+                                            </div>
+                                            @if ($conceptoIdPaso > 0 && can('editar-concepto-sueldos', false))
+                                                <a class="btn btn-sm btn-light border border-danger text-danger mt-1"
+                                                   href="{{ route('editar_concepto_sueldos', array_filter([
+                                                       'id' => $conceptoIdPaso,
+                                                       'resaltar_pos' => $errorPos >= 0 ? $errorPos : null,
+                                                       'campo' => $errorCampo,
+                                                       'origen' => 'liquidacion',
+                                                       'liquidacion_id' => $liq->id,
+                                                   ])) }}"
+                                                   target="_blank" rel="noopener">
+                                                    <i class="fa fa-edit"></i> Editar f&oacute;rmula
+                                                </a>
+                                            @endif
                                         </div>
                                     @endif
                                     @if (! empty($p['aviso']))
@@ -208,12 +238,13 @@
                                     <div class="row">
                                         <div class="col-lg-4">
                                             <small class="text-muted d-block">1. Cantidad</small>
-                                            <div class="traza-formula mb-2">
-                                                @if (! empty($p['formula_cantidad']))
-                                                    <code>{{ $p['formula_cantidad'] }}</code>
-                                                @else
-                                                    <span class="text-muted">Valor predeterminado</span>
-                                                @endif
+                                            <div class="traza-formula mb-2 {{ $tieneError && $errorCampo === 'formula_cantidad' ? 'traza-formula-campo-error' : '' }}">
+                                                @include('sueldos.liquidacion.partials.formula_resaltada', [
+                                                    'texto' => $p['formula_cantidad'] ?? '',
+                                                    'pos' => ($tieneError && $errorCampo === 'formula_cantidad') ? $errorPos : -1,
+                                                    'conError' => $tieneError && $errorCampo === 'formula_cantidad',
+                                                    'vacio' => 'Valor predeterminado',
+                                                ])
                                                 <strong class="float-right">{{ number_format((float) $p['cantidad'], 4, ',', '.') }}</strong>
                                             </div>
                                             @if (! empty($p['rastro_cantidad']))
@@ -228,12 +259,13 @@
                                         </div>
                                         <div class="col-lg-4">
                                             <small class="text-muted d-block">2. Valor</small>
-                                            <div class="traza-formula mb-2">
-                                                @if (! empty($p['formula_valor']))
-                                                    <code>{{ $p['formula_valor'] }}</code>
-                                                @else
-                                                    <span class="text-muted">Valor predeterminado</span>
-                                                @endif
+                                            <div class="traza-formula mb-2 {{ $tieneError && $errorCampo === 'formula_valor' ? 'traza-formula-campo-error' : '' }}">
+                                                @include('sueldos.liquidacion.partials.formula_resaltada', [
+                                                    'texto' => $p['formula_valor'] ?? '',
+                                                    'pos' => ($tieneError && $errorCampo === 'formula_valor') ? $errorPos : -1,
+                                                    'conError' => $tieneError && $errorCampo === 'formula_valor',
+                                                    'vacio' => 'Valor predeterminado',
+                                                ])
                                                 <strong class="float-right">{{ number_format((float) $p['valor'], 4, ',', '.') }}</strong>
                                             </div>
                                             @if (! empty($p['rastro_valor']))
@@ -248,12 +280,13 @@
                                         </div>
                                         <div class="col-lg-4">
                                             <small class="text-muted d-block">3. Importe</small>
-                                            <div class="traza-formula mb-2">
-                                                @if (! empty($p['formula']))
-                                                    <code>{{ $p['formula'] }}</code>
-                                                @else
-                                                    <span class="text-muted">Cantidad &times; valor</span>
-                                                @endif
+                                            <div class="traza-formula mb-2 {{ $tieneError && $errorCampo === 'formula' ? 'traza-formula-campo-error' : '' }}">
+                                                @include('sueldos.liquidacion.partials.formula_resaltada', [
+                                                    'texto' => $p['formula'] ?? '',
+                                                    'pos' => ($tieneError && $errorCampo === 'formula') ? $errorPos : -1,
+                                                    'conError' => $tieneError && $errorCampo === 'formula',
+                                                    'vacio' => 'Cantidad × valor',
+                                                ])
                                                 <strong class="float-right">$ {{ number_format((float) $p['importe'], 2, ',', '.') }}</strong>
                                             </div>
                                             @if (! empty($p['rastro']))
@@ -265,7 +298,7 @@
                                                     </ul>
                                                 </div>
                                             @elseif (! empty($p['rastro_texto']))
-                                                <div class="rastro-panel mb-2"><code>{{ $p['rastro_texto'] }}</code></div>
+                                                <div class="rastro-panel mb-2"><code class="traza-formula-code">{{ $p['rastro_texto'] }}</code></div>
                                             @endif
                                         </div>
                                     </div>

@@ -102,7 +102,7 @@
                                     @endif
                                 </td>
                                 <td class="text-right">
-                                    {{ number_format((float) ($item['total_sicore'] ?? 0), 2, ',', '.') }}
+                                    {{ number_format((float) ($item['total_sicore_bruto'] ?? $item['total_sicore'] ?? 0), 2, ',', '.') }}
                                 </td>
                                 <td class="text-right @if (($item['total_mayor_periodo'] ?? 0) < 0) text-danger @endif">
                                     {{ number_format((float) ($item['total_mayor_periodo'] ?? 0), 2, ',', '.') }}

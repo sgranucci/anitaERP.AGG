@@ -29,9 +29,6 @@ Art&iacute;culos
     min-width: 100% !important;
     max-width: 100%;
 }
-.lw-workbench .articulo-grilla .lw-table-fit .tabla-ancha td.lw-col {
-    max-width: 0; /* ellipsis con table-layout:fixed */
-}
 </style>
 @endsection
 
@@ -250,7 +247,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                 // Vista estándar: forzar fit (table-layout:fixed al 100%). Los min-width por
                 // título del thead sumaban > viewport y empujaban Acciones afuera.
                 $usaScrollHorizontal = count($columnasVisibles) > 14
-                    || $sumaAnchosPantalla > (LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 200);
+                    || LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? [], LwGrilla::ANCHO_PRESUPUESTO_PANTALLA + 200);
                 $anchoAcciones = 232;
                 $pctDatosDisponible = $usaScrollHorizontal
                     ? 100.0

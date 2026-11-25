@@ -41,9 +41,6 @@
         min-width: 100% !important;
         max-width: 100%;
     }
-    .lw-workbench .cobranza-grilla-ancha .lw-table-fit .tabla-ancha td.lw-col {
-        max-width: 0;
-    }
     #tabla-paginada td.lw-col ul {
         margin: 0;
         padding-left: 1rem;

@@ -178,6 +178,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             ->with([
                 'empresas',
                 'proveedores',
+                'proveedor_servicios',
                 'tipotransaccion_compras',
                 'monedas',
                 'precarga_comprobante_proveedor_conceptos',

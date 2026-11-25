@@ -25,7 +25,7 @@
         $layoutPantallaPorKey[$filaP['key']] = $filaP;
     }
     $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
-    $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+    $usaScrollHorizontal = LwGrilla::debeUsarScrollHorizontal($grillaLayout ?? []);
     $anchoAcciones = 100;
     $pctDatosDisponible = $usaScrollHorizontal
         ? 100.0

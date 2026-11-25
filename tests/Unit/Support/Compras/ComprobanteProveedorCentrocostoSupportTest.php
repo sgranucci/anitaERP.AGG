@@ -181,4 +181,38 @@ class ComprobanteProveedorCentrocostoSupportTest extends TestCase
         $this->assertSame(24594.26, round(array_sum(array_column($trozos, 'importe')), 2));
         $this->assertNotContains(6, array_column($trozos, 'centrocosto_id'));
     }
+
+    public function test_inicial_tipo_iva_desde_nombre_detecta_n_c_ind_y_dir(): void
+    {
+        $this->assertSame('N', ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeNombre('Iva Bs.Loc.N/C 10.5'));
+        $this->assertSame('I', ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeNombre('Iva Bs.Loc.Ind.10.5'));
+        $this->assertSame('D', ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeNombre('Iva Serv.Dir.21'));
+        $this->assertNull(ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeNombre('Percepcion IVA 3'));
+    }
+
+    public function test_inicial_desde_fino_origen_y_cuenta(): void
+    {
+        $this->assertSame('N', ComprobanteProveedorCentrocostoSupport::inicialDesdeFinoOrigen('FNS'));
+        $this->assertSame('I', ComprobanteProveedorCentrocostoSupport::inicialDesdeFinoOrigen('FIS'));
+        $this->assertSame('N', ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeCodigoCuenta(521130001));
+        $this->assertSame('I', ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeCodigoCuenta(114010002));
+    }
+
+    public function test_bs_loc_fuera_de_plantilla_serv_usa_tratamiento_del_nombre(): void
+    {
+        // Plantilla Serv solo trae id 27 (Serv N/C); la factura trae 25 (Bs.Loc N/C).
+        $desdePlantilla = ComprobanteProveedorCentrocostoSupport::inicialDesdeConceptosProrrateo([
+            [
+                'concepto_ivacompra_id' => 27,
+                'tipoconcepto' => 'I',
+                'fino_origen' => 'FNS',
+            ],
+        ], 25);
+
+        $this->assertNull($desdePlantilla);
+        $this->assertSame(
+            'N',
+            ComprobanteProveedorCentrocostoSupport::inicialTipoIvaDesdeNombre('Iva Bs.Loc.N/C 10.5')
+        );
+    }
 }

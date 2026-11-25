@@ -15,9 +15,10 @@
     $confirmContabilizar = $esModoAnita
         ? '¿Contabilizar esta corrida? Se genera un asiento PER por centro de costo (pasivos en CC 0) y se escribe ctamov en Anita.'
         : '¿Contabilizar esta corrida? Se genera el asiento SUEL en el ERP y se escribe ctamov en Anita.';
+    $tieneDetalleAsiento = $errorPrev || is_array($preview);
 @endphp
 @if ($muestraAsiento)
-<div class="card card-outline card-info mt-3">
+<div class="card card-outline card-info mt-3 {{ $tieneDetalleAsiento ? 'collapsed-card' : '' }}">
     <div class="card-header">
         <h3 class="card-title">
             Asiento de devengamiento
@@ -54,6 +55,33 @@
                     <i class="fa fa-external-link-alt"></i>
                     Asiento {{ optional($liq->asiento)->numeroasiento ?? $liq->asiento_id }}
                 </a>
+            @endif
+            @if ($tieneDetalleAsiento || \App\Support\Sueldos\SueldosAsientoExportSupport::tieneAsientosGrabados($liq))
+                @php
+                    $esAsientoGrabado = \App\Support\Sueldos\SueldosAsientoExportSupport::tieneAsientosGrabados($liq);
+                    $tituloExportAsiento = $esAsientoGrabado
+                        ? 'Exportar asiento contabilizado'
+                        : 'Exportar preview del asiento';
+                @endphp
+                <div class="btn-group btn-group-sm d-inline-flex" role="group" title="{{ $tituloExportAsiento }}">
+                    <a href="{{ route('exportar_asiento_liquidacion_sueldos', ['id' => $liq->id, 'formato' => 'PDF']) }}"
+                       class="btn btn-outline-danger" title="{{ $tituloExportAsiento }} (PDF)">
+                        <i class="fa fa-file-pdf"></i>
+                        @if ($esAsientoGrabado)
+                            PDF
+                        @else
+                            Preview PDF
+                        @endif
+                    </a>
+                    <a href="{{ route('exportar_asiento_liquidacion_sueldos', ['id' => $liq->id, 'formato' => 'EXCEL']) }}"
+                       class="btn btn-outline-success" title="{{ $tituloExportAsiento }} (Excel)">
+                        <i class="fa fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{{ route('exportar_asiento_liquidacion_sueldos', ['id' => $liq->id, 'formato' => 'CSV']) }}"
+                       class="btn btn-outline-secondary" title="{{ $tituloExportAsiento }} (CSV)">
+                        <i class="fa fa-file-csv"></i> CSV
+                    </a>
+                </div>
             @endif
             @if ($puedeContabilizar && $liq->estado === 'cerrada' && ! $liq->contabilizado)
                 <form action="{{ route('contabilizar_liquidacion_sueldos', ['id' => $liq->id]) }}" method="POST" class="d-inline"
@@ -93,8 +121,14 @@
                     </button>
                 </form>
             @endif
+            @if ($tieneDetalleAsiento)
+                <button type="button" class="btn btn-sm btn-tool" data-card-widget="collapse" title="Mostrar / ocultar detalle del asiento">
+                    <i class="fas fa-plus"></i>
+                </button>
+            @endif
         </div>
     </div>
+    @if ($tieneDetalleAsiento)
     <div class="card-body p-2">
         @if ($errorPrev)
             <div class="alert alert-danger mb-2">{{ $errorPrev }}</div>
@@ -123,55 +157,64 @@
                         'total_haber' => $preview['total_haber'] ?? 0,
                     ]];
             @endphp
-            @foreach ($tablasAsiento as $grupoVista)
-                @if (! empty($grupoVista['etiqueta']) && $esModoAnita)
-                    <p class="small font-weight-bold mb-1 mt-2">{{ $grupoVista['etiqueta'] }}</p>
-                @endif
-                <div class="table-responsive {{ ! $loop->last ? 'mb-2' : '' }}">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead style="background:#85C1E9;color:#17202A;">
-                            <tr>
-                                <th>Cuenta</th>
-                                <th>Nombre</th>
-                                <th>Centro de costo</th>
-                                <th class="text-right">Debe</th>
-                                <th class="text-right">Haber</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($grupoVista['lineas'] ?? [] as $linea)
+            <details class="mb-0">
+                <summary class="small mb-1" style="cursor:pointer;">
+                    Lista de cuentas del asiento
+                    @if (! empty($preview['lineas']) || ! empty($preview['grupos']))
+                        ({{ collect($tablasAsiento)->sum(fn ($g) => count($g['lineas'] ?? [])) }} renglones)
+                    @endif
+                </summary>
+                @foreach ($tablasAsiento as $grupoVista)
+                    @if (! empty($grupoVista['etiqueta']) && $esModoAnita)
+                        <p class="small font-weight-bold mb-1 mt-2">{{ $grupoVista['etiqueta'] }}</p>
+                    @endif
+                    <div class="table-responsive {{ ! $loop->last ? 'mb-2' : '' }}">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead style="background:#85C1E9;color:#17202A;">
                                 <tr>
-                                    <td>{{ $linea['cuenta_codigo'] }}</td>
-                                    <td>{{ $linea['cuenta_nombre'] }}</td>
-                                    <td>
-                                        @if (($linea['centrocosto_codigo'] ?? '') !== '')
-                                            {{ $linea['centrocosto_codigo'] }} {{ $linea['centrocosto_nombre'] }}
-                                        @else
-                                            <span class="text-muted">—</span>
-                                        @endif
-                                    </td>
-                                    <td class="text-right">{{ $linea['debe'] > 0 ? number_format($linea['debe'], 2, ',', '.') : '' }}</td>
-                                    <td class="text-right">{{ $linea['haber'] > 0 ? number_format($linea['haber'], 2, ',', '.') : '' }}</td>
+                                    <th>Cuenta</th>
+                                    <th>Nombre</th>
+                                    <th>Centro de costo</th>
+                                    <th class="text-right">Debe</th>
+                                    <th class="text-right">Haber</th>
                                 </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="5" class="text-center text-muted">
-                                        No hay conceptos AS con importe en esta corrida. Recalcule o verifique el mapeo.
-                                    </td>
+                            </thead>
+                            <tbody>
+                                @forelse ($grupoVista['lineas'] ?? [] as $linea)
+                                    <tr>
+                                        <td>{{ $linea['cuenta_codigo'] }}</td>
+                                        <td>{{ $linea['cuenta_nombre'] }}</td>
+                                        <td>
+                                            @if (($linea['centrocosto_codigo'] ?? '') !== '')
+                                                {{ $linea['centrocosto_codigo'] }} {{ $linea['centrocosto_nombre'] }}
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-right">{{ $linea['debe'] > 0 ? number_format($linea['debe'], 2, ',', '.') : '' }}</td>
+                                        <td class="text-right">{{ $linea['haber'] > 0 ? number_format($linea['haber'], 2, ',', '.') : '' }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">
+                                            No hay conceptos AS con importe en esta corrida. Recalcule o verifique el mapeo.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                            <tfoot>
+                                <tr class="font-weight-bold">
+                                    <td colspan="3" class="text-right">Totales</td>
+                                    <td class="text-right">{{ number_format((float) ($grupoVista['total_debe'] ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-right">{{ number_format((float) ($grupoVista['total_haber'] ?? 0), 2, ',', '.') }}</td>
                                 </tr>
-                            @endforelse
-                        </tbody>
-                        <tfoot>
-                            <tr class="font-weight-bold">
-                                <td colspan="3" class="text-right">Totales</td>
-                                <td class="text-right">{{ number_format((float) ($grupoVista['total_debe'] ?? 0), 2, ',', '.') }}</td>
-                                <td class="text-right">{{ number_format((float) ($grupoVista['total_haber'] ?? 0), 2, ',', '.') }}</td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            @endforeach
+                            </tfoot>
+                        </table>
+                    </div>
+                @endforeach
+            </details>
         @endif
     </div>
+    @endif
 </div>
 @endif

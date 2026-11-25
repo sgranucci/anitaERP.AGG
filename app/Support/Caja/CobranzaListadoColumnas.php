@@ -82,7 +82,7 @@ final class CobranzaListadoColumnas
             'source' => 'cobranza.detalle',
             'attr' => 'detalle',
             'group' => self::GRUPO_COBRANZA,
-            'ancho' => 130,
+            'ancho' => 120,
         ],
         'estado' => [
             'label' => 'Estado',
@@ -136,7 +136,7 @@ final class CobranzaListadoColumnas
             'source' => '',
             'attr' => 'movimientos',
             'group' => self::GRUPO_COBRANZA,
-            'ancho' => 170,
+            'ancho' => 140,
         ],
     ];
 

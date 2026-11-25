@@ -90,10 +90,13 @@
                         </td>
                     </tr>
                     @if ($mostrarControlPeriodo)
+                        @php
+                            $sicorePeriodo = (float) ($item['total_sicore_bruto'] ?? $item['total_sicore'] ?? 0);
+                        @endphp
                         <tr>
                             <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
                             <td>{{ $item['nombre'] ?? '' }} (control per&iacute;odo / ret. emitidas)</td>
-                            <td class="num">{{ number_format((float) ($item['total_sicore'] ?? 0), 2, ',', '.') }}</td>
+                            <td class="num">{{ number_format($sicorePeriodo, 2, ',', '.') }}</td>
                             <td class="num">{{ number_format((float) ($item['total_mayor_periodo'] ?? 0), 2, ',', '.') }}</td>
                             <td class="num">{{ number_format((float) ($item['diferencia_periodo'] ?? 0), 2, ',', '.') }}</td>
                             <td>

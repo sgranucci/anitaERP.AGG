@@ -20,6 +20,7 @@ use App\Repositories\Presupuesto\CapexRepositoryInterface;
 use App\Repositories\Presupuesto\PartidagastoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\ArticuloCentrocostoCuentaSupport;
+use App\Support\Compras\ProveedorOperativoComprasSupport;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionArticuloCatalogoSupport;
 use App\Support\Compras\RequisicionCapexCuentaPuenteSupport;
@@ -107,6 +108,7 @@ class RequisicionService
         $data['estado'] = $estadoAlta;
 
         try {
+            ProveedorOperativoComprasSupport::assertIdOperativo($data['proveedor_id'] ?? null);
             $data['oficinacompra_id'] = $this->validaYCalculaOficinaCompraIdDesdeArticulos($data);
             RequisicionArticuloCatalogoSupport::validarPayload($data);
             ArticuloCentrocostoCuentaSupport::validarPayload($data);
@@ -118,6 +120,8 @@ class RequisicionService
                 $data['centrocostodestino_arbol_id'] = $resolucionCc['centrocosto_arbol_id'];
                 $this->arbolaprobacionService->validaRequisicionRequestContraArbol($data);
             }
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         } catch (\Exception $e) {
@@ -737,6 +741,7 @@ class RequisicionService
 
         $data = $request->all();
         try {
+            ProveedorOperativoComprasSupport::assertIdOperativo($data['proveedor_id'] ?? null);
             RequisicionArticuloCatalogoSupport::validarPayload($data);
             ArticuloCentrocostoCuentaSupport::validarPayload($data);
         } catch (\InvalidArgumentException $e) {
@@ -882,6 +887,12 @@ class RequisicionService
 
         $proveedorId = $request->input('proveedor_id');
         $proveedorId = ($proveedorId !== null && $proveedorId !== '') ? (int) $proveedorId : null;
+
+        try {
+            ProveedorOperativoComprasSupport::assertIdOperativo($proveedorId);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
 
         $syncAnitaActivo = config('requisicion.anita.sync_activo', true);
         $habiaEnAnita = $syncAnitaActivo

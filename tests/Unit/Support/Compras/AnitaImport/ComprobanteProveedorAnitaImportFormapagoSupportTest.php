@@ -7,6 +7,14 @@ use PHPUnit\Framework\TestCase;
 
 class ComprobanteProveedorAnitaImportFormapagoSupportTest extends TestCase
 {
+    public function test_normalizar_conserva_medio_no_efectivo(): void
+    {
+        $this->assertSame(
+            3,
+            ComprobanteProveedorAnitaImportFormapagoSupport::normalizarId(3, 10, 20)
+        );
+    }
+
     public function test_elige_oc_no_efectivo_antes_que_proveedor(): void
     {
         $r = ComprobanteProveedorAnitaImportFormapagoSupport::elegirNoEfectivo(2, 3, 1);

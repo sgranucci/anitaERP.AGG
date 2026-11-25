@@ -222,9 +222,12 @@ class OrdencompraLegajoBandejaService
                 return true;
             }
         }
-        foreach (['nro_oc', 'nro_factura', 'nro_com', 'nro_op'] as $campo) {
+        foreach (['nro_oc', 'nro_factura', 'nro_com', 'nro_op', 'nro_cliente'] as $campo) {
             $v = trim((string) ($filtros[$campo] ?? ''));
-            if ($v !== '' && ctype_digit($v)) {
+            if ($v === '') {
+                continue;
+            }
+            if ($campo === 'nro_cliente' || ctype_digit($v)) {
                 return true;
             }
         }
@@ -876,6 +879,80 @@ class OrdencompraLegajoBandejaService
                 });
             }
         }
+
+        $nroCliente = trim((string) ($filtros['nro_cliente'] ?? ''));
+        if ($nroCliente !== '') {
+            $idsCliente = $this->ocIdsPorServicioCliente($nroCliente);
+            $query->whereIn('ordencompra.id', $idsCliente !== [] ? $idsCliente : [0]);
+        }
+    }
+
+    /**
+     * Legajos cuya precarga o factura tiene el nro. de cliente/medidor (servicio_cliente).
+     *
+     * @return list<int>
+     */
+    private function ocIdsPorServicioCliente(string $nroCliente): array
+    {
+        $needle = mb_substr(trim($nroCliente), 0, 255);
+        if ($needle === '') {
+            return [];
+        }
+
+        $like = '%'.$needle.'%';
+        $ids = [];
+
+        $cpQuery = \Illuminate\Support\Facades\DB::table('comprobante_proveedor as cp')
+            ->leftJoin('proveedor_servicio as ps', 'ps.id', '=', 'cp.proveedor_servicio_id')
+            ->where('cp.ordencompra_id', '>', 0)
+            ->where(function ($w) {
+                $w->whereNull('cp.estado')
+                    ->orWhereRaw('UPPER(TRIM(cp.estado)) != ?', ['ANULADA']);
+            })
+            ->where(function ($w) use ($needle, $like) {
+                $w->where('cp.servicio_cliente', $needle)
+                    ->orWhere('cp.servicio_cliente', 'like', $like)
+                    ->orWhere('ps.cliente', $needle)
+                    ->orWhere('ps.cliente', 'like', $like);
+            })
+            ->limit(400)
+            ->pluck('cp.ordencompra_id');
+        foreach ($cpQuery as $ocId) {
+            $ids[(int) $ocId] = true;
+        }
+
+        $pares = \Illuminate\Support\Facades\DB::table('precarga_comprobante_proveedor as pcp')
+            ->leftJoin('proveedor_servicio as ps', 'ps.id', '=', 'pcp.proveedor_servicio_id')
+            ->whereNotNull('pcp.numeroordencompra')
+            ->where('pcp.numeroordencompra', '!=', '')
+            ->where(function ($w) use ($needle, $like) {
+                $w->where('pcp.servicio_cliente', $needle)
+                    ->orWhere('pcp.servicio_cliente', 'like', $like)
+                    ->orWhere('ps.cliente', $needle)
+                    ->orWhere('ps.cliente', 'like', $like);
+            })
+            ->limit(400)
+            ->get(['pcp.empresa_id', 'pcp.numeroordencompra']);
+
+        if ($pares->isNotEmpty()) {
+            $ocQuery = Ordencompra::query()->select('id')->where(function ($q) use ($pares) {
+                foreach ($pares as $par) {
+                    $nroOc = (int) preg_replace('/\D+/', '', (string) ($par->numeroordencompra ?? ''));
+                    if ($nroOc <= 0) {
+                        continue;
+                    }
+                    $q->orWhere(function ($w) use ($par, $nroOc) {
+                        $w->where('empresa_id', (int) $par->empresa_id)
+                            ->where('numeroordencompra', $nroOc);
+                    });
+                }
+            });
+            foreach ($ocQuery->limit(400)->pluck('id') as $ocId) {
+                $ids[(int) $ocId] = true;
+            }
+        }
+
+        return array_keys($ids);
     }
 
     /**

@@ -29,6 +29,14 @@
             <input type="text" name="nro_op" id="nro_op" class="form-control form-control-sm"
                    value="{{ $filtros['nro_op'] ?? '' }}" placeholder="Cuando el legajo está pago" autocomplete="off">
         </div>
+        <div class="lw-busqueda-campo">
+            <label class="small mb-1" for="nro_cliente">Nº cliente / medidor</label>
+            <input type="text" name="nro_cliente" id="nro_cliente" class="form-control form-control-sm"
+                   value="{{ $filtros['nro_cliente'] ?? '' }}"
+                   placeholder="Opcional (Edesur, Metrogas…)"
+                   autocomplete="off"
+                   title="Filtra legajos cuya precarga o factura tenga ese nro. de cliente/medidor">
+        </div>
         <div class="lw-busqueda-acciones">
             <button type="submit" class="btn btn-primary btn-sm" id="btn-lw-buscar-nros">
                 <i class="fa fa-search"></i> Buscar

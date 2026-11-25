@@ -18,6 +18,9 @@ class Formapago extends Model implements Auditable
     /** Abreviatura de la forma de pago Transferencia (propago.def PROP_TRANSFERENCIA). */
     public const ABREVIATURA_TRANSFERENCIA = 'T';
 
+    /** Abreviatura de la forma de pago Tarjeta (corporativa / TC CORP). */
+    public const ABREVIATURA_TARJETA = 'TC';
+
     /**
      * IDs de las formas de pago que son transferencia (abreviatura T o nombre TRANSFERENCIA).
      *

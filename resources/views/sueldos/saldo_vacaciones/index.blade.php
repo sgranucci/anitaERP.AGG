@@ -5,13 +5,21 @@
 
 <?php use App\Support\Sueldos\EmpleadoEstados; ?>
 
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
+@endsection
+
 @section('contenido')
 @php
-    $esTodas = ($filtros['empresa_scope'] ?? 'una') === 'todas';
     $anioActual = (int) date('Y');
     $filasVista = collect($datas->items());
     $logosVista = \App\Support\Configuracion\EmpresaLogoArchivo::logosCabeceraDesdeColeccion($filasVista);
     $puedeVerEmpleado = can('editar-empleado-sueldos', false) || can('listar-empleado-sueldos', false);
+    $empresasSelVac = $filtros['empresa_ids'] ?? (
+        ($filtros['empresa_scope'] ?? 'una') === 'todas'
+            ? ($empresa_query ?? collect())->pluck('id')->map(fn ($id) => (int) $id)->all()
+            : array_filter([(int) ($filtros['empresa_id'] ?? 0)])
+    );
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -28,25 +36,14 @@
                 </p>
 
                 <form method="get" action="{{ route('saldo_vacaciones_sueldos') }}" id="form-saldo-vacaciones" class="mb-3">
-                    <div class="form-row">
-                        <div class="col-lg-5">
-                            @include('includes.form-empresa-asignada', [
-                                'empresa_query' => $empresa_query,
-                                'empresa_id' => $filtros['empresa_id'] ?? null,
-                                'required' => false,
-                                'permite_vacio' => true,
-                                'opcion_vacia' => '— Elegir empresa —',
-                                'col_label' => 'col-lg-3',
-                                'col_input' => 'col-lg-9',
-                            ])
-                        </div>
-                        <div class="col-lg-3">
-                            <div class="custom-control custom-checkbox mt-2">
-                                <input type="checkbox" class="custom-control-input" name="empresa_todas" id="empresa_todas" value="1" {{ $esTodas ? 'checked' : '' }}>
-                                <label class="custom-control-label" for="empresa_todas">Todas mis empresas</label>
-                            </div>
-                        </div>
-                    </div>
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
+                        'empresa_query' => $empresa_query,
+                        'empresa_ids_seleccionados' => $empresasSelVac,
+                        'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
+                        'id_prefix' => 'saldo_vac',
+                        'col_label' => 'col-lg-2',
+                        'col_body' => 'col-lg-10',
+                    ])
                     <div class="form-row mt-2">
                         <div class="form-group col-lg-3 col-sm-6 mb-2">
                             <label for="filtro_estado" class="small mb-1">Estado</label>

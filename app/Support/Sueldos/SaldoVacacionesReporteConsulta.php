@@ -44,7 +44,15 @@ class SaldoVacacionesReporteConsulta
 
         $empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empleado_sueldos.empresa_id');
 
-        if (($filtros['empresa_scope'] ?? 'una') !== 'todas' && ! empty($filtros['empresa_id'])) {
+        $empresaIds = collect($filtros['empresa_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($empresaIds !== []) {
+            $query->whereIn('empleado_sueldos.empresa_id', $empresaIds);
+        } elseif (($filtros['empresa_scope'] ?? 'una') !== 'todas' && ! empty($filtros['empresa_id'])) {
             $query->where('empleado_sueldos.empresa_id', (int) $filtros['empresa_id']);
         }
 

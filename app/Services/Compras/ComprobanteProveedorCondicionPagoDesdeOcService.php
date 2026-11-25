@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Comprobante;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportFormapagoSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
@@ -72,6 +73,7 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                     $monedaFacturaId,
                     $cotizacionFactura,
                     vincularOcc: true,
+                    ordencompra: $ordencompra,
                 ),
                 $fechaBase,
                 $totalComprobante,
@@ -114,6 +116,7 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 $monedaFacturaId,
                 $cotizacionFactura,
                 vincularOcc: false,
+                ordencompra: $ordencompra,
             );
             if ($vinculoExplicito && $ocComprobante) {
                 $meta['ordencompra_comprobante_id'] = $ocComprobante->id;
@@ -244,11 +247,14 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
         ?int $monedaFacturaId,
         ?float $cotizacionFactura,
         bool $vincularOcc,
+        ?Ordencompra $ordencompra = null,
     ): array {
         $cuotasOc = $ocComprobante->ordencompra_comprobante_cuotas->sortBy('id')->values();
         $sumOc = (float) $cuotasOc->sum('monto');
         // totalComprobante ya está en moneda factura: el factor escala importes a esa moneda.
         $factor = $sumOc > 0 ? $totalComprobante / $sumOc : 0.0;
+        $proveedorId = (int) ($ordencompra?->proveedor_id ?: 0) ?: null;
+        $ordencompraId = (int) ($ordencompra?->id ?: $ocComprobante->ordencompra_id ?: 0) ?: null;
 
         $cuotas = [];
         $n = 1;
@@ -276,7 +282,11 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 'cotizacion' => $cotizacionFactura !== null
                     ? (float) $cotizacionFactura
                     : ($cuotaOc->cotizacion !== null ? (float) $cuotaOc->cotizacion : null),
-                'formapago_id' => (int) ($cuotaOc->formapago_id ?: 1),
+                'formapago_id' => ComprobanteProveedorAnitaImportFormapagoSupport::normalizarId(
+                    (int) ($cuotaOc->formapago_id ?: 0),
+                    $proveedorId,
+                    $ordencompraId,
+                ),
                 'detalle' => $cuotaOc->detalle,
                 'ordencompra_comprobante_cuota_id' => $vincularOcc ? (int) $cuotaOc->id : null,
             ];
@@ -369,7 +379,11 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 'monto' => $monto,
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotizacion,
-                'formapago_id' => (int) ($cuotaPrev->formapago_id ?: 1),
+                'formapago_id' => ComprobanteProveedorAnitaImportFormapagoSupport::normalizarId(
+                    (int) ($cuotaPrev->formapago_id ?: 0),
+                    isset($ordencompra->proveedor_id) ? (int) $ordencompra->proveedor_id : null,
+                    (int) $ordencompra->id,
+                ),
                 'detalle' => $cuotaPrev->detalle,
                 // No reusa el id de cuota OCC/CP anterior (pertenece a otra factura).
                 'ordencompra_comprobante_cuota_id' => null,

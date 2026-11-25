@@ -118,6 +118,15 @@
     @case ('cotizacion')
         <td class="lw-col cp-col-compacta text-right text-nowrap">{{ ComprobanteProveedorListadoColumnas::valorCelda($data, $key) }}</td>
         @break
+    @case ('empresa')
+        <td class="lw-col cp-col-compacta cp-col-empresa text-nowrap">
+            @include('includes.listado.celda_enlace', [
+                'filaEnlace' => $data,
+                'metaEnlace' => ComprobanteProveedorListadoColumnas::catalogoActivo()[$key] ?? [],
+                'textoEnlace' => ComprobanteProveedorListadoColumnas::valorCelda($data, $key),
+            ])
+        </td>
+        @break
     @default
         <td class="lw-col cp-col-texto">
             @include('includes.listado.celda_enlace', [

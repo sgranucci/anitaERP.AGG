@@ -6,12 +6,17 @@
     $inputName = $inputName ?? 'liquidacion_id';
     $inputId = $inputId ?? 'liquidacion_sueldos_id';
     $required = ! empty($required);
+    $empresaIdFiltro = $empresaIdFiltro ?? null;
+    $empresaSelector = $empresaSelector ?? null;
+    $labelClass = $labelClass ?? 'd-block';
     $titleNumero = 'N&uacute;mero + Enter para validar; F1 o lupa para buscar';
 @endphp
 
-<div class="form-group mb-0 tm-liquidacion-sueldos-campo" data-liquidacion-sueldos-campo="1">
+<div class="form-group mb-0 tm-liquidacion-sueldos-campo" data-liquidacion-sueldos-campo="1"
+     @if ($empresaIdFiltro !== null && $empresaIdFiltro !== '') data-empresa-id="{{ $empresaIdFiltro }}" @endif
+     @if (! empty($empresaSelector)) data-empresa-selector="{{ $empresaSelector }}" @endif>
     @if ($label !== '')
-        <label class="d-block" for="{{ $inputId }}_numero" title="{!! $titleNumero !!}">
+        <label class="{{ $labelClass }}" for="{{ $inputId }}_numero" title="{!! $titleNumero !!}">
             {!! $label !!}@if($required)<span class="text-danger">*</span>@endif
         </label>
     @endif

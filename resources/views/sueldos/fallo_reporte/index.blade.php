@@ -11,6 +11,7 @@ window.empleadoSueldosConsultaUrls = {
     resolver: @json(route('resolver_operativo_empleado_sueldos'))
 };
 </script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/consulta.js')) ?: time() }}"></script>
 @endsection
 
@@ -32,18 +33,15 @@ window.empleadoSueldosConsultaUrls = {
             <div class="card-body">
                 <form method="get" action="{{ route('fallo_reporte_sueldos') }}" class="mb-3">
                     <input type="hidden" name="consultar" value="1">
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
+                        'empresa_query' => $empresa_query,
+                        'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? array_filter([(int) ($filtros['empresa_id'] ?? 0)]),
+                        'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
+                        'id_prefix' => 'fallo_rep',
+                        'col_label' => 'col-lg-2',
+                        'col_body' => 'col-lg-10',
+                    ])
                     <div class="form-row">
-                        <div class="form-group col-md-3">
-                            <label class="small mb-1">Empresa</label>
-                            <select name="empresa_id" id="fallo_reporte_empresa_id" class="form-control form-control-sm" required>
-                                <option value="">-- Elija --</option>
-                                @foreach ($empresa_query as $emp)
-                                    <option value="{{ $emp->id }}" @selected((int)($filtros['empresa_id'] ?? 0) === (int)$emp->id)>
-                                        {{ $emp->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
                         <div class="form-group col-md-2">
                             <label class="small mb-1">Desde</label>
                             <input type="date" name="fecha_desde" class="form-control form-control-sm" value="{{ $filtros['fecha_desde'] }}" required>
@@ -59,7 +57,7 @@ window.empleadoSueldosConsultaUrls = {
                                 <option value="totales" @selected(($filtros['modo'] ?? '') === 'totales')>Totales x empleado</option>
                             </select>
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             @include('sueldos.partials.campo_consulta_empleado_sueldos', [
                                 'prefix' => 'fallo_reporte_legajo_desde',
                                 'inputName' => 'legajo_desde',
@@ -68,7 +66,7 @@ window.empleadoSueldosConsultaUrls = {
                                 'nextFocus' => '#fallo_reporte_legajo_hasta_legajo',
                             ])
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             @include('sueldos.partials.campo_consulta_empleado_sueldos', [
                                 'prefix' => 'fallo_reporte_legajo_hasta',
                                 'inputName' => 'legajo_hasta',
@@ -77,7 +75,7 @@ window.empleadoSueldosConsultaUrls = {
                                 'nextFocus' => '#fallo_reporte_consultar',
                             ])
                         </div>
-                        <div class="form-group col-md-3 d-flex align-items-end">
+                        <div class="form-group col-md-2 d-flex align-items-end">
                             <button class="btn btn-primary btn-sm mr-2" id="fallo_reporte_consultar" type="submit">
                                 <i class="fa fa-search"></i> Consultar
                             </button>

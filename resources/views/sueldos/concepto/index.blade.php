@@ -30,6 +30,13 @@
                                 <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita
                             </button>
                         </form>
+                        <form action="{{ route('actualizar_formulas_anita_concepto_sueldos') }}" method="POST" class="d-inline mr-1"
+                              onsubmit="return confirm('¿Actualizar fórmulas desde Anita (habformula)? Re-trae líneas y valores fijos/implícitos (ej. ART 3299) y retraduce a sintaxis ERP. No agrega conceptos nuevos.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-info btn-sm">
+                                <i class="fa fa-fw fa-calculator"></i> Actualizar f&oacute;rmulas Anita
+                            </button>
+                        </form>
                         <form action="{{ route('retraducir_formulas_concepto_sueldos') }}" method="POST" class="d-inline mr-1"
                               onsubmit="return confirm('¿Retraducir las fórmulas Anita ya importadas a sintaxis ERP? Actualiza formula/cantidad/valor de cada concepto con líneas.');">
                             @csrf

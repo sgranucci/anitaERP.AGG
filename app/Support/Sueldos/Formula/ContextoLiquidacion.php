@@ -119,19 +119,41 @@ class ContextoLiquidacion implements EntornoFormula
         $this->periodoYm = (int) ($liquidacion->periodo ?: ($this->anio * 100 + $this->mes));
         $this->definirVentanaCorrida($liquidacion);
         $this->cargarBases($empleado, $this->fechaRef);
-        // B(1): la base de la categoría es el piso. Si el sueldo del legajo es
-        // mayor, manda ese.
-        $baseCategoria = (float) ($this->bases['1'] ?? 0);
-        $sueldoLegajo = (float) ($this->vars['empleado.sueldo_basico'] ?? 0);
-        if ($baseCategoria > 0 || $sueldoLegajo > 0) {
-            $efectivo = max($baseCategoria, $sueldoLegajo);
-            $this->vars['empleado.sueldo_basico'] = $efectivo;
-            if ($efectivo > 0) {
-                $this->bases['1'] = $efectivo;
-            }
-        }
+        // Categoría origen T: B(1)/B(2)/B(3) salen de la tabla de la categoría
+        // (no del legajo ni de un max). Origen C: quedan los del legajo.
+        $this->aplicarRemuneracionDesdeCategoriaSiCorresponde($empleado);
         $this->cargarHistorico($this->empleadoId, $this->liquidacionId);
         $this->cargarNovedades();
+    }
+
+    /**
+     * Si la categoría usa tabla (cat_tabla=T), pisa las 3 variables de remuneración
+     * del contexto con las bases 1/2/3 de la categoría.
+     */
+    private function aplicarRemuneracionDesdeCategoriaSiCorresponde(Empleado_Sueldos $empleado): void
+    {
+        $categoriaId = (int) ($empleado->categoria_id ?? 0);
+        if ($categoriaId <= 0) {
+            return;
+        }
+        try {
+            $origen = DB::table('categoria_sueldos')->where('id', $categoriaId)->value('origen_bases');
+        } catch (\Throwable $e) {
+            return;
+        }
+        if (! CategoriaOrigenBases::usaTablaCategoria($origen)) {
+            return;
+        }
+
+        $b1 = (float) ($this->bases['1'] ?? 0.0);
+        $b2 = (float) ($this->bases['2'] ?? 0.0);
+        $b3 = (float) ($this->bases['3'] ?? 0.0);
+        $this->vars['empleado.sueldo_basico'] = $b1;
+        $this->vars['empleado.jornal_dia'] = $b2;
+        $this->vars['empleado.jornal_hora'] = $b3;
+        $this->bases['1'] = $b1;
+        $this->bases['2'] = $b2;
+        $this->bases['3'] = $b3;
     }
 
     private function cargarVariables(Empleado_Sueldos $emp, Liquidacion_Sueldos $liq): void
@@ -860,6 +882,21 @@ class ContextoLiquidacion implements EntornoFormula
     }
 
     /**
+     * Neto parcial de la corrida (Anita TG): haberes + asignaciones − descuentos.
+     * Se usa como acum("NETO") porque no existe acumulador físico NETO.
+     */
+    public function netoParcial(): float
+    {
+        return round(
+            (float) ($this->acum['REM'] ?? 0.0)
+            + (float) ($this->acum['NOREM'] ?? 0.0)
+            + (float) ($this->acum['ASIG'] ?? 0.0)
+            - (float) ($this->acum['DESC'] ?? 0.0),
+            2
+        );
+    }
+
+    /**
      * Snapshot para el debugger de fórmulas (no muta estado).
      *
      * @return array{
@@ -875,6 +912,7 @@ class ContextoLiquidacion implements EntornoFormula
     {
         ksort($this->vars);
         $acum = $this->acum;
+        $acum['NETO'] = $this->netoParcial();
         ksort($acum);
         $conceptos = $this->conceptos;
         ksort($conceptos);
@@ -948,6 +986,10 @@ class ContextoLiquidacion implements EntornoFormula
                 return $this->baseNum((int) ($args[0] ?? 0));
             case 'acum':
                 $cod = strtoupper((string) ($args[0] ?? ''));
+                // Anita TG → NETO: no hay acumulador físico; se deriva del parcial.
+                if ($cod === 'NETO') {
+                    return $this->netoParcial();
+                }
 
                 return $this->acum[$cod] ?? 0.0;
             case 'param':

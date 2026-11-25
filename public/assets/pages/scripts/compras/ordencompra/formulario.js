@@ -3176,6 +3176,13 @@ $(function () {
 			if (!data) {
 				return;
 			}
+			if (String(data.estado || '') === 'Suspendido' && !window.consultaProveedorIncluirSuspendidos) {
+				$('#proveedor_id').val('');
+				$('#codigoproveedor').val(data.codigo || $('#codigoproveedor').val() || '');
+				$('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val('');
+				alert('El proveedor está suspendido (tiene un problema, p. ej. padrón ARCA). No se puede usar en requisiciones ni órdenes de compra: contactá a Compras.');
+				return;
+			}
 			if (data.condicioncompra_id) {
 				$('#condicioncompra_id').val(String(data.condicioncompra_id));
 			}

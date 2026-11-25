@@ -7,10 +7,13 @@ use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Acumulador_Sueldos;
 use App\Models\Sueldos\Liquidacion_Detalle_Sueldos;
+use App\Models\Sueldos\Liquidacion_Error_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use Illuminate\Support\Facades\Log;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Sueldos\ConceptoAnitaMapeo;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use App\Support\Sueldos\ConceptoTipo;
 use App\Support\Sueldos\EmpleadoBajaSupport;
@@ -75,7 +78,16 @@ class LiquidacionCalculadorService
     /**
      * Calcula y persiste la corrida completa. Devuelve un resumen.
      *
-     * @return array{recibos: int, total_neto: float, total_remunerativo: float, sin_conceptos: bool}
+     * @return array{
+     *   recibos: int,
+     *   total_neto: float,
+     *   total_remunerativo: float,
+     *   sin_conceptos: bool,
+     *   errores_formula?: list<array<string, mixed>>,
+     *   errores_formula_count?: int,
+     *   errores_count?: int,
+     *   egresos_periodo?: list<array<string, mixed>>
+     * }
      */
     public function calcular(Liquidacion_Sueldos $liquidacion): array
     {
@@ -105,6 +117,7 @@ class LiquidacionCalculadorService
                 Liquidacion_Recibo_Sueldos::query()->where('liquidacion_id', $liquidacion->id)
             );
             Liquidacion_Acumulador_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
+            Liquidacion_Error_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
 
             $periodoAnio = (int) ($liquidacion->periodo_anio ?: now()->year);
             $periodoMes = (int) ($liquidacion->periodo_mes ?: now()->month);
@@ -116,108 +129,189 @@ class LiquidacionCalculadorService
             $tot = ['rem' => 0.0, 'norem' => 0.0, 'desc' => 0.0, 'neto' => 0.0];
             $planPendientes = [];
             $erroresFormula = [];
+            $erroresPersistir = [];
 
             foreach ($empleados as $emp) {
                 $setInfo = null;
                 $conceptosEmp = $this->conceptosParaEmpleado($conceptos, $emp, $liquidacion, $setInfo);
                 if ($conceptosEmp->isEmpty()) {
+                    $erroresPersistir[] = $this->filaErrorLiquidacion(
+                        $liquidacion, $emp, 'omitido',
+                        'Sin conceptos aplicables para este empleado en la corrida.',
+                        $ahora
+                    );
                     continue;
                 }
-                $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
-                $lineas = $this->calcularEmpleado(
-                    $ctx, $emp, $conceptosEmp, $overrides, $liquidacion, $planPendientes,
-                    $setInfo['meta'] ?? [],
-                    $erroresFormula
-                );
+
+                $ctx = null;
+                $lineas = [];
+                $erroresEmp = [];
+                $planAntes = count($planPendientes);
+
+                try {
+                    // Savepoint: un empleado roto no revierte el resto de la corrida.
+                    DB::transaction(function () use (
+                        &$ctx, &$lineas, &$erroresEmp, &$planPendientes,
+                        $emp, $conceptosEmp, $overrides, $liquidacion, $setInfo,
+                        $acumDefs, $parametros
+                    ) {
+                        $ctx = new ContextoLiquidacion($emp, $liquidacion, $acumDefs, $parametros);
+                        $lineas = $this->calcularEmpleado(
+                            $ctx, $emp, $conceptosEmp, $overrides, $liquidacion, $planPendientes,
+                            $setInfo['meta'] ?? [],
+                            $erroresEmp
+                        );
+                    });
+                } catch (\Throwable $e) {
+                    // Deshace cuotas parciales de este empleado si el savepoint revirtió mid-cálculo.
+                    if (count($planPendientes) > $planAntes) {
+                        $planPendientes = array_slice($planPendientes, 0, $planAntes);
+                    }
+                    $msg = $e->getMessage();
+                    $erroresPersistir[] = $this->filaErrorLiquidacion(
+                        $liquidacion, $emp, 'empleado', $msg
+                    );
+                    Log::warning('LiquidacionCalculador: error por empleado', [
+                        'liquidacion_id' => $liquidacion->id,
+                        'empleado_id' => $emp->id,
+                        'legajo' => $emp->legajo,
+                        'error' => $msg,
+                        'exception' => get_class($e),
+                    ]);
+                    continue;
+                }
+
+                foreach ($erroresEmp as $ef) {
+                    $erroresFormula[] = $ef;
+                    $pos = isset($ef['formula_pos']) ? (int) $ef['formula_pos'] : FormulaException::extraerPosicion($ef['error'] ?? null);
+                    $erroresPersistir[] = [
+                        'liquidacion_id' => $liquidacion->id,
+                        'empleado_id' => $emp->id,
+                        'legajo' => $emp->legajo !== null ? (int) $emp->legajo : null,
+                        'apellido_nombre' => (string) ($emp->nombre ?? ''),
+                        'concepto_id' => isset($ef['concepto_id']) ? (int) $ef['concepto_id'] : null,
+                        'concepto_codigo' => isset($ef['concepto']) ? (int) $ef['concepto'] : null,
+                        'concepto_descripcion' => (string) ($ef['concepto_descripcion'] ?? ''),
+                        'formula_pos' => $pos >= 0 ? $pos : null,
+                        'formula_campo' => (string) ($ef['formula_campo'] ?? 'formula'),
+                        'etapa' => 'formula',
+                        'mensaje' => (string) ($ef['error'] ?? 'Error de fórmula'),
+                        'created_at' => $ahora,
+                        'updated_at' => $ahora,
+                    ];
+                }
 
                 // Sin líneas (fórmulas en 0 / sin novedad ni saldo): no arma recibo vacío.
                 if ($lineas === []) {
                     continue;
                 }
 
-                $numeroRecibo++;
-                $rec = $this->totalesRecibo($lineas);
-                $recibo = Liquidacion_Recibo_Sueldos::create([
-                    'liquidacion_id' => $liquidacion->id,
-                    'empleado_id' => $emp->id,
-                    'legajo' => $emp->legajo,
-                    'numero_recibo' => $numeroRecibo,
-                    'apellido_nombre' => $emp->nombre,
-                    'cuil' => $emp->cuil,
-                    'categoria_id' => $emp->categoria_id,
-                    'categoria_desc' => optional($emp->categoria)->descripcion,
-                    'agrupamiento_id' => $emp->agrupamiento_id,
-                    'lugartrabajo_id' => $emp->lugartrabajo_id,
-                    'obrasocial_id' => $emp->obrasocial_id,
-                    'sindicato_id' => $emp->sindicato_id,
-                    'fecha_ingreso' => $emp->fecha_ingreso,
-                    'sueldo_basico' => $emp->sueldo_basico,
-                    'dias_trabajados' => (float) $ctx->variable('periodo.dias_trabajados'),
-                    'dias_vacaciones' => 0,
-                    'horas' => 0,
-                    'total_remunerativo' => $rec['rem'],
-                    'total_no_remunerativo' => $rec['norem'],
-                    'total_bruto' => $rec['bruto'],
-                    'total_descuentos' => $rec['desc'],
-                    'total_aportes' => $rec['aportes'],
-                    'total_contribuciones' => $rec['contrib'],
-                    'total_asignaciones' => $rec['asig'],
-                    'neto' => $rec['neto'],
-                    'redondeo' => 0,
-                    'neto_a_pagar' => $rec['neto'],
-                    'estado' => 'calculado',
-                    ...self::atributosOrigenReciboMotor($emp),
-                ]);
+                try {
+                    DB::transaction(function () use (
+                        &$numeroRecibo, &$tot, &$snapshots, &$ctx, $lineas, $emp,
+                        $liquidacion, $periodo, $periodoAnio, $periodoMes, $ahora
+                    ) {
+                        $numeroRecibo++;
+                        $rec = $this->totalesRecibo($lineas);
+                        $recibo = Liquidacion_Recibo_Sueldos::create([
+                            'liquidacion_id' => $liquidacion->id,
+                            'empleado_id' => $emp->id,
+                            'legajo' => $emp->legajo,
+                            'numero_recibo' => $numeroRecibo,
+                            'apellido_nombre' => $emp->nombre,
+                            'cuil' => $emp->cuil,
+                            'categoria_id' => $emp->categoria_id,
+                            'categoria_desc' => optional($emp->categoria)->descripcion,
+                            'agrupamiento_id' => $emp->agrupamiento_id,
+                            'lugartrabajo_id' => $emp->lugartrabajo_id,
+                            'obrasocial_id' => $emp->obrasocial_id,
+                            'sindicato_id' => $emp->sindicato_id,
+                            'fecha_ingreso' => $emp->fecha_ingreso,
+                            'sueldo_basico' => $emp->sueldo_basico,
+                            'dias_trabajados' => (float) $ctx->variable('periodo.dias_trabajados'),
+                            'dias_vacaciones' => 0,
+                            'horas' => 0,
+                            'total_remunerativo' => $rec['rem'],
+                            'total_no_remunerativo' => $rec['norem'],
+                            'total_bruto' => $rec['bruto'],
+                            'total_descuentos' => $rec['desc'],
+                            'total_aportes' => $rec['aportes'],
+                            'total_contribuciones' => $rec['contrib'],
+                            'total_asignaciones' => $rec['asig'],
+                            'neto' => $rec['neto'],
+                            'redondeo' => $this->importeConcepto($lineas, ConceptoAnitaMapeo::CODIGO_AJUSTE_REDONDEO),
+                            'neto_a_pagar' => $rec['neto'],
+                            'estado' => 'calculado',
+                            ...self::atributosOrigenReciboMotor($emp),
+                        ]);
 
-                $nro = 0;
-                foreach ($lineas as $l) {
-                    $nro++;
-                    Liquidacion_Detalle_Sueldos::create([
-                        'recibo_id' => $recibo->id,
+                        $nro = 0;
+                        foreach ($lineas as $l) {
+                            $nro++;
+                            Liquidacion_Detalle_Sueldos::create([
+                                'recibo_id' => $recibo->id,
+                                'liquidacion_id' => $liquidacion->id,
+                                'empleado_id' => $emp->id,
+                                'concepto_id' => $l['concepto_id'],
+                                'concepto_codigo' => $l['codigo'],
+                                'concepto_descripcion' => $l['descripcion'],
+                                'tipo' => $l['tipo'],
+                                'nro_linea' => $nro,
+                                'columna' => $l['columna'],
+                                'cantidad' => $l['cantidad'],
+                                'valor' => $l['valor'],
+                                'base_calculo' => $l['base_calculo'] ?? null,
+                                'importe' => $l['importe'],
+                                'remunerativo' => $l['tipo'] === 'remunerativo',
+                                'va_recibo' => $l['va_recibo'],
+                                'concepto_afip' => $l['concepto_afip'],
+                                'leyenda' => $l['leyenda'],
+                            ]);
+                        }
+
+                        $tot['rem'] += $rec['rem'];
+                        $tot['norem'] += $rec['norem'];
+                        $tot['desc'] += $rec['desc'];
+                        $tot['neto'] += $rec['neto'];
+
+                        // Snapshot de acumuladores para el historico (memoria hacia atras).
+                        foreach ($ctx->acumuladores() as $cod => $val) {
+                            $snapshots[] = [
+                                'empresa_id' => $liquidacion->empresa_id,
+                                'empleado_id' => $emp->id,
+                                'liquidacion_id' => $liquidacion->id,
+                                'periodo' => $periodo,
+                                'periodo_anio' => $periodoAnio,
+                                'periodo_mes' => $periodoMes,
+                                'tipo_corrida' => $liquidacion->tipo,
+                                'codigo' => $cod,
+                                'valor' => round((float) $val, 2),
+                                'created_at' => $ahora,
+                                'updated_at' => $ahora,
+                            ];
+                        }
+                    });
+                } catch (\Throwable $e) {
+                    $msg = $e->getMessage();
+                    $erroresPersistir[] = $this->filaErrorLiquidacion(
+                        $liquidacion, $emp, 'recibo', $msg, $ahora
+                    );
+                    Log::warning('LiquidacionCalculador: error al persistir recibo', [
                         'liquidacion_id' => $liquidacion->id,
                         'empleado_id' => $emp->id,
-                        'concepto_id' => $l['concepto_id'],
-                        'concepto_codigo' => $l['codigo'],
-                        'concepto_descripcion' => $l['descripcion'],
-                        'tipo' => $l['tipo'],
-                        'nro_linea' => $nro,
-                        'columna' => $l['columna'],
-                        'cantidad' => $l['cantidad'],
-                        'valor' => $l['valor'],
-                        'base_calculo' => $l['base_calculo'] ?? null,
-                        'importe' => $l['importe'],
-                        'remunerativo' => $l['tipo'] === 'remunerativo',
-                        'va_recibo' => $l['va_recibo'],
-                        'concepto_afip' => $l['concepto_afip'],
-                        'leyenda' => $l['leyenda'],
+                        'legajo' => $emp->legajo,
+                        'error' => $msg,
+                        'exception' => get_class($e),
                     ]);
-                }
-
-                $tot['rem'] += $rec['rem'];
-                $tot['norem'] += $rec['norem'];
-                $tot['desc'] += $rec['desc'];
-                $tot['neto'] += $rec['neto'];
-
-                // Snapshot de acumuladores para el historico (memoria hacia atras).
-                foreach ($ctx->acumuladores() as $cod => $val) {
-                    $snapshots[] = [
-                        'empresa_id' => $liquidacion->empresa_id,
-                        'empleado_id' => $emp->id,
-                        'liquidacion_id' => $liquidacion->id,
-                        'periodo' => $periodo,
-                        'periodo_anio' => $periodoAnio,
-                        'periodo_mes' => $periodoMes,
-                        'tipo_corrida' => $liquidacion->tipo,
-                        'codigo' => $cod,
-                        'valor' => round((float) $val, 2),
-                        'created_at' => $ahora,
-                        'updated_at' => $ahora,
-                    ];
                 }
             }
 
             foreach (array_chunk($snapshots, 500) as $lote) {
                 Liquidacion_Acumulador_Sueldos::insert($lote);
+            }
+
+            foreach (array_chunk($erroresPersistir, 200) as $loteErr) {
+                Liquidacion_Error_Sueldos::insert($loteErr);
             }
 
             // Cuotas de planes (préstamos) calculadas: quedan pendientes hasta cerrar.
@@ -231,6 +325,8 @@ class LiquidacionCalculadorService
                 'fecha_calculo' => Carbon::now(),
             ]);
 
+            $erroresCount = count($erroresPersistir);
+
             return [
                 'recibos' => (int) $liquidacion->cantidad_recibos,
                 'total_neto' => (float) $liquidacion->total_neto,
@@ -238,9 +334,39 @@ class LiquidacionCalculadorService
                 'sin_conceptos' => false,
                 'errores_formula' => $erroresFormula,
                 'errores_formula_count' => count($erroresFormula),
+                'errores_count' => $erroresCount,
                 'egresos_periodo' => $egresosAviso,
             ];
         });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filaErrorLiquidacion(
+        Liquidacion_Sueldos $liquidacion,
+        Empleado_Sueldos $emp,
+        string $etapa,
+        string $mensaje,
+        ?Carbon $ahora = null
+    ): array {
+        $ahora = $ahora ?? Carbon::now();
+
+        return [
+            'liquidacion_id' => $liquidacion->id,
+            'empleado_id' => $emp->id,
+            'legajo' => $emp->legajo !== null ? (int) $emp->legajo : null,
+            'apellido_nombre' => (string) ($emp->nombre ?? ''),
+            'concepto_id' => null,
+            'concepto_codigo' => null,
+            'concepto_descripcion' => null,
+            'formula_pos' => null,
+            'formula_campo' => null,
+            'etapa' => $etapa,
+            'mensaje' => $mensaje,
+            'created_at' => $ahora,
+            'updated_at' => $ahora,
+        ];
     }
 
     /**
@@ -284,7 +410,7 @@ class LiquidacionCalculadorService
      * @param  \Illuminate\Support\Collection<int, Concepto_Sueldos>  $conceptos
      * @param  array<int, array<string, array{signo: int, excluir: bool}>>  $overrides
      * @param  array<int, array{origen?: string, detalle?: string, origen_label?: string}>  $origenMeta
-     * @param  list<array{legajo: int|string, concepto: int, error: string}>  $erroresFormula
+     * @param  list<array{legajo: int|string, concepto: int, concepto_descripcion?: string, error: string}>  $erroresFormula
      * @return array<int, array<string, mixed>>
      */
     private function calcularEmpleado(
@@ -305,16 +431,30 @@ class LiquidacionCalculadorService
                 $gananciasListo = true;
             }
 
+            $formulaCampo = 'formula';
             try {
                 $tieneCantidadExplicita = filled($c->formula_cantidad);
                 $tieneValorExplicito = filled($c->formula_valor);
-                $cantidad = $tieneCantidadExplicita ? $this->evalNum($ctx, $c->formula_cantidad, $c) : 1.0;
-                $valor = $tieneValorExplicito ? $this->evalNum($ctx, $c->formula_valor, $c) : 0.0;
+                if ($tieneCantidadExplicita) {
+                    $formulaCampo = 'formula_cantidad';
+                    $cantidad = $this->evalNum($ctx, $c->formula_cantidad, $c);
+                } else {
+                    $cantidad = 1.0;
+                }
+                if ($tieneValorExplicito) {
+                    $formulaCampo = 'formula_valor';
+                    $valor = $this->evalNum($ctx, $c->formula_valor, $c);
+                } else {
+                    $valor = 0.0;
+                }
                 $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
 
-                $importe = $c->formula
-                    ? $this->evalNum($ctx, $c->formula, $c)
-                    : $cantidad * $valor;
+                if ($c->formula) {
+                    $formulaCampo = 'formula';
+                    $importe = $this->evalNum($ctx, $c->formula, $c);
+                } else {
+                    $importe = $cantidad * $valor;
+                }
                 // INF/NAN (p.ej. división por 0 Anita): no persistir; tratar como 0.
                 if (! is_finite($importe)) {
                     $importe = 0.0;
@@ -330,9 +470,17 @@ class LiquidacionCalculadorService
                 // No aborta la corrida: registra 0 y sigue (piloto / fórmulas Anita incompletas).
                 $ctx->registrarConcepto((int) $c->codigo, 0.0);
                 if (is_array($erroresFormula)) {
+                    $pos = $e->posicion();
+                    if ($pos < 0) {
+                        $pos = FormulaException::extraerPosicion($e->getMessage());
+                    }
                     $erroresFormula[] = [
                         'legajo' => $emp->legajo,
+                        'concepto_id' => (int) $c->id,
                         'concepto' => (int) $c->codigo,
+                        'concepto_descripcion' => (string) ($c->descripcion ?? ''),
+                        'formula_pos' => $pos,
+                        'formula_campo' => $formulaCampo,
                         'error' => $e->getMessage(),
                     ];
                 }
@@ -726,9 +874,12 @@ class LiquidacionCalculadorService
             $rastroValor = null;
             $rastro = null;
             $error = null;
+            $formulaCampo = 'formula';
+            $formulaPos = -1;
 
             try {
                 if ($fCant !== '') {
+                    $formulaCampo = 'formula_cantidad';
                     if ($esFocus) {
                         [$cantidad, $rastroCant] = $this->motor->evaluarConRastro($fCant, $ctx);
                         $cantidad = (float) $cantidad;
@@ -740,6 +891,7 @@ class LiquidacionCalculadorService
                 }
 
                 if ($fValor !== '') {
+                    $formulaCampo = 'formula_valor';
                     if ($esFocus) {
                         [$valor, $rastroValor] = $this->motor->evaluarConRastro($fValor, $ctx);
                         $valor = (float) $valor;
@@ -753,6 +905,7 @@ class LiquidacionCalculadorService
                 $ctx->setEscalares($cantidad, $valor, (float) $c->factor);
 
                 if ($fImp !== '') {
+                    $formulaCampo = 'formula';
                     if ($esFocus) {
                         [$importe, $rastro] = $this->motor->evaluarConRastro($fImp, $ctx);
                         $importe = round((float) $importe, 2);
@@ -764,6 +917,10 @@ class LiquidacionCalculadorService
                 }
             } catch (FormulaException $e) {
                 $error = $e->getMessage();
+                $formulaPos = $e->posicion();
+                if ($formulaPos < 0) {
+                    $formulaPos = FormulaException::extraerPosicion($error);
+                }
                 $cantidad = $cantidad ?? 0.0;
                 $valor = $valor ?? 0.0;
                 $importe = 0.0;
@@ -790,6 +947,8 @@ class LiquidacionCalculadorService
                     'formula_cantidad' => $fCant !== '' ? $fCant : null,
                     'formula_valor' => $fValor !== '' ? $fValor : null,
                     'formula_override' => $esFocus && is_array($overridesFormula),
+                    'formula_campo' => $error !== null ? $formulaCampo : null,
+                    'formula_pos' => $error !== null && $formulaPos >= 0 ? $formulaPos : null,
                     'cantidad' => round((float) $cantidad, 4),
                     'valor' => round((float) $valor, 4),
                     'importe' => $importe,
@@ -948,7 +1107,8 @@ class LiquidacionCalculadorService
             return (float) $this->motor->evaluar($formula, $ctx);
         } catch (FormulaException $e) {
             throw FormulaException::evaluacion(
-                "Concepto {$c->codigo} ({$c->descripcion}): ".$e->getMessage()
+                "Concepto {$c->codigo} ({$c->descripcion}): ".$e->getMessage(),
+                $e->posicion()
             );
         }
     }
@@ -997,6 +1157,20 @@ class LiquidacionCalculadorService
         $t['neto'] = round($t['rem'] + $t['norem'] + $t['asig'] - $t['desc'], 2);
 
         return $t;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lineas
+     */
+    private function importeConcepto(array $lineas, int $codigo): float
+    {
+        foreach ($lineas as $l) {
+            if ((int) ($l['codigo'] ?? 0) === $codigo) {
+                return round((float) ($l['importe'] ?? 0), 2);
+            }
+        }
+
+        return 0.0;
     }
 
     /**
@@ -1135,7 +1309,8 @@ class LiquidacionCalculadorService
         // a toda la nómina por el fallback TVAC de la fórmula 422.
         $filtros = $this->filtros($liq);
 
-        if (! empty($filtros['empleado_ids']) && is_array($filtros['empleado_ids'])) {
+        // array_key_exists: selección explícita vacía = nadie (tras quitar el último recibo).
+        if (array_key_exists('empleado_ids', $filtros) && is_array($filtros['empleado_ids'])) {
             $query->whereIn('id', $filtros['empleado_ids']);
         }
         if (! empty($filtros['agrupamiento_id'])) {

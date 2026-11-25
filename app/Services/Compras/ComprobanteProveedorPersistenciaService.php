@@ -17,6 +17,7 @@ use App\Repositories\Compras\Comprobante_Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportFormapagoSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
@@ -42,6 +43,7 @@ use App\Support\Compras\ComprobanteProveedorIngresoEgresoEdicionSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\ComprobanteProveedorServicioSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
@@ -394,6 +396,7 @@ class ComprobanteProveedorPersistenciaService
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);
         $this->assertProveedorSuspendidoPermitido($payload);
+        $this->assertProveedorServicioAsignado($payload);
 
         ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
             (int) ($payload['tipotransaccion_compra_id'] ?? 0),
@@ -484,6 +487,7 @@ class ComprobanteProveedorPersistenciaService
                     ? (int) $payload['precarga_comprobante_proveedor_id']
                     : null
             );
+            $this->sincronizarServicioEnPrecarga($comprobante);
             $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
             app(ComprobanteProveedorScanManualService::class)->publicarPrimerAdjunto($comprobante, $request);
             $this->marcarOrdencompraComprobanteCargado($comprobante);
@@ -572,6 +576,7 @@ class ComprobanteProveedorPersistenciaService
 
         $payload = $this->armarPayloadCabecera($request);
         $payload['fechaiva'] = $payloadPeriodo['fechaiva'];
+        $this->assertProveedorServicioAsignado($payload);
         ComprobanteProveedorUnicidadSupport::assertUnico(
             (int) $payload['empresa_id'],
             (int) $payload['tipotransaccion_compra_id'],
@@ -645,6 +650,7 @@ class ComprobanteProveedorPersistenciaService
                     ? (int) $payload['precarga_comprobante_proveedor_id']
                     : null
             );
+            $this->sincronizarServicioEnPrecarga($comprobante);
             $this->marcarOrdencompraComprobanteCargado($comprobante);
         });
 
@@ -967,9 +973,17 @@ class ComprobanteProveedorPersistenciaService
             $modoCarga = ComprobanteProveedorModoCarga::SIN_RECEPCION;
         }
 
+        $asigServicio = ComprobanteProveedorServicioSupport::resolverAsignacion(
+            $request->input('proveedor_servicio_id'),
+            (int) $request->input('proveedor_id'),
+            $request->input('servicio_cliente')
+        );
+
         return [
             'empresa_id' => (int) $request->input('empresa_id'),
             'proveedor_id' => (int) $request->input('proveedor_id'),
+            'proveedor_servicio_id' => $asigServicio['proveedor_servicio_id'],
+            'servicio_cliente' => $asigServicio['servicio_cliente'],
             'identificacion_proveedor_cuit' => ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
                 (int) $request->input('proveedor_id'),
                 null,
@@ -1004,11 +1018,68 @@ class ComprobanteProveedorPersistenciaService
             ),
             'fechavencimientocae' => $request->input('fechavencimientocae'),
             'es_fce' => $request->boolean('es_fce'),
-            'leyenda' => $request->input('leyenda'),
+            'leyenda' => $this->leyendaConServicioSiVacia(
+                $request->input('leyenda'),
+                $asigServicio
+            ),
             'modo_carga' => $modoCarga,
             'origen_entrada' => $origen,
             'pararevisar' => $request->boolean('pararevisar'),
         ];
+    }
+
+    /**
+     * @param  array{proveedor_servicio_id: ?int, servicio_cliente: ?string}  $asigServicio
+     */
+    private function leyendaConServicioSiVacia(mixed $leyenda, array $asigServicio): ?string
+    {
+        $texto = trim((string) ($leyenda ?? ''));
+        if ($texto !== '') {
+            return $texto;
+        }
+
+        $id = $asigServicio['proveedor_servicio_id'] ?? null;
+        if ($id) {
+            $serv = \App\Models\Compras\Proveedor_Servicio::query()->find($id);
+            if ($serv) {
+                return ComprobanteProveedorServicioSupport::leyendaSugerida($serv);
+            }
+        }
+
+        return ComprobanteProveedorServicioSupport::leyendaDesdeCliente($asigServicio['servicio_cliente'] ?? null)
+            ?? ($leyenda !== null ? $texto : null);
+    }
+
+    private function sincronizarServicioEnPrecarga(Comprobante_Proveedor $comprobante): void
+    {
+        $precargaId = (int) ($comprobante->precarga_comprobante_proveedor_id ?? 0);
+        if ($precargaId <= 0) {
+            return;
+        }
+
+        Precarga_Comprobante_Proveedor::query()
+            ->whereKey($precargaId)
+            ->update([
+                'proveedor_servicio_id' => $comprobante->proveedor_servicio_id
+                    ? (int) $comprobante->proveedor_servicio_id
+                    : null,
+                'servicio_cliente' => filled($comprobante->servicio_cliente ?? null)
+                    ? (string) $comprobante->servicio_cliente
+                    : null,
+            ]);
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    private function assertProveedorServicioAsignado(array $payload): void
+    {
+        $errores = ComprobanteProveedorServicioSupport::erroresAsignacion(
+            $payload['proveedor_servicio_id'] ?? null,
+            isset($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
+            $payload['servicio_cliente'] ?? null
+        );
+        if ($errores !== []) {
+            throw new RuntimeException($errores[0]);
+        }
     }
 
     private function sincronizarConceptos(Request $request, Comprobante_Proveedor $comprobante): void
@@ -1243,7 +1314,11 @@ class ComprobanteProveedorPersistenciaService
                 'monto' => (float) ($montos[$i] ?? 0),
                 'moneda_id' => (int) ($monedaIds[$i] ?? $comprobante->moneda_id ?? 1),
                 'cotizacion' => isset($cotizaciones[$i]) ? (float) $cotizaciones[$i] : null,
-                'formapago_id' => (int) ($formapagoIds[$i] ?? 1),
+                'formapago_id' => ComprobanteProveedorAnitaImportFormapagoSupport::normalizarId(
+                    (int) ($formapagoIds[$i] ?? 0),
+                    isset($comprobante->proveedor_id) ? (int) $comprobante->proveedor_id : null,
+                    isset($comprobante->ordencompra_id) ? (int) $comprobante->ordencompra_id : null,
+                ),
                 'detalle' => $detalles[$i] ?? null,
                 'ordencompra_comprobante_cuota_id' => (int) ($ocCuotaIds[$i] ?? 0) ?: null,
             ];
@@ -1361,7 +1436,11 @@ class ComprobanteProveedorPersistenciaService
                 'monto' => (float) ($cuota['monto'] ?? 0),
                 'moneda_id' => $monedaFacturaId,
                 'cotizacion' => $cotizacionFactura,
-                'formapago_id' => (int) ($cuota['formapago_id'] ?? 1),
+                'formapago_id' => ComprobanteProveedorAnitaImportFormapagoSupport::normalizarId(
+                    (int) ($cuota['formapago_id'] ?? 0),
+                    isset($comprobante->proveedor_id) ? (int) $comprobante->proveedor_id : null,
+                    isset($comprobante->ordencompra_id) ? (int) $comprobante->ordencompra_id : null,
+                ),
                 'detalle' => $cuota['detalle'] ?? null,
                 'ordencompra_comprobante_cuota_id' => $cuota['ordencompra_comprobante_cuota_id'] ?? null,
             ]);

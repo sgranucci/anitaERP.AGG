@@ -3,6 +3,7 @@
     use App\Support\Sueldos\EmpleadoEstados;
     $ingresos = isset($data) ? ($data->ingresos ?? collect()) : collect();
     $puedeBaja = $puedeBaja ?? false;
+    $puedeBorrarHistoria = $puedeBorrarHistoria ?? false;
     $esProvisoria = isset($data) && EmpleadoBajaSupport::esBajaProvisoria($data);
     $esDefinitiva = isset($data) && EmpleadoBajaSupport::esBajaDefinitiva($data);
 @endphp
@@ -27,6 +28,9 @@
                     <th>Motivo</th>
                     <th>Comentario</th>
                     <th>Tipo</th>
+                    @if ($puedeBorrarHistoria)
+                        <th class="width80"></th>
+                    @endif
                 </tr>
             </thead>
             <tbody>
@@ -37,9 +41,22 @@
                         <td>{{ optional($ing->motivoegreso)->descripcion ?? optional($ing->motivoegreso)->nombre ?? '—' }}</td>
                         <td>{{ $ing->comentario_baja ?: '—' }}</td>
                         <td>{{ EmpleadoBajaSupport::labelMovimiento($ing->tipo_movimiento ?? '') }}</td>
+                        @if ($puedeBorrarHistoria)
+                            <td class="text-nowrap text-center">
+                                <form action="{{ route('eliminar_historia_empleado_sueldos', ['id' => $data->id, 'ingresoId' => $ing->id]) }}"
+                                      method="POST" class="d-inline"
+                                      onsubmit="return confirm('¿Eliminar este registro de historia?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn-accion-tabla tooltipsC text-danger" title="Eliminar registro">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        @endif
                     </tr>
                 @empty
-                    <tr><td colspan="5" class="text-center text-muted">Sin historia registrada.</td></tr>
+                    <tr><td colspan="{{ $puedeBorrarHistoria ? 6 : 5 }}" class="text-center text-muted">Sin historia registrada.</td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -65,6 +82,50 @@
             </div>
         </div>
     @elseif ($esProvisoria)
+        @php
+            $motBpId = (int) old('motivoegreso_id', $data->motivoegreso_id ?? 0);
+            $motBp = $motBpId > 0
+                ? (optional($data->motivoegreso)->id === $motBpId
+                    ? $data->motivoegreso
+                    : \App\Models\Sueldos\Motivoegreso_Sueldos::query()->find($motBpId))
+                : null;
+        @endphp
+        <div class="card card-outline card-info mb-3">
+            <div class="card-header"><strong>Modificar baja provisoria</strong></div>
+            <div class="card-body">
+                <p class="small text-muted">Corregí la fecha (o el motivo) si se cargó mal. El legajo sigue activo hasta confirmar la definitiva.</p>
+                <form action="{{ route('modificar_baja_provisoria_empleado_sueldos', ['id' => $data->id]) }}" method="POST" class="form-horizontal"
+                      onsubmit="return confirm('¿Guardar los cambios de la baja provisoria?');">
+                    @csrf
+                    <div class="form-group row">
+                        <label class="col-lg-2 control-label requerido">Fecha de baja</label>
+                        <div class="col-lg-3">
+                            <input type="date" name="fecha_egreso" class="form-control" required
+                                   value="{{ old('fecha_egreso', optional($data->fecha_egreso)->format('Y-m-d') ?: now()->format('Y-m-d')) }}">
+                        </div>
+                    </div>
+                    @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                        'maestro' => 'motivoegreso',
+                        'registroId' => $motBp->id ?? '',
+                        'codigo' => $motBp->codigo ?? '',
+                        'descripcion' => $motBp->descripcion ?? '',
+                        'label' => 'Motivo',
+                        'inputName' => 'motivoegreso_id',
+                        'inputId' => 'motivoegreso_id_mod_bp',
+                        'col_label' => 'col-lg-2',
+                        'col_input' => 'col-lg-6',
+                    ])
+                    <div class="form-group row">
+                        <label class="col-lg-2 control-label">Comentario</label>
+                        <div class="col-lg-6">
+                            <input type="text" name="comentario_baja" class="form-control" maxlength="80"
+                                   value="{{ old('comentario_baja', $data->comentario_baja ?? '') }}">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-info"><i class="fa fa-edit"></i> Guardar cambios</button>
+                </form>
+            </div>
+        </div>
         <div class="row">
             <div class="col-md-6">
                 <div class="card card-outline card-warning mb-3">
@@ -81,19 +142,17 @@
                                            value="{{ optional($data->fecha_egreso)->format('Y-m-d') ?: now()->format('Y-m-d') }}">
                                 </div>
                             </div>
-                            <div class="form-group row">
-                                <label class="col-lg-4 control-label">Motivo</label>
-                                <div class="col-lg-7">
-                                    <select name="motivoegreso_id" class="form-control">
-                                        <option value="">—</option>
-                                        @foreach ($motivosegreso ?? [] as $mot)
-                                            <option value="{{ $mot->id }}" @selected((int)($data->motivoegreso_id ?? 0) === (int)$mot->id)>
-                                                {{ $mot->codigo }} — {{ $mot->descripcion ?? $mot->nombre ?? '' }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
+                            @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                                'maestro' => 'motivoegreso',
+                                'registroId' => $motBp->id ?? '',
+                                'codigo' => $motBp->codigo ?? '',
+                                'descripcion' => $motBp->descripcion ?? '',
+                                'label' => 'Motivo',
+                                'inputName' => 'motivoegreso_id',
+                                'inputId' => 'motivoegreso_id_conf',
+                                'col_label' => 'col-lg-4',
+                                'col_input' => 'col-lg-7',
+                            ])
                             <div class="form-group row">
                                 <label class="col-lg-4 control-label">Comentario</label>
                                 <div class="col-lg-7">
@@ -143,17 +202,17 @@
                                     <input type="date" name="fecha_egreso" class="form-control" required value="{{ now()->format('Y-m-d') }}">
                                 </div>
                             </div>
-                            <div class="form-group row">
-                                <label class="col-lg-4 control-label">Motivo</label>
-                                <div class="col-lg-7">
-                                    <select name="motivoegreso_id" class="form-control">
-                                        <option value="">—</option>
-                                        @foreach ($motivosegreso ?? [] as $mot)
-                                            <option value="{{ $mot->id }}">{{ $mot->codigo }} — {{ $mot->descripcion ?? $mot->nombre ?? '' }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
+                            @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                                'maestro' => 'motivoegreso',
+                                'registroId' => '',
+                                'codigo' => '',
+                                'descripcion' => '',
+                                'label' => 'Motivo',
+                                'inputName' => 'motivoegreso_id',
+                                'inputId' => 'motivoegreso_id_bp',
+                                'col_label' => 'col-lg-4',
+                                'col_input' => 'col-lg-7',
+                            ])
                             <div class="form-group row">
                                 <label class="col-lg-4 control-label">Comentario</label>
                                 <div class="col-lg-7">
@@ -181,17 +240,17 @@
                                     <input type="date" name="fecha_egreso" class="form-control" required value="{{ now()->format('Y-m-d') }}">
                                 </div>
                             </div>
-                            <div class="form-group row">
-                                <label class="col-lg-4 control-label">Motivo</label>
-                                <div class="col-lg-7">
-                                    <select name="motivoegreso_id" class="form-control">
-                                        <option value="">—</option>
-                                        @foreach ($motivosegreso ?? [] as $mot)
-                                            <option value="{{ $mot->id }}">{{ $mot->codigo }} — {{ $mot->descripcion ?? $mot->nombre ?? '' }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
+                            @include('sueldos.partials.campo_consulta_maestro_sueldos', [
+                                'maestro' => 'motivoegreso',
+                                'registroId' => '',
+                                'codigo' => '',
+                                'descripcion' => '',
+                                'label' => 'Motivo',
+                                'inputName' => 'motivoegreso_id',
+                                'inputId' => 'motivoegreso_id_bd',
+                                'col_label' => 'col-lg-4',
+                                'col_input' => 'col-lg-7',
+                            ])
                             <div class="form-group row">
                                 <label class="col-lg-4 control-label">Comentario</label>
                                 <div class="col-lg-7">

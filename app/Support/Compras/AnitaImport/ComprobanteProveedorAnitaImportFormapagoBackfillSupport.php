@@ -2,11 +2,10 @@
 
 namespace App\Support\Compras\AnitaImport;
 
-use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Corrige cuotas ANITA_IMPORT que quedaron en Efectivo por el default del import.
+ * Corrige cuotas en Efectivo por default erróneo (import Anita, legajo, precarga, etc.).
  *
  * Prioridad: OC no-Efectivo → proveedor no-Efectivo.
  * Efectivo en la OC no bloquea: se intenta el proveedor.
@@ -60,13 +59,13 @@ final class ComprobanteProveedorAnitaImportFormapagoBackfillSupport
 
         $query = DB::table('comprobante_proveedor_cuota as cpc')
             ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cpc.comprobante_proveedor_id')
-            ->where('cp.origen_entrada', ComprobanteProveedorOrigenEntrada::ANITA_IMPORT)
             ->where('cpc.formapago_id', $efectivoId)
             ->select([
                 'cpc.id as cuota_id',
                 'cp.id as cp_id',
                 'cp.proveedor_id',
                 'cp.ordencompra_id',
+                'cp.origen_entrada',
                 'cp.letra',
                 'cp.sucursal',
                 'cp.numerocomprobante',

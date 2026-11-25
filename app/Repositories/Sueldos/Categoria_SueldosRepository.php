@@ -138,16 +138,23 @@ class Categoria_SueldosRepository implements Categoria_SueldosRepositoryInterfac
     }
 
     /**
-     * Trae categorías desde Anita e inserta las faltantes (llenado inicial).
-     * Para categorías con origen 'T' importa las bases != 0 hacia categoria_base_sueldos.
+     * Trae categorías desde Anita: inserta faltantes y refresca bases de tabla (T)
+     * (cat_sueldo / cat_diario / cat_hora / cat_base4..6 → nombrebase 1..6).
      *
-     * @return array{en_anita: int, importados: int, omitidos: int, bases_importadas: int, errores: list<string>}
+     * @return array{en_anita: int, importados: int, omitidos: int, bases_importadas: int, bases_actualizadas: int, errores: list<string>}
      */
     public function sincronizarConAnita()
     {
         ini_set('max_execution_time', '600');
 
-        $resultado = ['en_anita' => 0, 'importados' => 0, 'omitidos' => 0, 'bases_importadas' => 0, 'errores' => []];
+        $resultado = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'omitidos' => 0,
+            'bases_importadas' => 0,
+            'bases_actualizadas' => 0,
+            'errores' => [],
+        ];
 
         // Necesitamos el catálogo de nombres de base para mapear las bases.
         $nombrebasePorCodigo = Nombrebase_Sueldos::query()->pluck('id', 'codigo')->all();
@@ -183,23 +190,36 @@ class Categoria_SueldosRepository implements Categoria_SueldosRepositoryInterfac
                     continue;
                 }
 
+                $descripcion = $this->recortar(trim((string) ($row->cat_desc ?? '')), 30);
+                if ($descripcion === '') {
+                    $descripcion = (string) $codigo;
+                }
+                $origen = CategoriaOrigenBases::normalizar((string) ($row->cat_tabla ?? 'T'));
+
                 $categoria = $this->findPorCodigo($codigo);
                 if ($categoria === null) {
-                    $descripcion = $this->recortar(trim((string) ($row->cat_desc ?? '')), 30);
-                    if ($descripcion === '') {
-                        $descripcion = (string) $codigo;
-                    }
                     $categoria = $this->model->create([
                         'codigo' => $codigo,
                         'descripcion' => $descripcion,
-                        'origen_bases' => CategoriaOrigenBases::normalizar((string) ($row->cat_tabla ?? 'T')),
+                        'origen_bases' => $origen,
                     ]);
                     $resultado['importados']++;
                 } else {
                     $resultado['omitidos']++;
+                    $patchCat = [];
+                    if ((string) $categoria->descripcion !== $descripcion) {
+                        $patchCat['descripcion'] = $descripcion;
+                    }
+                    if ((string) $categoria->origen_bases !== $origen) {
+                        $patchCat['origen_bases'] = $origen;
+                    }
+                    if ($patchCat !== []) {
+                        $categoria->update($patchCat);
+                    }
+                    $categoria->origen_bases = $origen;
                 }
 
-                // Importar bases solo cuando la categoría toma bases de la tabla.
+                // Importar/actualizar bases solo cuando la categoría toma bases de la tabla.
                 if (! CategoriaOrigenBases::usaTablaCategoria($categoria->origen_bases)) {
                     continue;
                 }
@@ -214,23 +234,37 @@ class Categoria_SueldosRepository implements Categoria_SueldosRepositoryInterfac
                         continue;
                     }
 
-                    $yaExiste = Categoria_Base_Sueldos::query()
+                    $existente = Categoria_Base_Sueldos::query()
                         ->where('categoria_id', $categoria->id)
                         ->where('nombrebase_id', $nombrebaseId)
-                        ->exists();
-                    if ($yaExiste) {
+                        ->orderByDesc('fecha_vigencia')
+                        ->orderByDesc('id')
+                        ->first();
+
+                    if ($existente === null) {
+                        Categoria_Base_Sueldos::create([
+                            'categoria_id' => $categoria->id,
+                            'nombrebase_id' => $nombrebaseId,
+                            'valor' => $valor,
+                            'fecha_vigencia' => $hoy,
+                            'valor_anterior' => null,
+                            'usuario_id' => null,
+                        ]);
+                        $resultado['bases_importadas']++;
+
                         continue;
                     }
 
-                    Categoria_Base_Sueldos::create([
-                        'categoria_id' => $categoria->id,
-                        'nombrebase_id' => $nombrebaseId,
+                    if (abs((float) $existente->valor - $valor) <= 0.00005) {
+                        continue;
+                    }
+
+                    $existente->update([
+                        'valor_anterior' => $existente->valor,
                         'valor' => $valor,
                         'fecha_vigencia' => $hoy,
-                        'valor_anterior' => null,
-                        'usuario_id' => null,
                     ]);
-                    $resultado['bases_importadas']++;
+                    $resultado['bases_actualizadas']++;
                 }
             }
         }, true);

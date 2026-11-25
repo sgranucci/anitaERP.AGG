@@ -98,15 +98,27 @@ class FalloReporte_SueldosController extends Controller
      */
     private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
     {
-        $empresaId = (int) $request->input('empresa_id', 0);
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($empresaIds === [] && $request->filled('empresa_id')) {
+            $empresaIds = [(int) $request->input('empresa_id')];
+        }
+        if ($empresaIds === [] && $empresaQuery !== null && $empresaQuery->count() === 1) {
+            $empresaIds = [(int) $empresaQuery->first()->id];
+        }
         $legajoDesde = trim((string) $request->input('legajo_desde', ''));
         $legajoHasta = trim((string) $request->input('legajo_hasta', ''));
-        if ($empresaId <= 0 && $empresaQuery !== null && $empresaQuery->count() === 1) {
-            $empresaId = (int) $empresaQuery->first()->id;
-        }
 
         return [
-            'empresa_id' => $empresaId > 0 ? $empresaId : 0,
+            'empresa_id' => $empresaIds[0] ?? 0,
+            'empresa_ids' => $empresaIds,
+            'consolidar_empresas' => $request->exists('consolidar_empresas')
+                ? $request->boolean('consolidar_empresas')
+                : true,
             'fecha_desde' => (string) $request->input('fecha_desde', date('Y-m-01')),
             'fecha_hasta' => (string) $request->input('fecha_hasta', date('Y-m-d')),
             'orden' => $request->input('orden') === 'alfabetico' ? 'alfabetico' : 'legajo',

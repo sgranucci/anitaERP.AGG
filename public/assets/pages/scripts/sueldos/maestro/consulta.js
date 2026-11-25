@@ -11,7 +11,8 @@
         lugartrabajo: 'Lugares de trabajo',
         vacacion: 'Vacaciones',
         art: 'ART',
-        sindicato: 'Sindicatos'
+        sindicato: 'Sindicatos',
+        motivoegreso: 'Motivos de egreso'
     };
 
     function campoDesde($el) {

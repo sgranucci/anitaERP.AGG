@@ -52,6 +52,9 @@ class ConceptoElegibilidadCatalogo
 
     public const ORIGEN_GRUPO = 'grupo';
 
+    /** Grupo unido automáticamente en liquidación final (sindicato + motivo). */
+    public const ORIGEN_GRUPO_FINAL = 'grupo_final';
+
     public const ORIGEN_REGLA = 'regla';
 
     public const ORIGEN_EXPLICITO_MAS = 'explicito+';
@@ -72,6 +75,7 @@ class ConceptoElegibilidadCatalogo
     /** Etiquetas cortas para badges UI. */
     public const ORIGEN_LABELS = [
         self::ORIGEN_GRUPO => 'Grupo',
+        self::ORIGEN_GRUPO_FINAL => 'Grupo liq. final',
         self::ORIGEN_REGLA => 'Elegibilidad',
         self::ORIGEN_EXPLICITO_MAS => 'Explícito +',
         self::ORIGEN_EXPLICITO_MENOS => 'Explícito −',
@@ -85,6 +89,7 @@ class ConceptoElegibilidadCatalogo
     /** Clases Bootstrap badge por origen. */
     public const ORIGEN_BADGES = [
         self::ORIGEN_GRUPO => 'primary',
+        self::ORIGEN_GRUPO_FINAL => 'dark',
         self::ORIGEN_REGLA => 'info',
         self::ORIGEN_EXPLICITO_MAS => 'success',
         self::ORIGEN_EXPLICITO_MENOS => 'danger',

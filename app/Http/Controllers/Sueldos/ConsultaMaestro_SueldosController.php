@@ -139,7 +139,14 @@ class ConsultaMaestro_SueldosController extends Controller
             || can('actualizar-empleado-sueldos', false)
             || can('listar-contrato-plantilla-sueldos', false)
             || can('actualizar-contrato-plantilla-sueldos', false)
-            || can('crear-contrato-plantilla-sueldos', false)) {
+            || can('crear-contrato-plantilla-sueldos', false)
+            || can('listar-liquidacion-sueldos', false)
+            || can('crear-liquidacion-sueldos', false)
+            || can('editar-liquidacion-sueldos', false)
+            || can('listar-grupo-liq-final-sueldos', false)
+            || can('crear-grupo-liq-final-sueldos', false)
+            || can('editar-grupo-liq-final-sueldos', false)
+            || can('baja-empleado-sueldos', false)) {
             return;
         }
         abort(403);

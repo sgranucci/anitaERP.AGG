@@ -82,6 +82,21 @@ final class ComprobanteProveedorAnitaImportFormapagoSupport
     }
 
     /**
+     * Si el medio viene vacío o es Efectivo (default erróneo), resuelve OC/proveedor.
+     * Conserva cualquier otro medio ya elegido.
+     */
+    public static function normalizarId(?int $actual, ?int $proveedorId, ?int $ordencompraId = null): int
+    {
+        $actual = (int) ($actual ?? 0);
+        $efectivo = self::idEfectivo();
+        if ($actual > 0 && $actual !== $efectivo) {
+            return $actual;
+        }
+
+        return self::resolverId($proveedorId, $ordencompraId);
+    }
+
+    /**
      * Elige un formapago distinto de Efectivo para corregir defaults erróneos.
      *
      * @return array{id:int, origen:string}|null

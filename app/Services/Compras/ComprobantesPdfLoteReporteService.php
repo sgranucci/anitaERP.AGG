@@ -193,12 +193,32 @@ class ComprobantesPdfLoteReporteService
      */
     private function queryFacturas(array $filtros): Builder
     {
-        return Comprobante_Proveedor::query()
-            ->with(['proveedores', 'tipotransaccion_compras', 'empresas'])
+        $query = Comprobante_Proveedor::query()
+            ->with(['proveedores', 'tipotransaccion_compras', 'empresas', 'proveedor_servicios'])
             ->where('empresa_id', (int) $filtros['empresa_id'])
             ->whereIn('proveedor_id', $filtros['proveedor_ids'])
             ->whereDate('fechacomprobante', '>=', (string) $filtros['fecha_desde'])
-            ->whereDate('fechacomprobante', '<=', (string) $filtros['fecha_hasta'])
+            ->whereDate('fechacomprobante', '<=', (string) $filtros['fecha_hasta']);
+
+        $nroCliente = trim((string) ($filtros['nro_cliente'] ?? ''));
+        if ($nroCliente !== '') {
+            $like = '%'.$nroCliente.'%';
+            $query->where(function ($w) use ($nroCliente, $like) {
+                $w->where('servicio_cliente', $nroCliente)
+                    ->orWhere('servicio_cliente', 'like', $like)
+                    ->orWhereExists(function ($q) use ($nroCliente, $like) {
+                        $q->selectRaw('1')
+                            ->from('proveedor_servicio as ps')
+                            ->whereColumn('ps.id', 'comprobante_proveedor.proveedor_servicio_id')
+                            ->where(function ($inner) use ($nroCliente, $like) {
+                                $inner->where('ps.cliente', $nroCliente)
+                                    ->orWhere('ps.cliente', 'like', $like);
+                            });
+                    });
+            });
+        }
+
+        return $query
             ->orderBy('fechacomprobante')
             ->orderBy('proveedor_id')
             ->orderBy('numerocomprobante')
@@ -280,6 +300,11 @@ class ComprobantesPdfLoteReporteService
             ?? $comprobante->tipotransaccion_compras->nombre
             ?? 'FAC');
 
+        $servicioCliente = trim((string) ($comprobante->servicio_cliente ?? ''));
+        if ($servicioCliente === '' && $comprobante->proveedor_servicios) {
+            $servicioCliente = trim((string) ($comprobante->proveedor_servicios->cliente ?? ''));
+        }
+
         return new ComprobantesPdfLoteFila(
             clave: 'fac:'.$comprobante->id,
             tipo: 'fac',
@@ -295,6 +320,7 @@ class ComprobantesPdfLoteReporteService
             pdfEtiqueta: 'Sin PDF',
             editarUrl: route('editar_comprobante_proveedor', ['id' => $comprobante->id]),
             pdfUrl: route('comprobante_proveedor_factura_pdf', ['id' => $comprobante->id, 'inline' => 1]),
+            servicioCliente: $servicioCliente,
         );
     }
 

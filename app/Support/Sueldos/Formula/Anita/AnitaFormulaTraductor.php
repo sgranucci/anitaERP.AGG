@@ -487,11 +487,25 @@ class AnitaFormulaTraductor
                 return ['t' => 'bin', 'op' => '^', 'a' => $x, 'b' => ['t' => 'num', 'v' => 2.0]];
 
             case 'REDON':
-                // REDON(x) → redondear(x, 2) (aproximación del redondeo por tabla)
-                $this->resultado->agregarAdvertencia('«REDON()» → «redondear(x, 2)» (redondeo final por tabla, revisar).');
+                // REDON(x) → ajuste para llevar x al peso entero hacia arriba
+                // (techo). En Anita el 3000 es `_d:=REDON(tg)` y el importe es
+                // la diferencia (0,01–0,99), no el neto redondeado.
+                $this->resultado->agregarAdvertencia(
+                    '«REDON(x)» → «redondear(techo(x) - x, 2)» (ajuste al peso entero).'
+                );
                 $x = $args[0] ?? ['t' => 'num', 'v' => 0.0];
+                $diff = [
+                    't' => 'bin',
+                    'op' => '-',
+                    'a' => ['t' => 'call', 'nombre' => 'techo', 'args' => [$x]],
+                    'b' => $x,
+                ];
 
-                return ['t' => 'call', 'nombre' => 'redondear', 'args' => [$x, ['t' => 'num', 'v' => 2.0]]];
+                return [
+                    't' => 'call',
+                    'nombre' => 'redondear',
+                    'args' => [$diff, ['t' => 'num', 'v' => 2.0]],
+                ];
 
             case 'B':
                 // B(1)=básico, B(2)=jornal día, B(3)=jornal hora; resto → base_num(n).

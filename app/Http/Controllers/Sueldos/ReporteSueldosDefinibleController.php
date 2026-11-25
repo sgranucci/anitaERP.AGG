@@ -506,6 +506,7 @@ class ReporteSueldosDefinibleController extends Controller
             }
         }
         $liquidacionesSeleccionadas = Liquidacion_Sueldos::query()
+            ->with(['empresa:id,nombre'])
             ->whereIn('id', array_filter([
                 $filtrosEjec['liquidacion_id'] ?? null,
                 $filtrosEjec['liquidacion_id_comparar'] ?? null,
@@ -1128,13 +1129,28 @@ class ReporteSueldosDefinibleController extends Controller
             ReporteSueldosDefinibleSupport::AGRUPACION_EMPLEADO
         );
 
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($empresaIds === [] && $request->filled('empresa_id')) {
+            $empresaIds = [(int) $request->input('empresa_id')];
+        }
+        $empresaId = $empresaIds[0] ?? null;
+
         return [
             'origen' => $request->input('origen', ReporteSueldosDefinibleSupport::ORIGEN_LIQUIDACION),
             'liquidacion_id' => $request->filled('liquidacion_id') ? (int) $request->input('liquidacion_id') : null,
             'liquidacion_id_comparar' => $request->filled('liquidacion_id_comparar')
                 ? (int) $request->input('liquidacion_id_comparar')
                 : null,
-            'empresa_id' => $request->filled('empresa_id') ? (int) $request->input('empresa_id') : null,
+            'empresa_id' => $empresaId,
+            'empresa_ids' => $empresaIds,
+            'consolidar_empresas' => $request->exists('consolidar_empresas')
+                ? $request->boolean('consolidar_empresas')
+                : true,
             'filtro_estado' => $request->input('filtro_estado', 'activo'),
             'agrupacion' => $agrupacion,
             'agrupaciones' => array_values(array_filter(

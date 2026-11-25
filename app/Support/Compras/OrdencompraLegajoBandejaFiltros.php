@@ -113,7 +113,7 @@ final class OrdencompraLegajoBandejaFiltros
             return true;
         }
 
-        foreach (['atajo', 'nro_oc', 'nro_factura', 'nro_com', 'nro_op', 'tab', 'vista_id', 'vista_estandar', 'qbe', 'sort', 'group'] as $key) {
+        foreach (['atajo', 'nro_oc', 'nro_factura', 'nro_com', 'nro_op', 'nro_cliente', 'tab', 'vista_id', 'vista_estandar', 'qbe', 'sort', 'group'] as $key) {
             if ($request->query->has($key) || $request->request->has($key)) {
                 return true;
             }
@@ -198,6 +198,7 @@ final class OrdencompraLegajoBandejaFiltros
             'nro_factura' => trim((string) $request->query('nro_factura', '')),
             'nro_com' => trim((string) $request->query('nro_com', '')),
             'nro_op' => trim((string) $request->query('nro_op', '')),
+            'nro_cliente' => trim((string) $request->query('nro_cliente', '')),
         ]);
     }
 
@@ -249,6 +250,9 @@ final class OrdencompraLegajoBandejaFiltros
         }
         if (! empty($filtros['nro_op'])) {
             $params['nro_op'] = $filtros['nro_op'];
+        }
+        if (! empty($filtros['nro_cliente'])) {
+            $params['nro_cliente'] = $filtros['nro_cliente'];
         }
 
         // Reescribir qbe/sort/agrupar con el catálogo de bandeja (por si OC usó otras claves).
@@ -323,6 +327,7 @@ final class OrdencompraLegajoBandejaFiltros
             'nro_factura' => $base['nro_factura'] ?? '',
             'nro_com' => $base['nro_com'] ?? '',
             'nro_op' => $base['nro_op'] ?? '',
+            'nro_cliente' => $base['nro_cliente'] ?? '',
         ];
 
         $campos = self::camposOrdenables();

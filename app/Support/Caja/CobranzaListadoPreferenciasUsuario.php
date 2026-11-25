@@ -10,7 +10,8 @@ use Illuminate\Support\Facades\Cache;
 
 final class CobranzaListadoPreferenciasUsuario
 {
-    private const CACHE_GRILLA = 'caja-cobranza-listado-grilla-estandar-v1';
+    /** v2: anchos estándar ≤ presupuesto (fit sin scroll H). */
+    private const CACHE_GRILLA = 'caja-cobranza-listado-grilla-estandar-v2';
 
     /**
      * @param  list<array{key: string, titulo: string, visible: bool, ancho: int, alinea: string, orden: int}>  $layout

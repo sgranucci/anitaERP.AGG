@@ -207,25 +207,49 @@
                 <h3 class="card-title mb-0"><i class="fa fa-money-bill-wave"></i> Remuneración</h3>
             </div>
             <div class="card-body pb-2">
+                @php
+                    $etiqRem = $etiquetasRemuneracion ?? [1 => 'Sueldo básico', 2 => 'Base 2', 3 => 'Base 3'];
+                    $valsCatRem = $valoresCategoriaRemuneracion ?? [];
+                    $usaTablaRem = ! empty($usaTabla);
+                    $soloVistaRem = ! empty($soloVisualizacion);
+                    $remReadonly = $usaTablaRem || $soloVistaRem;
+                    $valRem = static function (int $cod, $legajoVal, array $valsCat, bool $desdeCat) {
+                        if ($desdeCat) {
+                            return array_key_exists($cod, $valsCat) ? $valsCat[$cod] : 0;
+                        }
+
+                        return $legajoVal;
+                    };
+                @endphp
+                @if ($usaTablaRem)
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="fa fa-table"></i>
+                        Remuneración B1–B3 tomada de la <strong>categoría</strong> (origen tabla).
+                        Acá se muestra solo lectura; se modifica en el ABM de categorías / bases.
+                    </div>
+                @endif
                 <div class="form-group row">
-                    <label for="sueldo_basico" class="col-lg-4 control-label">Sueldo básico</label>
+                    <label for="sueldo_basico" class="col-lg-4 control-label">{{ $etiqRem[1] }} <span class="text-muted font-weight-normal">(B1)</span></label>
                     <div class="col-lg-5">
-                        <input type="number" step="0.0001" name="sueldo_basico" id="sueldo_basico" class="form-control text-right"
-                               value="{{ old('sueldo_basico', $data->sueldo_basico ?? '') }}">
+                        <input type="number" step="0.0001" name="sueldo_basico" id="sueldo_basico" class="form-control text-right{{ $remReadonly ? ' bg-light' : '' }}"
+                               value="{{ old('sueldo_basico', $valRem(1, $data->sueldo_basico ?? '', $valsCatRem, $usaTablaRem)) }}"
+                               @if ($remReadonly) readonly tabindex="-1" @endif>
                     </div>
                 </div>
                 <div class="form-group row">
-                    <label for="jornal_dia" class="col-lg-4 control-label">Jornal día</label>
+                    <label for="jornal_dia" class="col-lg-4 control-label">{{ $etiqRem[2] }} <span class="text-muted font-weight-normal">(B2)</span></label>
                     <div class="col-lg-5">
-                        <input type="number" step="0.0001" name="jornal_dia" id="jornal_dia" class="form-control text-right"
-                               value="{{ old('jornal_dia', $data->jornal_dia ?? '') }}">
+                        <input type="number" step="0.0001" name="jornal_dia" id="jornal_dia" class="form-control text-right{{ $remReadonly ? ' bg-light' : '' }}"
+                               value="{{ old('jornal_dia', $valRem(2, $data->jornal_dia ?? '', $valsCatRem, $usaTablaRem)) }}"
+                               @if ($remReadonly) readonly tabindex="-1" @endif>
                     </div>
                 </div>
                 <div class="form-group row">
-                    <label for="jornal_hora" class="col-lg-4 control-label">Jornal hora</label>
+                    <label for="jornal_hora" class="col-lg-4 control-label">{{ $etiqRem[3] }} <span class="text-muted font-weight-normal">(B3)</span></label>
                     <div class="col-lg-5">
-                        <input type="number" step="0.0001" name="jornal_hora" id="jornal_hora" class="form-control text-right"
-                               value="{{ old('jornal_hora', $data->jornal_hora ?? '') }}">
+                        <input type="number" step="0.0001" name="jornal_hora" id="jornal_hora" class="form-control text-right{{ $remReadonly ? ' bg-light' : '' }}"
+                               value="{{ old('jornal_hora', $valRem(3, $data->jornal_hora ?? '', $valsCatRem, $usaTablaRem)) }}"
+                               @if ($remReadonly) readonly tabindex="-1" @endif>
                     </div>
                 </div>
                 <div class="form-group row mb-0">

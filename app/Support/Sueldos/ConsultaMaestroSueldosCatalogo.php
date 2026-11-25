@@ -8,6 +8,7 @@ use App\Models\Sueldos\Agrupamiento_Sueldos;
 use App\Models\Sueldos\Art_Sueldos;
 use App\Models\Sueldos\Categoria_Sueldos;
 use App\Models\Sueldos\Lugartrabajo_Sueldos;
+use App\Models\Sueldos\Motivoegreso_Sueldos;
 use App\Models\Sueldos\Sindicato_Sueldos;
 use App\Models\Sueldos\Vacacion_Sueldos;
 
@@ -92,6 +93,16 @@ final class ConsultaMaestroSueldosCatalogo
                 'permiso_listar' => 'listar-sindicato-sueldos',
                 'permiso_editar' => 'editar-sindicato-sueldos',
                 'ruta_editar' => 'editar_sindicato_sueldos',
+            ],
+            'motivoegreso' => [
+                'model' => Motivoegreso_Sueldos::class,
+                'titulo' => 'Motivos de egreso',
+                'label' => 'Motivo de egreso',
+                'campo_nombre' => 'descripcion',
+                'extras' => ['clase'],
+                'permiso_listar' => 'listar-motivoegreso-sueldos',
+                'permiso_editar' => 'editar-motivoegreso-sueldos',
+                'ruta_editar' => 'editar_motivoegreso_sueldos',
             ],
         ];
     }

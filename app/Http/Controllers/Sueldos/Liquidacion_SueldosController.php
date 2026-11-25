@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Sueldos;
 
+use App\Exports\Sueldos\LiquidacionAsientoExport;
 use App\Exports\Sueldos\LiquidacionSueldosListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionLiquidacion_Sueldos;
@@ -16,6 +17,7 @@ use App\Services\Sueldos\ImportarAuxconfLiquidacionService;
 use App\Services\Sueldos\LiquidacionAsientoService;
 use App\Services\Sueldos\LiquidacionSolicitudpagoService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
+use App\Services\Sueldos\LiquidacionReciboEliminarService;
 use App\Services\Sueldos\LsdGeneradorPresentacionService;
 use App\Services\Sueldos\PlanCuotaLiquidacionService;
 use App\Services\Sueldos\ReciboAnexoIIIArmadorService;
@@ -25,10 +27,12 @@ use App\Support\Sueldos\Formula\FormulaException;
 use App\Support\Sueldos\LiquidacionConfidencialSeguridadSupport;
 use App\Support\Sueldos\LiquidacionSueldosListadoFiltros;
 use App\Support\Sueldos\SueldosAsientoCalidadCierreSupport;
+use App\Support\Sueldos\SueldosAsientoExportSupport;
 use App\Support\Sueldos\SueldosAsientoSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
+use Maatwebsite\Excel\Excel;
 
 class Liquidacion_SueldosController extends Controller
 {
@@ -167,6 +171,64 @@ class Liquidacion_SueldosController extends Controller
         ]);
     }
 
+    /**
+     * Candidatos a liquidar según tipo/período (para armar la selección en el ABM).
+     */
+    public function candidatosEmpleados(Request $request)
+    {
+        if (! can('crear-liquidacion-sueldos', false) && ! can('editar-liquidacion-sueldos', false)) {
+            abort(403);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $tipo = (string) $request->input('tipo', 'mensual');
+        $desde = $request->input('periodo_desde');
+        $hasta = $request->input('periodo_hasta');
+        $periodo = preg_replace('/\D+/', '', (string) $request->input('periodo', ''));
+        $motivoId = (int) $request->input('motivoegreso_id', 0);
+
+        if ($empresaId <= 0) {
+            return response()->json(['data' => [], 'mensaje' => 'Seleccioná empresa'], 422);
+        }
+
+        $q = \App\Models\Sueldos\Empleado_Sueldos::query()
+            ->where('empresa_id', $empresaId)
+            ->orderBy('legajo');
+
+        if ($tipo === 'final') {
+            $q->whereNotNull('fecha_egreso');
+            if ($desde && $hasta) {
+                $q->whereBetween('fecha_egreso', [$desde, $hasta]);
+            } elseif (strlen($periodo) === 6) {
+                $q->whereYear('fecha_egreso', (int) substr($periodo, 0, 4))
+                    ->whereMonth('fecha_egreso', (int) substr($periodo, 4, 2));
+            }
+            if ($motivoId > 0) {
+                $q->where('motivoegreso_id', $motivoId);
+            }
+        } else {
+            $q->where('estado', \App\Support\Sueldos\EmpleadoEstados::ACTIVO);
+        }
+
+        $rows = $q->limit(500)->get(['id', 'legajo', 'nombre', 'estado', 'fecha_egreso', 'motivoegreso_id']);
+        $data = $rows->map(function ($e) {
+            return [
+                'id' => (int) $e->id,
+                'legajo' => $e->legajo,
+                'nombre' => (string) $e->nombre,
+                'estado' => (string) $e->estado,
+                'fecha_egreso' => $e->fecha_egreso ? $e->fecha_egreso->format('Y-m-d') : null,
+                'fecha_egreso_fmt' => $e->fecha_egreso ? $e->fecha_egreso->format('d/m/Y') : null,
+            ];
+        })->values();
+
+        return response()->json([
+            'data' => $data,
+            'total' => $data->count(),
+            'tipo' => $tipo,
+        ]);
+    }
+
     public function guardar(ValidacionLiquidacion_Sueldos $request)
     {
         can('crear-liquidacion-sueldos');
@@ -186,6 +248,8 @@ class Liquidacion_SueldosController extends Controller
             return redirect('sueldos/liquidacion')
                 ->with('error', 'La corrida está '.strtolower($data->estadoLabel()).' y no puede editarse.');
         }
+
+        $data->loadMissing('motivoegreso:id,codigo,descripcion,clase');
 
         return view('sueldos.liquidacion.editar', [
             'data' => $data,
@@ -311,6 +375,11 @@ class Liquidacion_SueldosController extends Controller
         } catch (FormulaException $e) {
             return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
                 ->with('error', 'Error en fórmula: '.$e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', 'No se pudo calcular la corrida: '.$e->getMessage());
         }
 
         if ($resumen['sin_conceptos']) {
@@ -332,26 +401,19 @@ class Liquidacion_SueldosController extends Controller
                 .(count($egresos) > 8 ? '…' : '')
                 .'. Las bajas provisorias siguen activas hasta confirmar la definitiva.';
         }
-        $errN = (int) ($resumen['errores_formula_count'] ?? 0);
-        if ($errN > 0) {
-            $sample = collect($resumen['errores_formula'] ?? [])->take(3)
-                ->map(fn ($e) => 'leg.'.$e['legajo'].' conc.'.$e['concepto'])
-                ->implode(', ');
-
-            $redir = redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
-                ->with('mensaje', $msg)
-                ->with('error', $errN.' error(es) de fórmula (concepto omitido con importe 0). Ej: '.$sample);
-            if ($avisoEgresos) {
-                $redir->with('mensaje-aviso', $avisoEgresos);
-            }
-
-            return $redir;
+        $errN = (int) ($resumen['errores_count'] ?? $resumen['errores_formula_count'] ?? 0);
+        $avisos = [];
+        if ($avisoEgresos) {
+            $avisos[] = $avisoEgresos;
         }
-
+        if ($errN > 0) {
+            $avisos[] = $errN.' incidencia(s) al calcular (fórmulas, empleados omitidos u otros). '
+                .'Revise el panel «Errores de liquidación» más abajo.';
+        }
         $redir = redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
             ->with('mensaje', $msg);
-        if ($avisoEgresos) {
-            $redir->with('mensaje-aviso', $avisoEgresos);
+        if ($avisos !== []) {
+            $redir->with('mensaje-aviso', $avisos);
         }
 
         return $redir;
@@ -372,13 +434,101 @@ class Liquidacion_SueldosController extends Controller
             'solicitudpago:id,codigo,estado,monto',
         ]);
 
+        $busqueda = trim((string) $request->input('q', ''));
         $query = $liq->recibos()
             ->with(['detalles', 'empleado:id,confidencial,nombre']);
         LiquidacionConfidencialSeguridadSupport::aplicarVisibilidadRecibos($query);
-        $recibos = $query->orderBy('numero_recibo')->paginate(25);
+        if ($busqueda !== '') {
+            $like = '%'.$busqueda.'%';
+            $query->where(function ($q) use ($like, $busqueda) {
+                $q->where('apellido_nombre', 'like', $like)
+                    ->orWhere('cuil', 'like', $like)
+                    ->orWhere('legajo', 'like', $like);
+                if (ctype_digit($busqueda)) {
+                    $q->orWhere('numero_recibo', (int) $busqueda)
+                        ->orWhere('legajo', (int) $busqueda);
+                }
+            });
+        }
+        $recibos = $query->orderBy('numero_recibo')->paginate(25)->appends($request->only('q'));
 
         $hermanosPorRecibo = $multi->hermanosPorRecibos($recibos->getCollection());
         $totalesVisibles = LiquidacionConfidencialSeguridadSupport::totalesVisiblesCorrida($liq);
+
+        $filtroEtapaError = trim((string) $request->input('err_etapa', ''));
+        $filtroQError = trim((string) $request->input('err_q', ''));
+        $erroresQuery = $liq->errores()->orderBy('legajo')->orderBy('concepto_codigo')->orderBy('id');
+        if ($filtroEtapaError !== '' && array_key_exists($filtroEtapaError, \App\Models\Sueldos\Liquidacion_Error_Sueldos::ETAPAS)) {
+            $erroresQuery->where('etapa', $filtroEtapaError);
+        }
+        if ($filtroQError !== '') {
+            $likeErr = '%'.$filtroQError.'%';
+            $erroresQuery->where(function ($q) use ($likeErr, $filtroQError) {
+                $q->where('apellido_nombre', 'like', $likeErr)
+                    ->orWhere('mensaje', 'like', $likeErr)
+                    ->orWhere('concepto_descripcion', 'like', $likeErr)
+                    ->orWhere('legajo', 'like', $likeErr);
+                if (ctype_digit($filtroQError)) {
+                    $q->orWhere('legajo', (int) $filtroQError)
+                        ->orWhere('concepto_codigo', (int) $filtroQError);
+                }
+            });
+        }
+        $erroresLiquidacion = $erroresQuery->paginate(50, ['*'], 'err_page')
+            ->appends($request->only(['q', 'err_etapa', 'err_q']));
+        $erroresCountTotal = (int) $liq->errores()->count();
+        $erroresCountPorEtapa = $liq->errores()
+            ->selectRaw('etapa, count(*) as c')
+            ->groupBy('etapa')
+            ->pluck('c', 'etapa');
+        $empleadoIdsConError = $liq->errores()
+            ->whereNotNull('empleado_id')
+            ->distinct()
+            ->pluck('empleado_id')
+            ->flip();
+
+        // Conceptos únicos con error de fórmula (p.ej. 142 filas → 1 botón Editar).
+        $conceptosUnicosConError = $liq->errores()
+            ->where('etapa', 'formula')
+            ->whereNotNull('concepto_codigo')
+            ->get([
+                'concepto_id', 'concepto_codigo', 'concepto_descripcion',
+                'formula_pos', 'formula_campo', 'mensaje',
+            ])
+            ->groupBy('concepto_codigo')
+            ->map(function ($rows) {
+                $first = $rows->first();
+                $pos = $first->formulaPosicion();
+
+                return [
+                    'concepto_id' => $first->concepto_id,
+                    'concepto_codigo' => (int) $first->concepto_codigo,
+                    'concepto_descripcion' => (string) ($first->concepto_descripcion ?? ''),
+                    'formula_pos' => $pos >= 0 ? $pos : null,
+                    'formula_campo' => $first->formulaCampoId(),
+                    'mensaje' => (string) $first->mensaje,
+                    'cantidad' => $rows->count(),
+                ];
+            })
+            ->sortBy('concepto_codigo')
+            ->values();
+
+        $codigosSinId = $conceptosUnicosConError
+            ->filter(fn ($c) => empty($c['concepto_id']))
+            ->pluck('concepto_codigo')
+            ->all();
+        if ($codigosSinId !== []) {
+            $idsPorCodigo = \App\Models\Sueldos\Concepto_Sueldos::query()
+                ->whereIn('codigo', $codigosSinId)
+                ->pluck('id', 'codigo');
+            $conceptosUnicosConError = $conceptosUnicosConError->map(function ($c) use ($idsPorCodigo) {
+                if (empty($c['concepto_id']) && isset($idsPorCodigo[$c['concepto_codigo']])) {
+                    $c['concepto_id'] = (int) $idsPorCodigo[$c['concepto_codigo']];
+                }
+
+                return $c;
+            });
+        }
 
         $previewAsiento = null;
         $errorAsiento = null;
@@ -401,6 +551,17 @@ class Liquidacion_SueldosController extends Controller
                 && $liq->esEditable(),
             'previewAsiento' => $previewAsiento,
             'errorAsiento' => $errorAsiento,
+            'erroresLiquidacion' => $erroresLiquidacion,
+            'erroresCountTotal' => $erroresCountTotal,
+            'erroresCountPorEtapa' => $erroresCountPorEtapa,
+            'empleadoIdsConError' => $empleadoIdsConError,
+            'filtroEtapaError' => $filtroEtapaError,
+            'filtroQError' => $filtroQError,
+            'conceptosUnicosConError' => $conceptosUnicosConError,
+            'conceptoIdPorCodigo' => $conceptosUnicosConError
+                ->filter(fn ($c) => ! empty($c['concepto_id']))
+                ->mapWithKeys(fn ($c) => [(int) $c['concepto_codigo'] => (int) $c['concepto_id']]),
+            'puedeEditarConcepto' => can('editar-concepto-sueldos', false),
         ]);
     }
 
@@ -420,6 +581,61 @@ class Liquidacion_SueldosController extends Controller
 
         return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
             ->with('previewAsiento', $preview);
+    }
+
+    /**
+     * Exporta el asiento de la corrida en PDF / Excel / CSV.
+     * Sin contabilizar: preview (sin N°). Contabilizada: movimientos reales con numeroasiento.
+     */
+    public function exportarAsiento($id, $formato = null)
+    {
+        can('listar-liquidacion-sueldos');
+
+        $formato = strtoupper((string) $formato);
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        if (! empty($liq->simulacion)) {
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', 'Las corridas de simulación no generan asiento contable.');
+        }
+
+        try {
+            $preview = null;
+            if (! SueldosAsientoExportSupport::tieneAsientosGrabados($liq->loadMissing([
+                'asiento',
+                'asientosSueldos.asiento',
+            ]))) {
+                $preview = app(LiquidacionAsientoService::class)->preview($liq);
+            }
+            $payload = SueldosAsientoExportSupport::armar($liq, $preview);
+        } catch (\Throwable $e) {
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        switch ($formato) {
+            case 'PDF':
+                $html = view('sueldos.liquidacion.asiento_pdf', compact('payload'))->render();
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'portrait');
+                $pdf->loadHTML($html);
+
+                return $pdf->download(SueldosAsientoExportSupport::nombreArchivo($payload, 'pdf'));
+
+            case 'EXCEL':
+                return (new LiquidacionAsientoExport($payload, false))
+                    ->download(SueldosAsientoExportSupport::nombreArchivo($payload, 'xlsx'));
+
+            case 'CSV':
+                return (new LiquidacionAsientoExport($payload, true))
+                    ->download(
+                        SueldosAsientoExportSupport::nombreArchivo($payload, 'csv'),
+                        Excel::CSV
+                    );
+        }
+
+        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id]);
     }
 
     public function contabilizar($id)
@@ -476,6 +692,40 @@ class Liquidacion_SueldosController extends Controller
 
         return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
             ->with('mensaje', 'Solicitud de pago '.($sp->codigo ?? $spId).' generada (autorizada). Pagala desde Caja.');
+    }
+
+    /**
+     * Quita un recibo (empleado) de la corrida sin recalcular al resto.
+     */
+    public function eliminarRecibo(Request $request, LiquidacionReciboEliminarService $eliminar, $id, $reciboId)
+    {
+        can('editar-liquidacion-sueldos');
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+        $recibo = LiquidacionConfidencialSeguridadSupport::reciboVisibleDeCorrida((int) $id, (int) $reciboId);
+
+        try {
+            $res = $eliminar->eliminar($liq, $recibo);
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+            }
+
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        $msg = 'Se quitó el legajo '.$res['legajo']
+            .($res['nombre'] !== '' ? ' ('.$res['nombre'].')' : '')
+            .' de la corrida sin recalcular al resto. Quedan '.$res['recibos_restantes'].' recibo(s).';
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json(['mensaje' => 'ok', 'texto' => $msg, 'recibos_restantes' => $res['recibos_restantes']]);
+        }
+
+        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+            ->with('mensaje', $msg);
     }
 
     /**
@@ -713,7 +963,13 @@ class Liquidacion_SueldosController extends Controller
 
         $consulta = (string) ($request->input('consulta') ?? '');
         $empresaId = $request->filled('empresa_id') ? (int) $request->input('empresa_id') : null;
-        $data = $this->repository->listadoParaConsulta($consulta, $empresaId);
+        $empresaIds = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        $data = $this->repository->listadoParaConsulta($consulta, $empresaId, $empresaIds !== [] ? $empresaIds : null);
         $puedeAbrirAbm = can('editar-liquidacion-sueldos', false) || can('listar-liquidacion-sueldos', false);
 
         $output = ['data' => ''];
@@ -759,6 +1015,15 @@ class Liquidacion_SueldosController extends Controller
         $empresaId = $request->filled('empresa_id') ? (int) $request->input('empresa_id') : null;
         $liq = $this->repository->findPorNumero($numeroInt, $empresaId);
         if ($liq === null) {
+            $cantidad = $this->repository->contarPorNumero($numeroInt, $empresaId);
+            if ($cantidad > 1 && ($empresaId === null || $empresaId <= 0)) {
+                return response()->json([
+                    'error' => 'Hay varias liquidaciones con el número '.$numeroInt.' (una por empresa). Elija la empresa y vuelva a validar.',
+                    'ambiguo' => true,
+                    'cantidad' => $cantidad,
+                ], 409);
+            }
+
             return response()->json(['error' => 'Liquidación no encontrada'], 404);
         }
 
@@ -788,7 +1053,11 @@ class Liquidacion_SueldosController extends Controller
         $estadoLabel = Liquidacion_Sueldos::ESTADOS[$liq->estado] ?? (string) ($liq->estado ?? '');
         $tipoLabel = Liquidacion_Sueldos::TIPOS[$liq->tipo] ?? (string) ($liq->tipo ?? '');
         $desc = trim((string) ($liq->descripcion ?? ''));
+        $empresaNombre = trim((string) (optional($liq->empresa)->nombre ?? ''));
         $nombre = trim(($liq->periodo ?? '').($desc !== '' ? ' · '.$desc : '').($estadoLabel !== '' ? ' ('.$estadoLabel.')' : ''));
+        if ($empresaNombre !== '') {
+            $nombre = trim($nombre.($nombre !== '' ? ' · ' : '').$empresaNombre);
+        }
 
         return [
             'id' => (int) $liq->id,
@@ -800,7 +1069,7 @@ class Liquidacion_SueldosController extends Controller
             'estado' => $liq->estado,
             'estado_label' => $estadoLabel,
             'empresa_id' => $liq->empresa_id ? (int) $liq->empresa_id : null,
-            'empresa' => optional($liq->empresa)->nombre,
+            'empresa' => $empresaNombre !== '' ? $empresaNombre : optional($liq->empresa)->nombre,
         ];
     }
 

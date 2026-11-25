@@ -35,6 +35,7 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
                 'nro_factura' => '1234',
                 'nro_com' => '88',
                 'nro_op' => '55',
+                'nro_cliente' => '86691-1',
                 'empresa_todas' => 1,
             ])
         );
@@ -46,6 +47,7 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
         $this->assertSame('1234', $filtros['nro_factura']);
         $this->assertSame('88', $filtros['nro_com']);
         $this->assertSame('55', $filtros['nro_op']);
+        $this->assertSame('86691-1', $filtros['nro_cliente']);
         $this->assertNull($filtros['empresa_id']);
     }
 
@@ -69,6 +71,7 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
             'tab' => OrdencompraLegajoBandejaFiltros::TAB_RESTO,
             'atajo' => OrdencompraLegajoBandejaFiltros::ATAJO_CON_PAGO,
             'nro_factura' => '99',
+            'nro_cliente' => '03114013-7',
             'empresa_id' => 2,
             'empresa_scope' => 'una',
             'modo' => OrdencompraListadoFiltros::MODO_CAMPO,
@@ -81,6 +84,7 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
         $this->assertSame(OrdencompraLegajoBandejaFiltros::TAB_RESTO, $q['tab']);
         $this->assertSame(OrdencompraLegajoBandejaFiltros::ATAJO_CON_PAGO, $q['atajo']);
         $this->assertSame('99', $q['nro_factura']);
+        $this->assertSame('03114013-7', $q['nro_cliente']);
         $this->assertSame(2, $q['empresa_id']);
         $this->assertSame(OrdencompraListadoFiltros::MODO_CAMPO, $q['filtro_modo']);
         $this->assertSame('Kandiko', $q['filtro_valor']);
@@ -111,6 +115,11 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
         $this->assertTrue(
             OrdencompraLegajoBandejaFiltros::requestTraeContexto(
                 Request::create('/compras/legajos', 'GET', ['nro_oc' => '12'])
+            )
+        );
+        $this->assertTrue(
+            OrdencompraLegajoBandejaFiltros::requestTraeContexto(
+                Request::create('/compras/legajos', 'GET', ['nro_cliente' => '86691-1'])
             )
         );
     }

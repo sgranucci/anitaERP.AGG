@@ -6,6 +6,7 @@ use App\Exports\Configuracion\AiDecisionListadoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Ai\AiDecision;
 use App\Services\Ai\AiDecisionLogger;
+use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Configuracion\AiDecisionKpisSupport;
 use App\Support\Configuracion\AiDecisionListadoFiltros;
 use App\Support\Configuracion\AiFacturasCanalKpisSupport;
@@ -54,10 +55,13 @@ class AiDecisionController extends Controller
 
     /**
      * Reporte predefinido: facturas/precargas por canal (agente, scan, IA) + errores.
+     * Acceso: Gobernanza IA (listar-ai-decisiones) o menú Compras/Reportes (listar-facturas-canal).
      */
     public function facturasCanal(Request $request)
     {
-        can('listar-ai-decisiones');
+        if (! can('listar-ai-decisiones', false) && ! can('listar-facturas-canal', false)) {
+            can('listar-facturas-canal');
+        }
 
         $periodo = AiFacturasCanalKpisSupport::resolverPeriodo(
             $request->input('preset'),
@@ -74,6 +78,44 @@ class AiDecisionController extends Controller
             'reporte' => $reporte,
             'presets' => AiFacturasCanalKpisSupport::presetsEtiquetas(),
             'periodo' => $periodo,
+        ]);
+    }
+
+    /**
+     * Drill-down: precargas que componen un total del reporte Facturas por canal.
+     */
+    public function facturasCanalDetalle(Request $request)
+    {
+        if (! can('listar-ai-decisiones', false) && ! can('listar-facturas-canal', false)) {
+            can('listar-facturas-canal');
+        }
+
+        $origen = AiFacturasCanalKpisSupport::normalizarOrigen((string) $request->input('origen', ''));
+        $periodo = AiFacturasCanalKpisSupport::resolverPeriodo(
+            $request->input('preset'),
+            $request->input('fecha_desde'),
+            $request->input('fecha_hasta'),
+        );
+
+        $coleccion = AiFacturasCanalKpisSupport::listarPrecargasPorOrigen(
+            $origen,
+            $periodo['fecha_desde'],
+            $periodo['fecha_hasta'],
+            true,
+            50,
+        );
+        $coleccion->appends([
+            'origen' => $origen,
+            'fecha_desde' => $periodo['fecha_desde'],
+            'fecha_hasta' => $periodo['fecha_hasta'],
+            'preset' => $periodo['preset'],
+        ]);
+
+        return view('configuracion.ai_decision.facturas_canal_detalle', [
+            'origen' => $origen,
+            'origenEtiqueta' => PrecargaComprobanteOrigenEntrada::etiqueta($origen),
+            'periodo' => $periodo,
+            'coleccion' => $coleccion,
         ]);
     }
 

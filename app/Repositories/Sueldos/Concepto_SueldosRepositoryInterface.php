@@ -44,4 +44,23 @@ interface Concepto_SueldosRepositoryInterface extends RepositoryInterface
      * }
      */
     public function retraducirFormulasDesdeLineas();
+
+    /**
+     * Re-pull habformula y refresca concepto_formula_sueldos + traducción ERP.
+     * Sirve para montos fijos / implícitos en la fórmula (ej. 3299 `_V:=2010`)
+     * que la sync normal omite.
+     *
+     * @return array{
+     *     en_anita_con_formula: int,
+     *     procesados: int,
+     *     actualizados: int,
+     *     sin_cambio: int,
+     *     traducidos: int,
+     *     pendientes_traduccion: int,
+     *     no_en_erp: int,
+     *     errores: list<string>,
+     *     ejemplos_cambio: list<string>
+     * }
+     */
+    public function actualizarFormulasDesdeAnita();
 }

@@ -284,6 +284,7 @@ Route::delete('configuracion/feriado/{id}', 'Configuracion\FeriadoController@eli
  */
 Route::get('configuracion/ai-decisiones', 'Configuracion\AiDecisionController@index')->name('ai_decision');
 Route::get('configuracion/ai-decisiones/facturas-canal', 'Configuracion\AiDecisionController@facturasCanal')->name('ai_decision_facturas_canal');
+Route::get('configuracion/ai-decisiones/facturas-canal/detalle', 'Configuracion\AiDecisionController@facturasCanalDetalle')->name('ai_decision_facturas_canal_detalle');
 Route::get('configuracion/listar-ai-decisiones/{formato?}', 'Configuracion\AiDecisionController@listar')->name('listar_ai_decision');
 Route::post('configuracion/ai-decisiones/descartar', 'Configuracion\AiDecisionController@descartar')->name('descartar_ai_decision');
 Route::get('configuracion/ai-agente-eventos', 'Configuracion\AiAgenteEventoController@index')->name('ai_agente_evento');
@@ -4869,6 +4870,7 @@ Route::get('compras/iva-compras', 'Compras\IvaComprasReporteController@index')->
 Route::get('compras/listar-iva-compras/{formato}', 'Compras\IvaComprasReporteController@exportar')->name('listar_iva_compras');
 Route::get('compras/comprobantes-pdf-lote', 'Compras\ComprobantesPdfLoteReporteController@index')->name('comprobantes_pdf_lote');
 Route::get('compras/comprobantes-pdf-lote/zip', 'Compras\ComprobantesPdfLoteReporteController@descargarZip')->name('comprobantes_pdf_lote_zip');
+Route::get('compras/comprobantes-pdf-lote/servicios', 'Compras\ComprobantesPdfLoteReporteController@servicios')->name('comprobantes_pdf_lote_servicios');
 Route::get('compras/proveedor-control-ganancias-reporte', 'Compras\ProveedorControlGananciasReporteController@index')->name('proveedor_control_ganancias_reporte');
 Route::get('compras/listar-proveedor-control-ganancias-reporte/{formato}', 'Compras\ProveedorControlGananciasReporteController@exportar')->name('listar_proveedor_control_ganancias_reporte');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
@@ -5904,13 +5906,13 @@ Route::get('sueldos/categoria/{id}/historial-bases', 'Sueldos\Categoria_SueldosC
  * Consulta F1 de maestros de sueldos (categoría, agrupamiento, lugar, vacación, ART, sindicato).
  */
 Route::post('sueldos/maestro/{maestro}/consulta', 'Sueldos\ConsultaMaestro_SueldosController@consulta')
-    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato|motivoegreso')
     ->name('consulta_maestro_sueldos');
 Route::get('sueldos/maestro/{maestro}/leerporcodigo/{codigo}', 'Sueldos\ConsultaMaestro_SueldosController@leerPorCodigo')
-    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato|motivoegreso')
     ->name('leer_maestro_sueldos_por_codigo');
 Route::get('sueldos/maestro/{maestro}/leer/{id}', 'Sueldos\ConsultaMaestro_SueldosController@leer')
-    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato')
+    ->where('maestro', 'categoria|agrupamiento|lugartrabajo|vacacion|art|sindicato|motivoegreso')
     ->name('leer_maestro_sueldos');
 
 /*
@@ -5936,6 +5938,13 @@ Route::post('sueldos/sindicato', 'Sueldos\Sindicato_SueldosController@guardar')-
 Route::get('sueldos/sindicato/{id}/editar', 'Sueldos\Sindicato_SueldosController@editar')->name('editar_sindicato_sueldos');
 Route::put('sueldos/sindicato/{id}', 'Sueldos\Sindicato_SueldosController@actualizar')->name('actualizar_sindicato_sueldos');
 Route::delete('sueldos/sindicato/{id}', 'Sueldos\Sindicato_SueldosController@eliminar')->name('eliminar_sindicato_sueldos');
+
+Route::get('sueldos/grupo-liq-final', 'Sueldos\Grupo_Liq_Final_SueldosController@index')->name('consultar_grupo_liq_final_sueldos');
+Route::get('sueldos/grupo-liq-final/crear', 'Sueldos\Grupo_Liq_Final_SueldosController@crear')->name('crear_grupo_liq_final_sueldos');
+Route::post('sueldos/grupo-liq-final', 'Sueldos\Grupo_Liq_Final_SueldosController@guardar')->name('guardar_grupo_liq_final_sueldos');
+Route::get('sueldos/grupo-liq-final/{id}/editar', 'Sueldos\Grupo_Liq_Final_SueldosController@editar')->name('editar_grupo_liq_final_sueldos')->whereNumber('id');
+Route::put('sueldos/grupo-liq-final/{id}', 'Sueldos\Grupo_Liq_Final_SueldosController@actualizar')->name('actualizar_grupo_liq_final_sueldos')->whereNumber('id');
+Route::delete('sueldos/grupo-liq-final/{id}', 'Sueldos\Grupo_Liq_Final_SueldosController@eliminar')->name('eliminar_grupo_liq_final_sueldos')->whereNumber('id');
 
 /*
  * Plantillas Word y reglas de asignación para emisión de contratos / certificados.
@@ -5975,6 +5984,11 @@ Route::post('sueldos/descuento-fallo/{id}/anular', 'Sueldos\DescuentoFallo_Sueld
 Route::get('sueldos/fallo-reporte', 'Sueldos\FalloReporte_SueldosController@index')->name('fallo_reporte_sueldos');
 Route::get('sueldos/listar-fallo-reporte/{formato}', 'Sueldos\FalloReporte_SueldosController@exportar')
     ->name('listar_fallo_reporte_sueldos');
+
+Route::get('sueldos/comparativo-conceptos', 'Sueldos\ComparativoConceptosReporte_SueldosController@index')
+    ->name('comparativo_conceptos_sueldos');
+Route::get('sueldos/listar-comparativo-conceptos/{formato}', 'Sueldos\ComparativoConceptosReporte_SueldosController@exportar')
+    ->name('listar_comparativo_conceptos_sueldos');
 
 Route::get('sueldos/estructura-personal', 'Sueldos\EstructuraPersonalController@index')->name('estructura_personal_sueldos');
 Route::get('sueldos/estructura-personal/excel', 'Sueldos\EstructuraPersonalController@excel')->name('excel_estructura_personal_sueldos');
@@ -6037,6 +6051,7 @@ Route::get('sueldos/listaliquidacion/{formato?}/{busqueda?}', 'Sueldos\Liquidaci
 Route::post('sueldos/liquidacion/sincronizar-anita', 'Sueldos\Liquidacion_SueldosController@sincronizarAnita')->name('sincronizar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/crear', 'Sueldos\Liquidacion_SueldosController@crear')->name('crear_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/proximo-numero', 'Sueldos\Liquidacion_SueldosController@proximoNumero')->name('proximo_numero_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/candidatos-empleados', 'Sueldos\Liquidacion_SueldosController@candidatosEmpleados')->name('candidatos_empleados_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/consultaliquidacion', 'Sueldos\Liquidacion_SueldosController@consultaLiquidacion')->name('consulta_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/leerpornumero/{numero}', 'Sueldos\Liquidacion_SueldosController@leeUnLiquidacionPorNumero')->name('leer_liquidacion_sueldos_por_numero');
 Route::get('sueldos/liquidacion/leer/{id}', 'Sueldos\Liquidacion_SueldosController@leeLiquidacion')->name('leer_liquidacion_sueldos');
@@ -6047,11 +6062,13 @@ Route::post('sueldos/liquidacion/{id}/estado', 'Sueldos\Liquidacion_SueldosContr
 Route::post('sueldos/liquidacion/{id}/calcular', 'Sueldos\Liquidacion_SueldosController@calcular')->name('calcular_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/resultado', 'Sueldos\Liquidacion_SueldosController@resultado')->name('resultado_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/asiento', 'Sueldos\Liquidacion_SueldosController@previewAsiento')->name('preview_asiento_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/asiento/export/{formato}', 'Sueldos\Liquidacion_SueldosController@exportarAsiento')->name('exportar_asiento_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/contabilizar', 'Sueldos\Liquidacion_SueldosController@contabilizar')->name('contabilizar_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/descontabilizar', 'Sueldos\Liquidacion_SueldosController@descontabilizar')->name('descontabilizar_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/solicitudpago', 'Sueldos\Liquidacion_SueldosController@generarSolicitudpago')->name('solicitudpago_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}', 'Sueldos\Liquidacion_SueldosController@reciboPreview')->name('preview_recibo_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}/pdf', 'Sueldos\Liquidacion_SueldosController@reciboPdf')->name('pdf_recibo_liquidacion_sueldos');
+Route::delete('sueldos/liquidacion/{id}/recibo/{reciboId}', 'Sueldos\Liquidacion_SueldosController@eliminarRecibo')->name('eliminar_recibo_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibos/pdf', 'Sueldos\Liquidacion_SueldosController@recibosPdf')->name('pdf_recibos_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/confidencial/analizar', 'Sueldos\Liquidacion_SueldosController@analizarConfidencial')->name('analizar_confidencial_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/confidencial/ejecutar', 'Sueldos\Liquidacion_SueldosController@ejecutarConfidencial')->name('ejecutar_confidencial_liquidacion_sueldos');
@@ -6119,6 +6136,7 @@ Route::delete('sueldos/imputacion-concepto/{id}', 'Sueldos\Concepto_Imputacion_S
 Route::get('sueldos/concepto', 'Sueldos\Concepto_SueldosController@index')->name('consultar_concepto_sueldos');
 Route::get('sueldos/listaconcepto/{formato?}/{busqueda?}', 'Sueldos\Concepto_SueldosController@listar')->name('lista_concepto_sueldos');
 Route::post('sueldos/concepto/sincronizar-anita', 'Sueldos\Concepto_SueldosController@sincronizarAnita')->name('sincronizar_concepto_sueldos');
+Route::post('sueldos/concepto/actualizar-formulas-anita', 'Sueldos\Concepto_SueldosController@actualizarFormulasAnita')->name('actualizar_formulas_anita_concepto_sueldos');
 Route::post('sueldos/concepto/retraducir-formulas', 'Sueldos\Concepto_SueldosController@retraducirFormulas')->name('retraducir_formulas_concepto_sueldos');
 Route::post('sueldos/concepto/reclasificar-papo', 'Sueldos\Concepto_SueldosController@reclasificarPapo')->name('reclasificar_papo_concepto_sueldos');
 Route::post('sueldos/concepto/validar-formula', 'Sueldos\Concepto_SueldosController@validarFormula')->name('validar_formula_concepto_sueldos');
@@ -6139,6 +6157,9 @@ Route::post('sueldos/parametro', 'Sueldos\Parametro_SueldosController@guardar')-
 Route::get('sueldos/parametro/{id}/editar', 'Sueldos\Parametro_SueldosController@editar')->name('editar_parametro_sueldos');
 Route::put('sueldos/parametro/{id}', 'Sueldos\Parametro_SueldosController@actualizar')->name('actualizar_parametro_sueldos');
 Route::delete('sueldos/parametro/{id}', 'Sueldos\Parametro_SueldosController@eliminar')->name('eliminar_parametro_sueldos');
+
+Route::get('sueldos/recibo-firma', 'Sueldos\ReciboFirma_SueldosController@index')->name('recibo_firma_sueldos');
+Route::put('sueldos/recibo-firma', 'Sueldos\ReciboFirma_SueldosController@actualizar')->name('actualizar_recibo_firma_sueldos');
 
 Route::get('sueldos/antiguedad-tabla', 'Sueldos\Antiguedad_Tabla_SueldosController@index')->name('consultar_antiguedad_tabla_sueldos');
 Route::get('sueldos/listaantiguedadtabla/{formato?}/{busqueda?}', 'Sueldos\Antiguedad_Tabla_SueldosController@listar')->name('lista_antiguedad_tabla_sueldos');
@@ -6343,7 +6364,9 @@ Route::get('sueldos/empleado/{id}/autorizar-aviso', 'Sueldos\Empleado_SueldosCon
 Route::post('sueldos/empleado/{id}/baja', 'Sueldos\Empleado_SueldosController@darBaja')->name('baja_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/baja-provisoria', 'Sueldos\Empleado_SueldosController@programarBaja')->name('baja_provisoria_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/baja-definitiva', 'Sueldos\Empleado_SueldosController@confirmarBajaDefinitiva')->name('baja_definitiva_empleado_sueldos');
+Route::post('sueldos/empleado/{id}/modificar-baja-provisoria', 'Sueldos\Empleado_SueldosController@modificarBajaProvisoria')->name('modificar_baja_provisoria_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/anular-baja-provisoria', 'Sueldos\Empleado_SueldosController@anularBajaProvisoria')->name('anular_baja_provisoria_empleado_sueldos');
+Route::delete('sueldos/empleado/{id}/historia/{ingresoId}', 'Sueldos\Empleado_SueldosController@eliminarHistoria')->name('eliminar_historia_empleado_sueldos')->whereNumber(['id', 'ingresoId']);
 Route::post('sueldos/empleado/{id}/reincorporar', 'Sueldos\Empleado_SueldosController@reincorporar')->name('reincorporar_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/bases', 'Sueldos\Empleado_SueldosController@guardarBase')->name('guardar_base_empleado_sueldos');
 Route::post('sueldos/empleado/{id}/bases/vigencias', 'Sueldos\Empleado_SueldosController@guardarVigenciasLote')->name('guardar_vigencias_empleado_sueldos');
@@ -6417,6 +6440,7 @@ Route::delete('sueldos/plan-cuota/{id}', 'Sueldos\Empleado_PlanCuotaSueldosContr
 
 Route::get('sueldos/empleado/{empleado}/novedades', 'Sueldos\Empleado_NovedadSueldosController@panel')->name('novedades_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/novedades', 'Sueldos\Empleado_NovedadSueldosController@guardar')->name('guardar_novedad_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/novedades/replicar', 'Sueldos\Empleado_NovedadSueldosController@replicar')->name('replicar_novedades_empleado_sueldos');
 Route::put('sueldos/novedad-empleado/{id}', 'Sueldos\Empleado_NovedadSueldosController@actualizar')->name('actualizar_novedad_empleado_sueldos');
 Route::delete('sueldos/novedad-empleado/{id}', 'Sueldos\Empleado_NovedadSueldosController@eliminar')->name('eliminar_novedad_empleado_sueldos');
 
@@ -6769,9 +6793,9 @@ Route::get('presupuesto/listar-capex-reporte/{formato?}', 'Presupuesto\CapexRepo
 Route::get('presupuesto/partidagasto', 'Presupuesto\PartidagastoController@index')->name('consultar_partidagasto');
 Route::get('presupuesto/partidagasto/crear', 'Presupuesto\PartidagastoController@crear')->name('crear_partidagasto');
 Route::post('presupuesto/partidagasto', 'Presupuesto\PartidagastoController@guardar')->name('guardar_partidagasto');
-Route::get('presupuesto/partidagasto/{id}/editar', 'Presupuesto\PartidagastoController@editar')->name('editar_partidagasto');
-Route::put('presupuesto/partidagasto/{id}', 'Presupuesto\PartidagastoController@actualizar')->name('actualizar_partidagasto');
-Route::delete('presupuesto/partidagasto/{id}', 'Presupuesto\PartidagastoController@eliminar')->name('eliminar_partidagasto');
+Route::get('presupuesto/partidagasto/{id}/editar', 'Presupuesto\PartidagastoController@editar')->name('editar_partidagasto')->middleware('modo.consulta');
+Route::put('presupuesto/partidagasto/{id}', 'Presupuesto\PartidagastoController@actualizar')->name('actualizar_partidagasto')->middleware('modo.consulta');
+Route::delete('presupuesto/partidagasto/{id}', 'Presupuesto\PartidagastoController@eliminar')->name('eliminar_partidagasto')->middleware('modo.consulta');
 
 Route::get('presupuesto/actualizaestadopartidagasto/{estadopartidagasto}/{partidagasto_id}', 'Presupuesto\PartidagastoController@actualizaEstadoPartidagasto')->name('actualiza_solo_partidagasto');
 Route::get('presupuesto/leerhistoriapartidagasto/{partidagasto_id}', 'Presupuesto\PartidagastoController@leerHistoriaPartidagasto')->name('lee_historia_partidagasto');

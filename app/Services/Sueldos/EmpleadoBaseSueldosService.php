@@ -7,10 +7,11 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Bases de cálculo (valores de liquidación fijos) por empleado, con manejo de
- * vigencia (versiones por fecha) e histórico consultable. Mismo patrón que
- * CategoriaBaseSueldosService, pero por legajo: se usa cuando la categoría del
- * empleado toma las bases "desde cada empleado" (origen_bases = C).
+ * Bases de cálculo por empleado, con vigencia e histórico.
+ * Mismo patrón que CategoriaBaseSueldosService.
+ * Con categoría origen C: todas las bases del legajo.
+ * Con origen T: solo las que no están en la tabla de la categoría
+ * (ej. mutual B7, horas B11); las de la tabla se editan en el ABM de categorías.
  */
 class EmpleadoBaseSueldosService
 {

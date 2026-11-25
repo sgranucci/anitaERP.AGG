@@ -18,7 +18,7 @@
         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
     } else {
         $pct = round(($ancho / $sumaAnchos) * $pctDatos, 2);
-        $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
+        $styleCol = 'width:'.$pct.'%;min-width:0;';
     }
     $cls = trim(LwGrilla::claseAlineacion($alinea).' lw-col lw-th-drag');
     $camposOrden = $camposOrdenablesThead ?? [];

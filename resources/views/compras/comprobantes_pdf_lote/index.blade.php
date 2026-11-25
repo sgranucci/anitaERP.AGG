@@ -7,7 +7,9 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script>
     window.COMPROBANTES_PDF_LOTE = {
-        leerProveedorUrlBase: @json(url('compras/leerproveedorporcodigo'))
+        leerProveedorUrlBase: @json(url('compras/leerproveedorporcodigo')),
+        serviciosUrl: @json(route('comprobantes_pdf_lote_servicios')),
+        nroClienteSeleccionado: @json((string) ($filtros['nro_cliente'] ?? ''))
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
@@ -80,6 +82,32 @@
                         'proveedoresIniciales' => $proveedores_iniciales ?? [],
                     ])
 
+                    <div class="form-group row" id="bloque-nro-cliente-pdf-lote">
+                        <label for="nro_cliente" class="{{ $colLabel }}">Nº cliente / medidor</label>
+                        <div class="col-lg-6">
+                            @php
+                                $nroClienteSel = (string) ($filtros['nro_cliente'] ?? '');
+                                $serviciosOpciones = $servicios_opciones ?? [];
+                            @endphp
+                            <select name="nro_cliente" id="nro_cliente" class="form-control"
+                                title="Opcional. Se completa con los medidores de los proveedores de la lista.">
+                                <option value="">— Sin filtrar (todos) —</option>
+                                @foreach ($serviciosOpciones as $op)
+                                    <option value="{{ $op['cliente'] }}"
+                                        data-servicio-id="{{ $op['id'] }}"
+                                        data-proveedor-id="{{ $op['proveedor_id'] }}"
+                                        @selected($nroClienteSel !== '' && $nroClienteSel === (string) $op['cliente'])>
+                                        {{ $op['etiqueta'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="form-text text-muted mb-0" id="aviso-nro-cliente-pdf-lote">
+                                Opcional. Agregá proveedores arriba para ver sus clientes/medidores.
+                                Solo filtra facturas.
+                            </small>
+                        </div>
+                    </div>
+
                     <div class="form-group row">
                         <label class="{{ $colLabel }} requerido">Incluir</label>
                         <div class="col-lg-10 pt-1">
@@ -123,6 +151,9 @@
                             <strong>{{ $filas ? $filas->total() : 0 }}</strong>
                             · {{ \Carbon\Carbon::parse($filtros['fecha_desde'])->format('d/m/Y') }}
                             al {{ \Carbon\Carbon::parse($filtros['fecha_hasta'])->format('d/m/Y') }}
+                            @if (! empty($filtros['nro_cliente']))
+                                · Cliente/medidor <strong>{{ $filtros['nro_cliente'] }}</strong>
+                            @endif
                         </div>
                         @if ($filas && $filas->total() > 0)
                             <div class="d-flex flex-wrap" style="gap: 6px;">
@@ -145,6 +176,9 @@
                             <input type="hidden" name="fecha_desde" value="{{ $filtros['fecha_desde'] ?? '' }}">
                             <input type="hidden" name="fecha_hasta" value="{{ $filtros['fecha_hasta'] ?? '' }}">
                             <input type="hidden" name="proveedor_ids" value="{{ implode(',', $filtros['proveedor_ids'] ?? []) }}">
+                            @if (! empty($filtros['nro_cliente']))
+                                <input type="hidden" name="nro_cliente" value="{{ $filtros['nro_cliente'] }}">
+                            @endif
                             <input type="hidden" name="tipos_enviados" value="1">
                             @foreach ($filtros['tipos'] ?? [] as $tipoMarcado)
                                 <input type="hidden" name="tipos[]" value="{{ $tipoMarcado }}">
@@ -163,6 +197,7 @@
                                     <th>Proveedor</th>
                                     <th>Tipo</th>
                                     <th>Comprobante</th>
+                                    <th>Cliente / medidor</th>
                                     <th class="text-right">Total</th>
                                     <th>PDF</th>
                                     <th class="text-center" style="width: 110px;">Acciones</th>
@@ -179,6 +214,7 @@
                                         <td>{{ $fila->proveedor }}</td>
                                         <td>{{ $fila->tipoEtiqueta }}</td>
                                         <td>{{ $fila->numero }}</td>
+                                        <td>{{ $fila->servicioCliente !== '' ? $fila->servicioCliente : '—' }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->total, 2, ',', '.') }}</td>
                                         <td>
                                             @if ($fila->tienePdf)
@@ -206,7 +242,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="text-center text-muted py-3">No hay documentos para esos filtros.</td>
+                                        <td colspan="9" class="text-center text-muted py-3">No hay documentos para esos filtros.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

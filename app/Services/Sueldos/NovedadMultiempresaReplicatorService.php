@@ -46,6 +46,53 @@ class NovedadMultiempresaReplicatorService
             ->get();
     }
 
+    /**
+     * Replica novedades del empleado a legajos activos del mismo legajo en otras empresas.
+     *
+     * @param  list<int>|null  $novedadIds  null/vacío = todas las no anuladas del empleado
+     * @return array{hermanos: int, replicadas: int, empresas: list<string>}
+     */
+    public function replicarNovedadesEmpleado(Empleado_Sueldos $empleado, ?array $novedadIds = null): array
+    {
+        $hermanos = $this->hermanos($empleado)->loadMissing('empresa:id,nombre,codigo');
+        $empresas = $hermanos
+            ->map(function (Empleado_Sueldos $h) {
+                $emp = $h->empresa;
+                if (! $emp) {
+                    return 'Empresa #'.$h->empresa_id;
+                }
+                $codigo = trim((string) ($emp->codigo ?? ''));
+
+                return $codigo !== '' ? $codigo.' — '.$emp->nombre : (string) $emp->nombre;
+            })
+            ->values()
+            ->all();
+
+        if ($hermanos->isEmpty()) {
+            return ['hermanos' => 0, 'replicadas' => 0, 'empresas' => []];
+        }
+
+        $query = Novedad_Sueldos::query()
+            ->where('empleado_id', (int) $empleado->id)
+            ->where('estado', '!=', NovedadSueldosCatalogo::ESTADO_ANULADA);
+
+        $ids = array_values(array_filter(array_map('intval', $novedadIds ?? [])));
+        if ($ids !== []) {
+            $query->whereIn('id', $ids);
+        }
+
+        $novedades = $query->orderBy('id')->get();
+        foreach ($novedades as $novedad) {
+            $this->replicarNovedad($novedad);
+        }
+
+        return [
+            'hermanos' => $hermanos->count(),
+            'replicadas' => $novedades->count(),
+            'empresas' => $empresas,
+        ];
+    }
+
     public function replicarNovedad(Novedad_Sueldos $origen): void
     {
         if (self::$replicando) {

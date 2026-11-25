@@ -79,7 +79,10 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
      *
      * @return \Illuminate\Support\Collection<int, Liquidacion_Sueldos>
      */
-    public function listadoParaConsulta(string $consulta = '', ?int $empresaId = null)
+    /**
+     * @param  list<int>|null  $empresaIds
+     */
+    public function listadoParaConsulta(string $consulta = '', ?int $empresaId = null, ?array $empresaIds = null)
     {
         $query = $this->model->newQuery()
             ->with(['empresa:id,nombre'])
@@ -89,7 +92,15 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
 
-        if ($empresaId !== null && $empresaId > 0) {
+        $ids = collect($empresaIds ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($ids !== []) {
+            $query->whereIn('empresa_id', $ids);
+        } elseif ($empresaId !== null && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);
         }
 
@@ -137,7 +148,33 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
             $query->where('empresa_id', $empresaId);
         }
 
+        // Sin empresa: si el número se repite (mensual por empresa), no adivinar.
+        if ($empresaId === null || $empresaId <= 0) {
+            $matches = (clone $query)->limit(2)->get(['id', 'empresa_id']);
+            if ($matches->count() > 1) {
+                return null;
+            }
+        }
+
         return $query->first();
+    }
+
+    /**
+     * Cantidad de liquidaciones con el mismo número (para mensajes de ambigüedad).
+     */
+    public function contarPorNumero(int $numero, ?int $empresaId = null): int
+    {
+        if ($numero <= 0) {
+            return 0;
+        }
+
+        $query = $this->model->newQuery()->where('numero', $numero);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return (int) $query->count();
     }
 
     public function findParaConsulta(int $id, ?int $empresaId = null): ?Liquidacion_Sueldos
@@ -311,6 +348,29 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
         }
         if (array_key_exists('acumula_novedades', $data)) {
             $out['acumula_novedades'] = (bool) $data['acumula_novedades'];
+        }
+
+        if (array_key_exists('empleados_modo', $data) || array_key_exists('empleado_ids', $data) || array_key_exists('filtros_json', $data)) {
+            $filtros = [];
+            if ($existente !== null && is_array($existente->filtros_json)) {
+                $filtros = $existente->filtros_json;
+            } elseif (is_array($data['filtros_json'] ?? null)) {
+                $filtros = $data['filtros_json'];
+            }
+            $modo = (string) ($data['empleados_modo'] ?? 'todos');
+            $ids = collect($data['empleado_ids'] ?? [])
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+            if ($modo === 'seleccion') {
+                // Vacío = liquidar a nadie (no cae a "todos").
+                $filtros['empleado_ids'] = $ids;
+            } else {
+                unset($filtros['empleado_ids']);
+            }
+            $out['filtros_json'] = $filtros === [] ? null : $filtros;
         }
 
         return $out;

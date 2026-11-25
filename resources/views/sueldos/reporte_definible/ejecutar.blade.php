@@ -8,6 +8,7 @@
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/liquidacion/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/reporte_definible/ejecutar.js') }}" type="text/javascript"></script>
@@ -59,6 +60,18 @@
                         <input type="hidden" name="variante_id" value="{{ $varianteAplicada->id }}">
                         <input type="hidden" name="pivot_spec_json" value="{{ e(json_encode($varianteAplicada->pivot_spec ?? [])) }}">
                     @endif
+                    @php
+                        $empresasSeleccionadasRsd = $filtrosEjec['empresa_ids']
+                            ?? (array_filter([(int) ($filtrosEjec['empresa_id'] ?? ($liquidacionSeleccionada->empresa_id ?? 0))]));
+                    @endphp
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
+                        'empresa_query' => $empresa_query,
+                        'empresa_ids_seleccionados' => $empresasSeleccionadasRsd,
+                        'consolidar_empresas' => $filtrosEjec['consolidar_empresas'] ?? true,
+                        'id_prefix' => 'rsd_exec',
+                        'col_label' => 'col-lg-2',
+                        'col_body' => 'col-lg-10',
+                    ])
                     <div class="form-row">
                         <div class="form-group col-md-3">
                             <label class="small mb-1">Origen</label>
@@ -67,35 +80,24 @@
                                 <option value="abm" {{ ($filtrosEjec['origen'] ?? '') === 'abm' ? 'selected' : '' }}>De ABM empleados</option>
                             </select>
                         </div>
-                        <div class="form-group col-md-3">
+                        <div class="form-group col-md-4">
                             @include('sueldos.partials.campo_consulta_liquidacion_sueldos', [
                                 'inputName' => 'liquidacion_id',
                                 'inputId' => 'reporte_liquidacion_id',
                                 'label' => 'Liquidación',
                                 'liquidacionId' => $filtrosEjec['liquidacion_id'] ?? null,
                                 'numero' => $liquidacionSeleccionada->numero ?? '',
-                                'descripcion' => $liquidacionSeleccionada->descripcion ?? '',
+                                'descripcion' => trim(($liquidacionSeleccionada->descripcion ?? '').(optional(optional($liquidacionSeleccionada)->empresa)->nombre ? ' · '.optional($liquidacionSeleccionada->empresa)->nombre : '')),
                             ])
                         </div>
-                        <div class="form-group col-md-3">
+                        <div class="form-group col-md-5">
                             @include('sueldos.partials.campo_consulta_liquidacion_sueldos', [
                                 'inputName' => 'liquidacion_id_comparar',
                                 'inputId' => 'reporte_liquidacion_comparar_id',
                                 'label' => 'Comparar vs liquidación (Δ)',
                                 'liquidacionId' => $filtrosEjec['liquidacion_id_comparar'] ?? null,
                                 'numero' => $liquidacionCompararSeleccionada->numero ?? '',
-                                'descripcion' => $liquidacionCompararSeleccionada->descripcion ?? '',
-                            ])
-                        </div>
-                        <div class="form-group col-md-3">
-                            @include('includes.form-empresa-asignada', [
-                                'empresa_query' => $empresa_query,
-                                'empresa_id' => $filtrosEjec['empresa_id'] ?? null,
-                                'required' => false,
-                                'permite_vacio' => true,
-                                'opcion_vacia' => '— Empresa —',
-                                'col_label' => 'col-lg-12 small mb-1',
-                                'col_input' => 'col-lg-12',
+                                'descripcion' => trim(($liquidacionCompararSeleccionada->descripcion ?? '').(optional(optional($liquidacionCompararSeleccionada)->empresa)->nombre ? ' · '.optional($liquidacionCompararSeleccionada->empresa)->nombre : '')),
                             ])
                         </div>
                     </div>
