@@ -198,6 +198,7 @@
                                 <th>N&deg; Pick.</th>
                                 <th>Pedido</th>
                                 <th>Cliente</th>
+                                <th>L&iacute;nea</th>
                                 <th>Art&iacute;culo</th>
                                 <th>Combinaci&oacute;n</th>
                                 <th class="text-right">Cant.</th>
@@ -236,6 +237,7 @@
                                     <td class="picking-nro-celda">{{ $nroPicking ?? '—' }}</td>
                                     <td>{{ $linea->pedidos->codigo ?? $linea->pedido_id }}</td>
                                     <td>{{ $linea->pedidos->clientes->nombre ?? '' }}</td>
+                                    <td>{{ $linea->articulos->lineas->nombre ?? '' }}</td>
                                     <td>{{ $linea->articulos->sku ?? '' }}</td>
                                     <td>{{ $linea->combinaciones->nombre ?? '' }}</td>
                                     <td class="text-right">{{ number_format((float) $linea->cantidad, 0, ',', '.') }}</td>
@@ -266,7 +268,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="13" class="text-center text-muted py-4">No hay l&iacute;neas con los filtros indicados.</td>
+                                    <td colspan="14" class="text-center text-muted py-4">No hay l&iacute;neas con los filtros indicados.</td>
                                 </tr>
                             @endforelse
                         </tbody>
