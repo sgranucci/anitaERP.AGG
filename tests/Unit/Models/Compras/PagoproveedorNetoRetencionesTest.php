@@ -57,4 +57,12 @@ class PagoproveedorNetoRetencionesTest extends TestCase
     {
         $this->assertSame(0.1235, $this->pagoCon(1.0, 0.8765)->netoAPagar(4));
     }
+
+    public function test_dev_ret_con_retencion_negativa_no_duplica_el_desembolso(): void
+    {
+        // DEV RET: monto = lo que se gira; retención negativa es NC SICORE.
+        // Antes: 103517.17 - (-103517.17) = 207034.34 (doble en Interbanking).
+        $this->assertSame(103517.17, $this->pagoCon(103517.17, -103517.17)->netoAPagar());
+        $this->assertSame(-103517.17, $this->pagoCon(103517.17, -103517.17)->totalRetenciones());
+    }
 }

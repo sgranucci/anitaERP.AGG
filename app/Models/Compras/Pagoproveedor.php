@@ -154,6 +154,7 @@ class Pagoproveedor extends Model implements Auditable
     /**
      * Total retenido en la OP. La columna es `importe`: pedir `monto` devuelve null
      * y el neto sale igual al bruto (se transfiere la retención al proveedor).
+     * Puede ser negativo en DEV RET / AOP (líneas SICORE NC).
      */
     public function totalRetenciones(): float
     {
@@ -163,11 +164,18 @@ class Pagoproveedor extends Model implements Auditable
     }
 
     /**
-     * Importe que efectivamente sale al proveedor: bruto menos retenciones.
+     * Importe que efectivamente sale al proveedor: bruto menos retenciones positivas.
+     * Las retenciones negativas (DEV RET / reverso) son contables/SICORE: no se restan
+     * (si se restaran, monto - (-ret) duplicaría el giro en Interbanking/Macro).
      */
     public function netoAPagar(int $decimales = 2): float
     {
-        return round(max(0, (float) $this->monto - $this->totalRetenciones()), $decimales);
+        $this->loadMissing('pagoproveedor_retenciones');
+        $retencionesPositivas = (float) $this->pagoproveedor_retenciones
+            ->filter(static fn ($r) => (float) ($r->importe ?? 0) > 0.0001)
+            ->sum('importe');
+
+        return round(max(0, (float) $this->monto - $retencionesPositivas), $decimales);
     }
 
     public function etiquetaComprobante(): string
