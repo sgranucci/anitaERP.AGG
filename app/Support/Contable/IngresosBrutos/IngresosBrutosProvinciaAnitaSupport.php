@@ -6,10 +6,12 @@ namespace App\Support\Contable\IngresosBrutos;
 
 use App\Models\Configuracion\Provincia;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
+use App\Support\Ventas\ClienteAnitaZonamultSupport;
 
 /**
  * Códigos Anita (zonamult / venibr / retibrmov) asociados a una provincia ERP.
  * Buenos Aires: 2 y 902. CABA: 1 y 901 (mismo criterio que PercepcioniibbExport).
+ * Neuquén: 4 (zonamult) y 915 (AFIP histórico del ERP).
  */
 final class IngresosBrutosProvinciaAnitaSupport
 {
@@ -49,6 +51,13 @@ final class IngresosBrutosProvinciaAnitaSupport
             if ($c > 0) {
                 $codigos[$c] = $c;
             }
+        }
+
+        // ibrxprov / venibr nativo: zonamult (1=CABA, 4=Neuquén…). Sin esto, Neuquén
+        // solo queda en 15/915 y no matchea las filas correctas con provincia 4.
+        $zonamult = ClienteAnitaZonamultSupport::codigoDesdeProvincia($provincia);
+        if ($zonamult > 0) {
+            $codigos[$zonamult] = $zonamult;
         }
 
         // Anita guarda la jurisdicción corta y la AFIP. Ferli no carga codigoexterno:
