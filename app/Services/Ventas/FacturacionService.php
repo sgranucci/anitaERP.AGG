@@ -6103,6 +6103,19 @@ class FacturacionService
 				DB::commit();
 			}
 
+			// El Bierzo: NC de mostrador/cobranza apaga «Emite NC» (hay que reactivar en la ficha).
+			if ($tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data)) {
+				try {
+					NotaCreditoClienteAprobacionSupport::revocarTrasEmitirSiCorresponde((int) $cliente_id);
+				} catch (\Throwable $e) {
+					Log::warning('facturacion.nc.revocar_emite_nc_cliente', [
+						'cliente_id' => (int) $cliente_id,
+						'venta_id' => (int) ($ret['venta_id'] ?? ($vta->id ?? 0)),
+						'mensaje' => $e->getMessage(),
+					]);
+				}
+			}
+
 			if (! $transaccionExterna && PedidoFacturaAnitaDeferSupport::debeDiferir()
 				&& (! empty($ret['anita_pendiente']) || ! empty($ret['vencae_pendiente']))) {
 				PedidoFacturaAnitaDeferSupport::programar(

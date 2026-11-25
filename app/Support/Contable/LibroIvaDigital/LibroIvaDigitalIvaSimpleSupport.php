@@ -75,8 +75,10 @@ final class LibroIvaDigitalIvaSimpleSupport
         ];
 
         if (! $restitucion) {
+            // Portal trata vacío como "todo computable"; el 0 explícito marca IVA no computable.
             $campos[] = LibroIvaDigitalMapeosSupport::importeCsvIvaSimple(
                 (float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0),
+                true,
             );
         }
 
@@ -223,9 +225,17 @@ final class LibroIvaDigitalIvaSimpleSupport
             $meta = is_array($registro['iva_simple'] ?? null) ? $registro['iva_simple'] : [];
             $actividad = self::normalizarCodigoActividad((string) ($meta['actividad_codigo'] ?? '0'));
             $actividadNombre = (string) ($meta['actividad_nombre'] ?? '');
-            $sujeto = (int) ($meta['tipo_sujeto'] ?? 3);
-            $restitucion = (bool) ($meta['restitucion'] ?? false);
             $cabecera = is_array($registro['cabecera'] ?? null) ? $registro['cabecera'] : [];
+            // Reaplica clase A→RI: el meta puede venir con CF si condicioniva estaba mal.
+            $sujeto = LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple(
+                match ((int) ($meta['tipo_sujeto'] ?? 3)) {
+                    1 => '1',
+                    2 => '6',
+                    default => '5',
+                },
+                (string) ($cabecera['tipo_comprobante'] ?? ''),
+            );
+            $restitucion = (bool) ($meta['restitucion'] ?? false);
             if ($restitucion) {
                 $actividad = self::ACTIVIDAD_NC_VENTAS;
             }

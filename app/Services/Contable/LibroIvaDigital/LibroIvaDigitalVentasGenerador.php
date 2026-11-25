@@ -48,11 +48,14 @@ class LibroIvaDigitalVentasGenerador
 
         $contenidoCbte = '';
         $contenidoAlicuotas = '';
+        $contenidoTurivaCbte = '';
+        $contenidoTurivaAlicuotas = '';
         $totalImporte = 0.0;
         $totalIva = 0.0;
         $totalExento = 0.0;
         $conteoVentas = 0;
         $conteoRegistros = 0;
+        $conteoTuriva = 0;
         $conteoConAlicuotas = 0;
         $conteoAlicuotas = 0;
         $conteoRmv = 0;
@@ -169,13 +172,30 @@ class LibroIvaDigitalVentasGenerador
         );
 
         foreach ($registrosFinales as $registro) {
-            $contenidoCbte .= LibroIvaDigitalFormatoSupport::registroVentasCbte($registro['cabecera'])."\r\n";
+            $tipoCbte = str_pad(
+                (string) ($registro['cabecera']['tipo_comprobante'] ?? ''),
+                3,
+                '0',
+                STR_PAD_LEFT,
+            );
+            $esTuriva = LibroIvaDigitalMapeosSupport::esTipoTuriva($tipoCbte);
+            if ($esTuriva) {
+                $contenidoTurivaCbte .= LibroIvaDigitalFormatoSupport::registroVentasTurivaCbte($registro['cabecera'])."\r\n";
+                $conteoTuriva++;
+            } else {
+                $contenidoCbte .= LibroIvaDigitalFormatoSupport::registroVentasCbte($registro['cabecera'])."\r\n";
+            }
             $totalExento += abs((float) ($registro['cabecera']['operaciones_exentas'] ?? 0));
             if ($registro['alicuotas'] !== []) {
                 $conteoConAlicuotas++;
             }
             foreach ($registro['alicuotas'] as $alicuota) {
-                $contenidoAlicuotas .= LibroIvaDigitalFormatoSupport::registroVentasAlicuota($alicuota)."\r\n";
+                $lineaAlic = LibroIvaDigitalFormatoSupport::registroVentasAlicuota($alicuota)."\r\n";
+                if ($esTuriva) {
+                    $contenidoTurivaAlicuotas .= $lineaAlic;
+                } else {
+                    $contenidoAlicuotas .= $lineaAlic;
+                }
                 $totalIva += abs((float) ($alicuota['impuesto_liquidado'] ?? 0));
                 $conteoAlicuotas++;
             }
@@ -185,9 +205,12 @@ class LibroIvaDigitalVentasGenerador
         return [
             'ventas_cbte' => rtrim($contenidoCbte, "\r\n"),
             'ventas_alicuotas' => rtrim($contenidoAlicuotas, "\r\n"),
+            'ventas_turiva_cbte' => rtrim($contenidoTurivaCbte, "\r\n"),
+            'ventas_turiva_alicuotas' => rtrim($contenidoTurivaAlicuotas, "\r\n"),
             'registros' => $registrosFinales,
             'resumen' => [
                 'comprobantes' => $conteoRegistros,
+                'comprobantes_turiva' => $conteoTuriva,
                 'ventas_emitidas' => $conteoVentas,
                 'ventas_b_individuales' => $conteoVentasBIndividuales,
                 'comprobantes_con_alicuotas' => $conteoConAlicuotas,
@@ -387,11 +410,21 @@ class LibroIvaDigitalVentasGenerador
             $codigo = LibroIvaDigitalIvaSimpleSupport::ACTIVIDAD_NC_VENTAS;
         }
 
+        $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) ($venta->codigo ?? ''));
+        $abrev = (string) ($venta->tipotransacciones->abreviatura ?? '');
+        $tipoCbte = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas(
+            (string) ($venta->tipotransacciones->codigo ?? '001'),
+            $letra,
+            $abrev,
+        );
+
         return [
             'actividad_codigo' => $codigo,
             'actividad_nombre' => (string) ($actividad->nombre ?? ''),
             'tipo_sujeto' => LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple(
                 (string) ($venta->condicionivas->codigoexterno ?? ''),
+                $tipoCbte,
+                $letra,
             ),
             'restitucion' => $restitucion,
         ];

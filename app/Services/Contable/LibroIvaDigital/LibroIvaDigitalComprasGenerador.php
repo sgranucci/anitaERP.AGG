@@ -123,7 +123,12 @@ class LibroIvaDigitalComprasGenerador
                         || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte),
                     'abreviatura_tipo' => LibroIvaDigitalComprasAnitaArmadoSupport::normalizarAbreviaturaTipo($tipoAbrev),
                 ];
-                $this->adjuntarConceptoIvaSimple($registro, $fila['conceptos'], (string) ($compra['com_letra'] ?? 'A'));
+                $this->adjuntarConceptoIvaSimple(
+                    $registro,
+                    $fila['conceptos'],
+                    (string) ($compra['com_letra'] ?? 'A'),
+                    $tipoAbrev,
+                );
                 if (! LibroIvaDigitalComprasCuitSupport::tieneCuitVendedor($registro)) {
                     $omitidosSinCuit++;
                     $omitidosDetalle[] = $this->filaOmitido(
@@ -569,9 +574,11 @@ class LibroIvaDigitalComprasGenerador
         $puntoVenta = (int) $cp->sucursal;
         $numero = (int) $cp->numerocomprobante;
 
+        $abreviaturaTipo = (string) ($cp->tipotransaccion_compras->abreviatura ?? '');
         $totales = LibroIvaDigitalConceptoIvacompraSupport::desglosarComprobante(
             $cp->comprobante_proveedor_conceptos,
             $letra,
+            $abreviaturaTipo,
         );
         $vendedor = LibroIvaDigitalComprasCuitSupport::cuitYNombreVendedorErp(
             $cp->proveedores?->nroinscripcion,
@@ -579,7 +586,7 @@ class LibroIvaDigitalComprasGenerador
             $cp->proveedor_documento_eventual,
             $cp->proveedores?->nombre,
             $cp->proveedor_nombre_eventual,
-            (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+            $abreviaturaTipo,
         );
         $cuit = $vendedor['cuit'];
         $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
@@ -659,7 +666,7 @@ class LibroIvaDigitalComprasGenerador
         $registro['iva_simple'] = [
             'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras),
             'abreviatura_tipo' => LibroIvaDigitalComprasAnitaArmadoSupport::normalizarAbreviaturaTipo(
-                (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+                $abreviaturaTipo,
             ),
         ];
 
@@ -670,8 +677,12 @@ class LibroIvaDigitalComprasGenerador
      * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
      * @param  list<array{concepto: int, importe: float}>  $conceptos
      */
-    private function adjuntarConceptoIvaSimple(array &$registro, array $conceptos, string $letra): void
-    {
+    private function adjuntarConceptoIvaSimple(
+        array &$registro,
+        array $conceptos,
+        string $letra,
+        string $abreviaturaTipo = '',
+    ): void {
         $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
             (string) ($registro['cabecera']['codigo_moneda'] ?? 'PES'),
             null,
@@ -680,7 +691,12 @@ class LibroIvaDigitalComprasGenerador
             $codigoMoneda,
             (float) ($registro['cabecera']['tipo_cambio'] ?? 1),
         );
-        $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple($conceptos, $letra, $coeficiente);
+        $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple(
+            $conceptos,
+            $letra,
+            $coeficiente,
+            $abreviaturaTipo,
+        );
         $porLid = [];
         foreach ($alicuotas as $row) {
             $codigo = LibroIvaDigitalMapeosSupport::codigoAlicuotaLid((float) ($row['tasa'] ?? 0));

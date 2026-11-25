@@ -73,6 +73,45 @@ return [
                 ],
             ],
         ],
+        [
+            'codigo' => 'VIE',
+            'nombre' => 'Viedma — Casino del Río',
+            'hotel_id' => (int) env('PXSOL_HOTEL_VIE_ID', 18731),
+            'token_env' => env('PXSOL_HOTEL_VIE_TOKEN_ENV', 'PXSOL_HOTEL_VIE_TOKEN'),
+            'puntoventas' => [
+                [
+                    'codigo' => '00127',
+                    'nombre' => 'Hotel Viedma',
+                    'fiscal' => 127,
+                ],
+            ],
+        ],
+        [
+            'codigo' => 'GRO',
+            'nombre' => 'General Roca — Casino del Río',
+            'hotel_id' => (int) env('PXSOL_HOTEL_GRO_ID', 23135),
+            'token_env' => env('PXSOL_HOTEL_GRO_TOKEN_ENV', 'PXSOL_HOTEL_GRO_TOKEN'),
+            'puntoventas' => [
+                [
+                    'codigo' => '00130',
+                    'nombre' => 'Hotel Gral Roca',
+                    'fiscal' => 130,
+                ],
+            ],
+        ],
+        [
+            'codigo' => 'LGR',
+            'nombre' => 'Las Grutas — Casino del Río',
+            'hotel_id' => (int) env('PXSOL_HOTEL_LGR_ID', 22084),
+            'token_env' => env('PXSOL_HOTEL_LGR_TOKEN_ENV', 'PXSOL_HOTEL_LGR_TOKEN'),
+            'puntoventas' => [
+                [
+                    'codigo' => '00128',
+                    'nombre' => 'Fact. electrónica LGR PXSOL',
+                    'fiscal' => 128,
+                ],
+            ],
+        ],
     ],
 
 ];

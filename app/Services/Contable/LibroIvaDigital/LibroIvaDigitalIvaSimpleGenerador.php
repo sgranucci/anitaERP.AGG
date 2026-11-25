@@ -232,11 +232,18 @@ class LibroIvaDigitalIvaSimpleGenerador
                 COALESCE(NULLIF(TRIM(actividad_arca.codigoarca), ''), NULLIF(TRIM(aa_pv.codigoarca), ''), '000000') as actividad,
                 COALESCE(NULLIF(TRIM(actividad_arca.nombre), ''), NULLIF(TRIM(aa_pv.nombre), ''), '') as actividad_nombre,
                 condicioniva.codigoexterno as cond_iva,
+                CASE
+                    WHEN venta.codigo REGEXP '[[:<:]]A[[:>:]]' THEN 'A'
+                    WHEN venta.codigo REGEXP '[[:<:]]B[[:>:]]' THEN 'B'
+                    WHEN venta.codigo REGEXP '[[:<:]]C[[:>:]]' THEN 'C'
+                    WHEN venta.codigo REGEXP '[[:<:]]T[[:>:]]' THEN 'T'
+                    ELSE 'B'
+                END as letra_cbte,
                 vi_neto.tasa as tasa,
                 SUM(ABS(vi_neto.importe)) as neto,
                 SUM(ABS(vi_iva.importe)) as iva
             ")
-            ->groupBy('actividad', 'actividad_nombre', 'cond_iva', 'tasa')
+            ->groupBy('actividad', 'actividad_nombre', 'cond_iva', 'letra_cbte', 'tasa')
             ->havingRaw('SUM(ABS(vi_neto.importe)) > 0')
             ->get();
 
@@ -244,7 +251,11 @@ class LibroIvaDigitalIvaSimpleGenerador
         $detalle = [];
         foreach ($rows as $row) {
             $actividad = LibroIvaDigitalIvaSimpleSupport::normalizarCodigoActividad((string) $row->actividad);
-            $tipoSujeto = LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple((string) $row->cond_iva);
+            $tipoSujeto = LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple(
+                (string) $row->cond_iva,
+                null,
+                (string) ($row->letra_cbte ?? ''),
+            );
             $codAlicuota = LibroIvaDigitalMapeosSupport::codigoAlicuotaIvaSimple((float) $row->tasa);
             $neto = (float) $row->neto;
             $iva = (float) $row->iva;
@@ -498,6 +509,7 @@ class LibroIvaDigitalIvaSimpleGenerador
                     $fila['conceptos'],
                     $letra,
                     $coeficiente,
+                    $tipoAbrev,
                 );
                 foreach ($alicuotas as $row) {
                     $this->acumularFilaCredito(
@@ -551,9 +563,11 @@ class LibroIvaDigitalIvaSimpleGenerador
                 )) {
                     return;
                 }
+                $tipoAbrevErp = (string) ($cp->tipotransaccion_compras->abreviatura ?? '');
                 $totales = LibroIvaDigitalConceptoIvacompraSupport::desglosarComprobante(
                     $cp->comprobante_proveedor_conceptos,
                     $letra,
+                    $tipoAbrevErp,
                 );
                 $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
                     $cp->monedas->codigo ?? null,
@@ -574,7 +588,6 @@ class LibroIvaDigitalIvaSimpleGenerador
                 );
                 $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras)
                     || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte);
-                $tipoAbrevErp = (string) ($cp->tipotransaccion_compras->abreviatura ?? '');
                 foreach ($totales['alicuotas'] as $row) {
                     $this->acumularFilaCredito(
                         $acumCredito,

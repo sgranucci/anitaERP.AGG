@@ -48,7 +48,7 @@ final class LibroIvaDigitalMapeosSupport
 
     /**
      * Factura / ND / NC T (TurIVA). Van a LIBRO_IVA_DIGITAL_VENTAS_TurIVA_*,
-     * no al archivo de ventas ordinario. AGG aún no genera esa sección.
+     * no al archivo de ventas ordinario.
      *
      * @var list<string>
      */
@@ -288,25 +288,57 @@ final class LibroIvaDigitalMapeosSupport
     }
 
     /**
-     * IVA simple — tipo de sujeto comprador (1=RI, 2=Monotributo, 3=CF/Exento/No alcanzado).
+     * Comprobantes clase A (FAC/ND/NC/FCE A). El comprador no puede ser CF:
+     * ARCA solo admite RI o monotributo.
      */
-    public static function tipoSujetoCompradorIvaSimple(?string $codigoExternoCondicionIva): int
+    public static function esComprobanteClaseA(?string $tipoComprobante = null, ?string $letra = null): bool
     {
+        if ($letra !== null && strtoupper(trim($letra)) === 'A') {
+            return true;
+        }
+
+        $tipo = str_pad(preg_replace('/\D+/', '', (string) $tipoComprobante) ?: '0', 3, '0', STR_PAD_LEFT);
+        if ($tipo === '000' || in_array($tipo, self::TIPOS_TURIVA, true)) {
+            return false;
+        }
+
+        $n = (int) $tipo;
+        // 001-005 FAC/ND/NC/recibo/nota contado A; 201-205 FCE A.
+        if (($n >= 1 && $n <= 5) || ($n >= 201 && $n <= 205)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * IVA simple — tipo de sujeto comprador (1=RI, 2=Monotributo, 3=CF/Exento/No alcanzado).
+     * Si el comprobante es clase A y la condición vino mal como CF, fuerza RI
+     * (Crown: muchas FAC A quedan con condicioniva=Consumidor Final).
+     */
+    public static function tipoSujetoCompradorIvaSimple(
+        ?string $codigoExternoCondicionIva,
+        ?string $tipoComprobante = null,
+        ?string $letra = null,
+    ): int {
         $codigo = trim((string) $codigoExternoCondicionIva);
-        if (in_array($codigo, ['6'], true)) {
+        if (in_array($codigo, ['6', '13'], true)) {
             return 2;
         }
-        if (in_array($codigo, ['1'], true)) {
+        if (in_array($codigo, ['1', '11'], true)) {
+            return 1;
+        }
+        if (self::esComprobanteClaseA($tipoComprobante, $letra)) {
             return 1;
         }
 
         return 3;
     }
 
-    public static function importeCsvIvaSimple(float $valor): string
+    public static function importeCsvIvaSimple(float $valor, bool $ceroComoCero = false): string
     {
         if (abs($valor) < 0.00001) {
-            return '';
+            return $ceroComoCero ? '0,00' : '';
         }
 
         return number_format($valor, 2, ',', '');

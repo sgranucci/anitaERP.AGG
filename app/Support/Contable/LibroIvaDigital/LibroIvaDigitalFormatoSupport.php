@@ -99,6 +99,18 @@ final class LibroIvaDigitalFormatoSupport
     }
 
     /**
+     * Ventas TurIVA (tipos 195/196/197): mismo diseño que VENTAS_CBTE + reintegro (281 pos.).
+     * Archivo: LIBRO_IVA_DIGITAL_VENTAS_TurIVA_CBTE
+     *
+     * @param  array<string, mixed>  $campos
+     */
+    public static function registroVentasTurivaCbte(array $campos): string
+    {
+        return self::registroVentasCbte($campos)
+            .self::importe15((float) ($campos['importe_reintegro_turiva'] ?? 0));
+    }
+
+    /**
      * @param  array<string, mixed>  $campos
      */
     public static function registroVentasAlicuota(array $campos): string

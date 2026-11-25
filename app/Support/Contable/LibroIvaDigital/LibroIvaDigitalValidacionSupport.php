@@ -46,6 +46,8 @@ final class LibroIvaDigitalValidacionSupport
         $muestras = [
             ['ventas.ventas_cbte', 266, 'VENTAS_CBTE'],
             ['ventas.ventas_alicuotas', 62, 'VENTAS_ALICUOTAS'],
+            ['ventas.ventas_turiva_cbte', 281, 'VENTAS_TURIVA_CBTE'],
+            ['ventas.ventas_turiva_alicuotas', 62, 'VENTAS_TURIVA_ALICUOTAS'],
             ['compras.compras_cbte', 325, 'COMPRAS_CBTE'],
             ['compras.compras_alicuotas', 84, 'COMPRAS_ALICUOTAS'],
             ['anulados.ventas', 44, 'VENTAS_ANULADOS'],
@@ -241,8 +243,17 @@ final class LibroIvaDigitalValidacionSupport
 
         $alicResumen = $alicCount;
         $cbteConAlic = (int) ($resultado['ventas']['resumen']['comprobantes_con_alicuotas'] ?? 0);
-        if ($cbteConAlic > 0 && $alicResumen === 0) {
+        if ($cbteConAlic > 0 && $alicResumen === 0
+            && trim((string) data_get($resultado, 'ventas.ventas_turiva_alicuotas', '')) === '') {
             $avisos[] = 'Hay comprobantes de venta con IVA discriminado pero el archivo de alícuotas está vacío.';
+        }
+
+        $turiva = (int) data_get($resultado, 'ventas.resumen.comprobantes_turiva', 0);
+        if ($turiva > 0) {
+            self::agregar(
+                $avisos,
+                "Hay {$turiva} comprobante(s) TurIVA (tipos 195/196/197) en LIBRO_IVA_DIGITAL_VENTAS_TurIVA_*.txt: en el Portal hay que tildar «Incluido en el Régimen TurIVA» e importarlos en la solapa Ventas por TURIVA, no en ventas ordinarias.",
+            );
         }
     }
 

@@ -222,7 +222,10 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             }
             $tasa = $clas['tasa'];
             $key = (string) round($tasa, 3);
-            $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre($nombreConcepto);
+            $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::resolverConceptoIvaSimple(
+                $nombreConcepto,
+                $abreviatura,
+            );
 
             switch ($destino) {
                 case 'no_integra':
@@ -232,15 +235,19 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
                     $alicuotas[$key]['neto'] = ($alicuotas[$key]['neto'] ?? 0) + $importe;
                     $alicuotas[$key]['tasa'] = $tasa;
                     $alicuotas[$key]['iva'] = $alicuotas[$key]['iva'] ?? 0;
-                    $alicuotas[$key]['concepto_iva_simple'] = $conceptoIvaSimple;
+                    $alicuotas[$key]['concepto_iva_simple'] = LibroIvaDigitalConceptoIvacompraSupport::preferirConceptoIvaSimple(
+                        (int) ($alicuotas[$key]['concepto_iva_simple'] ?? 0),
+                        $conceptoIvaSimple,
+                    );
                     break;
                 case 'iva':
                     $alicuotas[$key]['iva'] = ($alicuotas[$key]['iva'] ?? 0) + $importe;
                     $alicuotas[$key]['tasa'] = $tasa;
                     $alicuotas[$key]['neto'] = $alicuotas[$key]['neto'] ?? 0;
-                    if (! isset($alicuotas[$key]['concepto_iva_simple'])) {
-                        $alicuotas[$key]['concepto_iva_simple'] = $conceptoIvaSimple;
-                    }
+                    $alicuotas[$key]['concepto_iva_simple'] = LibroIvaDigitalConceptoIvacompraSupport::preferirConceptoIvaSimple(
+                        (int) ($alicuotas[$key]['concepto_iva_simple'] ?? 0),
+                        $conceptoIvaSimple,
+                    );
                     break;
                 case 'exento':
                     $exento += $importe;
@@ -481,9 +488,13 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
      * @param  list<array{concepto: int, importe: float}>  $conceptos
      * @return list<array{neto: float, iva: float, tasa: float, concepto_iva_simple: int}>
      */
-    public static function alicuotasIvaSimple(array $conceptos, string $letra, float $coeficiente = 1.0): array
-    {
-        $totales = self::desglosarConcmov($conceptos, $letra, $coeficiente);
+    public static function alicuotasIvaSimple(
+        array $conceptos,
+        string $letra,
+        float $coeficiente = 1.0,
+        string $abreviaturaTipo = '',
+    ): array {
+        $totales = self::desglosarConcmov($conceptos, $letra, $coeficiente, '', $abreviaturaTipo);
         $filas = [];
         foreach ($totales['alicuotas'] as $row) {
             $filas[] = [
