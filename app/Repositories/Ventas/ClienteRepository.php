@@ -251,6 +251,39 @@ class ClienteRepository implements ClienteRepositoryInterface
     }
 
     /**
+     * El Bierzo: tras emitir NC, deja al cliente en «No Emite Nota de Credito» (ERP + Anita).
+     * No corta la emisión si Anita está bloqueada: el ERP queda grabado y se loguea.
+     */
+    public function marcarNoEmiteNcTrasNotaCredito(int $id): void
+    {
+        if (! NotaCreditoClienteAprobacionSupport::exigeAprobacionDelCliente() || $id <= 0) {
+            return;
+        }
+
+        $cliente = $this->model->find($id);
+        if (! $cliente) {
+            return;
+        }
+
+        if (! NotaCreditoClienteAprobacionSupport::clienteAutoriza($cliente->emitenotadecredito)) {
+            return;
+        }
+
+        $emite = ['emitenotadecredito' => NotaCreditoClienteAprobacionSupport::NO_EMITE];
+        $this->model->find($id)->update($emite);
+
+        try {
+            $this->actualizarEmiteNcConReintentos($emite, (string) $cliente->codigo);
+        } catch (\Throwable $e) {
+            \Log::warning('cliente.emite_nc.revocar_tras_nc.anita_fallo', [
+                'cliente_id' => (int) $id,
+                'codigo' => (string) $cliente->codigo,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Anita Informix a veces responde 263 (record locked). Reintenta antes de fallar.
      */
     private function actualizarEmiteNcConReintentos(array $emite, string $codigo, int $intentos = 3): void

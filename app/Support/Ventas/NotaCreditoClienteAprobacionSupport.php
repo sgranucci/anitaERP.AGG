@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
@@ -78,5 +79,19 @@ class NotaCreditoClienteAprobacionSupport
         }
 
         return ['error' => self::mensaje()];
+    }
+
+    /**
+     * El Bierzo: tras emitir una NC de mostrador/cobranza, el cliente deja de poder emitir otra
+     * hasta que vuelvan a marcar «Emite NC» en la ficha.
+     */
+    public static function revocarTrasEmitirSiCorresponde(?int $clienteId): void
+    {
+        if (! self::exigeAprobacionDelCliente() || (int) $clienteId <= 0) {
+            return;
+        }
+
+        app(ClienteRepositoryInterface::class)
+            ->marcarNoEmiteNcTrasNotaCredito((int) $clienteId);
     }
 }

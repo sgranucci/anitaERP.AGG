@@ -22,6 +22,12 @@ interface ClienteRepositoryInterface extends RepositoryInterface
     public function actualizarEstadoDesdeAnita(bool $persistir = false): array;
     public function previewInsertClimaeSqlPorCodigo(string $codigo): string;
     public function updateEmiteNc($id);
+
+    /**
+     * El Bierzo: apaga Emite NC tras emitir una nota de crédito (ERP + Anita).
+     */
+    public function marcarNoEmiteNcTrasNotaCredito(int $id): void;
+
     public function findPorCodigo($codigo);
     public function actualizaPadronMipyme($modo);
     public function actualizaPadronMipymePorCuit($cuit, $modo);
