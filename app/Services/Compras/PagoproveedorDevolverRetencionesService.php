@@ -29,7 +29,7 @@ use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscri
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\PagoproveedorDevolucionRetencionSupport;
 use App\Support\Contable\AsientoBalanceSupport;
-use App\Support\Contable\AsientoMonedaDesdeOperacionSupport;
+use App\Support\Caja\AsientoMonedaDesdeOperacionSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Contable\PeriodoContableCierreSupport;

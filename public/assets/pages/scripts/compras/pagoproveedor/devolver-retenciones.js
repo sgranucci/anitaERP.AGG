@@ -190,6 +190,39 @@
         return data;
     }
 
+    function overlayEl() {
+        return document.getElementById('op-devret-proceso-overlay');
+    }
+
+    function mostrarOverlayGrabando(titulo, subtitulo) {
+        var overlay = overlayEl();
+        if (!overlay) {
+            return;
+        }
+        var t = document.getElementById('op-devret-proceso-titulo');
+        var s = document.getElementById('op-devret-proceso-subtitulo');
+        if (t && titulo) {
+            t.textContent = titulo;
+        }
+        if (s && subtitulo) {
+            s.textContent = subtitulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.style.cursor = 'wait';
+    }
+
+    function ocultarOverlayGrabando() {
+        var overlay = overlayEl();
+        if (overlay) {
+            overlay.classList.add('d-none');
+            overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        document.body.style.cursor = '';
+    }
+
     function confirmar() {
         if (!opIdActual) {
             return;
@@ -211,10 +244,10 @@
             return;
         }
 
-        var ui = window.IngresoEgresoAnularRevertirUi;
-        if (ui && typeof ui.mostrar === 'function') {
-            ui.mostrar('Devolviendo retenciones…');
-        }
+        mostrarOverlayGrabando(
+            'Grabando devolución de retenciones…',
+            'Genera la OP hija, caja, asiento y réplica Anita. No cierre ni recargue la página.'
+        );
         $('#op_devret_confirmar').prop('disabled', true);
 
         $.ajax({
@@ -228,26 +261,30 @@
                 'Accept': 'application/json'
             }
         }).done(function (resp) {
-            if (ui && typeof ui.ocultar === 'function') {
-                ui.ocultar();
-            }
             if (!resp || resp.mensaje !== 'ok') {
+                ocultarOverlayGrabando();
                 $('#op_devret_confirmar').prop('disabled', false);
                 alert((resp && resp.mensaje) || 'No se pudo grabar la devolución.');
                 return;
             }
+            var resultado = resp.resultado || {};
+            var nro = resultado.numerotransaccion || '';
+            mostrarOverlayGrabando(
+                nro ? ('Devolución grabada — OPP ' + nro) : 'Devolución grabada',
+                'Actualizando el listado…'
+            );
             $('#modalOpDevolverRetenciones').modal('hide');
             if (resp.imprimir_url) {
                 window.open(resp.imprimir_url, '_blank', 'noopener');
             }
-            if (resp.texto) {
-                alert(resp.texto);
+            // Alert solo si hay aviso (ej. fallo Anita); el overlay ya confirma el OK.
+            if (resultado.aviso || (resp.texto && /réplica Anita|falló|aviso/i.test(String(resp.texto)))) {
+                ocultarOverlayGrabando();
+                alert(resp.texto || resultado.aviso);
             }
             window.location.reload();
         }).fail(function (xhr) {
-            if (ui && typeof ui.ocultar === 'function') {
-                ui.ocultar();
-            }
+            ocultarOverlayGrabando();
             $('#op_devret_confirmar').prop('disabled', false);
             var msg = (xhr.responseJSON && xhr.responseJSON.mensaje) || xhr.statusText || 'Error al grabar.';
             alert(msg);
@@ -278,4 +315,5 @@
     });
     $('#op_devret_confirmar').on('click', confirmar);
     $('#modalOpDevolverRetenciones').on('hidden.bs.modal', resetModal);
+    window.addEventListener('pageshow', ocultarOverlayGrabando);
 })(jQuery);

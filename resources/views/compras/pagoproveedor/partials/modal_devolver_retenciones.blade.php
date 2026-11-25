@@ -84,3 +84,10 @@
     </div>
   </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'op-devret-proceso-overlay',
+    'tituloId' => 'op-devret-proceso-titulo',
+    'subtituloId' => 'op-devret-proceso-subtitulo',
+    'titulo' => 'Grabando devolución de retenciones…',
+    'subtitulo' => 'Genera la OP hija, caja, asiento y réplica Anita. No cierre ni recargue la página.',
+])
