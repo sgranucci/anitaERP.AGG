@@ -55,9 +55,23 @@ class LibroIvaDigitalService
 
         $importaciones = $this->importacionesGenerador->generar($empresaId, $anio, $mes, $opciones);
         $anulados = $this->anuladosGenerador->generar($empresaId, $anio, $mes, $opciones);
+
+        // Compras con CUIT país (50/55) no van a COMPRAS_CBTE: el Portal las rechaza.
+        // Se agregan al archivo de importación de servicios (donde ARCA admite CUIT país).
+        $serviciosDesdeCompras = trim((string) ($compras['importacion_servicios'] ?? ''));
+        if ($serviciosDesdeCompras !== '') {
+            $serviciosBase = trim((string) ($importaciones['importacion_servicios'] ?? ''));
+            $importaciones['importacion_servicios'] = $serviciosBase === ''
+                ? $serviciosDesdeCompras
+                : $serviciosBase."\r\n".$serviciosDesdeCompras;
+            $importaciones['resumen']['servicios'] = (int) ($importaciones['resumen']['servicios'] ?? 0)
+                + (int) ($compras['resumen']['desviados_importacion_servicios'] ?? 0);
+        }
+
         $comprasRegistros = array_merge(
             $compras['registros'] ?? [],
             $importaciones['registros'] ?? [],
+            $compras['registros_importacion_servicios'] ?? [],
         );
         $ivaSimple = $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, array_merge($opciones, [
             'ventas_registros' => $ventas['registros'] ?? [],
@@ -144,6 +158,7 @@ class LibroIvaDigitalService
                 'compras_registros' => array_merge(
                     $compras['registros'] ?? [],
                     $importaciones['registros'] ?? [],
+                    $compras['registros_importacion_servicios'] ?? [],
                 ),
             ])),
             'periodo' => [

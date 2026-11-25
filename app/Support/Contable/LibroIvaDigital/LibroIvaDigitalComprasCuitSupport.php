@@ -184,6 +184,23 @@ final class LibroIvaDigitalComprasCuitSupport
         return $dv === (int) $digits[10];
     }
 
+    /**
+     * CUIT país ARCA (tabla extranjeros): prefijo 50 / 55.
+     * En COMPRAS_CBTE el Portal lo rechaza; va a IMPORTACION_SERVICIOS.
+     */
+    public static function esCuitPais(string $digits): bool
+    {
+        $digits = self::soloDigitos($digits);
+
+        return self::esCuitValido($digits)
+            && (str_starts_with($digits, '50') || str_starts_with($digits, '55'));
+    }
+
+    public static function esCuitPaisRegistro(array $registro): bool
+    {
+        return self::esCuitPais((string) ($registro['cabecera']['numero_identificacion'] ?? ''));
+    }
+
     public static function soloDigitos(?string $cuit): string
     {
         return preg_replace('/\D+/', '', (string) $cuit) ?? '';

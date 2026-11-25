@@ -394,6 +394,13 @@ final class LibroIvaDigitalValidacionSupport
                 "Se omitieron {$omitidosInformante} compra(s) con CUIT de vendedor igual al informante. Ver tabla «Compras omitidas» e INFORME_COMPRAS_OMITIDOS.csv en el ZIP.",
             );
         }
+        $desviadosServicios = (int) data_get($resultado, 'compras.resumen.desviados_importacion_servicios', 0);
+        if ($desviadosServicios > 0) {
+            self::agregar(
+                $avisos,
+                "Se desviaron {$desviadosServicios} compra(s) con CUIT país (extranjero) a IMPORTACION_SERVICIOS_CREDITO_FISCAL.txt; el Portal rechaza ese CUIT en COMPRAS_CBTE. Ver «Compras omitidas» e INFORME_COMPRAS_OMITIDOS.csv.",
+            );
+        }
         if ($pesTipoCambioMal > 0) {
             self::agregar(
                 $avisos,

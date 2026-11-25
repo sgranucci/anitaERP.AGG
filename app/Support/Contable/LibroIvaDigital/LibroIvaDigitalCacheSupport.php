@@ -20,6 +20,8 @@ final class LibroIvaDigitalCacheSupport
         unset(
             $resultado['ventas']['registros'],
             $resultado['compras']['registros'],
+            $resultado['compras']['registros_importacion_servicios'],
+            $resultado['compras']['importacion_servicios'],
             $resultado['importaciones']['registros'],
             $resultado['iva_simple']['detalle_debito'],
             $resultado['iva_simple']['detalle_restitucion_debito'],

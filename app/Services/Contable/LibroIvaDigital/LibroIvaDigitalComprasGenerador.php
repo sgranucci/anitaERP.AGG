@@ -54,8 +54,13 @@ class LibroIvaDigitalComprasGenerador
         $conteoAnita = 0;
         $omitidosSinCuit = 0;
         $omitidosCuitInformante = 0;
+        $desviadosImportacionServicios = 0;
         /** @var list<array<string, mixed>> $omitidosDetalle */
         $omitidosDetalle = [];
+        /** @var list<string> $lineasImportacionServicios */
+        $lineasImportacionServicios = [];
+        /** @var list<array<string, mixed>> $registrosImportacionServicios */
+        $registrosImportacionServicios = [];
         $totalImporte = 0.0;
         $totalIva = 0.0;
         /** @var array<string, true> $clavesUsadas */
@@ -145,6 +150,21 @@ class LibroIvaDigitalComprasGenerador
                     );
                     continue;
                 }
+                if (LibroIvaDigitalComprasCuitSupport::esCuitPaisRegistro($registro)) {
+                    $this->desviarAImportacionServicios(
+                        $registro,
+                        $lineasImportacionServicios,
+                        $registrosImportacionServicios,
+                        $omitidosDetalle,
+                        $desviadosImportacionServicios,
+                        'anita',
+                        (string) ($compra['com_proveedor'] ?? ''),
+                        (string) ($compra['com_tipo'] ?? ''),
+                        (string) ($compra['com_letra'] ?? ''),
+                    );
+                    $cbtesUsados[$this->claveCbte($registro)] = true;
+                    continue;
+                }
                 $this->acumularRegistro(
                     $registro,
                     abs((float) ($compra['com_monto'] ?? 0)),
@@ -187,6 +207,9 @@ class LibroIvaDigitalComprasGenerador
                 &$omitidosSinCuit,
                 &$omitidosCuitInformante,
                 &$omitidosDetalle,
+                &$lineasImportacionServicios,
+                &$registrosImportacionServicios,
+                &$desviadosImportacionServicios,
                 $cuitInformante,
             ): void {
                 $nroInterno = (int) ($cp->anita_nro_interno ?? 0);
@@ -245,6 +268,22 @@ class LibroIvaDigitalComprasGenerador
 
                     return;
                 }
+                if (LibroIvaDigitalComprasCuitSupport::esCuitPaisRegistro($registro)) {
+                    $this->desviarAImportacionServicios(
+                        $registro,
+                        $lineasImportacionServicios,
+                        $registrosImportacionServicios,
+                        $omitidosDetalle,
+                        $desviadosImportacionServicios,
+                        'erp',
+                        (string) ($cp->proveedores->codigo ?? ''),
+                        (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+                        (string) ($cp->letra ?? ''),
+                    );
+                    $cbtesUsados[$this->claveCbte($registro)] = true;
+
+                    return;
+                }
 
                 $this->acumularRegistro(
                     $registro,
@@ -264,13 +303,16 @@ class LibroIvaDigitalComprasGenerador
         return [
             'compras_cbte' => implode("\r\n", $lineasCbte),
             'compras_alicuotas' => implode("\r\n", $lineasAlicuotas),
+            'importacion_servicios' => implode("\r\n", $lineasImportacionServicios),
             'registros' => $registros,
+            'registros_importacion_servicios' => $registrosImportacionServicios,
             'omitidos' => $omitidosDetalle,
             'resumen' => [
                 'comprobantes' => $conteo,
                 'comprobantes_anita' => $conteoAnita,
                 'omitidos_sin_cuit' => $omitidosSinCuit,
                 'omitidos_cuit_informante' => $omitidosCuitInformante,
+                'desviados_importacion_servicios' => $desviadosImportacionServicios,
                 'omitidos_total' => count($omitidosDetalle),
                 'alicuotas' => count($lineasAlicuotas),
                 'importe_total' => round($totalImporte, 2),
@@ -283,6 +325,134 @@ class LibroIvaDigitalComprasGenerador
                 'completar_compras_anita' => $completarAnita,
                 'compras_fecha_iva' => $preferirFechaIva,
             ],
+        ];
+    }
+
+    /**
+     * CUIT país: sale de COMPRAS_CBTE (Portal lo rechaza) y entra en IMPORTACION_SERVICIOS.
+     *
+     * @param  list<string>  $lineasImportacionServicios
+     * @param  list<array<string, mixed>>  $registrosImportacionServicios
+     * @param  list<array<string, mixed>>  $omitidosDetalle
+     */
+    private function desviarAImportacionServicios(
+        array $registro,
+        array &$lineasImportacionServicios,
+        array &$registrosImportacionServicios,
+        array &$omitidosDetalle,
+        int &$desviadosImportacionServicios,
+        string $origen,
+        string $proveedorCodigo = '',
+        string $tipoAbrev = '',
+        string $letra = '',
+    ): void {
+        $lineasImportacionServicios[] = $this->lineaImportacionServicioDesdeCompra($registro);
+        $registroIvaSimple = $this->registroIvaSimpleImportacionServicio($registro);
+        if ($registroIvaSimple !== null) {
+            $registrosImportacionServicios[] = $registroIvaSimple;
+        }
+        $desviadosImportacionServicios++;
+        $omitidosDetalle[] = $this->filaOmitido(
+            $registro,
+            'cuit_pais_importacion_servicios',
+            'CUIT país (extranjero): desviado a IMPORTACION_SERVICIOS (Portal rechaza CUIT país en COMPRAS_CBTE)',
+            $origen,
+            $proveedorCodigo,
+            $tipoAbrev,
+            $letra,
+        );
+    }
+
+    /**
+     * @param  array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}  $registro
+     */
+    private function lineaImportacionServicioDesdeCompra(array $registro): string
+    {
+        $cab = $registro['cabecera'] ?? [];
+        $cuit = LibroIvaDigitalComprasCuitSupport::soloDigitos((string) ($cab['numero_identificacion'] ?? ''));
+        $pv = (int) ($cab['punto_venta'] ?? 0);
+        $nro = (int) ($cab['numero_comprobante'] ?? 0);
+        $identificacion = str_pad((string) $pv, 5, '0', STR_PAD_LEFT)
+            .'-'
+            .str_pad((string) $nro, 8, '0', STR_PAD_LEFT);
+
+        $iva = 0.0;
+        $alicuotaLid = '0003';
+        foreach ($registro['alicuotas'] ?? [] as $alicuota) {
+            $iva += (float) ($alicuota['impuesto_liquidado'] ?? 0);
+            $codigo = (string) ($alicuota['alicuota_iva'] ?? '');
+            if ($codigo !== '' && $codigo !== '0003') {
+                $alicuotaLid = $codigo;
+            }
+        }
+        $credito = (float) ($cab['credito_fiscal_computable'] ?? $iva);
+        $fecha = (string) ($cab['fecha'] ?? '');
+        $monto = (float) ($cab['importe_total'] ?? 0);
+        if ($monto <= 0) {
+            $monto = (float) ($cab['no_integra_neto'] ?? 0) + (float) ($cab['operaciones_exentas'] ?? 0);
+        }
+
+        return LibroIvaDigitalFormatoSupport::registroImportacionServicio([
+            'tipo_comprobante' => 1,
+            'descripcion' => '',
+            'identificacion_comprobante' => $identificacion,
+            'fecha_operacion' => $fecha,
+            'monto_moneda_original' => $monto,
+            'codigo_moneda' => (string) ($cab['codigo_moneda'] ?? 'PES'),
+            'tipo_cambio' => (float) ($cab['tipo_cambio'] ?? 1),
+            'cuit_prestador' => $cuit,
+            'nif_prestador' => '',
+            'nombre_prestador' => (string) ($cab['nombre_vendedor'] ?? ''),
+            'alicuota_iva' => $alicuotaLid,
+            'fecha_ingreso_impuesto' => $fecha,
+            'monto_impuesto_ingresado' => $iva,
+            'impuesto_computable' => $credito,
+            'identificacion_pago' => '',
+            'cuit_entidad_pago' => '0',
+        ]);
+    }
+
+    /**
+     * Solo aporta a IVA Simple crédito cuando hay impuesto (concepto 3 = importación servicios).
+     *
+     * @param  array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}  $registro
+     * @return array<string, mixed>|null
+     */
+    private function registroIvaSimpleImportacionServicio(array $registro): ?array
+    {
+        $cab = $registro['cabecera'] ?? [];
+        $iva = 0.0;
+        $neto = 0.0;
+        $alicuotaLid = '0003';
+        foreach ($registro['alicuotas'] ?? [] as $alicuota) {
+            $iva += (float) ($alicuota['impuesto_liquidado'] ?? 0);
+            $neto += (float) ($alicuota['neto_gravado'] ?? 0);
+            $codigo = (string) ($alicuota['alicuota_iva'] ?? '');
+            if ($codigo !== '' && $codigo !== '0003') {
+                $alicuotaLid = $codigo;
+            }
+        }
+        if ($iva <= 0.0001) {
+            return null;
+        }
+        if ($neto <= 0) {
+            $neto = (float) ($cab['importe_total'] ?? 0);
+        }
+
+        return [
+            'cabecera' => [
+                'tipo_comprobante' => '067',
+                'operaciones_exentas' => 0.0,
+                'no_integra_neto' => 0.0,
+                'importe_total' => $neto + $iva,
+            ],
+            'alicuotas' => [[
+                'neto_gravado' => $neto,
+                'impuesto_liquidado' => $iva,
+                'alicuota_iva' => $alicuotaLid,
+                'concepto_iva_simple' => 3,
+            ]],
+            'iva_simple' => ['restitucion' => false],
         ];
     }
 

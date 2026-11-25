@@ -213,7 +213,7 @@ class LibroIvaDigitalVentasGenerador
             'venta_impuestos' => static function (HasMany $query): void {
                 $query->select('id', 'venta_id', 'concepto', 'importe', 'tasa', 'baseimponible');
             },
-            'tipotransacciones:id,codigo,signo,abreviatura',
+            'tipotransacciones:id,codigo,signo,abreviatura,iva_ventas',
             'puntoventas:id,codigo,actividad_arca_id',
             'puntoventas.actividad_arcas:id,codigoarca,nombre',
             'actividad_arca:id,codigoarca,nombre',
