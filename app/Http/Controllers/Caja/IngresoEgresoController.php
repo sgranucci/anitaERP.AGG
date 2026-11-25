@@ -934,6 +934,7 @@ class IngresoEgresoController extends Controller
                 $monedasAsiento,
                 $cotizAsiento,
                 $contextoOpv,
+                (string) $request->input('fecha', ''),
             );
 
             return response()->json([

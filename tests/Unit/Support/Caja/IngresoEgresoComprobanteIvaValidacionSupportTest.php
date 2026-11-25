@@ -52,4 +52,30 @@ class IngresoEgresoComprobanteIvaValidacionSupportTest extends TestCase
             0.0,
         );
     }
+
+    public function test_fechaiva_igual_a_fecha_ie_ok(): void
+    {
+        IngresoEgresoComprobanteIvaValidacionSupport::validarFechasContabilizacion(
+            [
+                ['letra' => 'A', 'sucursal' => 20, 'numerocomprobante' => 1, 'fechaiva' => '2026-10-28'],
+                ['letra' => 'A', 'sucursal' => 84, 'numerocomprobante' => 2, 'fechaiva' => '2026-10-28'],
+            ],
+            '2026-10-28',
+        );
+
+        $this->assertTrue(true);
+    }
+
+    public function test_fechaiva_distinta_a_fecha_ie_falla(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('debe coincidir con la fecha del ingreso/egreso');
+
+        IngresoEgresoComprobanteIvaValidacionSupport::validarFechasContabilizacion(
+            [
+                ['letra' => 'A', 'sucursal' => 20, 'numerocomprobante' => 26960, 'fechaiva' => '2026-10-16'],
+            ],
+            '2026-11-11',
+        );
+    }
 }

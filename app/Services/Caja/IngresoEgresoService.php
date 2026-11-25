@@ -1165,6 +1165,7 @@ class IngresoEgresoService
 			$this->listaRequest($request, 'monedaasiento_ids'),
 			$this->listaRequest($request, 'cotizacionasientos'),
 			$contextoOpv,
+			(string) $request->input('fecha', ''),
 		);
 	}
 

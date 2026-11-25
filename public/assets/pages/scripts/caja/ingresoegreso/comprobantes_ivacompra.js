@@ -678,6 +678,12 @@
     function mensajeFechasIe() {
         var comp = String($('#ie-cp-fecha-comprobante').val() || '').slice(0, 10);
         var iva = String($('#ie-cp-fecha-iva').val() || '').slice(0, 10);
+        var fechaIe = fechaCabeceraMovimiento();
+        if (iva && fechaIe && iva !== fechaIe) {
+            return 'La fecha de contabilización (IVA) debe coincidir con la fecha del movimiento ('
+                + fechaIe.split('-').reverse().join('/')
+                + '). El asiento del I/E se graba con esa fecha.';
+        }
         var topeIva = String($('#ie-cp-fecha-iva').attr('max') || '').slice(0, 10);
         if (iva && topeIva && iva > topeIva) {
             return 'La fecha de contabilización no puede ser posterior al ' + topeIva.split('-').reverse().join('/') + '.';
@@ -695,6 +701,31 @@
             return 'La fecha del comprobante no puede ser posterior a la fecha de contabilización.';
         }
         return '';
+    }
+
+    /** Antes de grabar el I/E: todas las fechaiva de la grilla = fecha cabecera. */
+    function mensajeFechasIvaGrillaVsCabecera() {
+        var fechaIe = fechaCabeceraMovimiento();
+        if (!fechaIe || !comprobantesIva.length) {
+            return '';
+        }
+        var mal = [];
+        comprobantesIva.forEach(function (c) {
+            if (!c) {
+                return;
+            }
+            var iva = String(c.fechaiva || c.fechacomprobante || '').slice(0, 10);
+            if (iva && iva !== fechaIe) {
+                var etiqueta = String(c.letra || '') + String(c.sucursal || '') + '-' + String(c.numerocomprobante || c.numero || '');
+                mal.push((etiqueta === '-' ? 'comprobante' : etiqueta) + ' (' + iva.split('-').reverse().join('/') + ')');
+            }
+        });
+        if (!mal.length) {
+            return '';
+        }
+        return 'La fecha de contabilización (IVA) de cada factura debe coincidir con la fecha del movimiento ('
+            + fechaIe.split('-').reverse().join('/')
+            + '). Corregí: ' + mal.slice(0, 8).join('; ') + (mal.length > 8 ? '…' : '') + '.';
     }
 
     function limpiarModal() {
@@ -717,9 +748,11 @@
         if (!hoy) {
             hoy = new Date().toISOString().slice(0, 10);
         }
+        // Alta: fechaiva = fecha del I/E (misma fecha del asiento / mayor).
+        var fechaAlta = fechaCabeceraMovimiento() || hoy;
         $('#ie-cp-fecha-iva').data('fecha-guardada', '');
         $('#ie-cp-fecha-iva').attr('max', hoy);
-        $('#ie-cp-fecha-comprobante, #ie-cp-fecha-iva').val(hoy);
+        $('#ie-cp-fecha-comprobante, #ie-cp-fecha-iva').val(fechaAlta);
         acotarFechaComprobanteIe();
         $('#ie-cp-preview-asiento').empty();
         $('#ie-cp-preview-total-debe, #ie-cp-preview-total-haber').text('0.00');
@@ -2862,6 +2895,15 @@
                 return;
             }
 
+            var avisoFechasGrilla = mensajeFechasIvaGrillaVsCabecera();
+            if (avisoFechasGrilla) {
+                alert(avisoFechasGrilla);
+                if (typeof callback === 'function') {
+                    callback(false);
+                }
+                return;
+            }
+
             var montos = [];
             var monedaIds = [];
             var cotizaciones = [];
@@ -2897,6 +2939,7 @@
 
             $.post(url, {
                 _token: $('meta[name="csrf-token"]').attr('content') || $('#csrf_token').val(),
+                fecha: $('#fecha').val() || '',
                 comprobantes_ivacompra_json: JSON.stringify(comprobantesIva),
                 montos: montos,
                 moneda_ids: monedaIds,

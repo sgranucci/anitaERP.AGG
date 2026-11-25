@@ -13,10 +13,98 @@ use App\Support\Numerico\NumeroDecimalLocalSupport;
  * no se pide concepto de gasto ni un comprobante para esa diferencia.
  * Si no hay asiento que cubra el pago, la diferencia sigue yendo al concepto
  * de gasto. Los comprobantes no pueden superar el pago.
+ *
+ * Fecha: la contabilización (fechaiva) de cada factura debe coincidir con la
+ * fecha del movimiento de caja; el asiento del I/E usa esa misma fecha.
  */
 final class IngresoEgresoComprobanteIvaValidacionSupport
 {
     public const TOLERANCIA = 0.05;
+
+    /**
+     * Obliga fechaiva (= contabilización) = fecha del I/E en todos los comprobantes.
+     * Así el asiento del movimiento cae en el mismo día que el IVA / mayor.
+     *
+     * @param  list<array<string, mixed>>  $comprobantes
+     */
+    public static function validarFechasContabilizacion(array $comprobantes, string $fechaMovimientoYmd): void
+    {
+        if ($comprobantes === []) {
+            return;
+        }
+
+        $fechaMov = self::normalizarFechaYmd($fechaMovimientoYmd);
+        if ($fechaMov === null) {
+            throw new \RuntimeException(
+                'Indique la fecha del movimiento de caja para validar la contabilización de los comprobantes IVA.'
+            );
+        }
+
+        $desalineados = [];
+        foreach ($comprobantes as $comprobante) {
+            if (! is_array($comprobante)) {
+                continue;
+            }
+
+            $fechaIva = self::normalizarFechaYmd((string) ($comprobante['fechaiva'] ?? ''));
+            if ($fechaIva === null) {
+                $fechaIva = self::normalizarFechaYmd((string) ($comprobante['fechacomprobante'] ?? ''));
+            }
+            if ($fechaIva === null) {
+                throw new \RuntimeException(
+                    'Cada comprobante IVA debe tener fecha de contabilización (IVA).'
+                );
+            }
+            if ($fechaIva !== $fechaMov) {
+                $etiqueta = self::etiquetaComprobante($comprobante);
+                $desalineados[] = $etiqueta.' ('.$fechaIva.')';
+            }
+        }
+
+        if ($desalineados === []) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'La fecha de contabilización (IVA) de cada factura debe coincidir con la fecha del ingreso/egreso ('
+            .self::formatoFechaDmY($fechaMov)
+            .'). Corregí: '.implode('; ', array_slice($desalineados, 0, 8))
+            .(count($desalineados) > 8 ? '…' : '')
+            .'.'
+        );
+    }
+
+    private static function normalizarFechaYmd(string $valor): ?string
+    {
+        $fecha = substr(trim($valor), 0, 10);
+        if ($fecha === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            return null;
+        }
+
+        return $fecha;
+    }
+
+    private static function formatoFechaDmY(string $ymd): string
+    {
+        $partes = explode('-', $ymd);
+
+        return ($partes[2] ?? '').'/'.($partes[1] ?? '').'/'.($partes[0] ?? '');
+    }
+
+    /**
+     * @param  array<string, mixed>  $comprobante
+     */
+    private static function etiquetaComprobante(array $comprobante): string
+    {
+        $letra = strtoupper(trim((string) ($comprobante['letra'] ?? '')));
+        $sucursal = trim((string) ($comprobante['sucursal'] ?? ''));
+        $numero = trim((string) ($comprobante['numerocomprobante'] ?? $comprobante['numero'] ?? ''));
+        if ($letra !== '' && $sucursal !== '' && $numero !== '') {
+            return $letra.$sucursal.'-'.$numero;
+        }
+
+        return 'comprobante';
+    }
 
     /**
      * @param  list<array<string, mixed>>  $comprobantes

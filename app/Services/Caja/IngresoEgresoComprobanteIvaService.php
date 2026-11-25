@@ -93,7 +93,15 @@ class IngresoEgresoComprobanteIvaService
         array $monedaAsientoIds = [],
         array $cotizacionesAsiento = [],
         array $contextoOpv = [],
+        ?string $fechaMovimiento = null,
     ): void {
+        if ($fechaMovimiento !== null && $fechaMovimiento !== '') {
+            IngresoEgresoComprobanteIvaValidacionSupport::validarFechasContabilizacion(
+                $comprobantesJson,
+                $fechaMovimiento
+            );
+        }
+
         if (IngresoEgresoLiquidacionTarjetaSupport::hay($comprobantesJson)) {
             IngresoEgresoConfiguracionSupport::assertPuedeGrabarCobranzaTarjeta($comprobantesJson);
             IngresoEgresoLiquidacionTarjetaSupport::validarCierre(
