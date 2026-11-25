@@ -47,16 +47,18 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
             return $desdeVenta;
         }
 
+        if (self::esConsumidorFinal($venta)) {
+            // CF anónimo: no usar documento del maestro genérico ni CUIT de leyenda
+            // (import ARCA a veces deja un CUIT con DV válido pero inexistente en padrón →
+            // «La CUIT del comprador es inválida» en el Portal).
+            return '';
+        }
+
         $desdeLeyenda = LibroIvaDigitalIdentificacionSupport::cuitDesdeLeyenda(
             (string) ($venta->leyenda ?? ''),
         );
         if ($desdeLeyenda !== '') {
             return $desdeLeyenda;
-        }
-
-        if (self::esConsumidorFinal($venta)) {
-            // CF anónimo en el comprobante: no usar documento del cliente maestro genérico.
-            return '';
         }
 
         return preg_replace(

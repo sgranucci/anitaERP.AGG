@@ -12,6 +12,11 @@ final class LibroIvaDigitalArchivosSupport
 
     public const VENTAS_ALICUOTAS = 'LIBRO_IVA_DIGITAL_VENTAS_ALICUOTAS.txt';
 
+    /** Tipos 195/196/197: sección TurIVA del Portal (no van en VENTAS_CBTE). */
+    public const VENTAS_TURIVA_CBTE = 'LIBRO_IVA_DIGITAL_VENTAS_TurIVA_CBTE.txt';
+
+    public const VENTAS_TURIVA_ALICUOTAS = 'LIBRO_IVA_DIGITAL_VENTAS_TurIVA_ALICUOTAS.txt';
+
     public const VENTAS_ANULADOS = 'LIBRO_IVA_DIGITAL_CBTES_VENTAS_ANULADOS.txt';
 
     public const COMPRAS_CBTE = 'LIBRO_IVA_DIGITAL_COMPRAS_CBTE.txt';
@@ -46,6 +51,12 @@ final class LibroIvaDigitalArchivosSupport
             ),
             self::VENTAS_ALICUOTAS => LibroIvaDigitalFormatoSupport::lineasDesdeContenido(
                 (string) ($resultado['ventas']['ventas_alicuotas'] ?? ''),
+            ),
+            self::VENTAS_TURIVA_CBTE => LibroIvaDigitalFormatoSupport::lineasDesdeContenido(
+                (string) ($resultado['ventas']['ventas_turiva_cbte'] ?? ''),
+            ),
+            self::VENTAS_TURIVA_ALICUOTAS => LibroIvaDigitalFormatoSupport::lineasDesdeContenido(
+                (string) ($resultado['ventas']['ventas_turiva_alicuotas'] ?? ''),
             ),
             self::VENTAS_ANULADOS => LibroIvaDigitalFormatoSupport::lineasDesdeContenido(
                 (string) ($resultado['anulados']['ventas'] ?? ''),

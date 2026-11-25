@@ -4,6 +4,7 @@ namespace Tests\Unit\Support\Contable\LibroIvaDigital;
 
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use PHPUnit\Framework\TestCase;
 
 class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
@@ -37,6 +38,42 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         $this->assertSame(1, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('IVA 21%'));
         $this->assertSame(2, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Locación de inmueble'));
         $this->assertSame(4, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Bienes de uso'));
+        $this->assertSame(4, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Gravado Bs.de Uso 21'));
+        $this->assertSame(4, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Iva Bs. Uso 21'));
+        $this->assertSame(3, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Iva Serv.Dir.21'));
+        $this->assertSame(1, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Iva Bs.Loc.Dir.21'));
+        $this->assertSame(2, LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre('Iva Loc.Dir.21'));
+    }
+
+    public function test_concepto_iva_simple_prioriza_abreviatura_anita(): void
+    {
+        $this->assertSame(3, LibroIvaDigitalConceptoIvacompraSupport::resolverConceptoIvaSimple('Gravado al 21%', 'FDS'));
+        $this->assertSame(4, LibroIvaDigitalConceptoIvacompraSupport::resolverConceptoIvaSimple('Gravado al 21%', 'FDU'));
+        $this->assertSame(2, LibroIvaDigitalConceptoIvacompraSupport::resolverConceptoIvaSimple('Gravado al 21%', 'FNL'));
+        $this->assertSame(1, LibroIvaDigitalConceptoIvacompraSupport::resolverConceptoIvaSimple('Iva Serv.Dir.21', 'FDB'));
+    }
+
+    public function test_factura_a_con_condicion_cf_va_como_ri(): void
+    {
+        $this->assertSame(1, LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple('5', '001'));
+        $this->assertSame(1, LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple('5', null, 'A'));
+        $this->assertSame(3, LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple('5', '006'));
+        $this->assertSame(2, LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple('6', '001'));
+
+        $armado = LibroIvaDigitalIvaSimpleSupport::debitoDesdeRegistrosLibro([[
+            'iva_simple' => [
+                'actividad_codigo' => '551022',
+                'tipo_sujeto' => 3,
+                'restitucion' => false,
+            ],
+            'cabecera' => ['tipo_comprobante' => '001', 'operaciones_exentas' => 0],
+            'alicuotas' => [[
+                'neto_gravado' => 100.0,
+                'impuesto_liquidado' => 21.0,
+                'alicuota_iva' => '0005',
+            ]],
+        ]]);
+        $this->assertSame(1, $armado['detalle'][0]['tipo_sujeto']);
     }
 
     public function test_prorrateo_global_deja_iva_computable_en_cero(): void
@@ -50,8 +87,38 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         ], true);
 
         $armado = LibroIvaDigitalIvaSimpleSupport::lineasDesdeAcumuladoCredito($acum);
-        $this->assertSame(['1;5;100,00;21,00;;'], $armado['lineas']);
+        $this->assertSame(['1;5;100,00;21,00;0,00;'], $armado['lineas']);
         $this->assertSame(0.0, $armado['detalle'][0]['iva_computable']);
+    }
+
+    public function test_credito_fn_emite_iva_computable_cero_explicito(): void
+    {
+        $armado = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro([
+            [
+                'iva_simple' => [
+                    'restitucion' => false,
+                    'abreviatura_tipo' => 'FNS',
+                ],
+                'cabecera' => [
+                    'tipo_comprobante' => '001',
+                    'operaciones_exentas' => 0.0,
+                    'no_integra_neto' => 0.0,
+                    'importe_total' => 121.0,
+                ],
+                'alicuotas' => [[
+                    'neto_gravado' => 100.0,
+                    'impuesto_liquidado' => 21.0,
+                    'alicuota_iva' => '0005',
+                    'concepto_iva_simple' => 3,
+                ]],
+            ],
+        ]);
+
+        $this->assertSame(0.0, $armado['detalle'][0]['iva_computable']);
+        $this->assertSame(
+            '3;5;100,00;21,00;0,00;',
+            LibroIvaDigitalIvaSimpleSupport::lineaCreditoFiscal($armado['detalle'][0]),
+        );
     }
 
     public function test_iva_computable_por_tipo_compra_aplica_coeficiente_indirecto(): void
@@ -66,7 +133,7 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         );
         $this->assertSame(
             0.0,
-            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('FIN', 21.0, 0.5),
+            LibroIvaDigitalIvaSimpleSupport::ivaComputablePorTipoCompra('FNS', 21.0, 0.5),
         );
         $this->assertSame(
             21.0,

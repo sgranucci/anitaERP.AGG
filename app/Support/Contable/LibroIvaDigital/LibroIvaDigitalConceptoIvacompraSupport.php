@@ -23,8 +23,11 @@ final class LibroIvaDigitalConceptoIvacompraSupport
      *     alicuotas: array<string, array{neto: float, iva: float, tasa: float, concepto_iva_simple: int}>
      * }
      */
-    public static function desglosarComprobante(iterable $conceptos, string $letra): array
-    {
+    public static function desglosarComprobante(
+        iterable $conceptos,
+        string $letra,
+        string $abreviaturaTipo = '',
+    ): array {
         $resultado = [
             'neto_gravado' => 0.0,
             'iva' => 0.0,
@@ -37,6 +40,7 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             'imp_interno' => 0.0,
             'otros' => 0.0,
             'alicuotas' => [],
+            '_abreviatura_tipo' => $abreviaturaTipo,
         ];
 
         foreach ($conceptos as $concepto) {
@@ -45,6 +49,7 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             }
             self::acumularConcepto($resultado, $concepto);
         }
+        unset($resultado['_abreviatura_tipo']);
 
         // Conservar signo por alícuota (p. ej. Edesur +27 % / −21 %): abs() por bucket
         // inflaba neto/IVA y rompía total vs suma. El TXT admite importe negativo.
@@ -116,14 +121,18 @@ final class LibroIvaDigitalConceptoIvacompraSupport
         }
         $tasa = $clas['tasa'];
         $nombre = (string) ($ci->nombre ?? '');
-        $conceptoIvaSimple = self::conceptoIvaSimpleDesdeNombre($nombre);
+        $abrevTipo = (string) ($resultado['_abreviatura_tipo'] ?? '');
+        $conceptoIvaSimple = self::resolverConceptoIvaSimple($nombre, $abrevTipo);
         $key = (string) round($tasa, 3);
 
         switch ($destino) {
             case 'gravado':
                 $resultado['alicuotas'][$key]['neto'] = ($resultado['alicuotas'][$key]['neto'] ?? 0) + $monto;
                 $resultado['alicuotas'][$key]['tasa'] = $tasa;
-                $resultado['alicuotas'][$key]['concepto_iva_simple'] = $conceptoIvaSimple;
+                $resultado['alicuotas'][$key]['concepto_iva_simple'] = self::preferirConceptoIvaSimple(
+                    (int) ($resultado['alicuotas'][$key]['concepto_iva_simple'] ?? 0),
+                    $conceptoIvaSimple,
+                );
                 $resultado['neto_gravado'] += $monto;
                 break;
             case 'exento':
@@ -135,9 +144,10 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             case 'iva':
                 $resultado['alicuotas'][$key]['iva'] = ($resultado['alicuotas'][$key]['iva'] ?? 0) + $monto;
                 $resultado['alicuotas'][$key]['tasa'] = $tasa;
-                if (! isset($resultado['alicuotas'][$key]['concepto_iva_simple'])) {
-                    $resultado['alicuotas'][$key]['concepto_iva_simple'] = $conceptoIvaSimple;
-                }
+                $resultado['alicuotas'][$key]['concepto_iva_simple'] = self::preferirConceptoIvaSimple(
+                    (int) ($resultado['alicuotas'][$key]['concepto_iva_simple'] ?? 0),
+                    $conceptoIvaSimple,
+                );
                 $resultado['iva'] += $monto;
                 break;
             case 'perc_iva':
@@ -161,19 +171,78 @@ final class LibroIvaDigitalConceptoIvacompraSupport
         }
     }
 
+    /**
+     * 1=Bienes, 2=Locaciones, 3=Servicios, 4=Bienes de uso (ARCA IVA Simple).
+     * Prioriza la familia Anita del tipo (…B/…S/…L/…U) y si no, el nombre del concepto.
+     */
+    public static function resolverConceptoIvaSimple(string $nombreConcepto, string $abreviaturaTipo = ''): int
+    {
+        $desdeTipo = self::conceptoIvaSimpleDesdeAbreviaturaTipo($abreviaturaTipo);
+        if ($desdeTipo !== null) {
+            return $desdeTipo;
+        }
+
+        return self::conceptoIvaSimpleDesdeNombre($nombreConcepto);
+    }
+
+    /**
+     * Anita Crown: FDB/FIB/FNB/…B = bienes; …S = servicios; …L = locaciones; …U = bienes de uso.
+     */
+    public static function conceptoIvaSimpleDesdeAbreviaturaTipo(string $abreviaturaTipo): ?int
+    {
+        $abrev = strtoupper(preg_replace('/[^A-Z]/', '', $abreviaturaTipo) ?? '');
+        if (strlen($abrev) < 2) {
+            return null;
+        }
+
+        // Prefijos de familia compra (FAC genérico no tipifica).
+        if (! preg_match('/^(FD|FI|FN|FP|CD|CI|CN|CP|DD|DI|DN|DP)/', $abrev)) {
+            return null;
+        }
+
+        return match (substr($abrev, -1)) {
+            'B' => 1,
+            'L' => 2,
+            'S' => 3,
+            'U' => 4,
+            default => null,
+        };
+    }
+
     public static function conceptoIvaSimpleDesdeNombre(string $nombre): int
     {
-        $n = strtolower($nombre);
-        if (str_contains($n, 'locacion') || str_contains($n, 'locación')) {
+        $n = strtolower(str_replace(['.', '_'], [' ', ' '], $nombre));
+        $n = preg_replace('/\s+/', ' ', $n) ?? $n;
+
+        // Bienes de uso antes que "bienes" genérico (Bs.Uso / Bs.de Uso / inversión).
+        if (preg_match('/\b(bien(?:es)?\s+de\s+uso|bs\s+(?:de\s+)?uso|inversi[oó]n)/u', $n)) {
+            return 4;
+        }
+        // Locaciones: no confundir con "Bs.Loc" (bienes locales).
+        if (preg_match('/\blocaci[oó]n|\balquiler\b|(?<!\bbs\s)\bloc(?:aciones?)?\b/u', $n)) {
             return 2;
         }
-        if (str_contains($n, 'servic')) {
+        // Serv / Servic / Servicios (tras normalizar "Serv.Dir" → "serv dir").
+        if (preg_match('/\bserv(?:ic(?:io)?s?)?\b/u', $n)) {
             return 3;
-        }
-        if (str_contains($n, 'bien de uso') || str_contains($n, 'bienes de uso') || str_contains($n, 'inversion')) {
-            return 4;
         }
 
         return 1;
+    }
+
+    /** Si ya hay un concepto distinto de bienes, no lo pisa un gravado genérico (concepto 1). */
+    public static function preferirConceptoIvaSimple(int $actual, int $candidato): int
+    {
+        if ($actual <= 0) {
+            return $candidato > 0 ? $candidato : 1;
+        }
+        if ($candidato <= 0 || $candidato === 1) {
+            return $actual;
+        }
+        if ($actual === 1) {
+            return $candidato;
+        }
+
+        return $actual;
     }
 }
