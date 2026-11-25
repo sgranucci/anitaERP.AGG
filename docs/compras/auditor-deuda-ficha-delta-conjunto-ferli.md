@@ -13,6 +13,58 @@ Si imputan una cuenta controlada (p. ej. `211100002 PROVEEDORES DEL EXTERIOR`) s
 
 ---
 
+## Alerta 25/11/2026 — aplicación OPA a FAS con Debe en gasto (no en proveedores)
+
+| | 24/11/2026 | 25/11/2026 | Variación |
+|---|---:|---:|---:|
+| Delta proveedores | 301.616.983,41 | 301.873.783,41 | **+256.800,00** |
+| Delta anticipos | 1.941.669,28 | 1.941.669,28 | 0,00 |
+| **Delta conjunto** | **303.558.652,69** | **303.815.452,69** | **+256.800,00** |
+
+Ficha deuda vs ficha: **cuadrada** (0 diferencias). La alerta del mail fue solo por el delta.
+
+### Cuenta que movió el conjunto
+
+Solo **211100001 PROVEEDORES** — el mayor creció 256.800 más que la deuda:
+
+| | 24/11 | 25/11 | Variación |
+|---|---:|---:|---:|
+| Deuda | 93.195.385,64 | 118.357.930,01 | +25.162.544,37 |
+| Mayor | 40.498.214,35 | 65.917.558,72 | +25.419.344,37 |
+| Delta | −52.697.171,29 | −52.440.371,29 | **+256.800,00** |
+
+### Origen (24/11, usuaria Romina)
+
+Se aplicaron 4 OPA (anticipo) a FAS de servicios. La CC bajó la deuda de proveedores; el asiento de aplicación **no debitó 211100001** sino la cuenta de gasto (`cuentacontablecompra_id` del proveedor). El Haber sí fue a `114110001 ANTICIPO PROVEEDORES`.
+
+| FAS | Proveedor | OPA | Asiento app | Debe (mal) | Importe |
+|---|---|---|---|---|---:|
+| C-3-218 (cp 32331) | CEPEDA ARIEL HERNAN | 1-77757 | 186324 / 430477 | 512000019 SERVICIOS DE PRODUCCION | 49.800,00 |
+| C-1-129 (cp 32333) | DUARTE VILLALBA JOSE DOMINGO | 1-77758 | 186325 / 430478 | 512000019 SERVICIOS DE PRODUCCION | 56.400,00 |
+| C-1-200 (cp 32334) | GONZALEZ LUIS ARIEL | 1-77759 | 186328 / 430481 | 512000000 GASTOS DE PRODUCCION | 49.600,00 |
+| C-2-226 (cp 32332) | JUAN BAUTISTA RUIZ | 1-77760 | 186329 / 430482 | 512000019 SERVICIOS DE PRODUCCION | 101.000,00 |
+| **Total = variación del conjunto** | | | | | **256.800,00** |
+
+Las FAS sí habían acreditado proveedores (mayor + deuda). Al aplicar el anticipo, la deuda CC se canceló y el mayor de proveedores quedó. Efecto: gasto duplicado + hueco mayor − deuda en 211100001.
+
+### Causa en código
+
+`ProveedorCuentacorrienteCuentaApImputadaSupport::codigosCuentasCandidatas` incluye `cuentacontablecompra_id`. Al leer el asiento de la FAS (Debe gasto + Haber proveedores) toma primero el gasto como “cuenta AP imputada”. `ProveedorCuentacorrienteAplicacionAsientoService` arma entonces Debe gasto / Haber anticipo en vez de Debe proveedores / Haber anticipo.
+
+### Corrección (25/11/2026)
+
+1. **Datos:** líneas Debe de los asientos **186324, 186325, 186328, 186329** → `cuentacontable_id` **209 (211100001)**; Haber anticipos sin cambio. Resync `ctamov` Anita.
+2. **Código:** `ProveedorCuentacorrienteCuentaApImputadaSupport` ya no incluye `cuentacontablecompra_id` entre candidatas de AP.
+
+Tras la corrección: delta 209 = −52.697.171,29 · **delta conjunto = 303.558.652,69** (igual al 24/11). Auditor `--sin-mail` al 25/11: **OK**, estable.
+
+### Lectura
+
+- **No era descuadre de ficha.**
+- **Sí era hueco mayor − deuda** por asiento de aplicación mal imputado (Debe gasto en vez de proveedores).
+
+---
+
 ## Alerta 21/11/2026 — I/E OPP (Adriana) no deben mover el conjunto
 
 Ficha deuda vs ficha: **cuadrada** (0). Mail en rojo solo por delta conjunto (+131.177.197,28), todo en **211100002**.

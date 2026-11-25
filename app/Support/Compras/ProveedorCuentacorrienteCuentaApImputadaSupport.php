@@ -21,8 +21,10 @@ use Throwable;
  * reclasifica de verdad (o no reclasifica nada, aunque la regla de moneda diga que sí).
  *
  * Orden: asiento del ERP → subdiario de Anita → null (el caller cae en la regla de moneda).
- * Solo se acepta una cuenta si su código es uno de los configurados como cuenta de
- * proveedores del proveedor, para no confundirla con una cuenta de gasto del documento.
+ * Solo se acepta una cuenta de **pasivo AP** (MN/ME del proveedor) o la de **anticipos**
+ * de la empresa. No entra `cuentacontablecompra_id` (gasto): en el asiento de la factura
+ * convive con proveedores y, si se tomaba, la aplicación OPA debitaba gasto otra vez
+ * en vez de cancelar el pasivo (incidente Ferli 25/11/2026, delta +256.800).
  */
 final class ProveedorCuentacorrienteCuentaApImputadaSupport
 {
@@ -235,8 +237,8 @@ final class ProveedorCuentacorrienteCuentaApImputadaSupport
     }
 
     /**
-     * Cuentas que pueden hacer de contrapartida de proveedores en el documento:
-     * las del proveedor (MN, ME y compras) más la de anticipos de la empresa.
+     * Cuentas de AP / anticipo del documento: MN y ME del proveedor, más anticipos
+     * de la empresa. Sin `cuentacontablecompra_id` (gasto del ítem).
      * Indexadas por código normalizado para comparar contra Anita.
      *
      * @return array<string, string>
@@ -246,7 +248,6 @@ final class ProveedorCuentacorrienteCuentaApImputadaSupport
         $ids = array_values(array_filter([
             (int) ($proveedor?->cuentacontable_id ?? 0),
             (int) ($proveedor?->cuentacontableme_id ?? 0),
-            (int) ($proveedor?->cuentacontablecompra_id ?? 0),
             (int) (ProveedorAnticipoCuentaContableSupport::cuentaAnticipoId($empresaId) ?? 0),
         ]));
         if ($ids === []) {
