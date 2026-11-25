@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
  *
  * Ferli no tiene columnas AGG de pago/auxpag/tesmov/climov/ctermae
  * (pag_emp_sueldos, pag_fecha_pago, pag_documento_id, axp_empresa, tesv_empresa, cliv_empresa, cter_empresa, …).
+ * Crown: sin cliv_empresa en climov (y sin axp_empresa / tesv_empresa; ver helpers).
  */
 final class CobranzaAnitaCheBanEsquemaSupport
 {
@@ -410,7 +411,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
             '0',
             'C'";
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (self::omitirEmpresaEnClimov()) {
             return [
                 'campos' => $baseCampos,
                 'valores' => $baseValores,
@@ -494,7 +495,7 @@ final class CobranzaAnitaCheBanEsquemaSupport
             '0',
             ''";
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (self::omitirEmpresaEnClimov()) {
             return [
                 'campos' => $baseCampos,
                 'valores' => $baseValores,
@@ -507,6 +508,14 @@ final class CobranzaAnitaCheBanEsquemaSupport
             'valores' => $baseValores.",
             '".$ctx['empresa']."'",
         ];
+    }
+
+    /**
+     * Ferli y Crown: climov sin cliv_empresa (Informix 217 si se manda).
+     */
+    public static function omitirEmpresaEnClimov(): bool
+    {
+        return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esCrown();
     }
 
     public static function omitirEmpresaEnCtermae(): bool
