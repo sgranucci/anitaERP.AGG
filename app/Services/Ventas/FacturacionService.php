@@ -7318,7 +7318,7 @@ class FacturacionService
 		}
 
 		if (! $modoMinimoAnita) {
-		// Graba venibr
+		// Graba venibr. veni_provincia = zonamult Anita (ibrxprov), no jurisdicción AFIP.
 		foreach ($conceptostotales as $concepto)
 		{
 			if ($this->debeOmitirTablaAnita('venibr')) {
@@ -7328,6 +7328,16 @@ class FacturacionService
 			{
 				if ($concepto['jurisdiccion'] > 0)
 				{
+					$provinciaAnita = ClienteAnitaZonamultSupport::codigoVenibrDesdeConcepto($concepto);
+					if ($provinciaAnita <= 0) {
+						throw new Exception(
+							'No se pudo resolver el código Anita (zonamult) para la percepción IIBB'
+							.' jurisdicción '.(string) $concepto['jurisdiccion']
+							.' (provincia_id '.(string) ($concepto['provincia_id'] ?? '').').'
+							.' Revisar zonamult / cliente_anita.zonamult_por_jurisdiccion.'
+						);
+					}
+
 					// Graba venibr
 					$apiAnita = new ApiAnita();
 
@@ -7341,7 +7351,7 @@ class FacturacionService
 										'".$letra."',
 										'".$puntoventa."',
 										'".$venta['numerocomprobante']."',
-										'".$concepto['jurisdiccion']."',
+										'".$provinciaAnita."',
 										'".'I'."',
 										'".$concepto['tasa']."',
 										'".$concepto['importe']."'

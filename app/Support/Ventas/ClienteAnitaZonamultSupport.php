@@ -56,6 +56,47 @@ final class ClienteAnitaZonamultSupport
     }
 
     /**
+     * Código Anita para venibr.veni_provincia (mismo que ibrxprov.ibrxp_provincia).
+     * ibrxprov indexa por zonamult (1=CABA, 4=Neuquén), no por AFIP 901/915.
+     * Si ya viene un código corto (menor a 900) se deja; si es AFIP (900+) se convierte.
+     */
+    public static function codigoDesdeJurisdiccion(int $jurisdiccionOZona): int
+    {
+        if ($jurisdiccionOZona <= 0) {
+            return 0;
+        }
+        if ($jurisdiccionOZona < 900) {
+            return $jurisdiccionOZona;
+        }
+
+        $mapa = self::mapaPorJurisdiccion();
+        if (isset($mapa[$jurisdiccionOZona]) && (int) $mapa[$jurisdiccionOZona] > 0) {
+            return (int) $mapa[$jurisdiccionOZona];
+        }
+
+        return 0;
+    }
+
+    /**
+     * Resuelve veni_provincia desde un concepto de percepción IIBB
+     * (provincia_id y/o jurisdicción AFIP).
+     *
+     * @param  array{provincia_id?: int|string|null, jurisdiccion?: int|string|null}  $concepto
+     */
+    public static function codigoVenibrDesdeConcepto(array $concepto): int
+    {
+        $provinciaId = (int) ($concepto['provincia_id'] ?? 0);
+        if ($provinciaId > 0) {
+            $codigo = self::codigoDesdeProvinciaId($provinciaId);
+            if ($codigo > 0) {
+                return $codigo;
+            }
+        }
+
+        return self::codigoDesdeJurisdiccion((int) ($concepto['jurisdiccion'] ?? 0));
+    }
+
+    /**
      * Anita → ERP: clim_zonamult → provincia.id de esa jurisdicción (901, 902, …).
      * No usa el domicilio. Null si la zona es 0 o no hay match.
      */
