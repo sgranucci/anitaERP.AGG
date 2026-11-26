@@ -1340,7 +1340,8 @@ class Comprobante_ProveedorController extends Controller
     }
 
     /**
-     * Crea NCJ (o NC con asiento) en mes abierto, clona conceptos, contabiliza y aplica CC.
+     * Crea la NCJ interna (exenta) en mes abierto con el asiento espejo de la factura.
+     * Sin pagos la aplica a la factura; pagada en total la deja a cuenta del proveedor.
      */
     public function revertirContable(Request $request, int $id)
     {

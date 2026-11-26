@@ -39,6 +39,7 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Models\Contable\Asiento;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\ComprobanteProveedorReversoAsientoEspejoSupport;
 use App\Support\Compras\TipotransaccionCompraAsientoSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
@@ -319,6 +320,11 @@ class ComprobanteProveedorAsientoService
      */
     public function armarPreview(Comprobante_Proveedor $comprobante, bool $permitirCuentasPendientes = false): array
     {
+        // Reverso contable: el asiento es el espejo del de la factura, no se arma desde conceptos.
+        if (ComprobanteProveedorReversoAsientoEspejoSupport::aplica($comprobante)) {
+            return $this->armarPreviewEspejoReverso($comprobante);
+        }
+
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
             'comprobante_proveedor_conceptos.concepto_ivacompras.concepto_ivacompra_empresas',
@@ -1181,6 +1187,72 @@ class ComprobanteProveedorAsientoService
                 : 0.0,
             'tiene_reparto_gasto' => $hayRepartoDebeGasto,
             'avisos' => $avisosPreview,
+        ];
+    }
+
+    /**
+     * Asiento de una NC de reverso contable: cada línea del asiento de la factura origen,
+     * con el signo opuesto (misma cuenta, centro, moneda y cotización).
+     *
+     * No pasa por la validación de matriz cuenta↔centro de costo: son las mismas
+     * cuentas y centros con los que se grabó la factura.
+     *
+     * @return array{
+     *     total_debe: float,
+     *     total_haber: float,
+     *     payload_asiento: array<string, mixed>,
+     *     cuentas_pendientes: bool,
+     *     permite_reparto_gasto: bool,
+     *     neto_imputable_gasto: float,
+     *     tiene_reparto_gasto: bool,
+     *     avisos: list<array<string, mixed>>
+     * }
+     */
+    private function armarPreviewEspejoReverso(Comprobante_Proveedor $comprobante): array
+    {
+        $origenId = (int) ComprobanteProveedorReversoAsientoEspejoSupport::origenId($comprobante);
+        $origen = Comprobante_Proveedor::query()->find($origenId);
+        if (! $origen || (int) ($origen->asiento_id ?? 0) <= 0) {
+            throw new RuntimeException(
+                'No se encontró el asiento de la factura origen (CP#'.$origenId.') para dar vuelta.'
+            );
+        }
+
+        $lineas = ComprobanteProveedorReversoAsientoEspejoSupport::lineasEspejoDesdeAsiento(
+            (int) $origen->asiento_id
+        );
+        $armado = ComprobanteProveedorReversoAsientoEspejoSupport::armarCamposPayload($lineas);
+
+        $comprobante->loadMissing(['tipotransaccion_compras', 'ordencompras']);
+        $tipoAsiento = $this->resolverTipoAsiento();
+        $tipoAbrev = (string) ($comprobante->tipotransaccion_compras?->abreviatura ?? 'NCJ');
+        $numeroOc = (int) ($comprobante->ordencompras?->numeroordencompra ?? 0);
+
+        $payloadAsiento = array_merge([
+            'empresa_id' => $comprobante->empresa_id,
+            'tipoasiento_id' => $tipoAsiento->id,
+            'fecha' => ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante),
+            'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR,
+            'comprobante_proveedor_id' => $comprobante->id,
+            'ordencompra_id' => $comprobante->ordencompra_id,
+            'observacion' => ComprobanteProveedorAsientoDescripcionSupport::descripcionAsientoErp($comprobante),
+            'tipo' => substr($tipoAbrev, 0, 3),
+            'letra' => $comprobante->letra,
+            'sucursal' => $comprobante->sucursal,
+            'nro' => $comprobante->numerocomprobante,
+            'ctav_o_compra' => $numeroOc,
+            'sistema_ctav' => 'C',
+        ], $armado['campos']);
+
+        return [
+            'total_debe' => $armado['total_debe'],
+            'total_haber' => $armado['total_haber'],
+            'payload_asiento' => $payloadAsiento,
+            'cuentas_pendientes' => false,
+            'permite_reparto_gasto' => false,
+            'neto_imputable_gasto' => 0.0,
+            'tiene_reparto_gasto' => false,
+            'avisos' => [],
         ];
     }
 

@@ -429,7 +429,7 @@
 
 {{-- Reverso contable compensatorio (NC en mes abierto) --}}
 <div class="modal fade" id="modal-reverso-contable-cp" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <form method="POST" id="form-reverso-contable-cp">
                 @csrf
@@ -439,9 +439,12 @@
                 </div>
                 <div class="modal-body">
                     <p class="mb-2">
-                        Se crea una <strong>NC con asiento</strong> en el mes abierto, con los mismos conceptos e importes,
-                        y se aplica en cuenta corriente a esta factura. La factura original no se borra ni se edita.
+                        Se crea una <strong>NC interna</strong> en el mes abierto cuyo asiento es el
+                        <strong>espejo del asiento de la factura</strong> (todas las líneas, con el signo opuesto).
+                        La NC se carga como exento / no gravado y no va al libro de IVA ni a IVA Digital.
+                        La factura original no se borra ni se edita.
                     </p>
+                    <p class="small mb-2 d-none" id="reverso-contable-cp-modo"></p>
                     <div class="alert alert-light border small mb-3" id="reverso-contable-cp-resumen">
                         Cargando…
                     </div>
