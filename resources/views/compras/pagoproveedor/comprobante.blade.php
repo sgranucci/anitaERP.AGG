@@ -189,6 +189,7 @@
                 <th>Nro. cheque</th>
                 <th>Banco</th>
                 <th>Car&aacute;cter</th>
+                <th>Tipo</th>
                 <th class="num">Monto</th>
                 <th>Mda.</th>
             </tr>
@@ -200,12 +201,13 @@
                     <td>{{ $cheque->numerocheque }}</td>
                     <td>{{ $cheque->banco }}{{ $cheque->anombrede !== '' ? ' — '.$cheque->anombrede : '' }}</td>
                     <td>{{ $cheque->caracter }}</td>
+                    <td>{{ $cheque->tipo ?? '' }}</td>
                     <td class="num">{{ number_format((float) $cheque->monto, 2, ',', '.') }}</td>
                     <td>{{ $cheque->moneda }}</td>
                 </tr>
             @endforeach
             <tr>
-                <td colspan="4" class="num" style="font-weight:bold;">Total cheques</td>
+                <td colspan="5" class="num" style="font-weight:bold;">Total cheques</td>
                 <td class="num" style="font-weight:bold;">{{ number_format($totalCheques ?? $cheques->sum('monto'), 2, ',', '.') }}</td>
                 <td></td>
             </tr>
