@@ -4,6 +4,8 @@ namespace App\Repositories\Compras;
 
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Ordencompra_Articulo_Entrega;
+use App\Models\Compras\Requisicion_Articulo;
+use App\Support\Compras\AhorroLineaSupport;
 use App\Models\Stock\Articulo;
 use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
@@ -37,6 +39,9 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
         $mostrarPeso = OrdencompraUiConfigSupport::mostrarPesoArticulo();
         $entregaSemanal = OrdencompraUiConfigSupport::entregaSemanal();
         $pesosArticuloCache = [];
+
+        $cargaAhorro = AhorroLineaSupport::tablaTieneColumnasAhorro('ordencompra_articulo');
+        $fechaAhorro = substr((string) ($data['fecha'] ?? date('Y-m-d')), 0, 10);
 
         $n = count($data['articulo_ids']);
         for ($i = 0; $i < $n; $i++) {
@@ -104,6 +109,22 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
                     ? (int) $data['precio_origen_ref_ids'][$i] : null,
                 'precio_origen_etiqueta' => isset($data['precio_origen_etiquetas'][$i]) ? (string) $data['precio_origen_etiquetas'][$i] : null,
             ];
+
+            if ($cargaAhorro) {
+                $ahorroCols = $this->columnasAhorroLinea(
+                    $data,
+                    $i,
+                    $precio,
+                    (int) $payload['moneda_id'],
+                    $cantidad,
+                    $fechaAhorro,
+                    $payload['requisicion_articulo_id'],
+                    $this->esLineaNueva($idsEntrantes[$i] ?? null, $idsExistentesFlip),
+                );
+                if ($ahorroCols !== null) {
+                    $payload = array_merge($payload, $ahorroCols);
+                }
+            }
 
             if ($mostrarPeso || array_key_exists('peso_unitarios', $data)) {
                 $pesoUnit = $this->resolverPesoUnitarioLinea(
@@ -257,5 +278,80 @@ class Ordencompra_ArticuloRepository implements Ordencompra_ArticuloRepositoryIn
         $peso = (float) $pesoArt;
 
         return abs($peso) > 0.0000001 ? $peso : null;
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $idsExistentesFlip
+     */
+    private function esLineaNueva(mixed $idEntrante, array $idsExistentesFlip): bool
+    {
+        $id = ($idEntrante === null || $idEntrante === '') ? null : (int) $idEntrante;
+
+        return $id === null || ! isset($idsExistentesFlip[$id]);
+    }
+
+    /**
+     * Columnas de ahorro de una línea de OC.
+     *
+     * - Si el formulario de OC mandó los campos de ahorro, se usan (y se recalcula con el precio,
+     *   la moneda y la cantidad de la OC, y el TC de la fecha de la OC).
+     * - Si no los mandó (wizard de OC desde requisición) o vinieron vacíos en una línea nueva
+     *   ligada a una línea de requisición, se copian los datos de ahorro de esa línea.
+     * - En cualquier otro caso (línea existente sin campos) no se toca el ahorro guardado.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>|null
+     */
+    private function columnasAhorroLinea(
+        array $data,
+        int $i,
+        float $precio,
+        int $monedaId,
+        float $cantidad,
+        string $fecha,
+        mixed $requisicionArticuloId,
+        bool $lineaNueva,
+    ): ?array {
+        $posteado = isset($data['preciooriginales']) && is_array($data['preciooriginales']);
+        $entrada = null;
+
+        if ($posteado) {
+            $entrada = [
+                'precio_anterior' => $data['preciooriginales'][$i] ?? null,
+                'moneda_anterior_id' => $data['moneda_anterior_ids'][$i] ?? null,
+                'origen_anterior' => $data['origen_anteriores'][$i] ?? null,
+                'referencia_anterior' => $data['referencia_anteriores'][$i] ?? null,
+                'tipoahorro_id' => $data['tipoahorro_ids'][$i] ?? null,
+                'observacion' => $data['motivoahorros'][$i] ?? null,
+            ];
+            $sinDatos = (float) str_replace(',', '.', (string) ($entrada['precio_anterior'] ?? 0)) <= 0;
+            if (! $sinDatos || ! $lineaNueva) {
+                return AhorroLineaSupport::columnasParaGrabar($entrada, $precio, $monedaId, $cantidad, $fecha);
+            }
+        }
+
+        $reqArtId = (int) $requisicionArticuloId;
+        if ($reqArtId <= 0 || ! $lineaNueva) {
+            return null;
+        }
+
+        $req = Requisicion_Articulo::query()->find($reqArtId);
+        if ($req === null) {
+            return null;
+        }
+        $precioAnterior = AhorroLineaSupport::precioAnteriorParaFormulario($req);
+        if ($precioAnterior === '') {
+            return null;
+        }
+
+        return AhorroLineaSupport::columnasParaGrabar([
+            'precio_anterior' => $precioAnterior,
+            // Sin moneda propia = la de la línea de requisición, que puede no ser la de la OC.
+            'moneda_anterior_id' => $req->moneda_anterior_id ?: $req->moneda_id,
+            'origen_anterior' => $req->origen_anterior,
+            'referencia_anterior' => $req->referencia_anterior,
+            'tipoahorro_id' => $req->tipoahorro_id,
+            'observacion' => $req->motivoahorro,
+        ], $precio, $monedaId, $cantidad, $fecha);
     }
 }

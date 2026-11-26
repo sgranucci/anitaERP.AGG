@@ -39,6 +39,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 </script>
 <script src="{{ asset('assets/pages/scripts/compras/articulo_centrocosto_cuenta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/articulo_centrocosto_cuenta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/lineas.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/lineas.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/ahorro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/ahorro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/form-color-talle.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>

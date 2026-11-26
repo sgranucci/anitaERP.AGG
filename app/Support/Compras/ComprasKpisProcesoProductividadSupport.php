@@ -604,6 +604,12 @@ final class ComprasKpisProcesoProductividadSupport
         });
     }
 
+    /** Ahorro en pesos por línea: KPI nuevo (ya convertido) o cálculo legacy de la moneda de la línea. */
+    private const EXPR_AHORRO_PESOS = 'COALESCE(ra.ahorro_total_pesos, (ra.preciooriginal - ra.precio) * ra.cantidad)';
+
+    /** Base (gasto anterior) en pesos: precio anterior × cantidad, convertido con el TC del KPI. */
+    private const EXPR_BASE_PESOS = 'COALESCE(ra.ahorro_total_pesos + ra.precio * ra.cantidad * ra.tc_ahorro, ra.preciooriginal * ra.cantidad)';
+
     /**
      * Ahorro en líneas de RQ, atribuido al creador de la OC vinculada (requisicion_id)
      * si es rol de compras; si no hay OC, al creador de la RQ solo si también es comprador.
@@ -635,7 +641,15 @@ final class ComprasKpisProcesoProductividadSupport
             ->leftJoin('usuario as u_rq', 'u_rq.id', '=', 'r.creousuario_id')
             ->whereBetween('r.fecha', [$desde, $hasta])
             ->where('ra.preciooriginal', '>', 0)
-            ->whereColumn('ra.preciooriginal', '>', 'ra.precio')
+            // Líneas con KPI cargado: ya están en pesos (ahorro neto, sobrecosto incluido).
+            // Líneas anteriores al KPI: solo las que bajaron de precio, en la moneda de la línea.
+            ->where(function ($w) {
+                $w->whereNotNull('ra.ahorro_total_pesos')
+                    ->orWhere(function ($w2) {
+                        $w2->whereNull('ra.moneda_anterior_id')
+                            ->whereColumn('ra.preciooriginal', '>', 'ra.precio');
+                    });
+            })
             ->where(function ($w) use ($usuarioIds) {
                 $w->whereIn('o.creousuario_id', $usuarioIds)
                     ->orWhere(function ($w2) use ($usuarioIds) {
@@ -646,15 +660,15 @@ final class ComprasKpisProcesoProductividadSupport
             ->select([
                 DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN o.creousuario_id ELSE r.creousuario_id END as usuario_id'),
                 DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN u_oc.nombre ELSE u_rq.nombre END as nombre'),
-                DB::raw('SUM((ra.preciooriginal - ra.precio) * ra.cantidad) as ahorro'),
-                DB::raw('SUM(ra.preciooriginal * ra.cantidad) as base'),
+                DB::raw(self::EXPR_AHORRO_PESOS.' as ahorro'),
+                DB::raw(self::EXPR_BASE_PESOS.' as base'),
                 DB::raw('COUNT(ra.id) as lineas'),
             ])
             ->groupBy(
                 DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN o.creousuario_id ELSE r.creousuario_id END'),
                 DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN u_oc.nombre ELSE u_rq.nombre END')
             )
-            ->orderByDesc(DB::raw('SUM((ra.preciooriginal - ra.precio) * ra.cantidad)'));
+            ->orderByDesc(DB::raw('SUM('.self::EXPR_AHORRO_PESOS.')'));
         if ($empresaId) {
             $q->where('r.empresa_id', $empresaId);
         }

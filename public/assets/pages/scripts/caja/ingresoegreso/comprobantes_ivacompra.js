@@ -1216,6 +1216,17 @@
         return '<select class="form-control form-control-sm ie-cp-centrocosto" data-cuenta-id="' + cuentaId + '" data-cc-actual="' + cc + '">' + opt + '</select>';
     }
 
+    /* Una fila nueva del reparto nace sin cuenta: su celda de centro de costo queda en "—".
+       Al elegir la cuenta hay que volver a armar la celda (select + consulta de CC). */
+    function refrescarCentroCostoFilaGasto($tr, cuentaId) {
+        var $celda = $tr.find('td.ie-cp-cc');
+        if (!$celda.length) {
+            return;
+        }
+        $celda.html(htmlSelectCentroCosto({ cuentacontable_id: cuentaId, centrocosto_id: 0 }));
+        aplicarCentrosCostoIeCp();
+    }
+
     function filaGastoHtml(linea, quitar) {
         var origen = linea.origen || 'debe_gasto';
         var esReparto = origen === 'debe_gasto';
@@ -1446,7 +1457,8 @@
         $('#ie-cp-preview-asiento .ie-cp-centrocosto').each(function () {
             var $sel = $(this);
             var cuentaId = parseInt($sel.attr('data-cuenta-id') || '0', 10) || 0;
-            var actual = parseInt($sel.attr('data-cc-actual') || $sel.val() || '0', 10) || 0;
+            // Gana lo que el usuario tiene elegido ahora; data-cc-actual es solo el valor con que se dibujó la fila.
+            var actual = parseInt($sel.val() || '0', 10) || parseInt($sel.attr('data-cc-actual') || '0', 10) || 0;
             window.cargarCentrosCostoEnSelect($sel, cuentaId, actual).done(function (res) {
                 if (!res || !res.maneja) {
                     $sel.closest('td').text('—');
@@ -1754,6 +1766,31 @@
                 }
             }
             return 'Indique la cuenta de cada débito de gasto en la vista previa del asiento.';
+        }
+        // La cuenta que maneja centro de costo no puede quedar sin centro (cada línea del reparto).
+        var sinCentro = null;
+        $('#ie-cp-preview-asiento tr.ie-cp-linea-gasto').each(function () {
+            var $tr = $(this);
+            var $cc = $tr.find('.ie-cp-centrocosto');
+            if (!$cc.length) {
+                return;
+            }
+            var importe = $tr.hasClass('ie-cp-debito-gasto')
+                ? (parseFloat($tr.find('.ie-cp-debito-importe').val() || '0') || 0)
+                : (parseFloat($tr.attr('data-importe') || '0') || 0);
+            if (Math.abs(importe) < 0.0001) {
+                return;
+            }
+            if ((parseInt($cc.val() || '0', 10) || 0) <= 0) {
+                sinCentro = $tr;
+                return false;
+            }
+        });
+        if (sinCentro) {
+            var codigoCc = $.trim(sinCentro.find('.codigocuentacontable').val() || '');
+            var nombreCc = $.trim(sinCentro.find('.nombrecuentacontable').val() || '');
+            sinCentro.find('.ie-cp-centrocosto').trigger('focus');
+            return 'Indique el centro de costo de la cuenta «' + (codigoCc + (nombreCc ? ' ' + nombreCc : '')) + '» en la vista previa del asiento.';
         }
         if (debitosGastoTocados && ultimoPreview && ultimoPreview.permite_reparto_gasto) {
             var neto = parseFloat(ultimoPreview.neto_imputable_gasto || '0') || 0;
@@ -2754,6 +2791,7 @@
             }
             if ($tr.hasClass('ie-cp-debito-gasto')) {
                 debitosGastoTocados = true;
+                refrescarCentroCostoFilaGasto($tr, ieCpCcAbrirCuentaId);
                 programarPreview();
             }
         });

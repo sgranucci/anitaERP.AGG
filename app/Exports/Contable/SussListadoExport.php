@@ -97,13 +97,13 @@ class SussListadoExport implements FromView, WithColumnFormatting, WithColumnWid
 
     public function columnFormats(): array
     {
-        // A Cert. | B Documento | C Razón | D Fecha | E Alícuota | F Base | G Importe
+        // A Cert. | B Documento | C Razón | D Fecha | E Régimen | F Base | G Importe
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
             'D' => NumberFormat::FORMAT_TEXT,
-            'E' => '#,##0.00',
+            'E' => NumberFormat::FORMAT_TEXT,
             'F' => '#,##0.00',
             'G' => '#,##0.00',
         ];
@@ -116,7 +116,7 @@ class SussListadoExport implements FromView, WithColumnFormatting, WithColumnWid
 
     public function columnWidths(): array
     {
-        // Detalle: Cert | Documento | Razón | Fecha | Alícuota | Base | Importe
+        // Detalle: Cert | Documento | Razón | Fecha | Régimen | Base | Importe
         // Conciliación: Cód | Concepto | Total SUSS | Total mayor | Diferencia | Estado.
         // D/F/G deben alcanzar para montos tipo -19.537.010,57 (si no, Excel muestra ####).
         return [

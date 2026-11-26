@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Contable\IngresosBrutos;
 
 use App\Models\Contable\Iibb_Presentacion_Config;
-use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
@@ -95,7 +94,7 @@ final class IngresosBrutosConciliacionContableService
             $particion['comparables'],
         )), 2);
 
-        $tolerancia = IngresosBrutosFormatoArbaSupport::tolerancia();
+        $tolerancia = (float) $config->tolerancia_conciliacion;
         $dif = round($totalIibb - $totalMayor, 2);
         $difPeriodo = round($totalIibb - $totalMayorPeriodo, 2);
 
@@ -135,10 +134,10 @@ final class IngresosBrutosConciliacionContableService
                 'total_iibb' => $totalIibb,
                 'total_mayor' => $totalMayor,
                 'diferencia' => $dif,
-                'cuadra' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $totalMayor),
+                'cuadra' => abs(round($totalIibb - $totalMayor, 2)) <= $tolerancia,
                 'total_mayor_periodo' => $totalMayorPeriodo,
                 'diferencia_periodo' => $difPeriodo,
-                'cuadra_periodo' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $totalMayorPeriodo),
+                'cuadra_periodo' => abs(round($totalIibb - $totalMayorPeriodo, 2)) <= $tolerancia,
                 'registros' => count($registros),
                 'tolerancia' => $tolerancia,
                 'auditoria' => $auditoria,

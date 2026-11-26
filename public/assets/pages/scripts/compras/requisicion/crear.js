@@ -327,6 +327,9 @@ $(function () {
 		$clone.removeClass('req-requisicion-linea-cerrada').removeAttr('title');
 		$clone.find('input,select').val('');
 		$clone.find('.req-ta-detalle-linea').val('');
+		if (typeof window.reqAhorroLimpiarFila === 'function') {
+			window.reqAhorroLimpiarFila($clone);
+		}
 		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
 		$clone.attr('data-maneja-stock-color-talle', '0');
 		reqLimpiarCantidadAlternativaHint($clone);
@@ -370,6 +373,9 @@ $(function () {
 		if (typeof window.reqLineasScheduleTotales === 'function') {
 			window.reqLineasScheduleTotales();
 		}
+		if (typeof window.reqAhorroRecalcular === 'function') {
+			window.reqAhorroRecalcular();
+		}
 	});
 
 	$(document).on('click', '.eliminar_requisicion_articulo', function (event) {
@@ -396,6 +402,9 @@ $(function () {
 		}
 		if (typeof window.reqLineasScheduleTotales === 'function') {
 			window.reqLineasScheduleTotales();
+		}
+		if (typeof window.reqAhorroRecalcular === 'function') {
+			window.reqAhorroRecalcular();
 		}
 	});
 

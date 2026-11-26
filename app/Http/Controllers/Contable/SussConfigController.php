@@ -5,7 +5,15 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Contable;
 
 use App\Http\Controllers\Controller;
+use App\Models\Compras\Proveedor;
+use App\Models\Configuracion\Moneda;
+use App\Models\Contable\Centrocosto;
+use App\Models\Contable\Cuentacontable;
+use App\Models\Contable\Suss_Empresa_Config;
 use App\Models\Contable\Suss_Presentacion_Config;
+use App\Models\Solicitudpago\Concepto_Solicitudpago;
+use App\Models\Solicitudpago\Formapagosol;
+use App\Models\Solicitudpago\Sector_Solicitudpago;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepositoryInterface;
 use App\Repositories\Contable\Suss_Presentacion_ConfigRepositoryInterface;
@@ -109,6 +117,131 @@ class SussConfigController extends Controller
         }
 
         abort(404);
+    }
+
+    /**
+     * Solicitud de pago SUSS y régimen 748 → 754, por empresa (columnas = empresas asignadas).
+     */
+    public function empresas()
+    {
+        can('listar-suss-config');
+
+        $empresas = $this->empresaRepository->allFiltrado();
+        $configs = Suss_Empresa_Config::query()
+            ->whereIn('empresa_id', $empresas->pluck('id')->all())
+            ->with([
+                'proveedor:id,codigo,nombre',
+                'sectorSolicitudpago:id,codigo,nombre',
+                'conceptoSolicitudpago:id,codigo,nombre',
+                'formapagosol:id,codigo,nombre',
+                'moneda:id,nombre',
+                'centrocosto:id,codigo,nombre',
+                'cuentacontableSuss:id,codigo,nombre',
+                'cuentacontableBanco:id,codigo,nombre',
+            ])
+            ->get()
+            ->keyBy('empresa_id');
+
+        return view('contable.suss_config.empresas', compact('empresas', 'configs'));
+    }
+
+    public function guardarEmpresas(Request $request)
+    {
+        can('actualizar-suss-config');
+
+        $permitidas = $this->empresaRepository->allFiltrado()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $filas = (array) $request->input('empresas', []);
+        $datos = [];
+        $errores = [];
+
+        foreach ($filas as $empresaKey => $f) {
+            $empresaId = (int) $empresaKey;
+            if ($empresaId <= 0 || ! in_array($empresaId, $permitidas, true)) {
+                continue;
+            }
+            $f = (array) $f;
+            $ref = 'Empresa #'.$empresaId;
+
+            $resuelto = [
+                'sigla' => trim((string) ($f['sigla'] ?? '')) !== '' ? mb_substr(trim((string) $f['sigla']), 0, 10) : null,
+                'proveedor_id' => $this->idPorCodigo(Proveedor::class, $f['proveedor_codigo'] ?? '', null, $ref, 'proveedor', $errores),
+                'sector_solicitudpago_id' => $this->idPorCodigo(Sector_Solicitudpago::class, $f['sector_codigo'] ?? '', null, $ref, 'sector', $errores),
+                'concepto_solicitudpago_id' => $this->idPorCodigo(Concepto_Solicitudpago::class, $f['concepto_codigo'] ?? '', null, $ref, 'concepto', $errores),
+                'formapagosol_id' => $this->idPorCodigo(Formapagosol::class, $f['forma_codigo'] ?? '', null, $ref, 'forma de pago', $errores),
+                'centrocosto_id' => $this->idPorCodigo(Centrocosto::class, $f['centrocosto_codigo'] ?? '', null, $ref, 'centro de costo', $errores),
+                'cuentacontable_suss_id' => $this->idPorCodigo(Cuentacontable::class, $f['cuenta_debe_codigo'] ?? '', $empresaId, $ref, 'cuenta Debe', $errores),
+                'cuentacontable_banco_id' => $this->idPorCodigo(Cuentacontable::class, $f['cuenta_haber_codigo'] ?? '', $empresaId, $ref, 'cuenta Haber', $errores),
+                'moneda_id' => $this->idMoneda($f['moneda_id'] ?? null, $ref, $errores),
+                'exportar_regimen_748_como_754' => ! empty($f['exportar_748']),
+                'activo' => true,
+            ];
+
+            $datos[$empresaId] = $resuelto;
+        }
+
+        if ($errores !== []) {
+            return back()->withInput()->with('mensaje', implode(' ', $errores));
+        }
+
+        try {
+            DB::beginTransaction();
+            foreach ($datos as $empresaId => $resuelto) {
+                Suss_Empresa_Config::query()->updateOrCreate(['empresa_id' => $empresaId], $resuelto);
+            }
+            DB::commit();
+
+            return redirect()->route('suss_config_empresas')
+                ->with('mensaje', 'Configuración SUSS por empresa guardada con éxito');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return back()->withInput()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    /**
+     * Resuelve un código de maestro a id (vacío = sin configurar). Carga errores si el código no existe.
+     *
+     * @param  class-string  $modelo
+     * @param  array<int, string>  $errores
+     */
+    private function idPorCodigo(string $modelo, mixed $codigo, ?int $empresaId, string $ref, string $rotulo, array &$errores): ?int
+    {
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $query = $modelo::query()->where('codigo', $codigo);
+        if ($empresaId !== null) {
+            $query->where('empresa_id', $empresaId);
+        }
+        $id = (int) ($query->value('id') ?? 0);
+        if ($id <= 0) {
+            $errores[] = $ref.': no existe el '.$rotulo.' con código «'.$codigo.'».';
+
+            return null;
+        }
+
+        return $id;
+    }
+
+    /**
+     * @param  array<int, string>  $errores
+     */
+    private function idMoneda(mixed $id, string $ref, array &$errores): ?int
+    {
+        $id = (int) $id;
+        if ($id <= 0) {
+            return null;
+        }
+        if (! Moneda::query()->whereKey($id)->exists()) {
+            $errores[] = $ref.': no existe la moneda #'.$id.'.';
+
+            return null;
+        }
+
+        return $id;
     }
 
     /**

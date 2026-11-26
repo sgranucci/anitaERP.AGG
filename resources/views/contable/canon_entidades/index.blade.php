@@ -11,6 +11,11 @@
             <div class="card-header">
                 <h3 class="card-title">F2015 · Canon entidades de bien público</h3>
                 <div class="card-tools">
+                    @if (can('listar-canon-entidades-config', false))
+                        <a href="{{ route('canon_entidades_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración canon entidades">
+                            <i class="fa fa-cog"></i> Configuración
+                        </a>
+                    @endif
                     <a href="{{ route('canon_entidades') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
@@ -115,12 +120,33 @@
                             <i class="fa fa-file-pdf"></i> PDF para SP
                         </a>
                     @endif
+                    @if ($consultado && can('exportar-canon-entidades', false) && can('crear-solicitud-pago', false) && (($resultado['totales']['dias_rango'] ?? 0) > 0))
+                        @php
+                            $conciliaOk = ! empty($resultado['conciliacion']['cuadra']);
+                        @endphp
+                        <button type="button"
+                                class="btn btn-primary ml-1"
+                                id="btn-generar-solicitud-entidades"
+                                data-preview-url="{{ route('preview_canon_entidades_solicitudpago') }}"
+                                style="background-color:#6f42c1;border-color:#6f42c1;"
+                                title="{{ $conciliaOk ? 'Genera las dos solicitudes de pago (máquinas y bingo) con el formulario adjunto.' : 'La conciliación contra el pasivo no está conforme' }}"
+                                @disabled(! $conciliaOk)>
+                            <i class="fa fa-paper-plane"></i> Generar solicitudes de pago
+                        </button>
+                        @if (! $conciliaOk)
+                            <small class="text-danger ml-2">La conciliación contra el pasivo no está conforme.</small>
+                        @endif
+                    @endif
                 </div>
             </form>
         </div>
 
         <iframe name="canon_entidades_dl" id="canon-entidades-dl-frame" title="Descarga PDF formulario"
             style="position:absolute;width:0;height:0;border:0;visibility:hidden;"></iframe>
+
+        @if ($consultado && can('exportar-canon-entidades', false) && can('crear-solicitud-pago', false))
+            @include('contable.canon_entidades.partials.modal_solicitudpago')
+        @endif
 
         @include('includes.proceso_overlay_aviso', [
             'overlayId' => 'canon-entidades-procesando-overlay',

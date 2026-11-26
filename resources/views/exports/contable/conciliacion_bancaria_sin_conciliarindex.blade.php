@@ -58,5 +58,24 @@
                 <td>{{ $fila['detalle_concepto'] ?? '' }}</td>
             </tr>
         @endforeach
+        @php
+            $totDebitos = round(collect($reporte['filas'] ?? [])->sum(fn ($f) => (float) ($f['debito'] ?? 0)), 2);
+            $totCreditos = round(collect($reporte['filas'] ?? [])->sum(fn ($f) => (float) ($f['credito'] ?? 0)), 2);
+            $totSaldo = round($totDebitos - $totCreditos, 2);
+        @endphp
+        <tr>
+            <td colspan="8"><strong>Total general · {{ count($reporte['filas'] ?? []) }} mov.</strong></td>
+            <td>{{ number_format($totDebitos, 2, '.', '') }}</td>
+            <td>{{ number_format($totCreditos, 2, '.', '') }}</td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td colspan="8"><strong>Saldo (Débitos − Créditos)</strong></td>
+            <td>{{ number_format($totSaldo, 2, '.', '') }}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+        </tr>
     </tbody>
 </table>

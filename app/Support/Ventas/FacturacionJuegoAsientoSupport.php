@@ -56,7 +56,19 @@ final class FacturacionJuegoAsientoSupport
             );
         }
 
-        $ccId = (int) ($cfg->centrocosto_id ?? 0) ?: null;
+        // Mesas: CC propio de mesas. Slots y ruleta El.: CC de la sala (SLOTS).
+        // Nunca reusar el CC de slots para mesas (incidente octubre 2026).
+        if ($rubro === FacturacionJuegoTipoSupport::RUBRO_MESA) {
+            $ccId = (int) ($cfg->centrocosto_mesa_id ?? 0) ?: null;
+            if ($ccId === null) {
+                throw new InvalidArgumentException(
+                    'Falta el centro de costo de mesas en la configuración de la sala.',
+                );
+            }
+        } else {
+            $ccId = (int) ($cfg->centrocosto_id ?? 0) ?: null;
+        }
+
         $ganancia = FacturacionJuegoTipoSupport::esGanancia($tipo);
 
         // SUMA → subd_tipo_mov H en c_venta (ventas al Haber)

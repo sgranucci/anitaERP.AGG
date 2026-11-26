@@ -150,7 +150,8 @@ class PagoproveedorComprobantePdfService
 
         $aplicaciones = $this->armarAplicaciones($pago);
         $mediosCaja = $this->armarMediosCaja($pago);
-        $cheques = ($pago->cheques ?? collect())->map(function ($cheque) {
+        $echeqService = app(\App\Services\Caja\ChequeEcheqService::class);
+        $cheques = ($pago->cheques ?? collect())->map(function ($cheque) use ($echeqService) {
             $fecha = $cheque->fechapago ?: $cheque->fechaemision;
             $caracter = (string) ($cheque->caracter ?? '');
             $caracterNombre = '';
@@ -166,6 +167,7 @@ class PagoproveedorComprobantePdfService
                 'numerocheque' => (string) ($cheque->numerocheque ?? ''),
                 'banco' => (string) (optional($cheque->bancos)->nombre ?? ''),
                 'caracter' => $caracterNombre !== '' ? $caracterNombre : $caracter,
+                'tipo' => $echeqService->esEcheq($cheque) ? 'E-Cheq' : 'Físico',
                 'monto' => (float) ($cheque->monto ?? 0),
                 'moneda' => (string) (optional($cheque->monedas)->abreviatura ?? ''),
                 'anombrede' => (string) ($cheque->anombrede ?? ''),

@@ -126,6 +126,42 @@ class ConciliacionBancariaSinConciliarExport implements FromView, WithColumnForm
         ];
     }
 
+    /**
+     * Filas finales (Total general y Saldo): importes numéricos, negrita y fondo de corte general.
+     */
+    private function aplicarTotalesFinales(Worksheet $sheet): void
+    {
+        $filas = array_values($this->reporte['filas'] ?? []);
+        $debitos = 0.0;
+        $creditos = 0.0;
+        foreach ($filas as $fila) {
+            $debitos += (float) ($fila['debito'] ?? 0);
+            $creditos += (float) ($fila['credito'] ?? 0);
+        }
+        $debitos = round($debitos, 2);
+        $creditos = round($creditos, 2);
+        $saldo = round($debitos - $creditos, 2);
+
+        $filaTotal = $this->filaPrimeraDatosExcel + count($filas);
+        $filaSaldo = $filaTotal + 1;
+
+        $sheet->setCellValueExplicit('I'.$filaTotal, $debitos, DataType::TYPE_NUMERIC);
+        $sheet->setCellValueExplicit('J'.$filaTotal, $creditos, DataType::TYPE_NUMERIC);
+        $sheet->setCellValueExplicit('I'.$filaSaldo, $saldo, DataType::TYPE_NUMERIC);
+
+        foreach ([$filaTotal, $filaSaldo] as $fila) {
+            $rango = 'A'.$fila.':'.self::COL_ULTIMA.$fila;
+            $sheet->getStyle($rango)->getFont()->setName('Arial')->setSize(11)->setBold(true)->getColor()->setRGB('17202A');
+            $sheet->getStyle($rango)->getFill()
+                ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                ->getStartColor()->setRGB('AED6F1');
+            foreach (['I', 'J'] as $col) {
+                $sheet->getStyle($col.$fila)->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle($col.$fila)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+            }
+        }
+    }
+
     public function registerEvents(): array
     {
         return [
@@ -167,6 +203,8 @@ class ConciliacionBancariaSinConciliarExport implements FromView, WithColumnForm
                         $sheet->getStyle($col.$excelRow)->getNumberFormat()->setFormatCode('#,##0.00');
                     }
                 }
+
+                $this->aplicarTotalesFinales($sheet);
             },
         ];
     }

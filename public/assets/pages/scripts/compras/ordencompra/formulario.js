@@ -2491,6 +2491,8 @@ $(function () {
 		$clone.find('.oc-precio-origen-tipo').val('');
 		$clone.find('.oc-precio-origen-ref-id').val('');
 		$clone.find('.oc-precio-origen-etiqueta').val('');
+		$clone.find('.oc-ahorro-dato').val('');
+		$cloneSub.find('.oc-ahorro-resumen').html('&mdash;');
 		$clone.find('.codigopartidagasto').val('');
 		$clone.find('.codigocapex').val('');
 		$clone.find('.descripcionpartidagasto').val('');
@@ -3280,6 +3282,9 @@ $(function () {
 					$row.find('.oc-precio-origen-tipo').val('');
 					$row.find('.oc-precio-origen-ref-id').val('');
 					$row.find('.oc-precio-origen-etiqueta').val('');
+					// El ahorro se copia en el servidor desde la línea de requisición al grabar.
+					$row.find('.oc-ahorro-dato').val('');
+					$sub.find('.oc-ahorro-resumen').html('&mdash;');
 					$row.find('.oc-entregas-semanal-json').val('[]');
 					$row.find('.oc-entregas-count').text('').addClass('d-none');
 					$row.find('.cantidad-linea').removeClass('oc-cant-desde-entregas');

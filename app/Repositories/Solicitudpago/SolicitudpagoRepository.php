@@ -256,8 +256,11 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 $this->escrituraService->actualizar($sp, $estadoAnterior);
             } else {
                 $this->escrituraService->insertar($sp);
+                // Procesos en lote (ej. canon entidades): el árbol se dispara después del commit de todo el lote.
+                $diferirArbol = ! empty($data['omitir_arbol']);
                 if (
-                    config('solicitudpago.arbol_al_crear', true)
+                    ! $diferirArbol
+                    && config('solicitudpago.arbol_al_crear', true)
                     && $sp->estado === SolicitudpagoEstados::EMITIDA
                 ) {
                     try {

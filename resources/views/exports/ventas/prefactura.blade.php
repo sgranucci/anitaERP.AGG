@@ -182,7 +182,13 @@
         </td>
         <td class="prefactura-meta">
             <div class="prefactura-titulo">PRE-FACTURA</div>
+            @if (! empty($pickingCodigo))
+                <strong>Picking Nro.: {{ $pickingCodigo }}</strong><br>
+            @endif
             <strong>Pedido Nro.: {{ $pedidoId }}</strong><br>
+            @if (! empty($pedidosEtiqueta))
+                <strong>Pedidos: {{ $pedidosEtiqueta }}</strong><br>
+            @endif
             @if ($mostrarCodigoExtra)
                 <strong>Código: {{ $pedidoCodigo }}</strong><br>
             @endif

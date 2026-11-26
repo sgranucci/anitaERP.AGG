@@ -229,6 +229,7 @@ class FacturacionJuegoController extends Controller
                 'cuentacontableBetsur',
                 'cuentacontableApuestas',
                 'centrocosto',
+                'centrocostoMesa',
             ])
             ->orderBy('sala_id')
             ->get();
@@ -304,6 +305,7 @@ class FacturacionJuegoController extends Controller
                 'cuentacontable_betsur_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_betsur_codigo'] ?? '')),
                 'cuentacontable_apuestas_id' => $this->resolverIdPorCodigo(Cuentacontable::class, (string) ($datos['cuentacontable_apuestas_codigo'] ?? '')),
                 'centrocosto_id' => $this->resolverIdPorCodigo(Centrocosto::class, (string) ($datos['centrocosto_codigo'] ?? '')),
+                'centrocosto_mesa_id' => $this->resolverIdPorCodigo(Centrocosto::class, (string) ($datos['centrocosto_mesa_codigo'] ?? '')),
                 'activo' => ! empty($datos['activo']),
             ]);
             $cfg->save();

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Services\Contable\Suss;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Suss_Empresa_Config;
 use App\Repositories\Contable\Suss_Presentacion_ConfigRepositoryInterface;
 use App\Support\Contable\Suss\SussFormatoF2004Support;
+use App\Support\Contable\Suss\SussLiquidacionTipoSupport;
 
 final class SussReporteService
 {
@@ -46,6 +48,10 @@ final class SussReporteService
         }
 
         $registros = $this->retencionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config);
+        $registros = SussFormatoF2004Support::aplicarRegimenExportacion(
+            $registros,
+            Suss_Empresa_Config::exportaRegimen748Como754($empresaId),
+        );
 
         usort($registros, static function (array $a, array $b): int {
             return strcmp((string) ($a['fecha_retencion'] ?? ''), (string) ($b['fecha_retencion'] ?? ''))
@@ -64,7 +70,12 @@ final class SussReporteService
         $cuitAgente = SussFormatoF2004Support::normalizarCuit((string) ($empresa?->nroinscripcion ?? ''));
         $periodo = (string) ($filtros['periodo'] ?? date('Ym'));
         $archivo = SussFormatoF2004Support::generarArchivo($registros, $cuitAgente);
-        $nombre = SussFormatoF2004Support::nombreArchivo($cuitAgente, $periodo);
+        $sufijo = match ((int) ($filtros['liquidacion'] ?? 0)) {
+            SussLiquidacionTipoSupport::LIQUIDACION_1Q => '1Q',
+            2 => '2Q',
+            default => '',
+        };
+        $nombre = SussFormatoF2004Support::nombreArchivo($cuitAgente, $periodo, $sufijo);
 
         return [
             'registros' => $registros,

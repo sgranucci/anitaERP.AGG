@@ -12,6 +12,7 @@ use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Services\Ventas\FacturacionServiceFerli;
+use App\Services\Ventas\PedidoServiceFerli;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use Illuminate\Http\Request;
@@ -98,6 +99,23 @@ class PickingPedidoFerliController extends Controller
             'puede_facturar' => can('facturar-picking-pedido', false),
             'picking_actual' => PedidoPickingFerliSupport::findPicking(PedidoPickingFerliSupport::pickingActivoId()),
         ]);
+    }
+
+    public function prefactura(Request $request)
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        $ids = array_values(array_filter(
+            array_map('intval', (array) $request->input('pedido_combinacion_id', [])),
+            static fn (int $id) => $id > 0
+        ));
+
+        return app(PedidoServiceFerli::class)->listarPreFacturaPicking(
+            $ids,
+            $request->input('descuentolinea'),
+            (int) $request->input('picking_codigo', 0),
+        );
     }
 
     public function exportarExcel(Request $request)

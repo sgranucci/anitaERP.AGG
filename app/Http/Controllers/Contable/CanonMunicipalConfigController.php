@@ -161,7 +161,8 @@ class CanonMunicipalConfigController extends Controller
             'plantilla_detalle' => 'plantilla detalle',
         ]);
 
-        $validated['activo'] = $request->boolean('activo', true);
+        // Checkbox destildado = no viene en el request: debe quedar en false.
+        $validated['activo'] = $request->boolean('activo');
         $validated['plantilla_detalle'] = trim((string) ($validated['plantilla_detalle'] ?? ''))
             ?: Canon_Municipal_Config::PLANTILLA_DETALLE_DEFAULT;
 

@@ -8,8 +8,8 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 
 /**
- * Si la cuenta maneja centro de costo y tiene centros habilitados, la línea
- * solo puede usar uno de esos. Sin lista cargada no hay restricción.
+ * Si la cuenta maneja centro de costo, la línea con importe tiene que traer uno.
+ * Con centros habilitados cargados en la cuenta, solo puede ser uno de esos.
  */
 final class CuentaCentrocostoHabilitadoSupport
 {
@@ -38,6 +38,7 @@ final class CuentaCentrocostoHabilitadoSupport
     {
         $cuentas = is_array($payload['cuentacontable_ids'] ?? null) ? $payload['cuentacontable_ids'] : [];
         $centros = is_array($payload['centrocosto_ids'] ?? null) ? $payload['centrocosto_ids'] : [];
+        $centrosPrevios = is_array($payload['centrocosto_id_previo'] ?? null) ? $payload['centrocosto_id_previo'] : [];
         $debes = is_array($payload['debes'] ?? null) ? $payload['debes'] : [];
         $haberes = is_array($payload['haberes'] ?? null) ? $payload['haberes'] : [];
         $n = max(count($cuentas), count($centros), count($debes), count($haberes));
@@ -55,9 +56,13 @@ final class CuentaCentrocostoHabilitadoSupport
                     continue;
                 }
             }
+            $centroId = (int) ($centros[$i] ?? 0);
+            if ($centroId <= 0) {
+                $centroId = (int) ($centrosPrevios[$i] ?? 0);
+            }
             $pares[] = [
                 'cuentacontable_id' => $cuentaId,
-                'centrocosto_id' => (int) ($centros[$i] ?? 0),
+                'centrocosto_id' => $centroId,
                 'etiqueta' => 'Línea '.($i + 1),
             ];
         }
@@ -105,7 +110,11 @@ final class CuentaCentrocostoHabilitadoSupport
                 continue;
             }
             $restriccion = CuentaCentrocostoAsignadosSupport::restriccion($cuentaId);
-            if (! $restriccion['restringe'] || ($ccId > 0 && in_array($ccId, $restriccion['ids'], true))) {
+            $sinCentroObligatorio = $restriccion['maneja'] && $ccId <= 0;
+            if (
+                ! $sinCentroObligatorio
+                && (! $restriccion['restringe'] || ($ccId > 0 && in_array($ccId, $restriccion['ids'], true)))
+            ) {
                 continue;
             }
             $cuentaIds[] = $cuentaId;
@@ -115,6 +124,7 @@ final class CuentaCentrocostoHabilitadoSupport
             $rechazos[] = [
                 'cuentacontable_id' => $cuentaId,
                 'centrocosto_id' => $ccId,
+                'restringe' => $restriccion['restringe'],
                 'etiqueta' => trim((string) ($par['etiqueta'] ?? '')),
             ];
         }
@@ -146,8 +156,11 @@ final class CuentaCentrocostoHabilitadoSupport
             $prefijo = $rechazo['etiqueta'] !== '' ? $rechazo['etiqueta'].': ' : '';
             $cc = $centros->get($rechazo['centrocosto_id']);
             if ($cc === null) {
-                $out[] = $prefijo.'la cuenta '.$etiquetaCuenta
-                    .' tiene centros de costo habilitados y la línea no usa uno de ellos.';
+                $out[] = $rechazo['restringe']
+                    ? $prefijo.'la cuenta '.$etiquetaCuenta
+                        .' tiene centros de costo habilitados y la línea no usa uno de ellos.'
+                    : $prefijo.'la cuenta '.$etiquetaCuenta
+                        .' maneja centro de costo y la línea no tiene centro de costo cargado.';
 
                 continue;
             }

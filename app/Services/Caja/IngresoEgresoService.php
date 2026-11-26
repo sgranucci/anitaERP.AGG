@@ -32,6 +32,7 @@ use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
+use App\Support\Caja\IngresoEgresoCentroCajaHerenciaSupport;
 use App\Support\Caja\IngresoEgresoLiquidacionTarjetaSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoBancoAsientoSupport;
@@ -757,8 +758,12 @@ class IngresoEgresoService
 		// Comprobantes IVA (pueden ser menores que el pago) y el resto al concepto de gasto.
 		$comprobantesIva = $this->decodificarComprobantesIvaJson($data['comprobantes_ivacompra_json'] ?? null);
 
+		// Rango de líneas del gasto/IVA de los comprobantes: de ahí sale el centro de la contrapartida.
+		$desdeGastoIva = count($asiento);
+		$hastaGastoIva = $desdeGastoIva;
 		if ($comprobantesIva !== []) {
 			$this->agregarLineasDebeComprobantesIva($asiento, $comprobantesIva, $signo, $empresa_id);
+			$hastaGastoIva = count($asiento);
 		}
 
 		if ($conceptogasto_id > 0 && count($datosContables) == 0 && $asiento !== [])
@@ -822,6 +827,9 @@ class IngresoEgresoService
 				}
 			}
 		}
+
+		// Caja, cheques y cupones de tarjeta: si su cuenta maneja centro, heredan el del gasto.
+		$asiento = IngresoEgresoCentroCajaHerenciaSupport::aplicar($asiento, $desdeGastoIva, $hastaGastoIva);
 
 		if ($solicitudpagoId > 0 && $asiento !== []) {
 			$monedaIdAsiento = (int) ($asiento[0]['moneda_id'] ?? 1);

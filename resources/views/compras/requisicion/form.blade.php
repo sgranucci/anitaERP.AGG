@@ -318,6 +318,14 @@
         if ($reqPedirPartidaCapex) {
             $reqColspanMetaArticulos += 2;
         }
+        // KPI de ahorro: columna «Ahorro» (solo si la migración del KPI ya corrió en esta base).
+        $reqAhorroActivo = \App\Support\Compras\AhorroLineaSupport::tablaTieneColumnasAhorro('requisicion_articulo');
+        // Requisición ya grabada con líneas bloqueadas (aprobada, con OC, cumplida): el ahorro se carga igual, por línea y sin circuito.
+        $reqAhorroGuardable = $reqAhorroActivo && $lineasSoloLectura && ! empty($data->id)
+            && empty($acceso_visualizacion_por_hash) && can('actualizar-requisicion', false);
+        if ($reqAhorroActivo) {
+            $reqColspanMetaArticulos += 1;
+        }
     @endphp
     <div id="ms-ayuda-color-talle" class="alert alert-info py-2 small mb-2" style="display:none;">
         Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
@@ -436,6 +444,9 @@
                 @if ($reqPedirPartidaCapex)
                     <th style="width: 14%;">Partida presupuesto</th>
                     <th style="width: 12%;">Capex</th>
+                @endif
+                @if ($reqAhorroActivo)
+                    <th style="width: 7%;" class="text-center text-nowrap" title="Precio anterior, origen y tipo de ahorro de la línea">Ahorro</th>
                 @endif
                 <th style="width: 3%;" class="text-center" title="Detalle / leyenda de la línea">Det.</th>
                 @if(!$lineasSoloLectura)
@@ -619,6 +630,23 @@
                     </div>
                 </td>
                 @endif
+                @if ($reqAhorroActivo)
+                @php
+                    $_ahPrecioAnt = old('preciooriginales.'.$idx, \App\Support\Compras\AhorroLineaSupport::precioAnteriorParaFormulario($linea));
+                @endphp
+                <td class="align-middle p-1 text-center req-ahorro-celda">
+                    <input type="hidden" class="req-ahorro-precio-anterior" name="preciooriginales[]" value="{{ $_ahPrecioAnt }}">
+                    <input type="hidden" class="req-ahorro-moneda-anterior" name="moneda_anterior_ids[]" value="{{ old('moneda_anterior_ids.'.$idx, $linea->moneda_anterior_id ?? '') }}">
+                    <input type="hidden" class="req-ahorro-origen" name="origen_anteriores[]" value="{{ old('origen_anteriores.'.$idx, $linea->origen_anterior ?? '') }}">
+                    <input type="hidden" class="req-ahorro-referencia" name="referencia_anteriores[]" value="{{ old('referencia_anteriores.'.$idx, $linea->referencia_anterior ?? '') }}">
+                    <input type="hidden" class="req-ahorro-tipo-id" name="tipoahorro_ids[]" value="{{ old('tipoahorro_ids.'.$idx, $linea->tipoahorro_id ?? '') }}" data-tipo-nombre="{{ e(optional($linea->tipoahorro)->nombre ?? '') }}">
+                    <input type="hidden" class="req-ahorro-observacion" name="motivoahorros[]" value="{{ old('motivoahorros.'.$idx, $linea->motivoahorro ?? '') }}">
+                    <button type="button" title="{{ $reqAhorroGuardable ? 'Cargar o corregir el ahorro de la línea' : ($lineasSoloLectura ? 'Ver el ahorro de la línea' : 'Cargar precio anterior y tipo de ahorro') }}" class="btn btn-sm btn-outline-success req-abrir-ahorro-linea">
+                        <i class="fa fa-balance-scale"></i>
+                    </button>
+                    <div class="req-ahorro-resumen small text-nowrap"></div>
+                </td>
+                @endif
                 <td class="align-middle p-1 text-center">
                     @unless ($reqPedirPartidaCapex)
                         <input type="hidden" class="partidagasto_id" name="partidagasto_ids[]" value="">
@@ -701,6 +729,34 @@
         @else
         <div></div>
         @endif
+        <div class="d-flex flex-wrap align-items-stretch">
+        @if ($reqAhorroActivo)
+        @php
+            $reqAhorroResumen = \App\Support\Compras\AhorroLineaSupport::resumen(
+                (isset($data) && $data) ? $data->requisicion_articulos : []
+            );
+            $reqAhorroNeg = $reqAhorroResumen['ahorro_pesos'] < 0;
+        @endphp
+        <div class="card {{ $reqAhorroNeg ? 'border-danger' : 'border-success' }} mb-0 mr-2" id="req-panel-ahorro"
+             title="Suma del ahorro de todas las líneas, en pesos, con el TC vigente a la fecha de la requisición. Si es negativo es un aumento (sobrecosto).">
+            <div class="card-body py-2 px-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center">
+                    <span class="text-muted small mb-1 mb-sm-0 mr-3" id="req-ahorro-etiqueta">{{ $reqAhorroNeg ? 'Sobrecosto' : 'Ahorro' }}</span>
+                    <strong class="text-nowrap {{ $reqAhorroNeg ? 'text-danger' : 'text-success' }}" id="req-ahorro-valor" style="font-size: 1.1rem;">
+                        @if ($reqAhorroResumen['lineas_con_ahorro'] > 0)
+                            $ {{ number_format($reqAhorroResumen['ahorro_pesos'], 0, ',', '.') }}
+                            @if ($reqAhorroResumen['porcentaje'] !== null)
+                                &middot; {{ number_format($reqAhorroResumen['porcentaje'], 1, ',', '.') }}%
+                            @endif
+                        @else
+                            &mdash;
+                        @endif
+                    </strong>
+                </div>
+                <div class="text-muted small mt-1">En pesos, TC del d&iacute;a de la requisici&oacute;n.</div>
+            </div>
+        </div>
+        @endif
         <div class="card border-secondary mb-0" id="req-panel-totales">
             <div class="card-body py-2 px-3">
                 <div class="d-flex flex-wrap justify-content-between align-items-center">
@@ -714,7 +770,16 @@
                 </div>
             </div>
         </div>
+        </div>
     </div>
+    @if ($reqAhorroActivo)
+        @include('compras.requisicion.partials.modal_ahorro_linea', [
+            'lineasSoloLectura' => $lineasSoloLectura,
+            'moneda_query' => $moneda_query,
+            'ahorroGuardable' => $reqAhorroGuardable,
+            'requisicionId' => $data->id ?? null,
+        ])
+    @endif
 </div>
 @include('includes.stock.modalconsultaarticulo')
 @if (!empty($reqPedirPartidaCapex))

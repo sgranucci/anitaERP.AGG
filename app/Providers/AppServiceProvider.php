@@ -808,6 +808,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Compras\TipoAhorroRepositoryInterface',
+            'App\Repositories\Compras\TipoAhorroRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Compras\TipoempresaRepositoryInterface',
             'App\Repositories\Compras\TipoempresaRepository',
         );
@@ -1254,6 +1259,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Contable\Canon_Municipal_ConfigRepositoryInterface',
             'App\Repositories\Contable\Canon_Municipal_ConfigRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Contable\IibbSolicitudpagoConfigRepositoryInterface',
+            'App\Repositories\Contable\IibbSolicitudpagoConfigRepository',
         );
 
         $this->app->bind(

@@ -5,18 +5,32 @@ declare(strict_types=1);
 namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
  * Gates y leyenda del reverso contable compensatorio (NC en mes abierto).
  *
- * No edita ni borra la factura original: crea una NC con asiento, mismos conceptos
- * e importa, y la aplica en cuenta corriente.
+ * No edita ni borra la factura original: crea una NC interna cuyo asiento es el espejo
+ * del asiento de la factura (ComprobanteProveedorReversoAsientoEspejoSupport). El
+ * comprobante de la NC se carga como exento / no gravado, sin IVA: no va a libros de IVA.
+ *
+ * Dos modos, según el estado de la factura:
+ * - aplicar_a_factura: factura sin pagos. La NC se aplica en cuenta corriente a la factura.
+ * - a_cuenta: factura pagada en total con órdenes de pago. La NC queda como crédito
+ *   abierto del proveedor (saldo a favor) para aplicarlo después a otros pagos.
  */
 final class ComprobanteProveedorReversoContableSupport
 {
     public const SLUG_PERMISO = 'revertir-contable-comprobante-proveedor';
+
+    public const MODO_APLICAR_A_FACTURA = 'aplicar_a_factura';
+
+    public const MODO_A_CUENTA = 'a_cuenta';
+
+    private const TOLERANCIA = 0.01;
 
     public const PREFIJO_LEYENDA = 'Reverso contable de CP#';
 
@@ -52,9 +66,13 @@ final class ComprobanteProveedorReversoContableSupport
     }
 
     /**
+     * Valida el reverso y devuelve el modo que corresponde a la factura.
+     *
+     * @return self::MODO_*
+     *
      * @throws RuntimeException
      */
-    public static function assertPuedeRevertir(Comprobante_Proveedor $comprobante): void
+    public static function assertPuedeRevertir(Comprobante_Proveedor $comprobante): string
     {
         if (! self::puedeMostrarBoton($comprobante)) {
             throw new RuntimeException(
@@ -64,12 +82,6 @@ final class ComprobanteProveedorReversoContableSupport
         }
 
         $id = (int) $comprobante->id;
-        if (ComprobanteProveedorPagoSupport::tienePagosAplicados($id)) {
-            throw new RuntimeException(
-                'La factura tiene pagos u otras aplicaciones en cuenta corriente. '
-                .'Primero hay que deshacer esas aplicaciones (o revertir la OP).'
-            );
-        }
 
         if (self::yaFueReversado($id)) {
             throw new RuntimeException(
@@ -77,16 +89,112 @@ final class ComprobanteProveedorReversoContableSupport
             );
         }
 
-        $conceptos = $comprobante->comprobante_proveedor_conceptos ?? collect();
-        $conMonto = $conceptos->filter(
-            static fn ($l) => (int) ($l->concepto_ivacompra_id ?? 0) > 0
-                && abs((float) ($l->monto ?? 0)) >= 0.0001
-        );
-        if ($conMonto->isEmpty()) {
+        if (abs((float) ($comprobante->total ?? 0)) < self::TOLERANCIA) {
+            throw new RuntimeException('La factura no tiene importe para revertir.');
+        }
+
+        $lineasAsiento = (int) DB::table('asiento_movimiento')
+            ->where('asiento_id', (int) $comprobante->asiento_id)
+            ->count();
+        if ($lineasAsiento < 2) {
             throw new RuntimeException(
-                'El comprobante no tiene conceptos IVA con monto para clonar en la NC.'
+                'El asiento de la factura no tiene líneas en el ERP: no hay nada que dar vuelta.'
             );
         }
+
+        if (! ComprobanteProveedorPagoSupport::tienePagosAplicados($id)) {
+            return self::MODO_APLICAR_A_FACTURA;
+        }
+
+        self::assertPagadaEnTotalSoloConOrdenesDePago($id);
+
+        return self::MODO_A_CUENTA;
+    }
+
+    /**
+     * Factura con pagos: solo se acepta si la deuda quedó cancelada en total y todas sus
+     * aplicaciones son de órdenes de pago. Un pago parcial o una NC aplicada a mano no entran.
+     *
+     * @throws RuntimeException
+     */
+    public static function assertPagadaEnTotalSoloConOrdenesDePago(int $comprobanteId): void
+    {
+        $deudaIds = ComprobanteProveedorPagoSupport::idsCuentacorrienteDeuda($comprobanteId);
+        if ($deudaIds === []) {
+            throw new RuntimeException(
+                'No se encontró la deuda de la factura en cuenta corriente: no se puede verificar el pago.'
+            );
+        }
+
+        $deudas = DB::table('proveedor_cuentacorriente')
+            ->whereIn('id', $deudaIds)
+            ->pluck('total', 'id');
+        $aplicados = DB::table('proveedor_cuentacorriente_aplicacion')
+            ->whereIn('proveedor_cuentacorriente_id', $deudaIds)
+            ->selectRaw('proveedor_cuentacorriente_id, SUM(total) as aplicado')
+            ->groupBy('proveedor_cuentacorriente_id')
+            ->pluck('aplicado', 'proveedor_cuentacorriente_id');
+
+        foreach ($deudaIds as $deudaId) {
+            $saldo = ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+                (float) ($deudas[$deudaId] ?? 0),
+                isset($aplicados[$deudaId]) ? (float) $aplicados[$deudaId] : 0.0
+            );
+            if ($saldo >= self::TOLERANCIA) {
+                throw new RuntimeException(
+                    'La factura tiene un pago parcial (saldo pendiente '
+                    .number_format($saldo, 2, ',', '.').'). '
+                    .'El reverso a cuenta solo se hace con la factura pagada en total.'
+                );
+            }
+        }
+
+        $aplicadaFueraDeOp = DB::table('proveedor_cuentacorriente_aplicacion')
+            ->whereIn('proveedor_cuentacorriente_id', $deudaIds)
+            ->where(function ($q) {
+                $q->whereNull('pagoproveedor_id')->orWhere('pagoproveedor_id', 0);
+            })
+            ->exists();
+        if ($aplicadaFueraDeOp) {
+            throw new RuntimeException(
+                'La factura tiene aplicaciones que no son de una orden de pago (por ejemplo una NC aplicada). '
+                .'Hay que desaplicarlas antes de revertir.'
+            );
+        }
+    }
+
+    /**
+     * Concepto del comprobante de la NC: exento / no gravado, sin IVA.
+     * Se resuelve por el código de Anita (ComprobanteProveedorConceptoIvaTipos).
+     *
+     * @throws RuntimeException
+     */
+    public static function resolverConceptoExento(): Concepto_Ivacompra
+    {
+        $codigo = ComprobanteProveedorConceptoIvaTipos::CODIGOS_EXENTO_NO_GRAVADO[0];
+
+        $concepto = Concepto_Ivacompra::query()
+            ->where('tipoconcepto', 'E')
+            ->where('codigo', $codigo)
+            ->whereNull('empresa_id')
+            ->orderBy('id')
+            ->first();
+
+        if ($concepto === null) {
+            throw new RuntimeException(
+                'No hay un concepto IVA exento / no gravado (código '.$codigo.') para cargar la NC de reverso.'
+            );
+        }
+
+        return $concepto;
+    }
+
+    public static function textoModo(string $modo): string
+    {
+        return $modo === self::MODO_A_CUENTA
+            ? 'La factura está pagada: la NC queda como crédito del proveedor (a cuenta) para aplicar a otros pagos. '
+                .'No se aplica a esta factura.'
+            : 'La NC se aplica en cuenta corriente a esta factura.';
     }
 
     public static function yaFueReversado(int $comprobanteOrigenId): bool

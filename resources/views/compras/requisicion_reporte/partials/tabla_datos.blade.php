@@ -325,8 +325,12 @@
                     @endif
                 </td>
                 <td class="text-right">
-                    @if ((float) ($fila['monto_ahorro'] ?? 0) > 0)
-                        {{ $formatearNum($fila['monto_ahorro'] ?? 0) }}
+                    @if ((float) ($fila['monto_ahorro'] ?? 0) != 0)
+                        @if ((float) $fila['monto_ahorro'] < 0 && ! $paraExcel)
+                            <span class="text-danger">{{ $formatearNum($fila['monto_ahorro']) }}</span>
+                        @else
+                            {{ $formatearNum($fila['monto_ahorro']) }}
+                        @endif
                     @endif
                 </td>
                 <td><small>{{ $fila['motivo_ahorro'] ?? '' }}</small></td>

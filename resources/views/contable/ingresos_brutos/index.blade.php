@@ -12,8 +12,13 @@
                 <h3 class="card-title">Ingresos Brutos (ARBA / AGIP / Río Negro)</h3>
                 <div class="card-tools">
                     @if (can('listar-ingresos-brutos-config', false))
-                        <a href="{{ route('ingresos_brutos_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración">
+                        <a href="{{ route('ingresos_brutos_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración IIBB">
                             <i class="fa fa-cogs"></i> Configuración
+                        </a>
+                    @endif
+                    @if (can('listar-iibb-arba-config', false))
+                        <a href="{{ route('iibb_arba_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración ARBA">
+                            <i class="fa fa-cogs"></i> Configuración ARBA
                         </a>
                     @endif
                     <a href="{{ route('ingresos_brutos') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
@@ -235,6 +240,10 @@
                 'periodo_texto' => $periodo_texto ?? '',
             ])
 
+            @if (! empty($arba))
+                @include('contable.ingresos_brutos.partials.arba_liquidacion')
+            @endif
+
             <div class="card card-outline card-secondary mt-3">
                 <div class="card-header">
                     <h3 class="card-title">
@@ -295,6 +304,7 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     window.iibbTiposPorEmpresa = @json($tipos_por_empresa ?? []);
     window.iibbProvinciasFisco = @json($provincias_fisco ?? []);

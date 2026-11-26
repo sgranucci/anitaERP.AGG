@@ -21,6 +21,7 @@ use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoAnitaNumeracionSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCtamovRollbackSupport;
+use App\Support\Contable\CuentaCentrocostoHabilitadoSupport;
 use App\Support\Contable\AsientoEmpresaCambioSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -94,6 +95,11 @@ class AsientoRepository implements AsientoRepositoryInterface
     public function create(array $data)
     {
 		$this->assertPeriodoContablePermitido($data);
+
+		// Cuenta que maneja centro de costo: no se graba la línea sin centro (todo el sistema).
+		if (! filter_var($data['omitir_validacion_centrocosto'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+			CuentaCentrocostoHabilitadoSupport::assertPayload($data, 'No se puede grabar el asiento.');
+		}
 
 		//$data['numeroasiento'] = self::ultimoAsiento($data['empresa_id']);
 		$this->asignarPathSistema($data);

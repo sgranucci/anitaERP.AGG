@@ -93,7 +93,7 @@
         <td><strong>Documento</strong></td>
         <td><strong>Razón</strong></td>
         <td><strong>Fecha</strong></td>
-        <td><strong>Alícuota</strong></td>
+        <td><strong>Régimen</strong></td>
         <td><strong>Base</strong></td>
         <td><strong>Importe</strong></td>
     </tr>
@@ -103,7 +103,7 @@
             <td>{{ $reg['nro_documento'] ?? '' }}</td>
             <td>{{ $reg['razon_social'] ?? '' }}</td>
             <td>{{ $reg['fecha_retencion'] ?? '' }}</td>
-            <td style="text-align:right;">{{ $fmtMontoExcel($reg['alicuota'] ?? 0) }}</td>
+            <td style="text-align:center;">{{ $reg['codigo_regimen'] ?? '' }}</td>
             <td style="text-align:right;">{{ $fmtMontoExcel($reg['base_calculo'] ?? 0) }}</td>
             <td style="text-align:right;">{{ $fmtMontoExcel($reg['importe'] ?? 0) }}</td>
         </tr>
@@ -136,7 +136,7 @@
                 <th>Documento</th>
                 <th>Razón</th>
                 <th>Fecha</th>
-                <th class="num">Alícuota</th>
+                <th>Régimen</th>
                 <th class="num">Base</th>
                 <th class="num">Importe</th>
             </tr>
@@ -148,7 +148,7 @@
                     <td>{{ $reg['nro_documento'] ?? '' }}</td>
                     <td>{{ $reg['razon_social'] ?? '' }}</td>
                     <td>{{ $reg['fecha_retencion'] ?? '' }}</td>
-                    <td class="num">{{ number_format((float) ($reg['alicuota'] ?? 0), 2, ',', '.') }}</td>
+                    <td>{{ $reg['codigo_regimen'] ?? '' }}</td>
                     <td class="num">{{ number_format((float) ($reg['base_calculo'] ?? 0), 2, ',', '.') }}</td>
                     <td class="num">{{ number_format((float) ($reg['importe'] ?? 0), 2, ',', '.') }}</td>
                 </tr>

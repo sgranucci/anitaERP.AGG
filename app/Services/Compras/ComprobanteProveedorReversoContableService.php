@@ -12,6 +12,7 @@ use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
+use App\Support\Compras\ComprobanteProveedorReversoAsientoEspejoSupport;
 use App\Support\Compras\ComprobanteProveedorReversoContableSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use Illuminate\Http\Request;
@@ -20,7 +21,13 @@ use RuntimeException;
 
 /**
  * Reverso contable de una factura de compra en período cerrado (o sin reeditar):
- * NC compensatoria en mes abierto + aplicación en cuenta corriente.
+ * NC interna en mes abierto cuyo asiento es el espejo del de la factura.
+ *
+ * - Factura sin pagos: la NC se aplica en cuenta corriente a la factura.
+ * - Factura pagada en total: la NC queda como crédito abierto del proveedor (a cuenta).
+ *
+ * El comprobante de la NC es exento / no gravado: el IVA se da vuelta solo en el asiento.
+ * La NC interna (subdiario N) no va al libro de IVA compras ni a IVA Digital.
  */
 final class ComprobanteProveedorReversoContableService
 {
@@ -37,6 +44,7 @@ final class ComprobanteProveedorReversoContableService
      *   nc_id:int,
      *   nc_etiqueta:string,
      *   asiento_id:int,
+     *   modo:string,
      *   aplicaciones:int,
      *   monto:float,
      *   mensaje:string
@@ -45,15 +53,10 @@ final class ComprobanteProveedorReversoContableService
     public function revertir(int $comprobanteId, ?string $fechaContable = null): array
     {
         $origen = Comprobante_Proveedor::query()
-            ->with([
-                'tipotransaccion_compras',
-                'comprobante_proveedor_conceptos.concepto_ivacompras',
-                'comprobante_proveedor_debe_gastos',
-                'proveedores',
-            ])
+            ->with(['tipotransaccion_compras', 'proveedores'])
             ->findOrFail($comprobanteId);
 
-        ComprobanteProveedorReversoContableSupport::assertPuedeRevertir($origen);
+        $modo = ComprobanteProveedorReversoContableSupport::assertPuedeRevertir($origen);
 
         $tipoNc = ComprobanteProveedorReversoContableSupport::resolverTipoNc();
         $fecha = $this->resolverFechaContable($origen, $fechaContable);
@@ -75,7 +78,15 @@ final class ComprobanteProveedorReversoContableService
                 );
             }
 
-            $aplicacion = $this->aplicarNcSobreFactura($origen, $nc, $fecha);
+            // El reverso siempre da vuelta el asiento de la factura: se verifica línea por línea.
+            ComprobanteProveedorReversoAsientoEspejoSupport::assertEsEspejo(
+                (int) $origen->asiento_id,
+                (int) $nc->asiento_id
+            );
+
+            $aplicacion = $modo === ComprobanteProveedorReversoContableSupport::MODO_A_CUENTA
+                ? ['aplicadas' => 0, 'monto' => 0.0]
+                : $this->aplicarNcSobreFactura($origen, $nc, $fecha);
         } catch (\Throwable $e) {
             $this->intentarLimpiarNcFallida($ncId);
             throw $e;
@@ -89,15 +100,23 @@ final class ComprobanteProveedorReversoContableService
             (int) ($nc->numerocomprobante ?? 0)
         );
 
+        $mensaje = 'Reverso contable OK: se creó '.$etiqueta
+            .' (asiento #'.(int) $nc->asiento_id.', espejo del asiento de la factura #'.$origen->id.')';
+        $mensaje .= $modo === ComprobanteProveedorReversoContableSupport::MODO_A_CUENTA
+            ? '. La NC quedó a cuenta del proveedor por '
+                .number_format((float) $nc->total, 2, ',', '.')
+                .': se aplica a otros pagos desde la cuenta corriente.'
+            : ' y se aplicó a la factura.';
+
         return [
             'origen_id' => (int) $origen->id,
             'nc_id' => $ncId,
             'nc_etiqueta' => $etiqueta,
             'asiento_id' => (int) $nc->asiento_id,
+            'modo' => $modo,
             'aplicaciones' => (int) ($aplicacion['aplicadas'] ?? 0),
             'monto' => (float) ($aplicacion['monto'] ?? 0),
-            'mensaje' => 'Reverso contable OK: se creó '.$etiqueta
-                .' (asiento #'.(int) $nc->asiento_id.') y se aplicó a la factura #'.$origen->id.'.',
+            'mensaje' => $mensaje,
         ];
     }
 
@@ -110,16 +129,18 @@ final class ComprobanteProveedorReversoContableService
      *   total:float,
      *   fecha_contable:string,
      *   tipo_nc:string,
-     *   conceptos:int
+     *   modo:string,
+     *   modo_texto:string,
+     *   lineas:list<array{cuenta_codigo:string, cuenta_nombre:string, debe:float, haber:float}>
      * }
      */
     public function previsualizar(int $comprobanteId, ?string $fechaContable = null): array
     {
         $origen = Comprobante_Proveedor::query()
-            ->with(['tipotransaccion_compras', 'comprobante_proveedor_conceptos'])
+            ->with(['tipotransaccion_compras'])
             ->findOrFail($comprobanteId);
 
-        ComprobanteProveedorReversoContableSupport::assertPuedeRevertir($origen);
+        $modo = ComprobanteProveedorReversoContableSupport::assertPuedeRevertir($origen);
         $tipoNc = ComprobanteProveedorReversoContableSupport::resolverTipoNc();
         $fecha = $this->resolverFechaContable($origen, $fechaContable);
 
@@ -132,18 +153,17 @@ final class ComprobanteProveedorReversoContableService
             (int) ($origen->numerocomprobante ?? 0)
         );
 
-        $conceptos = ($origen->comprobante_proveedor_conceptos ?? collect())->filter(
-            static fn ($l) => (int) ($l->concepto_ivacompra_id ?? 0) > 0
-                && abs((float) ($l->monto ?? 0)) >= 0.0001
-        )->count();
-
         return [
             'origen_id' => (int) $origen->id,
             'etiqueta' => $etiqueta,
             'total' => round((float) ($origen->total ?? 0), 2),
             'fecha_contable' => $fecha,
             'tipo_nc' => (string) ($tipoNc->abreviatura ?? ''),
-            'conceptos' => $conceptos,
+            'modo' => $modo,
+            'modo_texto' => ComprobanteProveedorReversoContableSupport::textoModo($modo),
+            'lineas' => ComprobanteProveedorReversoAsientoEspejoSupport::lineasParaPreview(
+                (int) $origen->asiento_id
+            ),
         ];
     }
 
@@ -176,25 +196,10 @@ final class ComprobanteProveedorReversoContableService
         $cuit = (string) ($origen->identificacion_proveedor_cuit ?? '');
         $numero = $this->proximoNumeroInterno((int) $tipoNc->id, $cuit);
 
-        $conceptoIds = [];
-        $montos = [];
-        $cuentas = [];
-        $centros = [];
-        foreach ($origen->comprobante_proveedor_conceptos->sortBy('orden') as $linea) {
-            $conceptoId = (int) ($linea->concepto_ivacompra_id ?? 0);
-            $monto = round((float) ($linea->monto ?? 0), 4);
-            if ($conceptoId <= 0 || abs($monto) < 0.0001) {
-                continue;
-            }
-            $conceptoIds[] = $conceptoId;
-            $montos[] = $monto;
-            $cuentas[] = (int) ($linea->cuentacontabledebe_id ?? 0) ?: null;
-            $centros[] = (int) ($linea->centrocosto_id ?? 0) ?: null;
-        }
-
-        if ($conceptoIds === []) {
-            throw new RuntimeException('No hay conceptos para clonar.');
-        }
+        // NC interna: un solo concepto exento / no gravado por el total. El IVA y las demás
+        // piernas se dan vuelta en el asiento espejo, no en el comprobante.
+        $total = round((float) ($origen->total ?? 0), 4);
+        $conceptoExento = ComprobanteProveedorReversoContableSupport::resolverConceptoExento();
 
         $payload = [
             'empresa_id' => (int) $origen->empresa_id,
@@ -206,8 +211,8 @@ final class ComprobanteProveedorReversoContableService
             'fechacomprobante' => $fecha,
             'fechaiva' => $fecha,
             'fechavencimiento' => $fecha,
-            'subtotal' => (float) ($origen->subtotal ?? $origen->total ?? 0),
-            'total' => (float) ($origen->total ?? 0),
+            'subtotal' => $total,
+            'total' => $total,
             'moneda_id' => (int) ($origen->moneda_id ?? 1),
             'cotizacion' => (float) ($origen->cotizacion ?? 1),
             'leyenda' => ComprobanteProveedorReversoContableSupport::leyendaPara($origen),
@@ -215,38 +220,19 @@ final class ComprobanteProveedorReversoContableService
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::MANUAL,
             'es_fce' => false,
             'pararevisar' => false,
-            'concepto_ivacompra_ids' => $conceptoIds,
-            'montos' => $montos,
-            'cuentacontabledebe_ids' => $cuentas,
-            'concepto_centrocosto_ids' => $centros,
+            'concepto_ivacompra_ids' => [(int) $conceptoExento->id],
+            'montos' => [$total],
+            'cuentacontabledebe_ids' => [null],
+            'concepto_centrocosto_ids' => [null],
             'cuota_numero' => [1],
             'cuota_fechavencimiento' => [$fecha],
-            'cuota_monto' => [(float) ($origen->total ?? 0)],
+            'cuota_monto' => [$total],
             'cuota_moneda_id' => [(int) ($origen->moneda_id ?? 1)],
             'cuota_cotizacion' => [(float) ($origen->cotizacion ?? 1)],
         ];
 
         if ((int) ($origen->provincia_destino_id ?? 0) > 0) {
             $payload['provincia_destino_id'] = (int) $origen->provincia_destino_id;
-        }
-
-        $debeCuentas = [];
-        $debeImportes = [];
-        $debeCentros = [];
-        foreach ($origen->comprobante_proveedor_debe_gastos->sortBy('orden') as $dg) {
-            $cuentaId = (int) ($dg->cuentacontable_id ?? 0);
-            $importe = round((float) ($dg->importe ?? 0), 4);
-            if ($cuentaId <= 0 || abs($importe) < 0.0001) {
-                continue;
-            }
-            $debeCuentas[] = $cuentaId;
-            $debeImportes[] = $importe;
-            $debeCentros[] = (int) ($dg->centrocosto_id ?? 0) ?: null;
-        }
-        if ($debeCuentas !== []) {
-            $payload['debe_gasto_cuenta_ids'] = $debeCuentas;
-            $payload['debe_gasto_importes'] = $debeImportes;
-            $payload['debe_gasto_centrocosto_ids'] = $debeCentros;
         }
 
         return Request::create('/compras/comprobante-proveedor/reverso-contable', 'POST', $payload);

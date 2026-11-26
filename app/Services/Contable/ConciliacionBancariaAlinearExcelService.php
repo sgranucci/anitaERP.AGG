@@ -3,6 +3,7 @@
 namespace App\Services\Contable;
 
 use App\Models\Caja\Cuentacaja;
+use App\Models\Contable\ConciliacionBancariaPar;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
@@ -25,6 +26,8 @@ class ConciliacionBancariaAlinearExcelService
         '326' => 3,
         '3112' => 3,
     ];
+
+    private const TIPS_CHEQUE = ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'];
 
     public function __construct(
         private readonly ConciliacionBancariaService $service,
@@ -98,6 +101,59 @@ class ConciliacionBancariaAlinearExcelService
                 true,
             );
             gc_collect_cycles();
+        }
+
+        return $out;
+    }
+
+    /**
+     * Solo desconcilia los pares sintéticos «CIERRE CONTADURIA» cuyo cheque el Excel Anita
+     * vuelve a listar como pendiente. No cierra ni empareja nada.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function reabrirSinteticosAnita(string $ruta, bool $aplicar): array
+    {
+        if (! is_readable($ruta)) {
+            throw new RuntimeException('No se puede leer: '.$ruta);
+        }
+        if (! ConciliacionBancariaExcelReferenciaSupport::esExportAnitaSinConciliar($ruta)) {
+            throw new RuntimeException('El archivo no parece un export Anita de movimientos sin conciliar.');
+        }
+
+        $out = [];
+        foreach (ConciliacionBancariaExcelReferenciaSupport::leerPendientesAnitaSinConciliar($ruta) as $cuentaExcel) {
+            $codigo = (string) $cuentaExcel['codigo'];
+            $etiqueta = 'anita:'.((string) ($cuentaExcel['hoja'] ?? $codigo));
+            $empresaId = self::CODIGO_EMPRESA[$codigo] ?? 0;
+            $cuenta = $empresaId > 0
+                ? Cuentacaja::query()->paraEmpresa($empresaId)->where('codigo', $codigo)->first()
+                : null;
+            if (! $cuenta) {
+                $out[] = [
+                    'codigo' => $codigo,
+                    'archivo' => $etiqueta,
+                    'error' => $empresaId > 0
+                        ? "No existe cuentacaja código {$codigo} empresa {$empresaId}"
+                        : 'Código de cuenta no mapeado a empresa: '.$codigo,
+                ];
+
+                continue;
+            }
+
+            $out[] = [
+                'codigo' => $codigo,
+                'empresa_id' => $empresaId,
+                'cuentacaja_id' => (int) $cuenta->id,
+                'archivo' => $etiqueta,
+                'aplicar' => $aplicar,
+                'reapertura' => $this->reabrirSinteticosProtegidos(
+                    $empresaId,
+                    (int) $cuenta->id,
+                    $this->clavesTipNumeroExcel($cuentaExcel['cheques'] ?? []),
+                    $aplicar,
+                ),
+            ];
         }
 
         return $out;
@@ -419,6 +475,24 @@ class ConciliacionBancariaAlinearExcelService
             'pendientes_banco_excel' => $detalle['banco_pendientes'] ?? [],
         ];
 
+        $protegidosBanco = $this->clavesPendientesBancoExcel($detalle['banco_pendientes'] ?? []);
+        $protegidosCheques = [];
+        foreach ($detalle['cheques'] ?? [] as $ch) {
+            $n = ConciliacionBancariaExcelReferenciaSupport::soloDigitos((string) ($ch['numero'] ?? ''));
+            if ($n !== '' && $n !== '0') {
+                $protegidosCheques[$n] = true;
+            }
+        }
+        $protegidosTipNumero = $this->clavesTipNumeroExcel($detalle['cheques'] ?? []);
+
+        // Antes de ejecutar: lo reabierto vuelve a pendientes y el matcher lo cruza con el débito real.
+        $reapertura = $this->reabrirSinteticosProtegidos(
+            $empresaId,
+            (int) $cuenta->id,
+            $protegidosTipNumero,
+            $aplicar,
+        );
+
         $resultado = $this->service->ejecutar(
             $empresaId,
             (int) $cuenta->id,
@@ -429,22 +503,18 @@ class ConciliacionBancariaAlinearExcelService
             $opcionesEjecutar,
         );
 
-        $protegidosBanco = $this->clavesPendientesBancoExcel($detalle['banco_pendientes'] ?? []);
-        $protegidosCheques = [];
-        $protegidosTipNumero = [];
-        foreach ($detalle['cheques'] ?? [] as $ch) {
-            $n = ConciliacionBancariaExcelReferenciaSupport::soloDigitos((string) ($ch['numero'] ?? ''));
-            $tip = strtoupper(trim((string) ($ch['tip'] ?? '')));
-            if ($n !== '' && $n !== '0') {
-                $protegidosCheques[$n] = true;
-                if ($tip !== '') {
-                    $protegidosTipNumero[$tip.'|'.$n] = true;
+        $pendC = is_array($resultado['pendientes_contables'] ?? null) ? $resultado['pendientes_contables'] : [];
+        $pendB = is_array($resultado['pendientes_banco'] ?? null) ? $resultado['pendientes_banco'] : [];
+
+        $chequesTipErp = [];
+        foreach ($pendC as $mov) {
+            if (is_array($mov)) {
+                $n = $this->numeroChequeTipCheque($mov);
+                if ($n !== null) {
+                    $chequesTipErp[$n] = true;
                 }
             }
         }
-
-        $pendC = is_array($resultado['pendientes_contables'] ?? null) ? $resultado['pendientes_contables'] : [];
-        $pendB = is_array($resultado['pendientes_banco'] ?? null) ? $resultado['pendientes_banco'] : [];
 
         $aCerrarC = [];
         $protegidosC = [];
@@ -452,7 +522,7 @@ class ConciliacionBancariaAlinearExcelService
             if (! is_array($mov)) {
                 continue;
             }
-            if ($this->contableProtegidoPorExcel($mov, $protegidosCheques, $protegidosTipNumero)) {
+            if ($this->contableProtegidoPorExcel($mov, $protegidosCheques, $protegidosTipNumero, $chequesTipErp)) {
                 $protegidosC[] = $mov;
                 continue;
             }
@@ -563,6 +633,7 @@ class ConciliacionBancariaAlinearExcelService
             'archivo' => $etiquetaArchivo,
             'import' => null,
             'aplicar' => $aplicar,
+            'reapertura' => $reapertura,
             'pares_cierre_candidatos' => count($paresCierre),
             'pares_cierre_persistidos' => $persistidos,
             'protegidos_contables' => count($protegidosC),
@@ -638,13 +709,18 @@ class ConciliacionBancariaAlinearExcelService
     /**
      * @param  array<string, true>  $cheques
      * @param  array<string, true>  $tipNumero  claves "TIP|numero" del Excel Anita/Contaduría
+     * @param  array<string, true>  $chequesTipErp  números con movimiento tip cheque (CHP…) pendiente en el ERP
      */
-    private function contableProtegidoPorExcel(array $mov, array $cheques, array $tipNumero = []): bool
-    {
+    private function contableProtegidoPorExcel(
+        array $mov,
+        array $cheques,
+        array $tipNumero = [],
+        array $chequesTipErp = [],
+    ): bool {
         // tipNumero poblado = alineación Anita Bridge (Tip|Numero). Contaduría suele ir solo con $cheques.
         $modoAnita = $tipNumero !== [];
         $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
-        $esTipCheque = in_array($tipo, ['CHP', 'CHD', 'CHQ', 'CHE', 'ACP'], true);
+        $esTipCheque = in_array($tipo, self::TIPS_CHEQUE, true);
 
         if (ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov)) {
             // Contaduría: las ANULA se mantienen. Anita Bridge no las lista → se cierran.
@@ -661,9 +737,15 @@ class ConciliacionBancariaAlinearExcelService
         }
 
         $n = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
-        // Por nro de cheque del Excel solo se protege el tip cheque.
-        // Un OPP con "Ch: N" duplica el CHP de Anita y debe cerrarse (no protegerlo).
         if ($n !== null && isset($cheques[$n]) && ($esTipCheque || ! $modoAnita)) {
+            return true;
+        }
+        // En el mayor ERP el cheque emitido suele existir solo como OPP "Ch: N" (sin CHP).
+        // El OPP es duplicado (y se cierra) únicamente si el ERP también tiene el CHP N pendiente.
+        if ($n !== null && $modoAnita && ! $esTipCheque
+            && $this->chequeListadoEnAnita($tipNumero, $n)
+            && ! isset($chequesTipErp[$n])
+        ) {
             return true;
         }
 
@@ -700,6 +782,139 @@ class ConciliacionBancariaAlinearExcelService
         }
 
         return false;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $cheques  filas del Excel (tip, numero)
+     * @return array<string, true>  claves "TIP|numero"
+     */
+    private function clavesTipNumeroExcel(array $cheques): array
+    {
+        $out = [];
+        foreach ($cheques as $ch) {
+            $n = ConciliacionBancariaExcelReferenciaSupport::soloDigitos((string) ($ch['numero'] ?? ''));
+            $tip = strtoupper(trim((string) ($ch['tip'] ?? '')));
+            if ($n !== '' && $n !== '0' && $tip !== '') {
+                $out[$tip.'|'.$n] = true;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, true>  $tipNumero
+     */
+    private function chequeListadoEnAnita(array $tipNumero, string $numero): bool
+    {
+        foreach (self::TIPS_CHEQUE as $tip) {
+            if (isset($tipNumero[$tip.'|'.$numero])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Número del cheque de un movimiento contable tip cheque (CHP…); null si no es tip cheque.
+     *
+     * @param  array<string, mixed>  $mov
+     */
+    private function numeroChequeTipCheque(array $mov): ?string
+    {
+        $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
+        if (! in_array($tipo, self::TIPS_CHEQUE, true)) {
+            return null;
+        }
+        $n = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
+        if ($n !== null) {
+            return $n;
+        }
+        $dig = ConciliacionBancariaExcelReferenciaSupport::soloDigitos((string) ($mov['nro'] ?? ''));
+
+        return $dig !== '' && $dig !== '0' ? $dig : null;
+    }
+
+    /**
+     * Desconcilia los pares sintéticos «CIERRE CONTADURIA» (banco inventado desde el contable)
+     * cuyo cheque el Excel Anita lista como pendiente. Los pares contra débitos reales no se tocan.
+     *
+     * @param  array<string, true>  $tipNumero
+     * @return array{candidatos: int, importe: float, reabiertos: int, bloqueados: list<array<string, mixed>>, detalle: list<array<string, mixed>>}
+     */
+    private function reabrirSinteticosProtegidos(
+        int $empresaId,
+        int $cuentacajaId,
+        array $tipNumero,
+        bool $aplicar,
+    ): array {
+        $vacio = ['candidatos' => 0, 'importe' => 0.0, 'reabiertos' => 0, 'bloqueados' => [], 'detalle' => []];
+        if ($tipNumero === []) {
+            return $vacio;
+        }
+
+        $sinteticos = [];
+        $chequesTipConciliados = [];
+        $query = ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->select(['id', 'hash_contable', 'hash_banco', 'contable_json', 'fecha_contable', 'importe']);
+        foreach ($query->lazyById(500) as $par) {
+            $contable = is_array($par->contable_json)
+                ? $par->contable_json
+                : (json_decode((string) $par->contable_json, true) ?: []);
+            $nTip = $this->numeroChequeTipCheque($contable);
+            if ($nTip !== null) {
+                $chequesTipConciliados[$nTip] = true;
+            }
+            $esSintetico = (string) $par->hash_banco === hash('sha256', 'cierre_excel|banco|'.$par->hash_contable);
+            if (! $esSintetico) {
+                continue;
+            }
+            $n = ConciliacionBancariaReferenciaSupport::extraerChequeContable($contable) ?? $nTip;
+            if ($n === null || ! $this->chequeListadoEnAnita($tipNumero, $n)) {
+                continue;
+            }
+            $sinteticos[] = [
+                'par_id' => (int) $par->id,
+                'tipo' => strtoupper(trim((string) ($contable['tipo_comp'] ?? ''))),
+                'cheque' => $n,
+                'es_tip_cheque' => $nTip !== null,
+                'fecha' => $par->fecha_contable?->format('Y-m-d'),
+                'importe' => (float) $par->importe,
+                'descripcion' => mb_substr((string) ($contable['descripcion'] ?? ''), 0, 60),
+            ];
+        }
+
+        $detalle = [];
+        foreach ($sinteticos as $s) {
+            // OPP con el CHP del mismo cheque ya conciliado en el ERP: el OPP es el duplicado.
+            if (! $s['es_tip_cheque'] && isset($chequesTipConciliados[$s['cheque']])) {
+                continue;
+            }
+            unset($s['es_tip_cheque']);
+            $detalle[] = $s;
+        }
+
+        $out = $vacio;
+        $out['candidatos'] = count($detalle);
+        $out['importe'] = round(array_sum(array_map(static fn (array $d) => abs($d['importe']), $detalle)), 2);
+        $out['detalle'] = $detalle;
+        if (! $aplicar) {
+            return $out;
+        }
+
+        foreach ($detalle as $d) {
+            try {
+                $this->service->desconciliar($empresaId, $cuentacajaId, $d['par_id']);
+                $out['reabiertos']++;
+            } catch (RuntimeException $e) {
+                $out['bloqueados'][] = $d + ['motivo' => $e->getMessage()];
+            }
+        }
+
+        return $out;
     }
 
     private function fechaHastaCorte(mixed $fecha, Carbon $corte): bool

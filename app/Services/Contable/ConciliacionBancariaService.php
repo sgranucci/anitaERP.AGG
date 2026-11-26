@@ -792,6 +792,103 @@ class ConciliacionBancariaService
     }
 
     /**
+     * Cruza entre sí una orden de pago con cheque y su "ANULA OPP" (solo líneas contables, sin banco).
+     * No inventa movimiento de banco: el grupo exige mismo cheque, al menos una anulación y suma cero.
+     *
+     * @param  list<array<string, mixed>>  $contables
+     */
+    public function conciliarAnulacionOp(
+        int $empresaId,
+        int $cuentacajaId,
+        array $contables,
+        ?int $usuarioId,
+    ): ConciliacionBancariaGrupo {
+        $contables = array_values(array_filter($contables, 'is_array'));
+        if (count($contables) < 2) {
+            throw new RuntimeException('Elegí la orden de pago y su anulación (al menos dos movimientos contables).');
+        }
+
+        $fechaRef = self::fechaDesdeYmdOString($contables[0]['fecha'] ?? $contables[0]['fecha_fmt'] ?? null);
+        $this->assertEditableDesdeFechas($empresaId, $cuentacajaId, $fechaRef, null, $usuarioId);
+
+        $hashes = $this->hashesConciliadosCuenta($empresaId, $cuentacajaId);
+        $lineas = [];
+        $vistos = [];
+        $cheques = [];
+        $hayAnula = false;
+        $suma = 0.0;
+
+        foreach ($contables as $mov) {
+            $hash = (string) ($mov['hash'] ?? '');
+            if ($hash === '' || isset($vistos[$hash])) {
+                continue;
+            }
+            if (isset($hashes['contables'][$hash])) {
+                throw new RuntimeException('Hay un movimiento contable que ya está conciliado.');
+            }
+            $cheque = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
+            if ($cheque === null) {
+                throw new RuntimeException('Todos los movimientos tienen que ser de un cheque (Ch: N).');
+            }
+            $cheques[ltrim($cheque, '0')] = true;
+            $hayAnula = $hayAnula || ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov);
+
+            $imp = ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
+            $suma += $imp;
+            $vistos[$hash] = true;
+            $lineas[] = [
+                'hash' => $hash,
+                'mov' => $mov,
+                'importe' => $imp,
+                'fecha' => self::fechaDesdeYmdOString($mov['fecha'] ?? $mov['fecha_fmt'] ?? null),
+            ];
+        }
+
+        if (count($lineas) < 2) {
+            throw new RuntimeException('Faltan movimientos válidos para armar el cruce.');
+        }
+        if (count($cheques) !== 1) {
+            throw new RuntimeException('La orden de pago y su anulación tienen que ser del mismo cheque.');
+        }
+        if (! $hayAnula) {
+            throw new RuntimeException('Falta el movimiento "ANULA OPP" del cheque.');
+        }
+        $suma = round($suma, 2);
+        if (abs($suma) > ConciliacionBancariaReglasSupport::toleranciaImporte()) {
+            throw new RuntimeException('La orden de pago y su anulación no se compensan (diferencia '.$suma.').');
+        }
+
+        try {
+            return DB::transaction(function () use ($empresaId, $cuentacajaId, $lineas, $usuarioId) {
+                $grupo = ConciliacionBancariaGrupo::query()->create([
+                    'empresa_id' => $empresaId,
+                    'cuentacaja_id' => $cuentacajaId,
+                    'importe_contable' => 0,
+                    'importe_banco' => 0,
+                    'modo' => 'anulacion_op',
+                    'conciliado_por_usuario_id' => $usuarioId,
+                    'conciliado_at' => now(),
+                ]);
+                foreach ($lineas as $linea) {
+                    ConciliacionBancariaGrupoLinea::query()->create([
+                        'grupo_id' => $grupo->id,
+                        'cuentacaja_id' => $cuentacajaId,
+                        'lado' => ConciliacionBancariaGrupoLinea::LADO_CONTABLE,
+                        'hash' => $linea['hash'],
+                        'movimiento_json' => $linea['mov'],
+                        'fecha' => $linea['fecha'],
+                        'importe' => $linea['importe'],
+                    ]);
+                }
+
+                return $grupo->load('lineas');
+            });
+        } catch (QueryException $e) {
+            throw new RuntimeException('No se pudo guardar el cruce. Algún movimiento puede haber quedado conciliado en otra solapa.', 0, $e);
+        }
+    }
+
+    /**
      * Conciliación multi-match (1:N, N:1 o N:N) por suma de importes.
      *
      * @param  list<array<string, mixed>>  $contables

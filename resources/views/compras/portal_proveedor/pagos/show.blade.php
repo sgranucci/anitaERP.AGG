@@ -149,7 +149,7 @@
                             @foreach ($pago->cheques as $ch)
                                 @php $hayMedios = true; @endphp
                                 <tr>
-                                    <td>Cheque</td>
+                                    <td>Cheque {{ app(\App\Services\Caja\ChequeEcheqService::class)->esEcheq($ch) ? '(E-Cheq)' : '(Físico)' }}</td>
                                     <td>
                                         N° {{ $ch->numerocheque ?: '—' }}
                                         · {{ optional($ch->bancos)->nombre }}

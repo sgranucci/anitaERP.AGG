@@ -15,6 +15,11 @@ class Iibb_Presentacion_Config extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     protected $table = 'iibb_presentacion_config';
 
+    /** Valores sugeridos al crear la configuración (la pantalla los muestra y el operador los cambia). */
+    public const TOLERANCIA_CONCILIACION_DEFAULT = 100;
+
+    public const PALABRAS_BANCO_DEFAULT = 'BCO,BANCO';
+
     protected $fillable = [
         'provincia_id',
         'tipo',
@@ -22,12 +27,27 @@ class Iibb_Presentacion_Config extends Model implements Auditable
         'descripcion',
         'codigo_actividad_arba',
         'frecuencia',
+        'tolerancia_conciliacion',
+        'palabras_banco',
         'activo',
     ];
 
     protected $casts = [
         'activo' => 'boolean',
+        'tolerancia_conciliacion' => 'float',
     ];
+
+    /**
+     * Palabras que identifican un banco en el nombre del proveedor (separadas por coma o punto y coma).
+     *
+     * @return list<string>
+     */
+    public function palabrasBanco(): array
+    {
+        $partes = preg_split('/[,;]+/', (string) ($this->palabras_banco ?? '')) ?: [];
+
+        return array_values(array_filter(array_map(static fn (string $p) => trim($p), $partes), static fn (string $p) => $p !== ''));
+    }
 
     /** @var array<string, string> */
     public static array $enumTipo = [

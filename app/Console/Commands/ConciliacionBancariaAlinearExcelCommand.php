@@ -13,6 +13,7 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
                             {--mes=10 : Mes}
                             {--anio=2026 : Año}
                             {--hasta= : Fecha corte Y-m-d (Anita sin conciliar; default fin de mes)}
+                            {--solo-reabrir : Anita: solo desconcilia los cierres sintéticos de cheques que el Excel lista pendientes}
                             {--aplicar : Persistir import EXTRACTO, pares y cierre Contaduría (sin esto es dry-run)}';
 
     protected $description = 'Alinea el ERP a los pendientes del Excel Contaduría o Anita Tesorería (opción A: el Excel manda)';
@@ -34,6 +35,10 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
             $this->error('Indicá --dir= o --archivo=');
 
             return self::FAILURE;
+        }
+
+        if ($this->option('solo-reabrir')) {
+            return $this->soloReabrir($service, $archivo, $aplicar);
         }
 
         $this->info(($aplicar ? 'APLICAR' : 'DRY-RUN').sprintf(' · %02d/%d', $mes, $anio)
@@ -102,6 +107,10 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
                 ));
             }
 
+            if (isset($r['reapertura'])) {
+                $this->lineaReapertura($r['reapertura'], $aplicar);
+            }
+
             $this->line(sprintf(
                 '  Cierre: %d candidatos · %d persistidos · protegidos C/B %d/%d',
                 (int) ($r['pares_cierre_candidatos'] ?? 0),
@@ -149,5 +158,73 @@ class ConciliacionBancariaAlinearExcelCommand extends Command
         $this->info('Todas las cuentas alineadas a carátula Contaduría.');
 
         return self::SUCCESS;
+    }
+
+    private function soloReabrir(ConciliacionBancariaAlinearExcelService $service, string $archivo, bool $aplicar): int
+    {
+        if ($archivo === '') {
+            $this->error('--solo-reabrir requiere --archivo= (Excel Anita sin conciliar).');
+
+            return self::FAILURE;
+        }
+
+        $this->info(($aplicar ? 'APLICAR' : 'DRY-RUN').' · reapertura de cierres sintéticos · '.basename($archivo));
+
+        try {
+            $resultados = $service->reabrirSinteticosAnita($archivo, $aplicar);
+        } catch (\Throwable $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $bloqueados = 0;
+        foreach ($resultados as $r) {
+            $this->newLine();
+            $titulo = sprintf('%s · empresa %s · cuentacaja %s · %s', $r['codigo'] ?? '?', $r['empresa_id'] ?? '?', $r['cuentacaja_id'] ?? '?', $r['archivo'] ?? '');
+            if (! empty($r['error'])) {
+                $this->warn($titulo);
+                $this->warn('  '.$r['error']);
+
+                continue;
+            }
+            $this->info($titulo);
+            $this->lineaReapertura($r['reapertura'], $aplicar);
+            $filas = array_map(static fn (array $d) => [
+                $d['par_id'],
+                $d['tipo'],
+                $d['cheque'],
+                $d['fecha'],
+                number_format($d['importe'], 2, ',', '.'),
+                $d['descripcion'],
+            ], $r['reapertura']['detalle']);
+            if ($filas !== []) {
+                $this->table(['Par', 'Tipo', 'Cheque', 'Fecha', 'Importe', 'Descripción'], $filas);
+            }
+            $bloqueados += count($r['reapertura']['bloqueados']);
+        }
+
+        if (! $aplicar) {
+            $this->newLine();
+            $this->comment('Dry-run: no se desconcilió nada. Repetí con --aplicar para reabrir estos pares.');
+        }
+
+        return $bloqueados > 0 ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * @param  array{candidatos: int, importe: float, reabiertos: int, bloqueados: list<array<string, mixed>>}  $reapertura
+     */
+    private function lineaReapertura(array $reapertura, bool $aplicar): void
+    {
+        $this->line(sprintf(
+            '  Reapertura cierres sintéticos: %d candidatos ($ %s)%s',
+            $reapertura['candidatos'],
+            number_format($reapertura['importe'], 2, ',', '.'),
+            $aplicar ? sprintf(' · %d reabiertos · %d bloqueados', $reapertura['reabiertos'], count($reapertura['bloqueados'])) : '',
+        ));
+        foreach ($reapertura['bloqueados'] as $b) {
+            $this->warn(sprintf('    par %d ch %s: %s', $b['par_id'], $b['cheque'], $b['motivo']));
+        }
     }
 }

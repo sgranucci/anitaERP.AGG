@@ -314,6 +314,26 @@
             window.location = base + sep + qs;
         });
 
+        $('#btn-prefactura-picking').on('click', function (e) {
+            e.preventDefault();
+            var ids = idsSeleccionados();
+            if (!ids.length) {
+                alert('Seleccione al menos una línea para la pre-factura');
+                return;
+            }
+            var descuento = prompt('Ingrese descuento de linea: ');
+            if (descuento === null) {
+                return;
+            }
+            var base = $(this).attr('href') || '';
+            var qs = ids.map(function (id) {
+                return 'pedido_combinacion_id[]=' + encodeURIComponent(id);
+            }).join('&');
+            qs += '&descuentolinea=' + encodeURIComponent(descuento);
+            qs += '&picking_codigo=' + encodeURIComponent($('#picking_codigo').val() || '');
+            window.location = base + (base.indexOf('?') >= 0 ? '&' : '?') + qs;
+        });
+
         $('#btn-facturar-picking').on('click', function () {
             var ids = idsSeleccionados();
             if (!ids.length) {

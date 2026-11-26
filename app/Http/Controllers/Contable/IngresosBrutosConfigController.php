@@ -133,6 +133,8 @@ class IngresosBrutosConfigController extends Controller
             'descripcion' => 'nullable|string|max:255',
             'codigo_actividad_arba' => ['required', 'integer', Rule::in([6, 7])],
             'frecuencia' => ['required', Rule::in(array_keys(Iibb_Presentacion_Config::$enumFrecuencia))],
+            'tolerancia_conciliacion' => ['required', 'numeric', 'min:0', 'max:1000000'],
+            'palabras_banco' => ['nullable', 'string', 'max:255'],
             'activo' => 'nullable',
         ]);
 
@@ -143,7 +145,10 @@ class IngresosBrutosConfigController extends Controller
             'descripcion' => $request->input('descripcion'),
             'codigo_actividad_arba' => (int) $request->input('codigo_actividad_arba'),
             'frecuencia' => (string) $request->input('frecuencia'),
-            'activo' => $request->boolean('activo', true),
+            'tolerancia_conciliacion' => (float) $request->input('tolerancia_conciliacion'),
+            'palabras_banco' => trim((string) $request->input('palabras_banco', '')),
+            // Checkbox destildado = no viene en el request: debe quedar en false.
+            'activo' => $request->boolean('activo'),
         ];
     }
 

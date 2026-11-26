@@ -3,6 +3,7 @@
 namespace App\Support\Caja;
 
 use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Contable\Cuentacontable;
 use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
@@ -145,7 +146,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 $impuestos[] = self::linea(
                     $cuentaId,
                     $monto,
-                    $centrocostoId,
+                    self::centroLinea($cuentaId, 0, $centrocostoId),
                     (string) $modelo->nombre,
                     $conceptoId,
                     'impuesto',
@@ -237,7 +238,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 $lineas[] = self::linea(
                     $cuentaId,
                     (float) $debito['importe'],
-                    CuentaCentrocostoAsignadosSupport::resolver(
+                    self::centroLinea(
                         $cuentaId,
                         (int) ($debito['centrocosto_id'] ?? 0),
                         $centrocostoId
@@ -266,7 +267,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 $lineas[] = self::linea(
                     $cuentaId,
                     (float) $netoLinea['monto'],
-                    CuentaCentrocostoAsignadosSupport::resolver(
+                    self::centroLinea(
                         $cuentaId,
                         (int) ($netoLinea['centrocosto_id'] ?? 0),
                         $centrocostoId
@@ -278,6 +279,17 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                     false,
                 );
             }
+        }
+
+        $lineas = self::heredarCentroImpuestos($lineas);
+
+        $sinCentro = self::lineasSinCentroObligatorio($lineas);
+        if ($sinCentro !== []) {
+            $msgCentro = 'Indique el centro de costo en: '.implode('; ', $sinCentro).'.';
+            if ($exigirCuentas) {
+                throw new \RuntimeException($msgCentro);
+            }
+            $error = $error ?? $msgCentro;
         }
 
         return [
@@ -376,6 +388,109 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
             'nombre' => $nombre,
             'mensaje' => $mensaje,
         ];
+    }
+
+    /**
+     * Centro de una línea DEBE. Si la cuenta maneja centro de costo no hay default de caja:
+     * sale del elegido, del único asignado a la cuenta o de su lista. Si no hay, queda 0.
+     * Cuentas que no manejan centro conservan el centro por defecto.
+     */
+    private static function centroLinea(int $cuentaId, int $elegido, int $porDefecto): int
+    {
+        if (CuentaCentrocostoAsignadosSupport::maneja($cuentaId)) {
+            return CuentaCentrocostoAsignadosSupport::resolver($cuentaId, $elegido, 0);
+        }
+
+        return CuentaCentrocostoAsignadosSupport::resolver($cuentaId, $elegido, $porDefecto);
+    }
+
+    /**
+     * El IVA / impuesto no tiene selector de centro: si su cuenta maneja centro y quedó sin él,
+     * sigue a las líneas de gasto. Un solo centro lo hereda; varios lo abren en la misma
+     * proporción que el gasto (como en facturas de proveedor).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private static function heredarCentroImpuestos(array $lineas): array
+    {
+        $pesos = [];
+        foreach ($lineas as $linea) {
+            if (($linea['origen'] ?? '') === 'impuesto') {
+                continue;
+            }
+            $cc = (int) ($linea['centrocosto_id'] ?? 0);
+            if ($cc > 0) {
+                $pesos[$cc] = round(($pesos[$cc] ?? 0.0) + abs((float) ($linea['importe'] ?? 0)), 2);
+            }
+        }
+        if ($pesos === []) {
+            return $lineas;
+        }
+
+        $out = [];
+        foreach ($lineas as $linea) {
+            $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+            $importe = round((float) ($linea['importe'] ?? 0), 2);
+            if (
+                ($linea['origen'] ?? '') !== 'impuesto'
+                || (int) ($linea['centrocosto_id'] ?? 0) > 0
+                || $cuentaId <= 0
+                || abs($importe) < 0.0001
+                || ! CuentaCentrocostoAsignadosSupport::maneja($cuentaId)
+            ) {
+                $out[] = $linea;
+
+                continue;
+            }
+
+            $totalPeso = array_sum($pesos);
+            $restante = $importe;
+            $ultimo = array_key_last($pesos);
+            foreach ($pesos as $cc => $peso) {
+                $parte = $cc === $ultimo
+                    ? $restante
+                    : round($importe * ($totalPeso > 0 ? $peso / $totalPeso : 0), 2);
+                $restante = round($restante - $parte, 2);
+                $centro = CuentaCentrocostoAsignadosSupport::resolver($cuentaId, (int) $cc, 0);
+                $out[] = array_merge($linea, ['importe' => $parte, 'centrocosto_id' => $centro]);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Líneas con importe cuya cuenta maneja centro de costo y no tienen centro.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<string>
+     */
+    private static function lineasSinCentroObligatorio(array $lineas): array
+    {
+        $faltan = [];
+        foreach ($lineas as $i => $linea) {
+            $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+            $importe = abs((float) ($linea['importe'] ?? 0));
+            if ($cuentaId <= 0 || $importe < 0.0001 || (int) ($linea['centrocosto_id'] ?? 0) > 0) {
+                continue;
+            }
+            if (! CuentaCentrocostoAsignadosSupport::maneja($cuentaId)) {
+                continue;
+            }
+
+            $cuenta = Cuentacontable::query()->whereKey($cuentaId)->first(['codigo', 'nombre']);
+            $etiqueta = $cuenta && trim((string) $cuenta->codigo) !== ''
+                ? trim((string) $cuenta->codigo)
+                : (string) $cuentaId;
+            if ($cuenta && trim((string) $cuenta->nombre) !== '') {
+                $etiqueta .= ' — '.trim((string) $cuenta->nombre);
+            }
+
+            $faltan[] = 'Línea '.($i + 1).': '.$etiqueta;
+        }
+
+        return $faltan;
     }
 
     /**

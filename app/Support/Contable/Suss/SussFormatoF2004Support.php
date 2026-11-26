@@ -156,12 +156,38 @@ final class SussFormatoF2004Support
         return $out;
     }
 
-    public static function nombreArchivo(string $cuitAgente, string $periodoYm): string
+    /**
+     * @param  string  $sufijoQuincena  '1Q' | '2Q' | '' (mes completo, sin sufijo)
+     */
+    public static function nombreArchivo(string $cuitAgente, string $periodoYm, string $sufijoQuincena = ''): string
     {
         $cuit = self::normalizarCuit($cuitAgente);
         $periodo = preg_replace('/\D/', '', $periodoYm) ?: date('Ym');
+        $sufijo = in_array($sufijoQuincena, ['1Q', '2Q'], true) ? '-'.$sufijoQuincena : '';
 
-        return sprintf('F2004-%s-%s.txt', $cuit, $periodo);
+        return sprintf('F2004-%s-%s%s.txt', $cuit, $periodo, $sufijo);
+    }
+
+    /**
+     * Régimen transitorio: mientras no esté el alta en SIRE, el 748 sale como 754 (tilde por empresa).
+     *
+     * @param  list<array<string, mixed>>  $registros
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarRegimenExportacion(array $registros, bool $mapear748Como754): array
+    {
+        if (! $mapear748Como754) {
+            return $registros;
+        }
+
+        foreach ($registros as $i => $reg) {
+            if ((int) ($reg['codigo_regimen'] ?? 0) === 748) {
+                $registros[$i]['codigo_regimen_erp'] = 748;
+                $registros[$i]['codigo_regimen'] = 754;
+            }
+        }
+
+        return $registros;
     }
 
     private static function formatearNroComprobanteOp(string $nro): string
