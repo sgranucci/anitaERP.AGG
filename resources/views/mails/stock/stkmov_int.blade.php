@@ -19,8 +19,50 @@
 </p>
 
 <p style="margin:0 0 16px 0;">
-    Adjunto el PDF con Art|Desc|Saldo|T.Unidades (suma Villafranca + Bierzo).
+    Adjunto el PDF con Art|Desc|Saldo|T.Unidades (suma Villafranca + Bierzo)
+    y el cuadro de porcentajes por grupo.
 </p>
+
+@php
+    $filasPct = $porcentajes['filas'] ?? [];
+    $totPct = $porcentajes['totales'] ?? [];
+@endphp
+@if ($filasPct !== [])
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="background:#85C1E9;">
+                <th align="left">Agrupación</th>
+                <th align="right">% Kg. venta</th>
+                <th align="right">% $ venta</th>
+                <th align="right">% Bonific.</th>
+                <th align="right">% Bonif. ABS</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($filasPct as $filaPct)
+                <tr>
+                    <td>{{ $filaPct['etiqueta'] ?? '' }}</td>
+                    <td align="right">{{ number_format((float) ($filaPct['pct_kg'] ?? 0), 0, ',', '.') }}</td>
+                    <td align="right">{{ number_format((float) ($filaPct['pct_pesos'] ?? 0), 0, ',', '.') }}</td>
+                    <td align="right">{{ number_format((float) ($filaPct['pct_bonif'] ?? 0), 0, ',', '.') }}</td>
+                    <td align="right">{{ number_format((float) ($filaPct['pct_bonif_abs'] ?? 0), 1, ',', '.') }}</td>
+                </tr>
+            @endforeach
+            <tr>
+                <td><strong>Total final</strong></td>
+                <td align="right"><strong>{{ number_format((float) ($totPct['pct_kg'] ?? 0), 0, ',', '.') }}</strong></td>
+                <td align="right"><strong>{{ number_format((float) ($totPct['pct_pesos'] ?? 0), 0, ',', '.') }}</strong></td>
+                <td align="right"><strong>{{ number_format((float) ($totPct['pct_bonif'] ?? 0), 0, ',', '.') }}</strong></td>
+                <td align="right"><strong>{{ number_format((float) ($totPct['pct_bonif_abs'] ?? 0), 1, ',', '.') }}</strong></td>
+            </tr>
+        </tbody>
+    </table>
+    @if (! empty($graficoPng))
+        <p style="margin:16px 0 0 0;">
+            <img src="{{ $message->embedData($graficoPng, 'stkmov-porcentajes.png', 'image/png') }}" alt="Porcentajes por agrupación" width="640">
+        </p>
+    @endif
+@endif
 
 <p style="margin-top:20px; font-size:12px; color:#666;">
     Generado {{ now()->format('d/m/Y H:i') }} · {{ config('app.empresa') }} · reemplazo de l-stkmovint

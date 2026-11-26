@@ -11,7 +11,11 @@ use Illuminate\Support\Facades\Log;
 final class StkmovIntAnitaBridgeReader
 {
     private const STKMOV_CAMPOS = 'stkv_articulo,stkv_fecha,stkv_tipo,stkv_deposito,stkv_partida,'
-        .'stkv_agrupacion,stkv_cantidad,stkv_cant_unidad,stkv_precio,stkv_expreso';
+        .'stkv_agrupacion,stkv_cantidad,stkv_cant_unidad,stkv_precio,stkv_expreso,'
+        .'stkv_descuento,stkv_dto_gral';
+
+    /** Tipos de comprobante de venta (tcomp_tipo_comp) que el C manda a la columna Bonif. si el precio es 0. */
+    private const TIPOS_COMP_BONIFICACION = ['01', '02', '03'];
 
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita,
@@ -19,13 +23,14 @@ final class StkmovIntAnitaBridgeReader
     }
 
     /**
+     * @param  array<string, true>  $articulosEnUnidades  SKU corto cuya unidad empieza con UN (el importe usa cant. unidad)
      * @return array{
-     *   filas: list<array{sku: string, agrupacion: string, saldo: float, unidades: float}>,
+     *   filas: list<array{sku: string, agrupacion: string, saldo: float, unidades: float, total: float, bonificacion: float}>,
      *   ok: bool,
      *   error: ?string
      * }
      */
-    public function agregarSaldosDelDia(string $pathSistema, string $fechaIso): array
+    public function agregarSaldosDelDia(string $pathSistema, string $fechaIso, array $articulosEnUnidades = []): array
     {
         $ymd = (int) str_replace('-', '', $fechaIso);
         if ($ymd <= 0 || $pathSistema === '') {
@@ -70,7 +75,14 @@ final class StkmovIntAnitaBridgeReader
         foreach (ApiAnita::decodificarListaFilas(is_string($raw) ? $raw : '') as $fila) {
             $f = is_array($fila) ? $fila : (array) $fila;
             $tipo = strtoupper(trim((string) ($f['stkv_tipo'] ?? '')));
-            $signo = $signos[$tipo] ?? $this->signoHeuristico($tipo);
+            if (isset($signos[$tipo])) {
+                $meta = $signos[$tipo];
+            } elseif ($signos === []) {
+                $meta = ['signo' => $this->signoHeuristico($tipo), 'tipo_comp' => ''];
+            } else {
+                continue;
+            }
+            $signo = (int) ($meta['signo'] ?? 0);
             if ($signo === 0) {
                 continue;
             }
@@ -85,16 +97,31 @@ final class StkmovIntAnitaBridgeReader
             $deltaSaldo = $signo < 0 ? $cant : -$cant;
             $deltaUn = $signo < 0 ? ($cantUn > 0 ? $cantUn : $cant) : -($cantUn > 0 ? $cantUn : $cant);
 
+            $precio = (float) ($f['stkv_precio'] ?? 0);
+            $precioNeto = $precio
+                * (1 - ((float) ($f['stkv_descuento'] ?? 0) / 100))
+                * (1 - ((float) ($f['stkv_dto_gral'] ?? 0) / 100));
+            $esUn = isset($articulosEnUnidades[$sku]);
+            $baseImporte = $esUn ? $cantUn : $cant;
+            $deltaTotal = ($signo < 0 ? $baseImporte : -$baseImporte) * $precioNeto;
+            $esBonif = abs($precio) < 0.0000001
+                && in_array((string) ($meta['tipo_comp'] ?? ''), self::TIPOS_COMP_BONIFICACION, true);
+            $deltaBonif = $esBonif ? $deltaSaldo : 0.0;
+
             if (! isset($acum[$sku])) {
                 $acum[$sku] = [
                     'sku' => $sku,
                     'agrupacion' => $agr,
                     'saldo' => 0.0,
                     'unidades' => 0.0,
+                    'total' => 0.0,
+                    'bonificacion' => 0.0,
                 ];
             }
             $acum[$sku]['saldo'] += $deltaSaldo;
             $acum[$sku]['unidades'] += $deltaUn;
+            $acum[$sku]['total'] += $deltaTotal;
+            $acum[$sku]['bonificacion'] += $deltaBonif;
             if ($acum[$sku]['agrupacion'] === '' && $agr !== '') {
                 $acum[$sku]['agrupacion'] = $agr;
             }
@@ -108,7 +135,7 @@ final class StkmovIntAnitaBridgeReader
     }
 
     /**
-     * @return array<string, int> tipo => -1 salida / +1 entrada / 0 omitir
+     * @return array<string, array{signo: int, tipo_comp: string}>
      */
     private function mapaSignoTcomp(string $pathSistema): array
     {
@@ -117,7 +144,7 @@ final class StkmovIntAnitaBridgeReader
                 'acc' => 'list',
                 'sistema' => 'ventas',
                 'tabla' => 't_comp',
-                'campos' => 'tcomp_clave,tcomp_oper_stk',
+                'campos' => 'tcomp_clave,tcomp_oper_stk,tcomp_tipo_comp',
                 'whereArmado' => ' WHERE 1=1',
                 'orderBy' => 'tcomp_clave',
                 'path_sistema' => $pathSistema,
@@ -137,14 +164,20 @@ final class StkmovIntAnitaBridgeReader
                 continue;
             }
             $oper = trim((string) ($f['tcomp_oper_stk'] ?? ''));
-            // Alineado a StockLocalInformeService + lee_tcomp del C.
-            if ($oper === '1') {
-                $mapa[$tipo] = 0;
-            } elseif (in_array($oper, ['2', '5', '7'], true)) {
-                $mapa[$tipo] = 1; // entrada (en el C resta del saldo del informe)
+            // l-stkmovint -b deja fl_comp_en_part = 1: solo oper_stk 2 (entrada) o 3 (salida).
+            // AP (5) y COM (7) no entran al listado ni al cuadro de porcentajes.
+            if ($oper === '2') {
+                $signo = 1;
+            } elseif ($oper === '3') {
+                $signo = -1;
             } else {
-                $mapa[$tipo] = -1; // salida
+                $signo = 0;
             }
+            $digitos = preg_replace('/\D+/', '', (string) ($f['tcomp_tipo_comp'] ?? '')) ?? '';
+            $mapa[$tipo] = [
+                'signo' => $signo,
+                'tipo_comp' => $digitos === '' ? '' : str_pad(substr($digitos, -2), 2, '0', STR_PAD_LEFT),
+            ];
         }
 
         return $mapa;

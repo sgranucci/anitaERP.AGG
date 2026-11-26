@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 
 use App\Support\Stock\StkmovIntAnitaBridgeReader;
 use App\Support\Stock\StkmovIntMailSupport;
+use App\Support\Stock\StkmovIntPorcentajeSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -30,6 +31,7 @@ class StkmovIntMailMergeService
             : date('Y-m-d');
 
         $mapErp = $this->mapearErp($fecha);
+        $articulosEnUnidades = $this->articulosEnUnidades();
 
         $villaOk = true;
         $villaError = null;
@@ -37,7 +39,8 @@ class StkmovIntMailMergeService
         try {
             $ret = $this->anitaReader->agregarSaldosDelDia(
                 StkmovIntMailSupport::pathVillafranca(),
-                $fecha
+                $fecha,
+                $articulosEnUnidades
             );
             $villaOk = (bool) ($ret['ok'] ?? false);
             $villaError = $ret['error'] ?? null;
@@ -56,7 +59,8 @@ class StkmovIntMailMergeService
         try {
             $ret = $this->anitaReader->agregarSaldosDelDia(
                 StkmovIntMailSupport::pathBierzo(),
-                $fecha
+                $fecha,
+                $articulosEnUnidades
             );
             $bierzoAnitaOk = (bool) ($ret['ok'] ?? false);
             $bierzoAnitaError = $ret['error'] ?? null;
@@ -93,9 +97,18 @@ class StkmovIntMailMergeService
             $saldoVilla = (float) ($villa['saldo'] ?? 0);
             $unVilla = (float) ($villa['unidades'] ?? 0);
 
+            $total = round(
+                (float) ($bierzoAnita['total'] ?? 0) + (float) ($villa['total'] ?? 0),
+                2
+            );
+            $bonificacion = round(
+                (float) ($bierzoAnita['bonificacion'] ?? 0) + (float) ($villa['bonificacion'] ?? 0),
+                2
+            );
             $saldo = round($saldoBierzo + $saldoVilla, 2);
             $unidades = round($unBierzo + $unVilla, 2);
-            if (abs($saldo) < 0.0001 && abs($unidades) < 0.0001) {
+            if (abs($saldo) < 0.0001 && abs($unidades) < 0.0001
+                && abs($total) < 0.0001 && abs($bonificacion) < 0.0001) {
                 continue;
             }
 
@@ -114,6 +127,8 @@ class StkmovIntMailMergeService
                 'agrupacion' => $agr,
                 'saldo' => $saldo,
                 'unidades' => round($unidades, 0),
+                'total' => $total,
+                'bonificacion' => $bonificacion,
                 'saldo_bierzo' => round($saldoBierzo, 2),
                 'saldo_villafranca' => round($saldoVilla, 2),
                 'fuente' => $fuente,
@@ -167,7 +182,68 @@ class StkmovIntMailMergeService
             'anita_error' => $anitaError,
             'villa_ok' => $villaOk,
             'bierzo_anita_ok' => $bierzoAnitaOk,
+            'porcentajes' => $this->porcentajesPorGrupo($filasMerge),
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return array<string, mixed>
+     */
+    private function porcentajesPorGrupo(array $filas): array
+    {
+        $grupos = [];
+        foreach ($filas as $fila) {
+            $agr = (string) ($fila['agrupacion'] ?? '');
+            if (! isset($grupos[$agr])) {
+                $grupos[$agr] = [
+                    'agrupacion' => $agr,
+                    'saldo' => 0.0,
+                    'total' => 0.0,
+                    'bonificacion' => 0.0,
+                ];
+            }
+            $grupos[$agr]['saldo'] += (float) ($fila['saldo'] ?? 0);
+            $grupos[$agr]['total'] += (float) ($fila['total'] ?? 0);
+            $grupos[$agr]['bonificacion'] += (float) ($fila['bonificacion'] ?? 0);
+        }
+        ksort($grupos, SORT_STRING);
+
+        return StkmovIntPorcentajeSupport::desdeGrupos(array_values($grupos));
+    }
+
+    /**
+     * Artículos vendidos por unidad (abreviatura UN…): el importe del C usa cant. unidad, no los kilos.
+     *
+     * @return array<string, true>
+     */
+    private function articulosEnUnidades(): array
+    {
+        $catIds = DB::table('categoria')
+            ->whereIn('codigo', StkmovIntMailSupport::CATEGORIAS_ERP)
+            ->pluck('id');
+        if ($catIds->isEmpty()) {
+            return [];
+        }
+
+        $rows = DB::table('articulo as a')
+            ->join('unidadmedida as u', 'u.id', '=', 'a.unidadmedida_id')
+            ->whereIn('a.categoria_id', $catIds)
+            ->get(['a.sku', 'u.abreviatura']);
+
+        $set = [];
+        foreach ($rows as $row) {
+            $abrev = strtoupper(substr(trim((string) ($row->abreviatura ?? '')), 0, 2));
+            if ($abrev !== 'UN') {
+                continue;
+            }
+            $corto = StkmovIntMailSupport::skuCorto((string) $row->sku);
+            if ($corto !== '') {
+                $set[$corto] = true;
+            }
+        }
+
+        return $set;
     }
 
     /**

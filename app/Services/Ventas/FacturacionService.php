@@ -1392,6 +1392,9 @@ class FacturacionService
 
 				// Graba la factura
 				PedidoFacturacionProfiler::etapa('tx_inicio');
+				// Punto de no retorno: tras DB::commit() el comprobante ya existe; una falla posterior
+				// no se revierte ni se informa como error (el operador reintenta y duplica).
+				$commitRealizado = false;
 				DB::beginTransaction();
 				try 
 				{
@@ -1774,6 +1777,7 @@ class FacturacionService
 					}
 					PedidoFacturacionProfiler::etapa('tx_commit');
 					DB::commit();
+					$commitRealizado = true;
 
 					$ok = $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
 					$ok['venta_id'] = (int) $vta->id;
@@ -1792,6 +1796,28 @@ class FacturacionService
 
 					return $ok;
 				} catch (\Throwable $e) {
+					// Ya confirmado: nada que revertir ni borrar en Anita. Se informa éxito con aviso y la
+					// réplica diferida se adjunta para que el llamador (programarDesdeResultados) la encole.
+					if ($commitRealizado) {
+						Log::critical('facturacion.error_post_commit', [
+							'contexto' => 'generaUnaFacturaPorPedido',
+							'venta_id' => (int) ($vta->id ?? 0),
+							'factura' => $venta['codigo'] ?? null,
+							'mensaje' => $e->getMessage(),
+							'origen' => basename($e->getFile()).':'.$e->getLine(),
+						]);
+
+						$ok = isset($ok) && is_array($ok) ? $ok : $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
+						$ok['venta_id'] = (int) ($vta->id ?? 0);
+						if (! empty($deferAnitaPedido) && (($anitaPendientePedido ?? null) !== null || ($vencaePendientePedido ?? null) !== null)) {
+							$ok['anita_pendiente'] = $anitaPendientePedido ?? null;
+							$ok['vencae_pendiente'] = $vencaePendientePedido ?? null;
+						}
+						$ok['aviso_caea'] = $this->mensajeAvisoPostCommit((string) ($venta['codigo'] ?? ''));
+
+						return $ok;
+					}
+
 					DB::rollback();
 
 					Log::error('facturacion.pedido.emision_rollback', [
@@ -5488,6 +5514,10 @@ class FacturacionService
 		}
 		$venta = [];
 		$replicacionAnitaIntentada = false;
+		// Punto de no retorno: tras DB::commit() el comprobante ya existe (ERP y ARCA). Cualquier falla
+		// posterior no puede revertirse ni devolverse como error (el operador reintenta y duplica).
+		$commitRealizado = false;
+		$anitaDiferidaProgramada = false;
 
 		try 
 		{
@@ -6101,15 +6131,16 @@ class FacturacionService
 
 			if (! $transaccionExterna) {
 				DB::commit();
+				$commitRealizado = true;
 			}
 
 			// El Bierzo: NC de mostrador/cobranza apaga «Emite NC» (hay que reactivar en la ficha).
 			if ($tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data)) {
 				try {
-					NotaCreditoClienteAprobacionSupport::revocarTrasEmitirSiCorresponde((int) $cliente_id);
+					NotaCreditoClienteAprobacionSupport::revocarTrasEmitirSiCorresponde((int) $cliente->id);
 				} catch (\Throwable $e) {
 					Log::warning('facturacion.nc.revocar_emite_nc_cliente', [
-						'cliente_id' => (int) $cliente_id,
+						'cliente_id' => (int) $cliente->id,
 						'venta_id' => (int) ($ret['venta_id'] ?? ($vta->id ?? 0)),
 						'mensaje' => $e->getMessage(),
 					]);
@@ -6124,11 +6155,22 @@ class FacturacionService
 					is_array($ret['vencae_pendiente'] ?? null) ? $ret['vencae_pendiente'] : null,
 					'mostrador',
 				);
+				$anitaDiferidaProgramada = true;
 				unset($ret['anita_pendiente'], $ret['vencae_pendiente']);
 			}
 
 			return $ret;
 		} catch (\Exception $e) {
+			// Ya confirmado: no hay nada que revertir ni borrar en Anita. Se informa éxito con aviso.
+			if ($commitRealizado) {
+				return $this->respuestaTrasErrorPostCommit(
+					$e,
+					isset($ret) && is_array($ret) ? $ret : [],
+					$anitaDiferidaProgramada,
+					'grabaFacturaERP'
+				);
+			}
+
 			$omitirContabilidadAnita = $omitirContabilidad
 				|| (is_array($opcionesEmision) && ! empty($opcionesEmision['anita_modo_minimo']));
 			$this->revertirVentaEnAnitaSiGrabada(
@@ -6149,6 +6191,63 @@ class FacturacionService
 
 			throw $e;
 		}
+	}
+
+	/**
+	 * La transacción ya se confirmó (el comprobante existe en el ERP y en ARCA) y falló un paso posterior.
+	 * No se revierte ni se borra en Anita: se devuelve éxito con aviso para que el operador no reintente
+	 * y duplique el comprobante. Si la réplica diferida a Anita no llegó a encolarse, se intenta acá.
+	 *
+	 * @param  array<string, mixed>  $ret  Respuesta de éxito armada antes del commit.
+	 * @return array<string, mixed>
+	 */
+	private function respuestaTrasErrorPostCommit(\Throwable $e, array $ret, bool $anitaProgramada, string $contexto): array
+	{
+		Log::critical('facturacion.error_post_commit', [
+			'contexto' => $contexto,
+			'venta_id' => (int) ($ret['venta_id'] ?? 0),
+			'factura' => $ret['factura'] ?? null,
+			'mensaje' => $e->getMessage(),
+			'origen' => basename($e->getFile()).':'.$e->getLine(),
+		]);
+
+		$anitaPendiente = is_array($ret['anita_pendiente'] ?? null) ? $ret['anita_pendiente'] : null;
+		$vencaePendiente = is_array($ret['vencae_pendiente'] ?? null) ? $ret['vencae_pendiente'] : null;
+		$replicaEncolada = true;
+		if (! $anitaProgramada && ($anitaPendiente !== null || $vencaePendiente !== null)) {
+			try {
+				PedidoFacturaAnitaDeferSupport::programar(
+					(int) ($ret['venta_id'] ?? 0),
+					$anitaPendiente,
+					$vencaePendiente,
+					'mostrador',
+				);
+			} catch (\Throwable $ex) {
+				$replicaEncolada = false;
+				Log::critical('facturacion.error_post_commit.anita_no_encolada', [
+					'contexto' => $contexto,
+					'venta_id' => (int) ($ret['venta_id'] ?? 0),
+					'factura' => $ret['factura'] ?? null,
+					'mensaje' => $ex->getMessage(),
+				]);
+			}
+		}
+		unset($ret['anita_pendiente'], $ret['vencae_pendiente']);
+
+		$ret['error'] = '';
+		$ret['aviso_caea'] = $this->mensajeAvisoPostCommit(isset($ret['factura']) ? (string) $ret['factura'] : null, $replicaEncolada);
+
+		return $ret;
+	}
+
+	private function mensajeAvisoPostCommit(?string $factura, bool $replicaAnitaEncolada = true): string
+	{
+		$texto = 'El comprobante'.($factura ? ' '.$factura : '').' quedó emitido, pero un paso posterior falló y se registró para sistemas. No lo emita de nuevo.';
+		if (! $replicaAnitaEncolada) {
+			$texto .= ' Falta replicarlo en Anita: avise a sistemas.';
+		}
+
+		return $texto;
 	}
 
 	/**

@@ -62,6 +62,22 @@ class DistribuirStkmovIntMailCommand extends Command
             ],
         );
 
+        $filasPct = $informe['porcentajes']['filas'] ?? [];
+        if ($filasPct !== []) {
+            $this->table(
+                ['Agrupación', '% Kg', '% $', '% Bonific.', '% Bonif. ABS'],
+                array_map(static function (array $fila): array {
+                    return [
+                        (string) ($fila['etiqueta'] ?? ''),
+                        number_format((float) ($fila['pct_kg'] ?? 0), 0, ',', '.'),
+                        number_format((float) ($fila['pct_pesos'] ?? 0), 0, ',', '.'),
+                        number_format((float) ($fila['pct_bonif'] ?? 0), 0, ',', '.'),
+                        number_format((float) ($fila['pct_bonif_abs'] ?? 0), 1, ',', '.'),
+                    ];
+                }, $filasPct),
+            );
+        }
+
         if ($dryRun) {
             $this->warn('Dry-run: no se envió correo.');
 

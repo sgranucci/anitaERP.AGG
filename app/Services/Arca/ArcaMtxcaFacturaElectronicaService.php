@@ -180,6 +180,17 @@ class ArcaMtxcaFacturaElectronicaService
 
         $errs = $this->normalizeCodigoDescripcionCollection($result->arrayErrores ?? null);
         if ($errs !== []) {
+            // 1502: no hay comprobantes de ese tipo en ese punto de venta (primera emisión).
+            // Equivale al CbteNro 0 de WSFE: el llamador suma 1. Otros códigos (p. ej. 1501 PV no
+            // habilitado para CAE) siguen siendo error.
+            $sinHistorial = array_values(array_filter(
+                $errs,
+                static fn (array $e): bool => trim((string) ($e['code'] ?? '')) === '1502',
+            ));
+            if ($sinHistorial !== [] && count($sinHistorial) === count($errs)) {
+                return 0;
+            }
+
             throw new Exception('MTXCA — consultarUltimoComprobanteAutorizado: '.$this->formatCodigoDescripcionList($errs));
         }
 

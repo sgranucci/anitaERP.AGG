@@ -1514,7 +1514,7 @@ class Articulo extends Model implements Auditable
 					stkm_art_cbarra,
 					stkm_uref_cbarra,
 					stkm_envia_alarma,
-					stkm_peso_caja
+					stkm_peso_caja,
 					stkm_alerta_stock
 					',
                     'valores' => " 
@@ -1523,7 +1523,7 @@ class Articulo extends Model implements Auditable
 					'".$this->sqlTextoAnita($request->unidadesdemedidas->abreviatura ?? ' ')."',
 					'".($request->unidadesxenvase == null ? 0 : $request->unidadesxenvase)."',
 					'".'000000'."',
-					'".str_pad($request->categorias->codigo, 4, '0', STR_PAD_LEFT)."',
+					'".str_pad($request->categorias->codigo ?? '', 4, '0', STR_PAD_LEFT)."',
 					'".($request->cuentascontablesventas ? $request->cuentascontablesventas->codigo : 0)."',
 					'".($request->impuesto_id == null || $request->impuesto_id == ' ' ? 0 : $request->impuesto_id)."',
 					'".'0'."',
@@ -1543,7 +1543,7 @@ class Articulo extends Model implements Auditable
 					'".$this->sqlTextoAnita($request->skualternativo)."',
 					'".($request->peso == null ? 0 : $request->peso)."',
 					'".($request->materiales ? str_pad($request->materiales->codigo, 8, '0', STR_PAD_LEFT) : '')."',
-					'".str_pad($request->lineas->codigo, 6, '0', STR_PAD_LEFT)."',
+					'".($request->lineas ? str_pad($request->lineas->codigo ?? '', 6, '0', STR_PAD_LEFT) : ' ')."',
 					'".($request->cuentascontablescompras ? $request->cuentascontablescompras->codigo : 0)."',
 					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					'".$request->mventa_id."',
@@ -1974,7 +1974,7 @@ class Articulo extends Model implements Auditable
 					'".$this->sqlTextoAnita($request->skualternativo)."',
 					'".($request->peso == null ? 0 : $request->peso)."',
 					'".($request->materiales ? str_pad($request->materiales->codigo, 8, '0', STR_PAD_LEFT) : '')."',
-					'".str_pad($request->lineas->codigo, 6, '0', STR_PAD_LEFT)."',
+					'".($request->lineas ? str_pad($request->lineas->codigo ?? '', 6, '0', STR_PAD_LEFT) : ' ')."',
 					'".($request->cuentascontablescompras ? $request->cuentascontablescompras->codigo : 0)."',
 					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
 					'".$request->mventa_id."',

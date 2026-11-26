@@ -8,6 +8,7 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Stock\StkmovIntMailSupport;
+use App\Support\Stock\StkmovIntPorcentajeGrafico;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -42,6 +43,7 @@ class StkmovIntMailDistribucionService
             'mail_destino' => null,
             'mail_error' => null,
             'pdf_generado' => false,
+            'porcentajes' => [],
             'anita_ok' => true,
             'anita_error' => null,
             'dry_run' => $dryRun,
@@ -68,8 +70,10 @@ class StkmovIntMailDistribucionService
         $base['totales'] = $informe['totales'] ?? [];
         $base['anita_ok'] = (bool) ($informe['anita_ok'] ?? true);
         $base['anita_error'] = $informe['anita_error'] ?? null;
+        $base['porcentajes'] = $informe['porcentajes'] ?? [];
 
-        $pdfBinario = $this->generarPdf($informe);
+        $graficoPng = StkmovIntPorcentajeGrafico::png($informe['porcentajes'] ?? []);
+        $pdfBinario = $this->generarPdf($informe, $graficoPng);
         $base['pdf_generado'] = $pdfBinario !== '';
         $nombrePdf = 'stkmov_int_'.str_replace('-', '', (string) ($informe['fecha'] ?? date('Ymd'))).'.pdf';
 
@@ -100,6 +104,8 @@ class StkmovIntMailDistribucionService
                 totales: $informe['totales'] ?? [],
                 pdfContenido: $pdfBinario,
                 nombreArchivoPdf: $nombrePdf,
+                porcentajes: $informe['porcentajes'] ?? [],
+                graficoPng: $graficoPng,
             ));
             $base['mail_enviado'] = true;
             $base['mail_destino'] = implode(', ', $destinos)
@@ -118,12 +124,16 @@ class StkmovIntMailDistribucionService
     /**
      * @param  array<string, mixed>  $informe
      */
-    private function generarPdf(array $informe): string
+    private function generarPdf(array $informe, string $graficoPng): string
     {
         $html = view('stock.stkmov_int_mail.listado', [
             'fecha' => $informe['fecha'] ?? '',
             'filas' => $informe['filas_merge'] ?? [],
             'totales' => $informe['totales'] ?? [],
+            'porcentajes' => $informe['porcentajes'] ?? [],
+            'graficoDataUri' => $graficoPng !== ''
+                ? 'data:image/png;base64,'.base64_encode($graficoPng)
+                : '',
         ])->render();
 
         $tmp = storage_path('pdf/listados/stkmov_int_'.uniqid('', true).'.pdf');

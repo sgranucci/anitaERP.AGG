@@ -12,12 +12,15 @@ class StkmovIntMail extends Mailable
 
     /**
      * @param  array<string, mixed>  $totales
+     * @param  array<string, mixed>  $porcentajes
      */
     public function __construct(
         public string $fecha,
         public array $totales,
         public string $pdfContenido,
         public string $nombreArchivoPdf,
+        public array $porcentajes = [],
+        public string $graficoPng = '',
     ) {
     }
 
