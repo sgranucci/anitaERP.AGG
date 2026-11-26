@@ -140,6 +140,12 @@
                            title="Exporta solo las l&iacute;neas tildadas">
                             <i class="fa fa-file-excel"></i> Excel seleccionados
                         </a>
+                        <a href="{{ route('prefactura_picking_pedido') }}"
+                           class="btn btn-primary btn-sm mr-2"
+                           id="btn-prefactura-picking"
+                           title="Imprime la pre-factura de las l&iacute;neas tildadas, el mismo formato del pedido">
+                            <i class="fa fa-print"></i> Pre-Factura
+                        </a>
                         @if ($puede_facturar)
                             <button type="button" class="btn btn-warning btn-sm mr-2" id="btn-facturar-picking">
                                 <i class="fa fa-file-invoice"></i> Facturar seleccionados

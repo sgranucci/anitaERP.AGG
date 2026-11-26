@@ -658,14 +658,92 @@ class PedidoServiceFerli
 
 	public function listarPreFactura($id, $items_id, $descuentoLinea = null)
 	{
-	  	ini_set('memory_limit', '512M');
-
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];
-		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
-		$nombre_pdf = 'pedido-'.$id.'-'.$nombreCliente;
+		$itemsId = explode(',', (string) $items_id);
 
-		$itemsId = explode(",", $items_id);
+		return $this->emitirPreFactura($pedido, $itemsId, $descuentoLinea);
+	}
+
+	/**
+	 * Misma pre-factura del pedido, con las líneas tildadas del picking.
+	 * Un solo cliente. Si hay varios pedidos, el encabezado los lista.
+	 *
+	 * @param  list<int|string>  $ids
+	 */
+	public function listarPreFacturaPicking(array $ids, $descuentoLinea = null, int $pickingCodigo = 0)
+	{
+		$ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id) => $id > 0)));
+		if ($ids === []) {
+			return redirect()->route('picking_pedido')->with('error', 'Seleccione al menos una línea para la pre-factura.');
+		}
+
+		$lineas = Pedido_Combinacion::query()
+			->with([
+				'articulos:id,sku,descripcion,impuesto_id',
+				'combinaciones:id,codigo,nombre',
+				'modulos:id,nombre',
+				'pedido_combinacion_talles',
+				'pedidos:id,codigo,cliente_id,leyenda',
+			])
+			->whereIn('id', $ids)
+			->get();
+
+		if ($lineas->count() !== count($ids)) {
+			return redirect()->route('picking_pedido')->with('error', 'Hay líneas que ya no están en el pedido.');
+		}
+
+		$clienteIds = $lineas->map(fn ($linea) => (int) ($linea->pedidos->cliente_id ?? 0))->unique()->values();
+		if ($clienteIds->count() !== 1 || (int) $clienteIds->first() <= 0) {
+			return redirect()->route('picking_pedido')->with('error', 'La pre-factura es de un solo cliente. Seleccioná líneas del mismo cliente.');
+		}
+
+		$pedidoId = (int) $lineas->first()->pedido_id;
+		$data = $this->pedidoQuery->leePedidoporId($pedidoId);
+		$pedido = $data[0] ?? null;
+		if (! $pedido) {
+			$pedido = Pedido::query()
+				->with(['clientes:id,codigo,nombre', 'mventas:id,nombre', 'transportes:id,nombre'])
+				->find($pedidoId);
+		}
+		if (! $pedido) {
+			return redirect()->route('picking_pedido')->with('error', 'Pedido inexistente.');
+		}
+
+		$pedido->setRelation('pedido_combinaciones', $lineas->values());
+
+		$codigos = $lineas
+			->map(fn ($linea) => trim((string) ($linea->pedidos->codigo ?? $linea->pedido_id)))
+			->filter(static fn ($codigo) => $codigo !== '')
+			->unique()
+			->values();
+		$pedidosEtiqueta = $codigos->count() > 1 ? $codigos->implode(', ') : '';
+
+		if ($pickingCodigo <= 0) {
+			$lineas->load('pickingCabecera:id,codigo');
+			$codigosPicking = $lineas
+				->map(fn ($linea) => (int) ($linea->pickingCabecera->codigo ?? 0))
+				->unique()
+				->filter(static fn (int $codigo) => $codigo > 0)
+				->values();
+			if ($codigosPicking->count() === 1) {
+				$pickingCodigo = (int) $codigosPicking->first();
+			}
+		}
+
+		return $this->emitirPreFactura($pedido, $ids, $descuentoLinea, $pickingCodigo, $pedidosEtiqueta);
+	}
+
+	/**
+	 * @param  list<int|string>  $itemsId
+	 */
+	private function emitirPreFactura($pedido, array $itemsId, $descuentoLinea = null, int $pickingCodigo = 0, string $pedidosEtiqueta = '')
+	{
+		ini_set('memory_limit', '512M');
+
+		$id = $pedido->id;
+		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
+		$nombre_pdf = ($pickingCodigo > 0 ? 'prefactura-picking-'.$pickingCodigo.'-' : 'pedido-'.$id.'-').$nombreCliente;
 
 		// Arma tablas para calculo de impuestos
 		// Lee el cliente
@@ -748,8 +826,9 @@ class PedidoServiceFerli
 		$fechaFactura = Carbon::now()->format('Y-m-d');
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($tblImpuesto, $datosCliente, $fechaFactura);
 
-		$view =  \View::make('exports.ventas.prefactura', compact('pedido', 'itemsId', 'conceptosTotales', 'tblImpuesto'))
-			    ->render();
+		$view =  \View::make('exports.ventas.prefactura', compact(
+				'pedido', 'itemsId', 'conceptosTotales', 'tblImpuesto', 'pickingCodigo', 'pedidosEtiqueta'
+			))->render();
 		$path = storage_path('pdf/pedido');
 		if (! is_dir($path)) {
 			mkdir($path, 0775, true);
