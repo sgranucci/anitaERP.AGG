@@ -77,7 +77,15 @@ final class ComprobanteProveedorAuditorIvaTipoService
 
         $informe['total'] = $comprobantes->count();
 
+        $excluidos = array_map('intval', (array) ($config['excluir_comprobante_ids'] ?? []));
+
         foreach ($comprobantes as $cp) {
+            if (in_array((int) $cp->id, $excluidos, true)) {
+                $informe['omitidos']++;
+
+                continue;
+            }
+
             try {
                 $ids = [];
                 foreach ($cp->comprobante_proveedor_conceptos as $linea) {

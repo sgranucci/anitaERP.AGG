@@ -43,6 +43,12 @@ return [
         // Incluir solo tipoconcepto I (impuesto IVA). Percepciones/retenciones pueden
         // estar en varios tipos sin ser el reclamo de Contaduría.
         'solo_impuesto_iva' => filter_var(env('CP_AUDITOR_IVA_TIPO_SOLO_I', true), FILTER_VALIDATE_BOOLEAN),
+        // IDs de comprobante_proveedor aceptados como excepción (separados por coma).
+        // Cada excepción debe tener su motivo documentado en docs/compras/.
+        'excluir_comprobante_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('CP_AUDITOR_IVA_TIPO_EXCLUIR_IDS', ''))
+        ))),
     ],
 
     /*
