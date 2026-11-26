@@ -55,16 +55,18 @@ return [
 
     /**
      * Hoteles PXSOL para la transferencia por API.
-     * token_env: variable de .env con el Bearer; si falta, usa TESORERIA_CROWN_PXSOL_TOKEN.
+     * token: Bearer del hotel, leído acá (config) y no con env() en runtime:
+     * con config:cache env() devuelve null y el token caía al de otro hotel (401).
+     * Cada hotel tiene su propio token; no hay fallback entre hoteles.
      *
-     * @var list<array{codigo: string, nombre: string, hotel_id: int, token_env: string, puntoventas: list<array{codigo: string, nombre: string, fiscal?: int}>}>
+     * @var list<array{codigo: string, nombre: string, hotel_id: int, token: string, puntoventas: list<array{codigo: string, nombre: string, fiscal?: int}>}>
      */
     'pxsol_hoteles' => [
         [
             'codigo' => 'CIP',
             'nombre' => 'Cipolletti — Casino del Río',
             'hotel_id' => (int) env('PXSOL_HOTEL_CIP_ID', 23134),
-            'token_env' => env('PXSOL_HOTEL_CIP_TOKEN_ENV', 'TESORERIA_CROWN_PXSOL_TOKEN'),
+            'token' => (string) env('TESORERIA_CROWN_PXSOL_TOKEN', ''),
             'puntoventas' => [
                 [
                     'codigo' => '00131',
@@ -77,7 +79,7 @@ return [
             'codigo' => 'VIE',
             'nombre' => 'Viedma — Casino del Río',
             'hotel_id' => (int) env('PXSOL_HOTEL_VIE_ID', 18731),
-            'token_env' => env('PXSOL_HOTEL_VIE_TOKEN_ENV', 'PXSOL_HOTEL_VIE_TOKEN'),
+            'token' => (string) env('PXSOL_HOTEL_VIE_TOKEN', ''),
             'puntoventas' => [
                 [
                     'codigo' => '00127',
@@ -90,7 +92,7 @@ return [
             'codigo' => 'GRO',
             'nombre' => 'General Roca — Casino del Río',
             'hotel_id' => (int) env('PXSOL_HOTEL_GRO_ID', 23135),
-            'token_env' => env('PXSOL_HOTEL_GRO_TOKEN_ENV', 'PXSOL_HOTEL_GRO_TOKEN'),
+            'token' => (string) env('PXSOL_HOTEL_GRO_TOKEN', ''),
             'puntoventas' => [
                 [
                     'codigo' => '00130',
@@ -103,7 +105,7 @@ return [
             'codigo' => 'LGR',
             'nombre' => 'Las Grutas — Casino del Río',
             'hotel_id' => (int) env('PXSOL_HOTEL_LGR_ID', 22084),
-            'token_env' => env('PXSOL_HOTEL_LGR_TOKEN_ENV', 'PXSOL_HOTEL_LGR_TOKEN'),
+            'token' => (string) env('PXSOL_HOTEL_LGR_TOKEN', ''),
             'puntoventas' => [
                 [
                     'codigo' => '00128',

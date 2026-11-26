@@ -29,6 +29,7 @@ class FacturacionJuegoSala extends Model implements Auditable
         'cuentacontable_betsur_id',
         'cuentacontable_apuestas_id',
         'centrocosto_id',
+        'centrocosto_mesa_id',
         'activo',
     ];
 
@@ -77,8 +78,15 @@ class FacturacionJuegoSala extends Model implements Auditable
         return $this->belongsTo(Cuentacontable::class, 'cuentacontable_apuestas_id');
     }
 
+    /** CC de slots y ruleta El. de la sala (tragamonedas / ruleta). */
     public function centrocosto(): BelongsTo
     {
         return $this->belongsTo(Centrocosto::class, 'centrocosto_id');
+    }
+
+    /** CC propio de mesas de juego (no es el de slots). */
+    public function centrocostoMesa(): BelongsTo
+    {
+        return $this->belongsTo(Centrocosto::class, 'centrocosto_mesa_id');
     }
 }

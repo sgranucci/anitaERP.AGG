@@ -118,7 +118,8 @@
                                     <th>Cta. Del R&iacute;o</th>
                                     <th>Cta. Betsur</th>
                                     <th>Cta. Apuestas</th>
-                                    <th>Centro costo</th>
+                                    <th>CC slots / ruleta</th>
+                                    <th>CC mesas</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -193,6 +194,13 @@
                                                 value="{{ old("salas.$sid.centrocosto_codigo", $cfg->centrocosto->codigo ?? '') }}"
                                                 placeholder="C&oacute;d.">
                                             <div class="small text-muted">{{ \Illuminate\Support\Str::limit($cfg->centrocosto->nombre ?? '', 28) }}</div>
+                                        </td>
+                                        <td>
+                                            <input type="text" class="form-control form-control-sm"
+                                                name="salas[{{ $sid }}][centrocosto_mesa_codigo]"
+                                                value="{{ old("salas.$sid.centrocosto_mesa_codigo", $cfg->centrocostoMesa->codigo ?? '') }}"
+                                                placeholder="C&oacute;d.">
+                                            <div class="small text-muted">{{ \Illuminate\Support\Str::limit($cfg->centrocostoMesa->nombre ?? '', 28) }}</div>
                                         </td>
                                     </tr>
                                 @endforeach

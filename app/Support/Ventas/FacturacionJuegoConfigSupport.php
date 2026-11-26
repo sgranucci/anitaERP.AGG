@@ -68,6 +68,7 @@ final class FacturacionJuegoConfigSupport
                 'cuentacontableBetsur',
                 'cuentacontableApuestas',
                 'centrocosto',
+                'centrocostoMesa',
             ])
             ->where('sala_id', $salaId)
             ->first();
@@ -93,6 +94,7 @@ final class FacturacionJuegoConfigSupport
                 'cuentacontableBetsur',
                 'cuentacontableApuestas',
                 'centrocosto',
+                'centrocostoMesa',
             ])
             ->where('activo', true)
             ->orderBy('sala_id')
@@ -130,6 +132,9 @@ final class FacturacionJuegoConfigSupport
         }
         if ((int) ($cfg->cuentacaja_id ?? 0) <= 0) {
             $faltan[] = 'Cuenta de caja (tesorería)';
+        }
+        if ($rubro === FacturacionJuegoTipoSupport::RUBRO_MESA && (int) ($cfg->centrocosto_mesa_id ?? 0) <= 0) {
+            $faltan[] = 'Centro de costo de mesas';
         }
         $cuentaId = match ($rubro) {
             FacturacionJuegoTipoSupport::RUBRO_MESA => (int) ($cfg->cuentacontable_mesa_id ?? 0),

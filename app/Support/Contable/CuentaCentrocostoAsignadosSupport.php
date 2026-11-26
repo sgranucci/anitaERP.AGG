@@ -54,12 +54,12 @@ final class CuentaCentrocostoAsignadosSupport
     }
 
     /**
-     * @return array{restringe: bool, ids: list<int>}
+     * @return array{restringe: bool, ids: list<int>, maneja: bool}
      */
     public static function restriccion(int $cuentaId): array
     {
         if ($cuentaId <= 0) {
-            return ['restringe' => false, 'ids' => []];
+            return ['restringe' => false, 'ids' => [], 'maneja' => false];
         }
 
         $datos = self::deCuenta($cuentaId);
@@ -67,7 +67,14 @@ final class CuentaCentrocostoAsignadosSupport
         return [
             'restringe' => $datos['maneja'] && $datos['ids'] !== [],
             'ids' => $datos['ids'],
+            'maneja' => $datos['maneja'],
         ];
+    }
+
+    /** La cuenta marca «maneja centro de costo» (manejaccosto). */
+    public static function maneja(int $cuentaId): bool
+    {
+        return $cuentaId > 0 && self::deCuenta($cuentaId)['maneja'];
     }
 
     public static function resolver(int $cuentaId, int $elegido, int $fallback): int

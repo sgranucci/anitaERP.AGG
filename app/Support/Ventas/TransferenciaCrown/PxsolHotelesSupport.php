@@ -32,11 +32,8 @@ final class PxsolHotelesSupport
             if ($codigo === '' || $hotelId <= 0) {
                 continue;
             }
-            $tokenEnv = trim((string) ($hotel['token_env'] ?? 'TESORERIA_CROWN_PXSOL_TOKEN'));
-            $token = trim((string) env($tokenEnv, ''));
-            if ($token === '') {
-                $token = trim((string) config('tesoreria_crown.pxsol_token', ''));
-            }
+            // Token propio del hotel (config). Sin fallback a otro hotel: un token ajeno da 401.
+            $token = trim((string) ($hotel['token'] ?? ''));
             $pvs = [];
             foreach ((array) ($hotel['puntoventas'] ?? []) as $pv) {
                 if (! is_array($pv)) {
