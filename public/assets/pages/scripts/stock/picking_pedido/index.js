@@ -180,7 +180,23 @@
                 var q = parseFloat(t.cantidad);
                 html += "<td class='text-center'><input type='text' class='cantidadesportalles form-control form-control-sm text-center' readonly value='" + (q ? q : '') + "' style='width:42px;display:inline-block;'></td>";
             });
-            html += "</tr></tbody></table>";
+            html += "</tr>";
+            // Precio por talle (curva): los talles con el mismo precio salen en el mismo renglón de factura.
+            var hayPrecio = talles.some(function (t) { return parseFloat(t.precio) > 0; });
+            if (hayPrecio) {
+                var distintos = {};
+                talles.forEach(function (t) {
+                    distintos[String(parseFloat(t.precio) || 0)] = true;
+                });
+                var variosPrecios = Object.keys(distintos).length > 1;
+                html += "<tr>";
+                talles.forEach(function (t) {
+                    var p = parseFloat(t.precio) || 0;
+                    html += "<td class='text-center small" + (variosPrecios ? " font-weight-bold" : " text-muted") + "' title='Precio talle " + escHtml(t.nombre) + "'>" + (p ? formatoImportePicking(p) : '') + "</td>";
+                });
+                html += "</tr>";
+            }
+            html += "</tbody></table>";
             $dest.append(html);
         });
         $('#facturartotpares').val(tot ? String(Math.round(tot)) : '');

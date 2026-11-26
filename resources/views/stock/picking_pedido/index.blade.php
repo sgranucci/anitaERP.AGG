@@ -241,7 +241,21 @@
                                     <td>{{ $linea->articulos->sku ?? '' }}</td>
                                     <td>{{ $linea->combinaciones->nombre ?? '' }}</td>
                                     <td class="text-right">{{ number_format((float) $linea->cantidad, 0, ',', '.') }}</td>
-                                    <td class="text-right">{{ number_format(\App\Support\Ventas\PedidoPickingFerliSupport::precioUnitarioLinea($linea), 2, ',', '.') }}</td>
+                                    @php
+                                        $curvasPrecio = \App\Support\Ventas\PedidoPickingFerliSupport::preciosPorCurva($linea);
+                                    @endphp
+                                    <td class="text-right">
+                                        @if (count($curvasPrecio) > 1)
+                                            @foreach ($curvasPrecio as $curvaPrecio)
+                                                <div class="text-nowrap" title="Talles {{ implode(', ', $curvaPrecio['talles']) }}">
+                                                    <small class="text-muted">{{ implode('-', [reset($curvaPrecio['talles']), end($curvaPrecio['talles'])]) }}:</small>
+                                                    {{ number_format($curvaPrecio['precio'], 2, ',', '.') }}
+                                                </div>
+                                            @endforeach
+                                        @else
+                                            {{ number_format(\App\Support\Ventas\PedidoPickingFerliSupport::precioUnitarioLinea($linea), 2, ',', '.') }}
+                                        @endif
+                                    </td>
                                     <td>{{ $linea->picking_lote_codigo }}</td>
                                     <td>{{ $depTxt }}</td>
                                     <td>{{ $etiquetaFactura !== '' ? $etiquetaFactura : ($facturada ? 'Facturada' : '') }}</td>

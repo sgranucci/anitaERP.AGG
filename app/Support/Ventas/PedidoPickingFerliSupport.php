@@ -2947,34 +2947,44 @@ final class PedidoPickingFerliSupport
             $codigoComb = (string) ($linea->combinaciones->codigo ?? '');
             $fotoNombre = (string) ($linea->combinaciones->foto ?? '');
             $fechaPicking = $linea->pickingCabecera?->fecha?->format('d/m/Y') ?? '';
-            $presentacion = CurvaModuloPresentacionSupport::presentar($medidas);
+            // Una fila por curva cuando los talles tienen precios distintos.
+            $curvas = self::preciosPorCurva($linea);
+            if (count($curvas) <= 1) {
+                $curvas = [['precio' => self::precioUnitarioLinea($linea), 'medidas' => $medidas]];
+            }
+            $fotoPath = ArticuloCombinacionFotoSupport::rutaAbsoluta($fotoNombre, $sku, $codigoComb);
 
-            $filas[] = [
-                'pedido_combinacion_id' => $linea->id,
-                'pedido_id' => $linea->pedido_id,
-                'pedido_codigo' => $linea->pedidos->codigo ?? '',
-                'cliente' => $linea->pedidos->clientes->nombre ?? '',
-                'nombrelinea' => $linea->articulos->lineas->nombre ?? '',
-                'sku' => $sku,
-                'descripcion' => $linea->combinaciones->nombre ?? ($linea->articulos->descripcion ?? ''),
-                'medidas' => $presentacion['medidas'],
-                'total' => $presentacion['total'],
-                'pares_modulo' => $presentacion['pares_modulo'],
-                'cantidad_modulos' => $presentacion['modulos'],
-                'cantidadmodulo' => $presentacion['pares_modulo'],
-                'precio' => self::precioUnitarioLinea($linea),
-                'situacion' => $situaciones[(int) $linea->id]['situacion'],
-                'en_produccion' => $situaciones[(int) $linea->id]['en_produccion'],
-                'numero_ot' => $loteTxt,
-                'deposito' => $depositoTxt,
-                'observacion' => trim((string) ($linea->observacion ?? '')),
-                'factura' => self::etiquetaFacturaDesdeVenta($linea->pickingVenta),
-                'picking_codigo' => (int) ($linea->pickingCabecera->codigo ?? 0),
-                'fecha_picking' => $fechaPicking,
-                'modulo_id' => $linea->modulo_id,
-                'nombreempresa' => $nombreEmpresa,
-                'foto_path' => ArticuloCombinacionFotoSupport::rutaAbsoluta($fotoNombre, $sku, $codigoComb),
-            ];
+            foreach ($curvas as $idxCurva => $curva) {
+                $presentacion = CurvaModuloPresentacionSupport::presentar($curva['medidas']);
+
+                $filas[] = [
+                    'pedido_combinacion_id' => $linea->id,
+                    'pedido_id' => $linea->pedido_id,
+                    'pedido_codigo' => $linea->pedidos->codigo ?? '',
+                    'cliente' => $linea->pedidos->clientes->nombre ?? '',
+                    'nombrelinea' => $linea->articulos->lineas->nombre ?? '',
+                    'sku' => $sku,
+                    'descripcion' => $linea->combinaciones->nombre ?? ($linea->articulos->descripcion ?? ''),
+                    'medidas' => $presentacion['medidas'],
+                    'total' => $presentacion['total'],
+                    'pares_modulo' => $presentacion['pares_modulo'],
+                    'cantidad_modulos' => $presentacion['modulos'],
+                    'cantidadmodulo' => $presentacion['pares_modulo'],
+                    'precio' => $curva['precio'],
+                    'situacion' => $situaciones[(int) $linea->id]['situacion'],
+                    'en_produccion' => $situaciones[(int) $linea->id]['en_produccion'],
+                    'numero_ot' => $loteTxt,
+                    'deposito' => $depositoTxt,
+                    'observacion' => trim((string) ($linea->observacion ?? '')),
+                    'factura' => self::etiquetaFacturaDesdeVenta($linea->pickingVenta),
+                    'picking_codigo' => (int) ($linea->pickingCabecera->codigo ?? 0),
+                    'fecha_picking' => $fechaPicking,
+                    'modulo_id' => $linea->modulo_id,
+                    'nombreempresa' => $nombreEmpresa,
+                    // La foto va una sola vez por línea (en la primera curva).
+                    'foto_path' => $idxCurva === 0 ? $fotoPath : null,
+                ];
+            }
         }
 
         return $filas;
@@ -3301,6 +3311,8 @@ final class PedidoPickingFerliSupport
      * Si todos los talles con cantidad comparten un precio, ese manda.
      * La cabecera de la línea puede quedar desactualizada (se copia el precio
      * de la línea anterior si la pantalla no espera la lista).
+     * Con precios distintos entre talles no hay un único precio de línea:
+     * el picking los muestra por curva (ver preciosPorCurva).
      */
     public static function precioUnitarioLinea(object $linea): float
     {
@@ -3318,6 +3330,37 @@ final class PedidoPickingFerliSupport
         }
 
         return (float) ($linea->precio ?? 0);
+    }
+
+    /**
+     * Curvas de la línea agrupadas por precio de talle (un grupo por precio).
+     * Con un solo precio devuelve un único grupo. El talle sin precio usa el de la cabecera.
+     *
+     * @return list<array{precio: float, medidas: array<string, float>, talles: list<string>}>
+     */
+    public static function preciosPorCurva(object $linea): array
+    {
+        $cabecera = round((float) ($linea->precio ?? 0), 4);
+        $grupos = [];
+        foreach ($linea->pedido_combinacion_talles ?? [] as $talle) {
+            $cant = (float) ($talle->cantidad ?? 0);
+            if ($cant == 0.0) {
+                continue;
+            }
+            $precio = round((float) ($talle->precio ?? 0), 4);
+            if ($precio <= 0) {
+                $precio = $cabecera;
+            }
+            $nombre = (string) ($talle->talles->nombre ?? $talle->talle_id);
+            $clave = number_format($precio, 4, '.', '');
+            if (! isset($grupos[$clave])) {
+                $grupos[$clave] = ['precio' => $precio, 'medidas' => [], 'talles' => []];
+            }
+            $grupos[$clave]['medidas'][$nombre] = ($grupos[$clave]['medidas'][$nombre] ?? 0) + $cant;
+            $grupos[$clave]['talles'][] = $nombre;
+        }
+
+        return array_values($grupos);
     }
 
     /**
@@ -3462,10 +3505,16 @@ final class PedidoPickingFerliSupport
                     continue;
                 }
                 $pares += $cantTalle;
+                // Precio del talle del pedido (el que se factura); sin precio, el de la cabecera.
+                $precioTalle = round((float) ($talle->precio ?? 0), 4);
+                if ($precioTalle <= 0) {
+                    $precioTalle = round((float) ($linea->precio ?? 0), 4);
+                }
                 $talles[] = [
                     'nombre' => (string) ($talle->talles->nombre ?? $talle->talle_id),
                     'cantidad' => $cantTalle,
                     'talle_id' => (int) $talle->talle_id,
+                    'precio' => $precioTalle,
                 ];
             }
             usort($talles, static fn (array $a, array $b) => (float) $a['nombre'] <=> (float) $b['nombre']);

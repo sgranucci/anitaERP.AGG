@@ -168,6 +168,46 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertSame(24000.0, S::precioUnitarioLinea($linea));
     }
 
+    public function test_precios_por_curva_agrupa_los_talles_por_precio(): void
+    {
+        $talle = static fn (string $nombre, float $cant, float $precio) => (object) [
+            'talle_id' => (int) $nombre,
+            'talles' => (object) ['nombre' => $nombre],
+            'cantidad' => $cant,
+            'precio' => $precio,
+        ];
+        $linea = (object) [
+            'precio' => 68000,
+            'pedido_combinacion_talles' => [
+                $talle('23', 2, 28500),
+                $talle('24', 2, 28500),
+                $talle('27', 2, 33000),
+                $talle('28', 2, 33000),
+            ],
+        ];
+
+        $curvas = S::preciosPorCurva($linea);
+
+        self::assertCount(2, $curvas);
+        self::assertSame(28500.0, $curvas[0]['precio']);
+        self::assertSame(['23' => 2.0, '24' => 2.0], $curvas[0]['medidas']);
+        self::assertSame(33000.0, $curvas[1]['precio']);
+        self::assertSame(['27' => 2.0, '28' => 2.0], $curvas[1]['medidas']);
+    }
+
+    public function test_precios_por_curva_con_un_solo_precio_devuelve_un_grupo(): void
+    {
+        $linea = (object) [
+            'precio' => 68000,
+            'pedido_combinacion_talles' => [
+                (object) ['talle_id' => 1, 'cantidad' => 2, 'precio' => 40300],
+                (object) ['talle_id' => 2, 'cantidad' => 2, 'precio' => 40300],
+            ],
+        ];
+
+        self::assertCount(1, S::preciosPorCurva($linea));
+    }
+
     public function test_mensaje_ot_asignada_a_otro_pedido(): void
     {
         $msg = S::mensajeOtAsignadaAOtroPedido('30797', '5042', 'CALZADOS LOS GALLEGOS');
