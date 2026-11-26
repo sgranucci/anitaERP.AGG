@@ -6748,13 +6748,21 @@ class FacturacionService
 
 		$conceptostotales = [];
 		foreach (DB::table('venta_impuesto')->where('venta_id', $ventaId)->orderBy('id')->get() as $imp) {
-			$conceptostotales[] = [
+			$concepto = [
 				'concepto' => (string) $imp->concepto,
 				'baseimponible' => (float) $imp->baseimponible,
 				'tasa' => (float) $imp->tasa,
 				'importe' => (float) $imp->importe,
 				'impuesto_id' => $imp->impuesto_id,
 			];
+			// Percepción IIBB: sin provincia y jurisdicción, Anita no graba venibr ni ven_perc_ing_bruto
+			// y la réplica sale sin error pero incompleta (incidente NCD 3867/3869, 26/11/2026).
+			$provinciaIdLinea = (int) ($imp->provincia_id ?? 0);
+			if ($provinciaIdLinea > 0) {
+				$concepto['provincia_id'] = $provinciaIdLinea;
+				$concepto['jurisdiccion'] = (int) (DB::table('provincia')->where('id', $provinciaIdLinea)->value('jurisdiccion') ?? 0);
+			}
+			$conceptostotales[] = $concepto;
 		}
 
 		$lineas = [];
