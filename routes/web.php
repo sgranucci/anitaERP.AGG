@@ -4377,6 +4377,16 @@ Route::put('compras/condicionentrega/{id}', 'Compras\CondicionentregaController@
 Route::delete('compras/condicionentrega/{id}', 'Compras\CondicionentregaController@eliminar')->name('eliminar_condicionentrega');
 
 /*
+ * Tipos de ahorro (KPI de ahorro en requisición y OC)
+ */
+Route::get('compras/tipoahorro', 'Compras\TipoAhorroController@index')->name('tipoahorro');
+Route::get('compras/tipoahorro/crear', 'Compras\TipoAhorroController@crear')->name('crear_tipoahorro');
+Route::post('compras/tipoahorro', 'Compras\TipoAhorroController@guardar')->name('guardar_tipoahorro');
+Route::get('compras/tipoahorro/{id}/editar', 'Compras\TipoAhorroController@editar')->name('editar_tipoahorro');
+Route::put('compras/tipoahorro/{id}', 'Compras\TipoAhorroController@actualizar')->name('actualizar_tipoahorro');
+Route::delete('compras/tipoahorro/{id}', 'Compras\TipoAhorroController@eliminar')->name('eliminar_tipoahorro');
+
+/*
  * Tipos de empresa
  */
 
@@ -4814,6 +4824,9 @@ Route::get('compras/requisicion/aviso-arbol-grabacion', 'Compras\RequisicionCont
 Route::get('compras/requisicion/consulta-listas-precio-articulo', 'Compras\RequisicionController@consultaListasPrecioArticulo')->name('requisicion_consulta_listas_precio_articulo');
 Route::get('compras/requisicion/precio-ultima-compra-articulo', 'Compras\RequisicionController@precioUltimaCompraArticulo')->name('requisicion_precio_ultima_compra_articulo');
 Route::post('compras/requisicion/calcular-totales', 'Compras\RequisicionController@calcularTotales')->name('requisicion_calcular_totales');
+Route::post('compras/requisicion/ahorro-calcular', 'Compras\RequisicionAhorroController@calcular')->name('requisicion_ahorro_calcular');
+Route::get('compras/requisicion/ahorro-precio-anterior', 'Compras\RequisicionAhorroController@precioAnterior')->name('requisicion_ahorro_precio_anterior');
+Route::post('compras/requisicion/{id}/guardar-ahorro', 'Compras\RequisicionAhorroController@guardar')->name('requisicion_guardar_ahorro')->where('id', '[0-9]+');
 Route::post('compras/requisicion/consulta_partidagasto', 'Compras\RequisicionController@consultaPartidagastoRequisicion')->name('consulta_partidagasto_requisicion');
 Route::get('compras/requisicion/leer_partidagasto/{partidagasto_id}', 'Compras\RequisicionController@leerPartidagastoRequisicionPorId')->name('leer_partidagasto_requisicion');
 Route::get('compras/requisicion/visualizar/{id}/{hash}', 'Compras\RequisicionController@visualizar')->name('visualizar_requisicion');
@@ -4863,6 +4876,13 @@ Route::get('compras/contrato-vencimiento-reporte', 'Compras\ContratoVencimientoR
 Route::get('compras/listar-contrato-vencimiento-reporte/{formato?}', 'Compras\ContratoVencimientoReporteController@exportar')->name('listar_reporte_contrato_vencimiento');
 Route::get('compras/historial-precios-articulo', 'Compras\HistorialPreciosArticuloController@index')->name('reporte_historial_precios_articulo');
 Route::get('compras/listar-historial-precios-articulo/{formato?}', 'Compras\HistorialPreciosArticuloController@exportar')->name('listar_reporte_historial_precios_articulo');
+Route::get('compras/ahorro-reporte', 'Compras\AhorroReporteController@index')->name('reporte_ahorro_compras');
+Route::get('compras/listar-ahorro-reporte/{formato?}', 'Compras\AhorroReporteController@exportar')->name('listar_reporte_ahorro_compras');
+Route::get('compras/ahorro-importacion', 'Compras\AhorroImportacionController@index')->name('importar_ahorro_compras');
+Route::get('compras/ahorro-importacion/plantilla', 'Compras\AhorroImportacionController@plantilla')->name('importar_ahorro_compras_plantilla');
+Route::post('compras/ahorro-importacion/previsualizar', 'Compras\AhorroImportacionController@previsualizar')->name('importar_ahorro_compras_previsualizar');
+Route::post('compras/ahorro-importacion/confirmar', 'Compras\AhorroImportacionController@confirmar')->name('importar_ahorro_compras_confirmar');
+Route::post('compras/ordencompra/{id}/guardar-ahorro', 'Compras\OrdencompraAhorroController@guardar')->name('ordencompra_guardar_ahorro');
 Route::get('compras/articulo-cuenta-oc-reporte', 'Compras\ArticuloCuentaOcReporteController@index')->name('reporte_articulo_cuenta_oc');
 Route::get('compras/listar-articulo-cuenta-oc-reporte/{formato?}', 'Compras\ArticuloCuentaOcReporteController@exportar')->name('listar_reporte_articulo_cuenta_oc');
 Route::get('compras/comprobante-proveedor-imputacion-ap-reporte', 'Compras\ComprobanteProveedorImputacionApReporteController@index')->name('reporte_imputacion_ap_proveedor');

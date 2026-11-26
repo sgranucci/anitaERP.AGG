@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\AhorroLineaSupport;
 use App\Support\Compras\RequisicionReporteCriteriosSupport;
 use App\Support\Compras\RequisicionReporteFiltros;
 use App\Support\Compras\RequisicionVisibilidadSupport;
@@ -225,6 +226,9 @@ class RequisicionReporteService
                 'ra.precio',
                 'ra.preciooriginal',
                 'ra.motivoahorro',
+                ...(AhorroLineaSupport::tablaTieneColumnasAhorro('requisicion_articulo')
+                    ? ['ra.ahorro_total_pesos', 'ra.porc_ahorro']
+                    : []),
                 'ra.detalle as leyenda_linea',
                 'ra.fechaentrega as fecha_entrega_linea',
                 'r.numerorequisicion',
@@ -643,6 +647,14 @@ class RequisicionReporteService
         $porcAhorro = $precioOriginal > 0.000001
             ? (($precioOriginal - $importe) / $precioOriginal) * 100
             : null;
+        $montoAhorro = $montoAhorroUnit > 0 ? $montoAhorroUnit * $cantidad : 0.0;
+
+        // Línea con ahorro del KPI: ya viene calculado en pesos (neto de IVA, TC BNA de la fecha),
+        // admite sobrecosto (negativo) y moneda anterior distinta. Las líneas viejas siguen como antes.
+        if (($row->ahorro_total_pesos ?? null) !== null) {
+            $montoAhorro = (float) $row->ahorro_total_pesos;
+            $porcAhorro = $row->porc_ahorro !== null ? (float) $row->porc_ahorro : null;
+        }
 
         $estadoNombre = $this->nombreEstado((string) ($row->estado ?? ''));
         $leyenda = trim((string) ($row->leyenda_linea ?? ''));
@@ -697,7 +709,7 @@ class RequisicionReporteService
             'motivo_urgencia' => (string) ($row->motivotratamiento ?? ''),
             'precio_original' => $precioOriginal,
             'porc_ahorro' => $porcAhorro,
-            'monto_ahorro' => $montoAhorroUnit > 0 ? $montoAhorroUnit * $cantidad : 0.0,
+            'monto_ahorro' => $montoAhorro,
             'motivo_ahorro' => (string) ($row->motivoahorro ?? ''),
             'usuario_ahorro' => trim((string) ($row->motivoahorro ?? '')) !== ''
                 ? (string) ($row->usuario_nombre ?? '')

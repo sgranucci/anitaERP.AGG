@@ -23,6 +23,8 @@ class Requisicion_Articulo extends Model implements Auditable
         'color_id', 'talle_id', 'cantidad', 'cantidadentregada', 'precio', 'moneda_id', 'cantidadalternativa',
         'detalle', 'centrocostodestino_id', 'preciooriginal', 'motivoahorro', 'partidagasto_id', 'capex_id',
         'precio_origen_etiqueta',
+        'moneda_anterior_id', 'origen_anterior', 'referencia_anterior', 'tipoahorro_id',
+        'tc_ahorro', 'tc_ahorro_anterior', 'ahorro_unitario', 'ahorro_total', 'ahorro_total_pesos', 'porc_ahorro',
         'anita_nro_interno', 'anita_nro_orden',
     ];
 
@@ -81,5 +83,15 @@ class Requisicion_Articulo extends Model implements Auditable
     public function capexs()
     {
         return $this->belongsTo(Capex::class, 'capex_id');
+    }
+
+    public function tipoahorro()
+    {
+        return $this->belongsTo(TipoAhorro::class, 'tipoahorro_id');
+    }
+
+    public function moneda_anterior()
+    {
+        return $this->belongsTo(Moneda::class, 'moneda_anterior_id');
     }
 }

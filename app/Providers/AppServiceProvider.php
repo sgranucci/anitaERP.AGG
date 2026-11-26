@@ -808,6 +808,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Compras\TipoAhorroRepositoryInterface',
+            'App\Repositories\Compras\TipoAhorroRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Compras\TipoempresaRepositoryInterface',
             'App\Repositories\Compras\TipoempresaRepository',
         );

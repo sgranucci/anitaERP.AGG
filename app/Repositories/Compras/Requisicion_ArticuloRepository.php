@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Requisicion_Articulo;
+use App\Support\Compras\AhorroLineaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 
@@ -43,6 +44,10 @@ class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryIn
         $aActualizar = [];
         $aInsertar = [];
 
+        $cargaAhorro = isset($data['preciooriginales']) && is_array($data['preciooriginales'])
+            && AhorroLineaSupport::tablaTieneColumnasAhorro('requisicion_articulo');
+        $fechaAhorro = substr((string) ($data['fecha'] ?? date('Y-m-d')), 0, 10);
+
         $n = count($data['articulo_ids']);
         for ($i = 0; $i < $n; $i++) {
             $articulo_id = $data['articulo_ids'][$i] ?? null;
@@ -80,6 +85,24 @@ class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryIn
                 'proveedor_id' => ! empty($data['linea_proveedor_ids'][$i]) ? (int) $data['linea_proveedor_ids'][$i] : null,
                 'articulo_proveedor_id' => ! empty($data['articulo_proveedor_ids'][$i]) ? (int) $data['articulo_proveedor_ids'][$i] : null,
             ];
+
+            // KPI de ahorro: solo si la pantalla mandó los campos (importaciones y otros alta no los traen).
+            if ($cargaAhorro) {
+                $payload = array_merge($payload, AhorroLineaSupport::columnasParaGrabar(
+                    [
+                        'precio_anterior' => $data['preciooriginales'][$i] ?? null,
+                        'moneda_anterior_id' => $data['moneda_anterior_ids'][$i] ?? null,
+                        'origen_anterior' => $data['origen_anteriores'][$i] ?? null,
+                        'referencia_anterior' => $data['referencia_anteriores'][$i] ?? null,
+                        'tipoahorro_id' => $data['tipoahorro_ids'][$i] ?? null,
+                        'observacion' => $data['motivoahorros'][$i] ?? null,
+                    ],
+                    $precio,
+                    (int) $payload['moneda_id'],
+                    $cantidad,
+                    $fechaAhorro,
+                ));
+            }
 
             $idCandidato = $idsEntrantes[$i] ?? null;
             $idCandidato = ($idCandidato === null || $idCandidato === '') ? null : (int) $idCandidato;

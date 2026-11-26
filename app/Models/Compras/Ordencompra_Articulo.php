@@ -24,6 +24,9 @@ class Ordencompra_Articulo extends Model implements Auditable
         'estado_linea_oc', 'cantidad', 'precio', 'moneda_id', 'cotizacion',
         'descuento', 'cantidadalternativa', 'detalle', 'centrocostodestino_id', 'partidagasto_id', 'capex_id',
         'precio_origen_tipo', 'precio_origen_ref_id', 'precio_origen_etiqueta',
+        'preciooriginal', 'motivoahorro',
+        'moneda_anterior_id', 'origen_anterior', 'referencia_anterior', 'tipoahorro_id',
+        'tc_ahorro', 'tc_ahorro_anterior', 'ahorro_unitario', 'ahorro_total', 'ahorro_total_pesos', 'porc_ahorro',
     ];
 
     public function ordencompras()
@@ -87,5 +90,15 @@ class Ordencompra_Articulo extends Model implements Auditable
             ->orderBy('orden')
             ->orderBy('fecha')
             ->orderBy('id');
+    }
+
+    public function tipoahorro()
+    {
+        return $this->belongsTo(TipoAhorro::class, 'tipoahorro_id');
+    }
+
+    public function moneda_anterior()
+    {
+        return $this->belongsTo(Moneda::class, 'moneda_anterior_id');
     }
 }

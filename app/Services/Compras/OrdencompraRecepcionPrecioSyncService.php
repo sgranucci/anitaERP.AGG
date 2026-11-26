@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
+use App\Support\Compras\AhorroLineaSupport;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaSalidaSupport;
@@ -76,6 +77,7 @@ class OrdencompraRecepcionPrecioSyncService
             }
 
             $ocArt->update(['precio' => $precioNuevo]);
+            $this->recalcularAhorroLinea($ocArt, $oc);
             $this->actualizarPendmovpPrecio($recepcion, $linea, $precioNuevo);
 
             $this->precioHistoriaService->registrar(
@@ -167,6 +169,7 @@ class OrdencompraRecepcionPrecioSyncService
             }
 
             $ocArt->update(['precio' => $precioRec]);
+            $this->recalcularAhorroLinea($ocArt, $oc);
             $this->actualizarPendmovpPrecio($recepcion, $linea, $precioRec);
 
             $this->precioHistoriaService->registrar(
@@ -280,5 +283,24 @@ class OrdencompraRecepcionPrecioSyncService
             'whereArmado' => $where,
             'valores' => RecepcionProveedorAnitaEscrituraSupport::pendmovpPrecioUpdateSet($precio),
         ], 'OC precio desde recepción '.$recepcion->id.' línea '.$linea->id);
+    }
+
+    /**
+     * KPI de ahorro: si la línea tiene ahorro cargado, lo recalcula con el precio nuevo (fecha de la OC).
+     * Un fallo acá no debe frenar la propagación del precio.
+     */
+    private function recalcularAhorroLinea(Ordencompra_Articulo $ocArt, $oc): void
+    {
+        try {
+            $cols = AhorroLineaSupport::columnasRecalculoLineaOc(
+                $ocArt->refresh(),
+                $oc->fecha ? (string) $oc->fecha : null,
+            );
+            if ($cols !== null) {
+                $ocArt->update($cols);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('No se pudo recalcular el ahorro de la línea de OC '.$ocArt->id.': '.$e->getMessage());
+        }
     }
 }

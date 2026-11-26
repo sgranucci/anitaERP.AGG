@@ -700,6 +700,8 @@
             }
         }
         $ocPedirPartidaCapex = \App\Support\Compras\OrdencompraUiConfigSupport::pedirPartidaCapex();
+        // KPI de ahorro: solo si la migración del KPI ya corrió en esta base.
+        $ocAhorroActivo = \App\Support\Compras\AhorroLineaSupport::tablaTieneColumnasAhorro('ordencompra_articulo');
         $ocMostrarPesoArticulo = \App\Support\Compras\OrdencompraUiConfigSupport::mostrarPesoArticulo();
         $ocEntregaSemanal = \App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal();
         // Con peso/entregas y sin partida/CAPEX (El Bierzo): CC y cotización en cabecera.
@@ -1014,6 +1016,14 @@
                         <input type="hidden" class="oc-precio-origen-tipo" name="precio_origen_tipos[]" value="{{ $_poTipo }}">
                         <input type="hidden" class="oc-precio-origen-ref-id" name="precio_origen_ref_ids[]" value="{{ $_poRef }}">
                         <input type="hidden" class="oc-precio-origen-etiqueta" name="precio_origen_etiquetas[]" value="{{ $_poEtiq }}">
+                        @if ($ocAhorroActivo)
+                            <input type="hidden" class="oc-ahorro-dato" name="preciooriginales[]" value="{{ old('preciooriginales.'.$idx, \App\Support\Compras\AhorroLineaSupport::precioAnteriorParaFormulario($linea)) }}">
+                            <input type="hidden" class="oc-ahorro-dato" name="moneda_anterior_ids[]" value="{{ old('moneda_anterior_ids.'.$idx, $linea->moneda_anterior_id ?? '') }}">
+                            <input type="hidden" class="oc-ahorro-dato" name="origen_anteriores[]" value="{{ old('origen_anteriores.'.$idx, $linea->origen_anterior ?? '') }}">
+                            <input type="hidden" class="oc-ahorro-dato" name="referencia_anteriores[]" value="{{ old('referencia_anteriores.'.$idx, $linea->referencia_anterior ?? '') }}">
+                            <input type="hidden" class="oc-ahorro-dato" name="tipoahorro_ids[]" value="{{ old('tipoahorro_ids.'.$idx, $linea->tipoahorro_id ?? '') }}">
+                            <input type="hidden" class="oc-ahorro-dato" name="motivoahorros[]" value="{{ old('motivoahorros.'.$idx, $linea->motivoahorro ?? '') }}">
+                        @endif
                         <input type="hidden" class="linea-articulo-proveedor-id" name="articulo_proveedor_ids[]" value="{{ $_apId > 0 ? $_apId : '' }}">
                         <input type="hidden" class="linea-codigo-articulo-proveedor" name="linea_codigo_articulo_proveedor[]" value="{{ $_apCodigo }}">
                         <input type="hidden" class="linea-coef-conversion" value="{{ $_apCoef !== '' && $_apCoef !== null ? $_apCoef : '' }}">
@@ -1205,12 +1215,21 @@
                 </tr>
                 @php
                     $_metaOrigenTxt = ($_poEtiq !== '' && $_poEtiq !== null) ? (string) $_poEtiq : '';
+                    $_ahorroLineaRes = $ocAhorroActivo ? \App\Support\Compras\AhorroLineaSupport::resumen([$linea]) : null;
                     $_metaDetalleTxt = trim((string) old('detalle_articulos.'.$idx, $linea->detalle ?? ''));
+                    $_ahorroPesos = $ocAhorroActivo ? ($linea->ahorro_total_pesos ?? null) : null;
+                    $_ahorroPorc = $ocAhorroActivo ? ($linea->porc_ahorro ?? null) : null;
+                    $_ahorroNeg = $_ahorroPesos !== null && (float) $_ahorroPesos < 0;
+                    $_ahorroTipo = $ocAhorroActivo ? trim((string) optional($linea->tipoahorro)->nombre) : '';
                     $_metaVacia = $ocLayoutCompacto
                         && $_metaOrigenTxt === ''
-                        && $_metaDetalleTxt === '';
+                        && $_metaDetalleTxt === ''
+                        && $_ahorroPesos === null;
                 @endphp
-                <tr class="item-ordencompra-articulo-sub{{ $_metaVacia ? ' oc-meta-vacia' : '' }}">
+                <tr class="item-ordencompra-articulo-sub{{ $_metaVacia ? ' oc-meta-vacia' : '' }}"
+                    @if ($_ahorroLineaRes && $_ahorroLineaRes['lineas_con_ahorro'] > 0)
+                        data-ahorro-pesos="{{ $_ahorroLineaRes['ahorro_pesos'] }}" data-ahorro-base="{{ $_ahorroLineaRes['base_pesos'] }}"
+                    @endif>
                     <td colspan="{{ $ocColspanMetaArticulos }}" class="px-2 bg-light">
                         <div class="oc-meta-fila-una-linea">
                             <div class="oc-meta-bloque oc-meta-bloque-detalle">
@@ -1221,6 +1240,29 @@
                                 <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Origen precio</span>
                                 <div class="oc-origen-precio-resumen oc-linea-item-leyenda text-body" title="{{ $_metaOrigenTxt }}">{{ $_metaOrigenTxt !== '' ? $_metaOrigenTxt : '—' }}</div>
                             </div>
+                            @if ($ocAhorroActivo)
+                                <div class="oc-meta-bloque oc-meta-bloque-ahorro border-left pl-2 ml-1">
+                                    <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">{{ $_ahorroNeg ? 'Sobrecosto' : 'Ahorro' }}</span>
+                                    <div class="oc-ahorro-resumen oc-linea-item-leyenda text-body">
+                                        @if ($_ahorroPesos !== null)
+                                            <span class="font-weight-bold {{ $_ahorroNeg ? 'text-danger' : 'text-success' }}">{{ $_ahorroNeg ? '-' : '' }}$ {{ number_format(abs((float) $_ahorroPesos), 0, ',', '.') }}@if ($_ahorroPorc !== null) &middot; {{ number_format((float) $_ahorroPorc, 1, ',', '.') }}%@endif</span>
+                                            @if ($_ahorroTipo !== '')
+                                                <span class="text-muted small ml-1">{{ $_ahorroTipo }}</span>
+                                            @endif
+                                        @else
+                                            &mdash;
+                                        @endif
+                                    </div>
+                                    @if (! $soloLectura && isset($data) && $data && $linea->id)
+                                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 ml-2 oc-btn-guardar-ahorro"
+                                            data-url="{{ route('ordencompra_guardar_ahorro', $data->id) }}"
+                                            data-articulo="{{ trim((string) optional($linea->articulos)->sku.' '.optional($linea->articulos)->descripcion) }}"
+                                            title="Carga el precio anterior y guarda el ahorro de esta l&iacute;nea, sin volver a aprobaci&oacute;n">
+                                            Guardar ahorro
+                                        </button>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
                     </td>
                 </tr>
@@ -1385,6 +1427,20 @@
                                     </strong>
                                 </td>
                             </tr>
+                            @if ($ocAhorroActivo)
+                                @php
+                                    $ocAhorroResumen = \App\Support\Compras\AhorroLineaSupport::resumen(
+                                        (isset($data) && $data && $data->ordencompra_articulos) ? $data->ordencompra_articulos : []
+                                    );
+                                    $ocAhorroNeg = $ocAhorroResumen['ahorro_pesos'] < 0;
+                                @endphp
+                                <tr id="oc-tot-ahorro-fila" @if ($ocAhorroResumen['lineas_con_ahorro'] === 0) style="display:none;" @endif>
+                                    <td class="pl-0 pt-1" title="Suma del ahorro de las l&iacute;neas, en pesos, con el TC de la fecha de la OC. Se actualiza al guardar el ahorro de una l&iacute;nea."><strong id="oc-tot-ahorro-etiqueta">{{ $ocAhorroNeg ? 'Sobrecosto' : 'Ahorro' }}</strong> <span class="small text-muted">(en pesos)</span></td>
+                                    <td class="text-right pt-1 text-nowrap {{ $ocAhorroNeg ? 'text-danger' : 'text-success' }}" id="oc-tot-ahorro-celda">
+                                        <strong id="oc-tot-ahorro-valor">{{ $ocAhorroNeg ? '-' : '' }}$ {{ number_format(abs($ocAhorroResumen['ahorro_pesos']), 0, ',', '.') }}@if ($ocAhorroResumen['porcentaje'] !== null) &middot; {{ number_format($ocAhorroResumen['porcentaje'], 1, ',', '.') }}%@endif</strong>
+                                    </td>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>
@@ -1479,6 +1535,9 @@
     </div>
 
     @include('compras.ordencompra._modales_comprobantes')
+    @if ($ocAhorroActivo && ! $soloLectura)
+        @include('compras.ordencompra.partials.modal_ahorro_linea')
+    @endif
 </div>
 
 <div id="oc-solapa-archivos" class="oc-solapa" style="display:none;">
