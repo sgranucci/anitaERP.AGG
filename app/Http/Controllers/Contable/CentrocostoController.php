@@ -200,6 +200,94 @@ class CentrocostoController extends Controller
         ]);
     }
 
+    /**
+     * Modal de grupos de centros de costo (los grupos no tienen maestro propio:
+     * salen de centrocosto.grupo_codigo / grupo_nombre).
+     */
+    public function consultaGrupoCentrocosto(Request $request)
+    {
+        if (! $this->puedeConsultarCentrocosto()) {
+            abort(403);
+        }
+
+        $consulta = mb_strtolower(trim((string) ($request->input('consulta') ?? '')));
+        $grupos = $this->gruposCentrocosto();
+
+        if ($consulta !== '') {
+            $grupos = array_filter($grupos, static function (array $g) use ($consulta): bool {
+                return str_contains(mb_strtolower($g['codigo']), $consulta)
+                    || str_contains(mb_strtolower($g['nombre']), $consulta);
+            });
+        }
+
+        $output = ['data' => ''];
+        if ($grupos === []) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach (array_slice(array_values($grupos), 0, 200) as $g) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="codigo">'.e($g['codigo']).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($g['nombre']).'</td>';
+                $output['data'] .= '<td class="cantidad text-right">'.e((string) $g['cantidad']).'</td>';
+                $output['data'] .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultagrupocentrocosto">Elegir</a></td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function resolverGrupoCentrocosto(Request $request)
+    {
+        if (! $this->puedeConsultarCentrocosto()) {
+            abort(403);
+        }
+
+        $valor = \App\Support\Contable\MovCcostoListadoFiltros::normalizarGrupo((string) $request->query('valor', ''));
+        if (trim((string) $request->query('valor', '')) === '') {
+            return response()->json(['ok' => false]);
+        }
+
+        foreach ($this->gruposCentrocosto() as $g) {
+            if ($g['codigo'] === $valor) {
+                return response()->json([
+                    'ok' => true,
+                    'codigo' => $g['codigo'],
+                    'nombre' => $g['nombre'],
+                ]);
+            }
+        }
+
+        return response()->json(['ok' => false, 'mensaje' => 'Grupo de centro de costo no encontrado']);
+    }
+
+    /**
+     * @return list<array{codigo: string, nombre: string, cantidad: int}>
+     */
+    private function gruposCentrocosto(): array
+    {
+        $grupos = [];
+        foreach (Centrocosto::query()->get(['grupo_codigo', 'grupo_nombre']) as $cc) {
+            $codigo = \App\Support\Contable\MovCcostoListadoFiltros::normalizarGrupo($cc->grupo_codigo);
+            $grupos[$codigo] ??= ['codigo' => $codigo, 'nombre' => '', 'cantidad' => 0];
+            $grupos[$codigo]['cantidad']++;
+            if ($grupos[$codigo]['nombre'] === '' && trim((string) $cc->grupo_nombre) !== '') {
+                $grupos[$codigo]['nombre'] = trim((string) $cc->grupo_nombre);
+            }
+        }
+        foreach ($grupos as &$g) {
+            if ($g['nombre'] === '') {
+                $g['nombre'] = $g['codigo'] === '0' ? 'Sin grupo' : 'Grupo '.$g['codigo'];
+            }
+        }
+        unset($g);
+
+        $lista = array_values($grupos);
+        usort($lista, static fn (array $a, array $b): int => strnatcasecmp($a['codigo'], $b['codigo']));
+
+        return $lista;
+    }
+
     private function puedeConsultarCentrocosto(): bool
     {
         // ABM usuarios: middleware superadmin (administrador / Enc-sistemas)
@@ -221,6 +309,7 @@ class CentrocostoController extends Controller
             'editar-movimientos-de-stock',
             'listar-movimientos-de-stock',
             'listar-mayor-plano-cuenta',
+            'listar-movccosto',
             'ver-configuracion-indumentaria',
             'editar-configuracion-indumentaria',
             'crear-perdida-personal',

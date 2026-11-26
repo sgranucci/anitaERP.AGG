@@ -107,6 +107,13 @@ class IngresoEgresoService
 
 	public function guardaIngresoEgreso($request, $origen = null)
 	{
+		$this->assertPeriodoEdicionIngresoEgreso($request, (int) $request->input('empresa_id'), null);
+
+		return $this->guardaIngresoEgresoGrabando($request, $origen);
+	}
+
+	private function guardaIngresoEgresoGrabando($request, $origen = null)
+	{
 		session(['empresa_id' => $request->empresa_id]);
 
 		PeriodoContableCierreSupport::assertOperacionPermitida(
@@ -298,6 +305,13 @@ class IngresoEgresoService
 	}
 
     public function actualizaIngresoEgreso($request, $id, $origen = null)
+    {
+        $this->assertPeriodoEdicionIngresoEgreso($request, (int) $request->input('empresa_id'), (int) $id);
+
+        return $this->actualizaIngresoEgresoGrabando($request, $id, $origen);
+    }
+
+    private function actualizaIngresoEgresoGrabando($request, $id, $origen = null)
     {
         session(['empresa_id' => $request->empresa_id]);
 
@@ -966,6 +980,80 @@ class IngresoEgresoService
 			'observacion' => 'Cupones '.$cuentacaja->nombre,
 			'carga_cuentacontable_manual' => 'N',
 		];
+	}
+
+	/**
+	 * Cierres antes de grabar nada (ni caja ni Anita): fecha del movimiento vieja y nueva,
+	 * y los comprobantes IVA. Si el I/E queda con comprobantes de compras, su fecha también
+	 * define el asiento, así que se valida contra cuentas a pagar.
+	 *
+	 * @param  int|null  $cajaMovimientoId  null en alta
+	 */
+	private function assertPeriodoEdicionIngresoEgreso($request, int $empresaId, ?int $cajaMovimientoId): void
+	{
+		$fechaNueva = (string) ($request->input('fecha') ?? date('Y-m-d'));
+		$movAnterior = $cajaMovimientoId ? $this->caja_movimientoRepository->find($cajaMovimientoId) : null;
+		$fechaAnterior = $movAnterior ? substr((string) $movAnterior->fecha, 0, 10) : null;
+		$cambiaFecha = $fechaAnterior !== null && $fechaAnterior !== $fechaNueva;
+		$cajaId = (int) ($cajaMovimientoId ?? 0);
+
+		if ($cambiaFecha) {
+			PeriodoContableCierreSupport::assertOperacionPermitida(
+				$empresaId,
+				$fechaAnterior,
+				PeriodoContableCierreSupport::ALCANCE_CAJA
+			);
+		}
+
+		$comprobantes = $this->comprobantesIvaPorSincronizar($request);
+		if ($comprobantes !== null) {
+			$this->comprobanteIvaService->assertPeriodoComprobantesJson($comprobantes, $empresaId, $cajaId);
+		}
+
+		$quedanComprobantes = $comprobantes !== null
+			? $comprobantes !== []
+			: $this->comprobanteIvaService->tieneComprobantesIngresoEgreso($cajaId);
+		if (! $quedanComprobantes) {
+			return;
+		}
+
+		PeriodoContableCierreSupport::assertOperacionPermitida(
+			$empresaId,
+			$fechaNueva,
+			PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR
+		);
+		if ($cambiaFecha) {
+			PeriodoContableCierreSupport::assertOperacionPermitida(
+				$empresaId,
+				$fechaAnterior,
+				PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR
+			);
+		}
+	}
+
+	/**
+	 * Lista de comprobantes IVA que el I/E va a grabar. Null = no toca comprobantes;
+	 * [] = los quita (OPV o JSON vacío). Espeja sincronizarComprobantesIva.
+	 *
+	 * @return list<mixed>|null
+	 */
+	private function comprobantesIvaPorSincronizar($request): ?array
+	{
+		$contextoOpv = [
+			'tipotransaccion_caja_id' => (int) $request->input('tipotransaccion_caja_id', 0),
+			'tipo_abreviatura' => (string) $request->input('tipo_abreviatura', ''),
+			'tipo_operacion' => (string) $request->input('tipo_operacion', ''),
+		];
+		if (IngresoEgresoOperacionVariaSupport::esOpvDesdeData($contextoOpv)) {
+			return [];
+		}
+
+		$json = $request->input('comprobantes_ivacompra_json');
+		if ($json === null || $json === '') {
+			return null;
+		}
+
+		return $this->decodificarComprobantesIvaJson($json);
 	}
 
 	private function sincronizarComprobantesIva($request, int $cajaMovimientoId, int $empresaId): void

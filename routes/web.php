@@ -1569,6 +1569,12 @@ Route::get('contable/cc-vs-mayor-anita', 'Contable\CcVsMayorAnitaController@inde
 Route::get('contable/listar-cc-vs-mayor-anita/{formato}', 'Contable\CcVsMayorAnitaController@exportar')->name('listar_cc_vs_mayor_anita');
 Route::get('contable/sumas-saldos', 'Contable\SumasSaldosController@index')->name('sumas_saldos');
 Route::get('contable/listar-sumas-saldos/{formato}', 'Contable\SumasSaldosController@exportar')->name('listar_sumas_saldos');
+Route::get('contable/movimientos-centro-costo', 'Contable\MovCcostoController@index')->name('movccosto');
+Route::get('contable/listar-movimientos-centro-costo/{formato}', 'Contable\MovCcostoController@exportar')->name('listar_movccosto');
+Route::get('contable/movimientos-centro-costo/conciliacion', 'Contable\MovCcostoController@conciliacion')->name('movccosto_conciliacion');
+Route::get('contable/listar-movimientos-centro-costo-sin-cc/{formato}', 'Contable\MovCcostoController@exportarConciliacion')->name('listar_movccosto_conciliacion');
+Route::post('contable/centrocosto/consultagrupocentrocosto', 'Contable\CentrocostoController@consultaGrupoCentrocosto')->name('consulta_grupo_centrocosto');
+Route::get('contable/centrocosto/resolvergrupocentrocosto', 'Contable\CentrocostoController@resolverGrupoCentrocosto')->name('resolver_grupo_centrocosto');
 
 Route::get('contable/ajuste-inflacion', 'Contable\AjusteInflacionController@index')->name('ajuste_inflacion');
 Route::post('contable/ajuste-inflacion/inicializar', 'Contable\AjusteInflacionController@inicializar')->name('inicializar_ajuste_inflacion');

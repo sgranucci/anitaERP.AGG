@@ -1031,7 +1031,7 @@ class SumasSaldosProcesador
      *   luego a la moneda de informe con la cotización del día de la transacción
      *   (fecha del asiento) para esa moneda.
      */
-    private function importeEnMonedaReporte(
+    public function importeEnMonedaReporte(
         float $montoFirmado,
         int $monedaMovimientoId,
         int $monedaReporteId,

@@ -178,6 +178,8 @@ class IngresoEgresoComprobanteIvaService
      */
     public function sincronizarDesdeJson(int $cajaMovimientoId, int $empresaId, array $comprobantesJson, bool $vincularAsiento = true): void
     {
+        $this->assertPeriodoComprobantesJson($comprobantesJson, $empresaId, $cajaMovimientoId);
+
         $existentes = Comprobante_Proveedor::query()
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
@@ -229,6 +231,68 @@ class IngresoEgresoComprobanteIvaService
         if ($vincularAsiento) {
             $this->asientoVinculoService->vincularPorCajaMovimiento($cajaMovimientoId);
         }
+    }
+
+    /**
+     * Cierre de cuentas a pagar sobre los comprobantes del I/E, con el mismo criterio que
+     * Compras: la fecha de contabilización es fechaiva. Se valida lo que se graba (alta o
+     * edición) y la fecha ya grabada, porque sacar un comprobante de un período cerrado
+     * también lo modifica. Los que salen del movimiento se validan con su fecha grabada.
+     *
+     * Se llama antes de cualquier escritura (también desde Anita) para no dejar nada a medias.
+     *
+     * @param  list<mixed>  $comprobantesJson
+     */
+    public function assertPeriodoComprobantesJson(array $comprobantesJson, int $empresaId, int $cajaMovimientoId): void
+    {
+        $grabados = $cajaMovimientoId > 0
+            ? Comprobante_Proveedor::query()
+                ->where('caja_movimiento_id', $cajaMovimientoId)
+                ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
+                ->get()
+            : collect();
+        $grabadosPorId = $grabados->keyBy('id');
+        $conservados = [];
+
+        foreach ($comprobantesJson as $payload) {
+            if (! is_array($payload)) {
+                continue;
+            }
+
+            $id = (int) ($payload['id'] ?? 0);
+            $fechaNueva = ComprobanteProveedorFechaContableSupport::fechaYmdDesdePayload([
+                'fechaiva' => $payload['fechaiva'] ?? $payload['fechacomprobante'] ?? null,
+            ]);
+            ComprobanteProveedorFechaContableSupport::assertPeriodoContablePermitido($empresaId, $fechaNueva);
+
+            if ($id > 0 && $grabadosPorId->has($id)) {
+                $conservados[] = $id;
+                $fechaGrabada = ComprobanteProveedorFechaContableSupport::fechaYmd($grabadosPorId->get($id));
+                if ($fechaGrabada !== $fechaNueva) {
+                    ComprobanteProveedorFechaContableSupport::assertPeriodoContablePermitido($empresaId, $fechaGrabada);
+                }
+            }
+        }
+
+        foreach ($grabados as $grabado) {
+            if (! in_array((int) $grabado->id, $conservados, true)) {
+                ComprobanteProveedorFechaContableSupport::assertPeriodoContablePermitido(
+                    $empresaId,
+                    ComprobanteProveedorFechaContableSupport::fechaYmd($grabado)
+                );
+            }
+        }
+    }
+
+    /**
+     * ¿El movimiento ya tiene comprobantes IVA de I/E grabados?
+     */
+    public function tieneComprobantesIngresoEgreso(int $cajaMovimientoId): bool
+    {
+        return $cajaMovimientoId > 0 && Comprobante_Proveedor::query()
+            ->where('caja_movimiento_id', $cajaMovimientoId)
+            ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
+            ->exists();
     }
 
     /**

@@ -303,8 +303,9 @@ final class ClientePrecargaDesdePadronArcaService
 
     private function buscarPorDocumento(string $documento): ?Cliente
     {
+        // Evita duplicar: el CUIT se guarda con guiones y el padrón/API lo trae solo con dígitos.
         return Cliente::query()
-            ->where('numerodocumento', $documento)
+            ->whereRaw("REPLACE(REPLACE(REPLACE(numerodocumento, '-', ''), '.', ''), ' ', '') = ?", [$documento])
             ->orderBy('id')
             ->first();
     }

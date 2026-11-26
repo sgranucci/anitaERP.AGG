@@ -127,6 +127,21 @@ return [
     ],
 
     /*
+    | Totales por centro de costo / grupo (l-movccosto). Lee asientos del ERP.
+    | Topes de columnas como en Anita (q_ing_grupo / q_ing_ccosto): 28 con solo saldo,
+    | 14 con débitos/créditos. Sin variables de entorno: son límites técnicos de la grilla.
+    */
+    'movccosto' => [
+        'memory_limit' => '1024M',
+        'max_execution_time' => 600,
+        'max_columnas_saldo' => 28,
+        'max_columnas_debe_haber' => 14,
+        // Columnas por tabla en el PDF (la grilla se parte en bloques que repiten Nro. Cta. y Descripción).
+        'pdf_columnas_por_bloque_saldo' => 9,
+        'pdf_columnas_por_bloque_debe_haber' => 4,
+    ],
+
+    /*
     | SIFERE (percepciones IIBB sufridas) y percepciones de IVA sufridas.
     | Hasta fecha_limite_anita inclusive el mayor sale de Anita (ctamov + subdiario).
     | Desde el día siguiente, solo asientos y comprobantes del ERP.

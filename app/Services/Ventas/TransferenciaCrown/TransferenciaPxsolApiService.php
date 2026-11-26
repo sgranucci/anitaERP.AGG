@@ -302,8 +302,9 @@ final class TransferenciaPxsolApiService
             return null;
         }
 
+        // El CUIT se guarda con guiones (30-61206726-7); la API lo trae solo con dígitos.
         return Cliente::query()
-            ->where('numerodocumento', $documento)
+            ->whereRaw("REPLACE(REPLACE(REPLACE(numerodocumento, '-', ''), '.', ''), ' ', '') = ?", [$documento])
             ->orderBy('id')
             ->first();
     }
