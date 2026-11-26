@@ -1518,10 +1518,15 @@ Route::delete('contable/ingresos-brutos-config/{id}', 'Contable\IngresosBrutosCo
 Route::get('contable/suss', 'Contable\SussReporteController@index')->name('suss');
 Route::get('contable/exportar-suss', 'Contable\SussReporteController@exportar')->name('exportar_suss');
 Route::get('contable/listar-suss/{formato?}', 'Contable\SussReporteController@listar')->name('listar_suss');
+Route::get('contable/liquidacion-suss', 'Contable\SussLiquidacionController@liquidacion')->name('liquidacion_suss');
+Route::get('contable/suss/solicitud-pago/preview', 'Contable\SussLiquidacionController@previewSolicitudPago')->name('preview_suss_solicitudpago');
+Route::post('contable/suss/solicitud-pago', 'Contable\SussLiquidacionController@generarSolicitudPago')->name('generar_suss_solicitudpago');
 
 Route::get('contable/suss-config', 'Contable\SussConfigController@index')->name('suss_config');
 Route::get('contable/suss-config/crear', 'Contable\SussConfigController@crear')->name('crear_suss_config');
 Route::post('contable/suss-config', 'Contable\SussConfigController@guardar')->name('guardar_suss_config');
+Route::get('contable/suss-config/empresas', 'Contable\SussConfigController@empresas')->name('suss_config_empresas');
+Route::put('contable/suss-config/empresas', 'Contable\SussConfigController@guardarEmpresas')->name('guardar_suss_config_empresas');
 Route::get('contable/suss-config/{id}/editar', 'Contable\SussConfigController@editar')->name('editar_suss_config');
 Route::put('contable/suss-config/{id}', 'Contable\SussConfigController@actualizar')->name('actualizar_suss_config');
 Route::delete('contable/suss-config/{id}', 'Contable\SussConfigController@eliminar')->name('eliminar_suss_config');

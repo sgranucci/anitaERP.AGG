@@ -18,6 +18,11 @@
                     <a href="{{ route('suss') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al proceso
                     </a>
+                    @if (can('listar-suss-config', false))
+                        <a href="{{ route('suss_config_empresas') }}" class="btn btn-outline-info btn-sm" title="Sigla, solicitud de pago y régimen 748 → 754 por empresa">
+                            <i class="fa fa-fw fa-building"></i> Solicitud de pago por empresa
+                        </a>
+                    @endif
                     @if (can('crear-suss-config', false))
                         <a href="{{ route('crear_suss_config') }}" class="btn btn-outline-secondary btn-sm">
                             <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro

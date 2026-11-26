@@ -60,6 +60,21 @@
                 </table>
             </div>
 
+            @foreach ($conciliacion['items'] ?? [] as $item)
+                @if (! empty($item['pago_posterior']))
+                    <p class="small text-info px-3 py-2 mb-0 border-top">
+                        Pago de una quincena anterior asentado después del «hasta»: $ {{ number_format((float) $item['pago_posterior'], 2, ',', '.') }}.
+                        Está en el mayor y no se toma como diferencia.
+                    </p>
+                @endif
+                @if (! empty($item['ajustada_dj']))
+                    <p class="small text-info px-3 py-2 mb-0 border-top">
+                        DJ: el total SUSS se compara neto de saldo a favor anterior ($ {{ number_format((float) ($item['saf'] ?? 0), 2, ',', '.') }})
+                        y pago a cuenta 1Q ($ {{ number_format((float) ($item['pago_cuenta_1q'] ?? 0), 2, ',', '.') }}, si su fecha es ≤ hasta).
+                    </p>
+                @endif
+            @endforeach
+
             <p class="small text-muted px-3 py-2 mb-0 border-top">
                 Total SUSS: suma de retenciones del período consultado (1ra quincena, 2da o mes).
                 Total mayor: saldo acumulado (columna P del mayor ERP) al último movimiento de la quincena/mes.

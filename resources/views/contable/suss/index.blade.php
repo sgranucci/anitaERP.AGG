@@ -139,10 +139,34 @@
                         <a href="{{ route('exportar_suss', $filtrosQuery) }}" class="btn btn-success">
                             <i class="fa fa-download"></i> Descargar F2004
                         </a>
+                        <button type="button" class="btn btn-warning" id="btn-suss-abrir-liquidacion"
+                            data-toggle="modal" data-target="#modal-suss-liquidacion">
+                            <i class="fa fa-file-archive"></i> Liquidación completa
+                        </button>
+                        @if (can('crear-solicitud-pago', false))
+                            <button type="button" class="btn btn-primary" id="btn-suss-abrir-solicitud"
+                                data-toggle="modal" data-target="#modal-suss-solicitud"
+                                @disabled(($resultado['totales']['registros'] ?? 0) === 0)>
+                                <i class="fa fa-paper-plane"></i> Generar solicitud de pago
+                            </button>
+                            @if (($resultado['totales']['registros'] ?? 0) === 0)
+                                <small class="text-muted ml-2">Sin retenciones SUSS en la quincena.</small>
+                            @endif
+                        @endif
                     @endif
                 </div>
             </form>
         </div>
+
+        @if ($consultado && can('exportar-suss', false))
+            @php
+                $tipoDefault = ((int) ($filtros['liquidacion'] ?? 1) === 1) ? '1q' : 'dj';
+            @endphp
+            @include('contable.suss.partials.modal_liquidacion', ['tipoDefault' => $tipoDefault])
+            @if (can('crear-solicitud-pago', false))
+                @include('contable.suss.partials.modal_solicitudpago', ['tipoDefault' => $tipoDefault])
+            @endif
+        @endif
 
         @include('includes.proceso_overlay_aviso', [
             'overlayId' => 'suss-procesando-overlay',
@@ -234,4 +258,10 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/contable/suss/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/suss/form.js')) ?: time() }}" type="text/javascript"></script>
+@if ($consultado && can('exportar-suss', false))
+<script>
+    window.SUSS_URL_PREVIEW = @json(route('preview_suss_solicitudpago'));
+</script>
+<script src="{{ asset('assets/pages/scripts/contable/suss/liquidacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/suss/liquidacion.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
