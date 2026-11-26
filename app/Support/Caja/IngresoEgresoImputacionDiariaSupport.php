@@ -292,6 +292,32 @@ final class IngresoEgresoImputacionDiariaSupport
     }
 
     /**
+     * Retenciones de un OPP/OPA en pesos, en valor absoluto. Una retención de pago graba
+     * importe positivo y su devolución (DEV RET) negativo: en tesmov ambas quedan como
+     * líneas de retención (RGP/RIP/RSP/RTP) imputadas al mismo comprobante.
+     *
+     * @param  iterable<object>  $retenciones  Pagoproveedor_Retencion
+     */
+    public static function retencionesPagoEnPesos(iterable $retenciones, mixed $fecha = null): float
+    {
+        $total = 0.0;
+        foreach ($retenciones as $ret) {
+            $importe = abs((float) ($ret->importe ?? 0));
+            if ($importe < 0.0001) {
+                continue;
+            }
+            $total += self::aPesos(
+                $importe,
+                (int) ($ret->moneda_id ?: 1),
+                $ret->cotizacion ?? 1,
+                $fecha,
+            );
+        }
+
+        return round($total, 2);
+    }
+
+    /**
      * Ferli no guarda tesv_cod_mon: el importe queda en la moneda de la línea y, si la
      * cotización no se aplicó, el control compara dólares contra la caja en pesos.
      * Solo se reescala cuando el producto cierra con la tesorería; una cotización
@@ -452,9 +478,11 @@ final class IngresoEgresoImputacionDiariaSupport
         int $chequesSinCpromae,
         int $chequesSinTesmov,
         float $tolerancia = self::TOLERANCIA,
+        float $retencionesArs = 0.0,
     ): array {
         $alertas = [];
         $tesoreriaArs = round($cajaArs + $chequesArs, 2);
+        $tesoreriaTesmovArs = round($tesoreriaArs + $retencionesArs, 2);
         $tesoreriaVsAsiento = round($tesoreriaVsAsiento, 2);
 
         if (! $tieneAsiento) {
@@ -470,7 +498,7 @@ final class IngresoEgresoImputacionDiariaSupport
 
         if (! $tieneTesmov) {
             $alertas[] = 'Sin tesmov Anita';
-        } elseif (abs($tesmovArs - $tesoreriaArs) >= $tolerancia) {
+        } elseif (abs($tesmovArs - $tesoreriaTesmovArs) >= $tolerancia) {
             $alertas[] = 'Caja ≠ tesmov';
         }
 
@@ -498,7 +526,7 @@ final class IngresoEgresoImputacionDiariaSupport
             'ok' => $alertas === [],
             'alertas' => $alertas,
             'diff_caja_asiento' => round($asientoArs - $tesoreriaVsAsiento, 2),
-            'diff_caja_tesmov' => round($tesmovArs - $tesoreriaArs, 2),
+            'diff_caja_tesmov' => round($tesmovArs - $tesoreriaTesmovArs, 2),
             'diff_asiento_ctamov' => round(($ctamovDebe + $ctamovHaber) - ($asientoDebe + $asientoHaber), 2),
         ];
     }

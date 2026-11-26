@@ -47,11 +47,13 @@
         </td>
     </tr>
     <tr>
-        <td>Caja / cheques / asiento / tesmov ($)</td>
+        <td>Caja / cheques / retenciones / asiento / tesmov ($)</td>
         <td align="right">
             {{ number_format((float) ($informe['totales']['caja_ars'] ?? 0), 2, ',', '.') }}
             /
             {{ number_format((float) ($informe['totales']['cheques_ars'] ?? 0), 2, ',', '.') }}
+            /
+            {{ number_format((float) ($informe['totales']['retenciones_ars'] ?? 0), 2, ',', '.') }}
             /
             {{ number_format((float) ($informe['totales']['asiento_ars'] ?? 0), 2, ',', '.') }}
             /

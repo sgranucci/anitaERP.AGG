@@ -57,6 +57,7 @@ final class IngresoEgresoImputacionDiariaService
                 'cheques.cuentacajas:id,codigo,nombre',
                 'asientos.asiento_movimientos',
                 'pagoproveedores.asientos.asiento_movimientos',
+                'pagoproveedores.pagoproveedor_retenciones',
                 'movimientoOrigen.tipotransaccioncajas:id,abreviatura',
             ])
             ->whereIn('empresa_id', $empresaIds)
@@ -93,6 +94,7 @@ final class IngresoEgresoImputacionDiariaService
             'sin_pago' => 0,
             'caja_ars' => 0.0,
             'cheques_ars' => 0.0,
+            'retenciones_ars' => 0.0,
             'asiento_ars' => 0.0,
             'tesmov_ars' => 0.0,
         ];
@@ -114,10 +116,11 @@ final class IngresoEgresoImputacionDiariaService
         foreach ($filas as $fila) {
             $totales['caja_ars'] += (float) ($fila['caja_ars'] ?? 0);
             $totales['cheques_ars'] += (float) ($fila['cheques_ars'] ?? 0);
+            $totales['retenciones_ars'] += (float) ($fila['retenciones_ars'] ?? 0);
             $totales['asiento_ars'] += (float) ($fila['asiento_ars'] ?? 0);
             $totales['tesmov_ars'] += (float) ($fila['tesmov_ars'] ?? 0);
         }
-        foreach (['caja_ars', 'cheques_ars', 'asiento_ars', 'tesmov_ars'] as $k) {
+        foreach (['caja_ars', 'cheques_ars', 'retenciones_ars', 'asiento_ars', 'tesmov_ars'] as $k) {
             $totales[$k] = round((float) $totales[$k], 2);
         }
 
@@ -149,6 +152,7 @@ final class IngresoEgresoImputacionDiariaService
                 'En ING/EGR/TRA además se exige que caja+cheques cuadre con el total del asiento.',
                 'Dólares y otras monedas se comparan en pesos con la cotización de cada línea (caja, asiento, tesmov y ctamov).',
                 'OPP/OPA de I/E no exigen caja = asiento (el asiento incluye AP/retenciones).',
+                'En OPP/OPA el tesmov se compara contra caja + cheques + retenciones del pago (valor absoluto): las retenciones también se graban en tesmov del comprobante.',
                 'Compensatorios OPP/OPA se cruzan en Anita como AOP del nro original (no del nro ERP del reverso).',
             ],
         ];
@@ -300,11 +304,19 @@ final class IngresoEgresoImputacionDiariaService
             );
             $tes = $tesmov[$keyComp] ?? ['ars' => 0.0, 'lineas' => 0, 'encontrado' => false];
             $tieneTesmov = ! empty($tes['encontrado']);
-            $tesoreriaArs = round($cajaArs + $chequesArs, 2);
+            // En OPP/OPA el tesmov del comprobante también graba las retenciones del pago
+            // (RGP/RIP/RSP/RTP). El asiento ya las incluye; la caja no.
+            $retencionesArs = Ie::esTipoOppIe($tipo)
+                ? Ie::retencionesPagoEnPesos(
+                    $mov->pagoproveedores?->pagoproveedor_retenciones ?? [],
+                    $mov->fecha ?? null,
+                )
+                : 0.0;
+            $tesoreriaTesmovArs = round($cajaArs + $chequesArs + $retencionesArs, 2);
             $tesmovArs = $tieneTesmov
                 ? Ie::reconciliarTesmovEnPesos(
                     (float) ($tes['ars'] ?? 0),
-                    $tesoreriaArs,
+                    $tesoreriaTesmovArs,
                     $cotizacionesMov,
                     $tolerancia,
                 )
@@ -339,7 +351,8 @@ final class IngresoEgresoImputacionDiariaService
                 $chequesEmitidos,
                 $sinCpromae,
                 $sinTesmovChp,
-                $tolerancia
+                $tolerancia,
+                $retencionesArs,
             );
 
             $etiqueta = trim($tipo.' '.$nro);
@@ -365,6 +378,7 @@ final class IngresoEgresoImputacionDiariaService
                 'numeroasiento' => (string) ($asiento?->numeroasiento ?? ''),
                 'caja_ars' => $cajaArs,
                 'cheques_ars' => $chequesArs,
+                'retenciones_ars' => $retencionesArs,
                 'tesoreria_ars' => round($cajaArs + $chequesArs, 2),
                 'asiento_ars' => $asientoArs,
                 'tesmov_ars' => $tesmovArs,
