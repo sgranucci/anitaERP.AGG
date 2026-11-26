@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Stock\Centroemisor;
 use App\Models\Stock\Unidadmedida;
 use App\Support\Stock\InterformingSifabSupport;
+use App\Support\Stock\UnidadmedidaSifabSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -52,6 +53,7 @@ class ImportarArticulosSifabInterformingCommand extends Command
             ->pluck('id', 'codigo')
             ->map(fn ($id) => (int) $id)
             ->all();
+        $unidadesTodas = Unidadmedida::query()->get(['id', 'nombre', 'abreviatura']);
 
         $oficinaPorCentro = Centroemisor::query()
             ->whereNotNull('codigo_interno_sifab')
@@ -155,6 +157,13 @@ class ImportarArticulosSifabInterformingCommand extends Command
 
             $codigoUmSifab = $this->asCodigo($row['codigoUMedidaStock'] ?? null);
             $unidadmedidaId = $codigoUmSifab !== null ? ($umPorCodigo[$codigoUmSifab] ?? null) : null;
+            if ($codigoUmSifab !== null && $unidadmedidaId === null) {
+                // Sin unidad con ese código: se busca por el nombre que SIFAB le da al código.
+                $unidadmedidaId = UnidadmedidaSifabSupport::resolverIdPorCodigoSifab($codigoUmSifab, $unidadesTodas);
+                if ($unidadmedidaId !== null) {
+                    $umPorCodigo[$codigoUmSifab] = $unidadmedidaId;
+                }
+            }
             if ($codigoUmSifab !== null && $unidadmedidaId === null) {
                 $umFaltantes[$codigoUmSifab] = true;
             }
