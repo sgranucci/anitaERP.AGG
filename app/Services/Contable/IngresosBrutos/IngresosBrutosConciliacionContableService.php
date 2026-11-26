@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace App\Services\Contable\IngresosBrutos;
 
 use App\Models\Contable\Iibb_Presentacion_Config;
-use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
 use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 
 /**
- * Conciliación IIBB vs mayor Anita:
- * 1) saldo de ejercicio (col. P) al cierre del rango;
- * 2) control del período: solo movimientos comparables del rango
- *    (retenciones emitidas / anuladas / devoluciones), sin pagos ARBA/DDJJ.
+ * Conciliación IIBB vs mayor ERP (la misma fuente que SUSS):
+ * 1) saldo de ejercicio (col. P) al cierre del rango, con el signo de acreedor en positivo;
+ * 2) control del período: movimientos comparables del rango
+ *    (retenciones emitidas / anuladas / devoluciones), sin pagos ARBA/DDJJ
+ *    y sin ajustes que no tienen proveedor ni CUIT (esos quedan solo en el saldo).
  */
 final class IngresosBrutosConciliacionContableService
 {
@@ -62,13 +62,12 @@ final class IngresosBrutosConciliacionContableService
         $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
         $codigos = $this->saldoEjercicioSupport->codigosNumericos($cuentasDetalle);
 
-        // Precarga col. P + líneas del período en un solo mayor Anita.
+        // Precarga col. P + líneas del período en un solo mayor ERP.
         $this->saldoEjercicioSupport->precargar(
             $empresaId,
             $hasta,
             $codigos,
-            MayorFuenteConsultaSupport::MODO_ANITA,
-            $desde,
+            fechaDesdeIso: $desde,
         );
 
         $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
@@ -76,8 +75,7 @@ final class IngresosBrutosConciliacionContableService
             $hasta,
             $cuentasDetalle,
             $cuentaInversa,
-            MayorFuenteConsultaSupport::MODO_ANITA,
-            $desde,
+            fechaDesdeIso: $desde,
         );
 
         $lineasPeriodo = $this->saldoEjercicioSupport->lineasPeriodo(
@@ -85,13 +83,23 @@ final class IngresosBrutosConciliacionContableService
             $desde,
             $hasta,
             $codigos,
-            MayorFuenteConsultaSupport::MODO_ANITA,
         );
         $particion = SicoreMayorComparableSupport::particionar($lineasPeriodo);
+        $comparables = [];
+        foreach ($particion['comparables'] as $mov) {
+            if (self::esAjusteSinProveedorNiCuit($mov)) {
+                $particion['excluidos'][] = array_merge($mov, [
+                    'excluido_comparable' => true,
+                    'motivo_exclusion' => 'Ajuste sin proveedor ni CUIT',
+                ]);
+                continue;
+            }
+            $comparables[] = $mov;
+        }
 
         $totalMayorPeriodo = round(array_sum(array_map(
             static fn (array $m) => SicoreConciliacionAuditoriaSupport::importeLineaMayorFirmado($m),
-            $particion['comparables'],
+            $comparables,
         )), 2);
 
         $tolerancia = (float) $config->tolerancia_conciliacion;
@@ -102,7 +110,7 @@ final class IngresosBrutosConciliacionContableService
             ? null
             : SicoreConciliacionAuditoriaSupport::auditarOperaciones(
                 $registros,
-                $particion['comparables'],
+                $comparables,
                 $cuentaInversa,
                 $tolerancia,
             );
@@ -152,6 +160,26 @@ final class IngresosBrutosConciliacionContableService
             'saldo_ejercicio_desde' => self::ymdAIso(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD),
             'saldo_ejercicio_hasta' => $hasta,
         ];
+    }
+
+    /**
+     * El ajuste entra en el saldo (columna P) y queda fuera del movimiento del período.
+     *
+     * @param  array<string, mixed>  $mov
+     */
+    private static function esAjusteSinProveedorNiCuit(array $mov): bool
+    {
+        $detalle = (string) ($mov['detalle'] ?? '');
+        if (preg_match('/\bAJUSTE\b/iu', $detalle) !== 1) {
+            return false;
+        }
+        if (preg_match('/\d{2}-?\d{8}-?\d/', $detalle) === 1) {
+            return false;
+        }
+
+        $emisor = trim((string) ($mov['emisor'] ?? $mov['subd_emisor'] ?? ''));
+
+        return $emisor === '';
     }
 
     private static function ymdAIso(int $ymd): string

@@ -30,6 +30,12 @@ class IibbSolicitudpagoConfig extends Model implements Auditable
 
     public const DIAS_AVISO_PENDIENTE_DEFAULT = 90;
 
+    /**
+     * Diferencia entre el VEP que carga el usuario y el VEP de la liquidación
+     * a partir de la cual se pide confirmación. Por debajo, los centavos no avisan.
+     */
+    public const TOLERANCIA_VEP = 1.0;
+
     protected $fillable = [
         'empresa_id',
         'proveedor_id',

@@ -29,21 +29,39 @@ final class IngresosBrutosNeteoCalculoSupport
 
     /**
      * Base que da un importe con la alícuota: base = importe / (alícuota / 100).
+     * Si el redondeo deja el impuesto un centavo arriba o abajo, mueve la base
+     * de a un centavo hasta que el impuesto de ARBA coincide con el importe.
      * Devuelve centavos de base.
      */
     public static function baseCentavos(int $importeCentavos, int $alicuotaCentesimas): int
     {
-        if ($alicuotaCentesimas <= 0) {
+        if ($alicuotaCentesimas <= 0 || $importeCentavos <= 0) {
             return 0;
         }
 
-        return (int) round($importeCentavos * 10000 / $alicuotaCentesimas);
+        $base = (int) round($importeCentavos * 10000 / $alicuotaCentesimas);
+        for ($i = 0; $i < 8; $i++) {
+            $impuesto = self::impuestoLineaCentavos($base, $alicuotaCentesimas);
+            if ($impuesto === $importeCentavos) {
+                return $base;
+            }
+            $base += $impuesto < $importeCentavos ? 1 : -1;
+        }
+
+        return max(0, $base);
     }
 
-    /** Impuesto de la línea como lo calcula ARBA: base × alícuota, truncado a centavos. */
+    /**
+     * Impuesto de la línea como lo toma ARBA: base × alícuota, a 2 decimales.
+     * 64.421,47 × 4 % = 2.576,8588 → 2.576,86 (no 2.576,85).
+     */
     public static function impuestoLineaCentavos(int $baseCentavos, int $alicuotaCentesimas): int
     {
-        return intdiv($baseCentavos * $alicuotaCentesimas, 10000);
+        if ($alicuotaCentesimas <= 0 || $baseCentavos === 0) {
+            return 0;
+        }
+
+        return (int) round($baseCentavos * $alicuotaCentesimas / 10000);
     }
 
     /** VEP: total de la DJ truncado a 10 centavos. */
@@ -53,7 +71,7 @@ final class IngresosBrutosNeteoCalculoSupport
     }
 
     /**
-     * Total de la DJ ARBA: suma de cada línea truncada (no del importe redondeado).
+     * Total de la DJ ARBA: suma del impuesto de cada línea (a 2 decimales), no del importe del certificado.
      *
      * @param  list<array{base_calculo: float, alicuota: float}>  $lineas
      */

@@ -5,11 +5,11 @@ namespace App\Repositories\Sueldos;
 use App\ApiAnita;
 use App\Models\Sueldos\Vacacion_Periodo_Sueldos;
 use App\Models\Sueldos\Vacacion_Sueldos;
-use App\Support\Sueldos\VacacionFechaAnita;
 use App\Support\Sueldos\VacacionSueldosListadoFiltros;
 use App\Support\Sueldos\VacacionTipoDia;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Vacaciones de sueldos (Anita sueldos / vacmae + vacmov).
@@ -223,26 +223,7 @@ class Vacacion_SueldosRepository implements Vacacion_SueldosRepositoryInterface
                     ]);
                     $resultado['importados']++;
 
-                    $periodos = [];
-                    foreach ($periodosPorCodigo[$codigo] ?? [] as $mov) {
-                        $nroLinea = (int) ($mov->vacv_nro_linea ?? $mov->VACV_NRO_LINEA ?? 0);
-                        if ($nroLinea <= 0) {
-                            continue;
-                        }
-                        $periodos[] = [
-                            'nro_linea' => $nroLinea,
-                            'fecha_desde' => VacacionFechaAnita::erpDesdeAnita(
-                                $mov->vacv_desde ?? $mov->VACV_DESDE ?? 0
-                            ),
-                            'fecha_hasta' => VacacionFechaAnita::erpDesdeAnita(
-                                $mov->vacv_hasta ?? $mov->VACV_HASTA ?? 0
-                            ),
-                            'tipo_dia' => VacacionTipoDia::normalizar(
-                                (string) ($mov->vacv_tipo_dia ?? $mov->VACV_TIPO_DIA ?? '')
-                            ),
-                            'cantidad_dias' => max(0, (int) ($mov->vacv_cant_dia ?? $mov->VACV_CANT_DIA ?? 0)),
-                        ];
-                    }
+                    $periodos = $this->periodosDesdeFilasAnita($periodosPorCodigo[$codigo] ?? []);
 
                     $this->sincronizarPeriodos((int) $vacacion->id, $periodos);
                     $resultado['periodos_importados'] += count($periodos);
@@ -251,6 +232,127 @@ class Vacacion_SueldosRepository implements Vacacion_SueldosRepositoryInterface
         });
 
         return $resultado;
+    }
+
+    /**
+     * Completa las tablas que ya existen en el ERP con lo que Anita (vacmov) tiene y el ERP no:
+     * el rango de antigüedad en años de cada tramo y las líneas que faltan (la línea 0 se
+     * descartaba al importar). No pisa lo que el operador cambió: solo rellena `anios_desde` /
+     * `anios_hasta` vacíos de una línea con el mismo nº, y agrega líneas inexistentes.
+     *
+     * @return array{tablas: int, lineas_completadas: int, lineas_nuevas: int, detalle: list<string>, errores: list<string>}
+     */
+    public function completarAntiguedadDesdeAnita(bool $dryRun = true): array
+    {
+        $res = ['tablas' => 0, 'lineas_completadas' => 0, 'lineas_nuevas' => 0, 'detalle' => [], 'errores' => []];
+
+        if (! $this->tieneColumnasAnios()) {
+            $res['errores'][] = 'Falta migrar vacacion_periodo_sueldos (anios_desde / anios_hasta).';
+
+            return $res;
+        }
+
+        $parsedMov = ApiAnita::parsearRespuestaLista((new ApiAnita())->apiCall([
+            'acc' => 'list',
+            'sistema' => 'sueldos',
+            'tabla' => $this->tableAnitaMov,
+            'campos' => 'vacv_codigo, vacv_nro_linea, vacv_desde, vacv_hasta, vacv_tipo_dia, vacv_cant_dia',
+            'orderBy' => 'vacv_codigo, vacv_nro_linea',
+        ]));
+        if (! empty($parsedMov['error_lectura'])) {
+            $res['errores'][] = (string) $parsedMov['error_lectura'];
+
+            return $res;
+        }
+
+        $porCodigo = [];
+        foreach ($parsedMov['filas'] as $row) {
+            $codigo = (int) ($row->vacv_codigo ?? $row->VACV_CODIGO ?? 0);
+            if ($codigo > 0) {
+                $porCodigo[$codigo][] = $row;
+            }
+        }
+
+        $aplicar = function () use ($porCodigo, $dryRun, &$res) {
+            foreach ($porCodigo as $codigo => $filasAnita) {
+                $vacacion = $this->findPorCodigo((int) $codigo);
+                if ($vacacion === null) {
+                    continue;
+                }
+                $existentes = $this->periodoModel->newQuery()
+                    ->where('vacacion_id', $vacacion->id)
+                    ->get()
+                    ->keyBy('nro_linea');
+                $tocada = false;
+
+                foreach ($this->periodosDesdeFilasAnita($filasAnita) as $p) {
+                    $actual = $existentes->get($p['nro_linea']);
+                    if ($actual === null) {
+                        $res['lineas_nuevas']++;
+                        $res['detalle'][] = sprintf('Tabla %d: línea %d NUEVA (%s–%s años, %d días)', $codigo, $p['nro_linea'], $p['anios_desde'], $p['anios_hasta'], $p['cantidad_dias']);
+                        $tocada = true;
+                        if (! $dryRun) {
+                            $this->periodoModel->create(['vacacion_id' => $vacacion->id] + $p);
+                        }
+
+                        continue;
+                    }
+                    if ($actual->anios_desde === null && $actual->anios_hasta === null && (int) $actual->cantidad_dias === (int) $p['cantidad_dias']) {
+                        $res['lineas_completadas']++;
+                        $res['detalle'][] = sprintf('Tabla %d: línea %d completa años %s–%s (%d días)', $codigo, $p['nro_linea'], $p['anios_desde'], $p['anios_hasta'], $p['cantidad_dias']);
+                        $tocada = true;
+                        if (! $dryRun) {
+                            $actual->update(['anios_desde' => $p['anios_desde'], 'anios_hasta' => $p['anios_hasta']]);
+                        }
+                    }
+                }
+                if ($tocada) {
+                    $res['tablas']++;
+                }
+            }
+        };
+
+        if ($dryRun) {
+            $aplicar();
+        } else {
+            Vacacion_Periodo_Sueldos::withoutAuditing(fn () => DB::transaction($aplicar));
+        }
+
+        return $res;
+    }
+
+    /**
+     * Filas vacmov de Anita -> líneas del ERP. La línea 0 es válida (primer tramo de antigüedad).
+     * vacv_desde / vacv_hasta son AÑOS de antigüedad, no fechas.
+     *
+     * @param  iterable<object>  $filas
+     * @return list<array{nro_linea: int, anios_desde: int, anios_hasta: int, tipo_dia: ?string, cantidad_dias: int}>
+     */
+    private function periodosDesdeFilasAnita(iterable $filas): array
+    {
+        $periodos = [];
+        foreach ($filas as $mov) {
+            $nroLinea = (int) ($mov->vacv_nro_linea ?? $mov->VACV_NRO_LINEA ?? -1);
+            if ($nroLinea < 0) {
+                continue;
+            }
+            $periodos[] = [
+                'nro_linea' => $nroLinea,
+                'anios_desde' => max(0, (int) ($mov->vacv_desde ?? $mov->VACV_DESDE ?? 0)),
+                'anios_hasta' => max(0, (int) ($mov->vacv_hasta ?? $mov->VACV_HASTA ?? 0)),
+                'tipo_dia' => VacacionTipoDia::normalizar((string) ($mov->vacv_tipo_dia ?? $mov->VACV_TIPO_DIA ?? '')),
+                'cantidad_dias' => max(0, (int) ($mov->vacv_cant_dia ?? $mov->VACV_CANT_DIA ?? 0)),
+            ];
+        }
+
+        return $periodos;
+    }
+
+    private function tieneColumnasAnios(): bool
+    {
+        static $tiene = null;
+
+        return $tiene ??= Schema::hasColumn('vacacion_periodo_sueldos', 'anios_desde');
     }
 
     /**
@@ -278,8 +380,8 @@ class Vacacion_SueldosRepository implements Vacacion_SueldosRepositoryInterface
     private function extraerPeriodos(array $data): array
     {
         $nros = $data['nro_linea'] ?? [];
-        $desdes = $data['fecha_desde'] ?? [];
-        $hastas = $data['fecha_hasta'] ?? [];
+        $aniosDesde = $data['anios_desde'] ?? [];
+        $aniosHasta = $data['anios_hasta'] ?? [];
         $tipos = $data['tipo_dia'] ?? [];
         $cantidades = $data['cantidad_dias'] ?? [];
 
@@ -289,28 +391,27 @@ class Vacacion_SueldosRepository implements Vacacion_SueldosRepositoryInterface
 
         $periodos = [];
         $total = count($nros);
-        $lineaAuto = 1;
+        $lineaAuto = 0;
 
         for ($i = 0; $i < $total; $i++) {
-            $desde = trim((string) ($desdes[$i] ?? ''));
-            $hasta = trim((string) ($hastas[$i] ?? ''));
+            $desde = trim((string) ($aniosDesde[$i] ?? ''));
+            $hasta = trim((string) ($aniosHasta[$i] ?? ''));
             $tipo = VacacionTipoDia::normalizar((string) ($tipos[$i] ?? ''));
             $cantidad = (int) ($cantidades[$i] ?? 0);
-            $nro = (int) ($nros[$i] ?? 0);
+            $nroRaw = trim((string) ($nros[$i] ?? ''));
 
-            if ($desde === '' && $hasta === '' && $tipo === null && $cantidad <= 0 && $nro <= 0) {
+            if ($desde === '' && $hasta === '' && $tipo === null && $cantidad <= 0 && $nroRaw === '') {
                 continue;
             }
 
-            if ($nro <= 0) {
-                $nro = $lineaAuto;
-            }
+            // La línea 0 es válida (Anita numera desde 0). Vacío = siguiente libre.
+            $nro = $nroRaw === '' ? $lineaAuto : max(0, (int) $nroRaw);
             $lineaAuto = max($lineaAuto, $nro) + 1;
 
             $periodos[] = [
                 'nro_linea' => $nro,
-                'fecha_desde' => $desde !== '' ? $desde : null,
-                'fecha_hasta' => $hasta !== '' ? $hasta : null,
+                'anios_desde' => $desde !== '' ? max(0, (int) $desde) : null,
+                'anios_hasta' => $hasta !== '' ? max(0, (int) $hasta) : null,
                 'tipo_dia' => $tipo,
                 'cantidad_dias' => max(0, $cantidad),
             ];
@@ -323,7 +424,7 @@ class Vacacion_SueldosRepository implements Vacacion_SueldosRepositoryInterface
         foreach ($periodos as $idx => $periodo) {
             $nro = (int) $periodo['nro_linea'];
             if (isset($vistos[$nro])) {
-                $periodos[$idx]['nro_linea'] = $idx + 1;
+                $periodos[$idx]['nro_linea'] = max(array_keys($vistos)) + 1;
             }
             $vistos[$periodos[$idx]['nro_linea']] = true;
         }
@@ -338,15 +439,21 @@ class Vacacion_SueldosRepository implements Vacacion_SueldosRepositoryInterface
     {
         $this->periodoModel->newQuery()->where('vacacion_id', $vacacionId)->delete();
 
+        $conAnios = $this->tieneColumnasAnios();
         foreach ($periodos as $periodo) {
-            $this->periodoModel->create([
+            $fila = [
                 'vacacion_id' => $vacacionId,
                 'nro_linea' => $periodo['nro_linea'],
-                'fecha_desde' => $periodo['fecha_desde'],
-                'fecha_hasta' => $periodo['fecha_hasta'],
+                'fecha_desde' => $periodo['fecha_desde'] ?? null,
+                'fecha_hasta' => $periodo['fecha_hasta'] ?? null,
                 'tipo_dia' => $periodo['tipo_dia'],
                 'cantidad_dias' => $periodo['cantidad_dias'],
-            ]);
+            ];
+            if ($conAnios) {
+                $fila['anios_desde'] = $periodo['anios_desde'] ?? null;
+                $fila['anios_hasta'] = $periodo['anios_hasta'] ?? null;
+            }
+            $this->periodoModel->create($fila);
         }
     }
 

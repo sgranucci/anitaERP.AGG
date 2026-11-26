@@ -8,6 +8,7 @@ use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Models\Contable\IibbLiquidacionArba;
+use App\Models\Contable\IibbSolicitudpagoConfig;
 use App\Models\Contable\IibbNeteoAplicacion;
 use App\Models\Contable\IibbNeteoDevolucion;
 use App\Repositories\Contable\IibbSolicitudpagoConfigRepositoryInterface;
@@ -68,14 +69,14 @@ final class IngresosBrutosLiquidacionArbaService
             return $this->respuesta(false, $bloqueos, $advertencias, $empresaId, $config, $periodo, $quincena, $desde, $hasta);
         }
 
-        // Parámetros ARBA por empresa: días de aviso de pendientes (la tolerancia viene de la configuración IIBB).
+        // Sin fila ARBA igual se calcula el neteo, para poder revisarlo. No se puede liquidar ni pedir el pago.
         $cfgArba = $empresaId > 0 ? $this->configArba->vigentePorEmpresa($empresaId) : null;
         if ($cfgArba === null) {
-            $bloqueos[] = 'Falta la configuración ARBA activa de esta empresa (Contable → Configuración por módulo → Configuración ARBA).';
-
-            return $this->respuesta(false, $bloqueos, $advertencias, $empresaId, $config, $periodo, $quincena, $desde, $hasta);
+            $bloqueos[] = 'Falta la configuración ARBA activa de esta empresa (botón Configuración ARBA). Se puede revisar el neteo; no se puede liquidar ni generar la solicitud.';
         }
-        $diasAviso = (int) $cfgArba->dias_aviso_pendiente;
+        $diasAviso = $cfgArba !== null
+            ? (int) $cfgArba->dias_aviso_pendiente
+            : IibbSolicitudpagoConfig::DIAS_AVISO_PENDIENTE_DEFAULT;
 
         // Mismo criterio que generarArchivo(): los negativos no van al TXT.
         $positivos = [];
@@ -132,6 +133,7 @@ final class IngresosBrutosLiquidacionArbaService
             }
 
             $pendiente = ! empty($dec['pendiente']);
+            // «cert» es una sugerencia por importe: no se netea hasta que el usuario marque Confirmo.
             $confirmo = ! empty($dec['confirmo']) || in_array($via, ['proveedor', 'codigo', 'op', 'manual'], true);
 
             if ($pendiente) {
@@ -290,6 +292,8 @@ final class IngresosBrutosLiquidacionArbaService
         $saldoMayorC = null;
         $movMayorC = null;
         if ($conciliacionHabilitada) {
+            // total_mayor ya viene en convención acreedora positiva: el mayor muestra
+            // el saldo de 214010 en negativo (debe − haber) y saldoComparable lo invierte.
             $saldoMayorC = Calc::centavos((float) ($conc['total_mayor'] ?? 0));
             $movMayorC = Calc::centavos((float) ($conc['total_mayor_periodo'] ?? 0));
             // Movimiento del período = TXT − pendientes de la quincena + neteos de anteriores.
@@ -388,7 +392,7 @@ final class IngresosBrutosLiquidacionArbaService
             $hasta,
         );
 
-        return $resultado + [
+        return array_merge($resultado, [
             'dias_aviso' => $diasAviso,
             'devoluciones' => $filas,
             'pendientes' => $pendientesSalida,
@@ -407,7 +411,7 @@ final class IngresosBrutosLiquidacionArbaService
             ],
             'proveedor_por_devolucion' => $proveedorPorDevolucion,
             'devs_actuales' => $devsActuales,
-        ];
+        ]);
     }
 
     /**

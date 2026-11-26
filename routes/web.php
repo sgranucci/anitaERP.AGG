@@ -6444,6 +6444,7 @@ Route::delete('sueldos/empleado/{id}/bases-completa/{nombrebaseId}', 'Sueldos\Em
 Route::get('sueldos/empleado/{empleado}/ausencias', 'Sueldos\Empleado_AusenciaSueldosController@panel')->name('ausencias_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/ausencias', 'Sueldos\Empleado_AusenciaSueldosController@guardar')->name('guardar_ausencia_empleado_sueldos');
 Route::post('sueldos/empleado/{empleado}/ausencias/devengar', 'Sueldos\Empleado_AusenciaSueldosController@devengar')->name('devengar_ausencia_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/ausencias/modalidad', 'Sueldos\Empleado_AusenciaSueldosController@modalidad')->name('modalidad_ausencia_empleado_sueldos');
 Route::put('sueldos/ausencia/{id}', 'Sueldos\Empleado_AusenciaSueldosController@actualizar')->name('actualizar_ausencia_empleado_sueldos');
 Route::delete('sueldos/ausencia/{id}', 'Sueldos\Empleado_AusenciaSueldosController@eliminar')->name('eliminar_ausencia_empleado_sueldos');
 

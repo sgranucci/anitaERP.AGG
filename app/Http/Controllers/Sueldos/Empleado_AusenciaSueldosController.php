@@ -7,6 +7,7 @@ use App\Support\Sueldos\EmpleadoLegajoVisualizacion;
 use App\Http\Requests\ValidacionEmpleadoAusencia_Sueldos;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
+use App\Models\Sueldos\Novedad_Sueldos;
 use App\Models\Sueldos\Tipo_Ausencia_Sueldos;
 use App\Services\Sueldos\AusenciaNovedadSyncService;
 use App\Services\Sueldos\DevengamientoVacacionesService;
@@ -87,6 +88,47 @@ class Empleado_AusenciaSueldosController extends Controller
         $this->devengamiento->recalcularEmpleado($empleado, $this->usuarioId());
 
         return $this->responderPanel($empleado, 'Ausencia eliminada');
+    }
+
+    /**
+     * Asigna Plus / Adelanto a varias vacaciones del empleado (las importadas de Anita vienen sin definir).
+     * Solo cambia la modalidad. Si la ausencia ya tenía novedad de liquidación, la actualiza (422 / 420);
+     * no genera novedades nuevas, para no reabrir períodos ya liquidados.
+     */
+    public function modalidad(Request $request, $empleadoId)
+    {
+        can('actualizar-empleado-sueldos');
+        $empleado = Empleado_Sueldos::findOrFail($empleadoId);
+
+        $datos = $request->validate([
+            'ids' => 'required|array|min:1|max:500',
+            'ids.*' => 'integer',
+            'modalidad_vacaciones' => 'required|integer|in:'.implode(',', array_keys(Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES)),
+        ]);
+
+        $ausencias = Empleado_Ausencia_Sueldos::query()
+            ->with('tipo.concepto')
+            ->where('empleado_id', $empleado->id)
+            ->whereIn('id', $datos['ids'])
+            ->get()
+            ->filter(fn ($a) => $a->tipo && $a->tipo->esVacaciones());
+
+        $conNovedad = Novedad_Sueldos::query()
+            ->whereIn('ausencia_id', $ausencias->pluck('id'))
+            ->pluck('ausencia_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        foreach ($ausencias as $ausencia) {
+            $ausencia->update(['modalidad_vacaciones' => (int) $datos['modalidad_vacaciones']]);
+            if (in_array((int) $ausencia->id, $conNovedad, true)) {
+                $this->novedadSync->sincronizar($ausencia->fresh(['tipo.concepto', 'empleado']));
+            }
+        }
+
+        $etiqueta = Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES[(int) $datos['modalidad_vacaciones']];
+
+        return $this->responderPanel($empleado, sprintf('%d vacación(es) marcadas como %s', $ausencias->count(), $etiqueta));
     }
 
     public function devengar(Request $request, $empleadoId)

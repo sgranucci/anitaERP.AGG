@@ -101,13 +101,15 @@ final class IngresosBrutosNeteoService
                 $detalle = trim((string) $caja->detalle);
             }
 
-            // Pago de liquidación ARBA / DDJJ: no es devolución a proveedor.
-            if (SicoreMayorComparableSupport::motivoExclusion($detalle) !== null) {
+            $txt = Calc::analizarDetalle($detalle);
+
+            // Pago de la DJ: emisor banco y detalle de una solicitud de retenciones de la quincena.
+            // Un Debe sin CUIT (o con devolu / anula / reintegr / mal ejecutad) es devolución,
+            // aunque el texto mencione ARBA o IIBB. El banco no se toma como proveedor.
+            if ($this->esPagoLiquidacionQuincena($detalle, $caja, $palabrasBanco)) {
                 continue;
             }
-
-            $txt = Calc::analizarDetalle($detalle);
-            if (! $txt['devolucion'] && $txt['anula_op'] === 0) {
+            if (! $this->esDevolucion($detalle, $txt)) {
                 continue;
             }
 
@@ -137,13 +139,15 @@ final class IngresosBrutosNeteoService
                 $certRef = $this->certificadoDeOp($empresaId, $txt['op']);
             }
 
-            // Sin proveedor por ningún dato: sugerir el certificado de la quincena con el mismo importe.
-            if ($prov === null) {
+            // Un solo certificado de la quincena con el mismo importe: se propone y el usuario confirma.
+            if ($certRef === null) {
                 $sug = $this->certificadoSugerido($importe, $positivos);
                 if ($sug !== null) {
-                    $prov = $this->proveedorPorCuit($sug['nro_documento']);
-                    $certRef = $certRef ?? $sug['nro_cert'];
-                    $via = $prov !== null ? 'cert' : null;
+                    if ($prov === null) {
+                        $prov = $this->proveedorPorCuit($sug['nro_documento']);
+                    }
+                    $certRef = $sug['nro_cert'];
+                    $via = 'cert';
                 }
             }
 
@@ -269,6 +273,49 @@ final class IngresosBrutosNeteoService
         $f = Carbon::parse($fecha)->format('Y-m-d');
 
         return $f >= $desde && $f <= $hasta;
+    }
+
+    /**
+     * Pago de la DJ: detalle de una solicitud de retenciones de la quincena
+     * («Retenciones ARBA 1Q 10.2026», «Retenciones Arba Bsa 10.26 2Q»).
+     * Una devolución que además nombra la quincena se conserva.
+     *
+     * @param  list<string>  $palabrasBanco
+     */
+    private function esPagoLiquidacionQuincena(string $detalle, ?Caja_Movimiento $caja, array $palabrasBanco): bool
+    {
+        if (preg_match('/devolu|reintegr|mal\s+ejecutad/iu', $detalle) === 1) {
+            return false;
+        }
+
+        $tieneQuincena = preg_match('/\b[12]\s*Q\b/iu', $detalle) === 1;
+        $tieneRetencion = preg_match('/\bretenc/iu', $detalle) === 1;
+        if ($tieneQuincena && $tieneRetencion) {
+            return true;
+        }
+
+        $emisor = $caja?->proveedores;
+
+        return $emisor instanceof Proveedor
+            && $this->esBanco($emisor, $palabrasBanco)
+            && $tieneQuincena;
+    }
+
+    /**
+     * Debe de devolución: el detalle lo dice, o es un Debe sin CUIT (el pago de la DJ ya se descartó).
+     *
+     * @param  array{devolucion: bool, anula_op: int, op: int, cert: int, codigo: string}  $txt
+     */
+    private function esDevolucion(string $detalle, array $txt): bool
+    {
+        if ($txt['devolucion'] || $txt['anula_op'] > 0) {
+            return true;
+        }
+        if (preg_match('/devolu|anula|reintegr|mal\s+ejecutad/iu', $detalle) === 1) {
+            return true;
+        }
+
+        return preg_match('/\d{2}-?\d{8}-?\d/', $detalle) !== 1;
     }
 
     /**

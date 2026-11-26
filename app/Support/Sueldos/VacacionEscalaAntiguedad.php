@@ -33,9 +33,24 @@ class VacacionEscalaAntiguedad
 
     /**
      * Dias segun antiguedad (en años cumplidos al 31/12 del periodo).
+     *
+     * @param  list<array{anios_desde:int, dias:int}>|null  $escala  Tramos de la tabla de vacaciones del
+     *                                                              empleado. Null = escala de la ley (LCT).
      */
-    public static function diasPorAntiguedad(int $aniosAntiguedad): int
+    public static function diasPorAntiguedad(int $aniosAntiguedad, ?array $escala = null): int
     {
+        if ($escala !== null && $escala !== []) {
+            usort($escala, fn ($a, $b) => $a['anios_desde'] <=> $b['anios_desde']);
+            $dias = (int) $escala[0]['dias'];
+            foreach ($escala as $tramo) {
+                if ($aniosAntiguedad >= (int) $tramo['anios_desde']) {
+                    $dias = (int) $tramo['dias'];
+                }
+            }
+
+            return $dias;
+        }
+
         $dias = self::ESCALA_LCT[0];
         foreach (self::ESCALA_LCT as $minimo => $valor) {
             if ($aniosAntiguedad >= $minimo) {
@@ -47,28 +62,50 @@ class VacacionEscalaAntiguedad
     }
 
     /**
-     * Años de antiguedad al cierre del periodo (31/12/$anio), sumando antiguedad anterior en años.
+     * Fecha de ingreso "computable": el ingreso menos la antigüedad reconocida (Anita aa-mm-dd).
+     * Restar la duración completa (años + meses + días) evita perder los meses al medir.
      */
-    public static function aniosAntiguedadAlCierre(Carbon $fechaIngreso, int $anio, int $aniosPrevios = 0): int
+    public static function fechaIngresoComputable(Carbon $fechaIngreso, string|int|null $antiguedadAnterior = null): Carbon
     {
-        $cierre = Carbon::create($anio, 12, 31);
-        if ($fechaIngreso->greaterThan($cierre)) {
-            return $aniosPrevios;
+        if (is_int($antiguedadAnterior)) {
+            $componentes = ['anios' => max(0, $antiguedadAnterior), 'meses' => 0, 'dias' => 0];
+        } else {
+            $componentes = self::componentesAntiguedadAnterior($antiguedadAnterior);
         }
 
-        return $aniosPrevios + (int) $fechaIngreso->diffInYears($cierre);
+        return $fechaIngreso->copy()->startOfDay()
+            ->subYearsNoOverflow($componentes['anios'])
+            ->subMonthsNoOverflow($componentes['meses'])
+            ->subDays($componentes['dias']);
+    }
+
+    /**
+     * Años de antiguedad al cierre del periodo (31/12/$anio), sumando la antiguedad anterior (aa-mm-dd).
+     */
+    public static function aniosAntiguedadAlCierre(Carbon $fechaIngreso, int $anio, string|int|null $antiguedadAnterior = null): int
+    {
+        $cierre = Carbon::create($anio, 12, 31)->startOfDay();
+        $computable = self::fechaIngresoComputable($fechaIngreso, $antiguedadAnterior);
+        if ($fechaIngreso->copy()->startOfDay()->greaterThan($cierre)) {
+            // Aun no ingreso: solo cuenta lo reconocido de antes.
+            return (int) $computable->diffInYears($fechaIngreso->copy()->startOfDay());
+        }
+
+        return (int) $computable->diffInYears($cierre);
     }
 
     /**
      * Dias devengados para un periodo (año calendario), contemplando proporcionalidad.
      *
+     * @param  list<array{anios_desde:int, dias:int}>|null  $escala  Tabla de vacaciones del empleado (null = LCT)
      * @return array{dias: float, dias_escala: int, dias_trabajados: int, proporcional: bool}
      */
     public static function devengadoPeriodo(
         Carbon $fechaIngreso,
         int $anio,
-        int $aniosPrevios = 0,
-        ?Carbon $fechaEgreso = null
+        string|int|null $antiguedadAnterior = null,
+        ?Carbon $fechaEgreso = null,
+        ?array $escala = null
     ): array {
         $inicioAnio = Carbon::create($anio, 1, 1)->startOfDay();
         $finAnio = Carbon::create($anio, 12, 31)->startOfDay();
@@ -84,8 +121,8 @@ class VacacionEscalaAntiguedad
         }
 
         $diasTrabajados = (int) $desde->diffInDays($hasta) + 1;
-        $aniosAntiguedad = self::aniosAntiguedadAlCierre($fechaIngreso, $anio, $aniosPrevios);
-        $diasEscala = self::diasPorAntiguedad($aniosAntiguedad);
+        $aniosAntiguedad = self::aniosAntiguedadAlCierre($fechaIngreso, $anio, $antiguedadAnterior);
+        $diasEscala = self::diasPorAntiguedad($aniosAntiguedad, $escala);
 
         if ($diasTrabajados >= self::DIAS_MINIMO_ANIO_COMPLETO) {
             return [

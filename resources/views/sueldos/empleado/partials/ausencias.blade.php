@@ -129,10 +129,37 @@
         </div>
         <div id="ausencias-seccion-grilla" class="collapse show">
             <div class="card-body p-0">
+                @php
+                    $vacacionesSinModalidad = $ausencias->filter(fn ($x) => $x->tipo && $x->tipo->esVacaciones() && ! $x->modalidad_vacaciones)->count();
+                @endphp
+                <div class="d-flex flex-wrap align-items-center px-3 py-2 border-bottom" id="ausencias-modalidad-bar"
+                     data-url-modalidad="{{ route('modalidad_ausencia_empleado_sueldos', ['empleado' => $empleado->id]) }}">
+                    <div class="custom-control custom-checkbox mr-3">
+                        <input type="checkbox" class="custom-control-input" id="ausencias-solo-sin-modalidad">
+                        <label class="custom-control-label small" for="ausencias-solo-sin-modalidad">
+                            Solo vacaciones sin Plus/Adelanto
+                            <span class="badge badge-warning">{{ $vacacionesSinModalidad }}</span>
+                        </label>
+                    </div>
+                    @if ($puedeEditar)
+                        <span class="small text-muted mr-1">Asignar a las tildadas:</span>
+                        <select id="ausencias-modalidad-masiva" class="form-control form-control-sm mr-1" style="width:auto;">
+                            @foreach (Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES as $cod => $lab)
+                                <option value="{{ $cod }}">{{ $lab }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="btn-modalidad-masiva">
+                            <i class="fa fa-check"></i> Aplicar
+                        </button>
+                    @endif
+                </div>
                 <div class="table-responsive ausencias-scroll mb-0" style="max-height: 320px;">
                     <table class="table table-sm table-bordered table-hover mb-0" id="tabla-ausencias-empleado">
                         <thead style="background-color:#85C1E9; color:#17202A;">
                             <tr>
+                                @if ($puedeEditar)
+                                    <th style="width:30px"><input type="checkbox" id="ausencias-check-todas" title="Tildar las vacaciones visibles"></th>
+                                @endif
                                 <th>Tipo</th>
                                 <th>Plus/Adelanto</th>
                                 <th>Desde</th>
@@ -160,13 +187,28 @@
                                         'observacion' => $a->observacion,
                                         'url' => route('actualizar_ausencia_empleado_sueldos', ['id' => $a->id]),
                                     ];
-                                    $labModalidad = ($a->tipo && $a->tipo->esVacaciones() && $a->modalidad_vacaciones)
+                                    $esVacacionFila = $a->tipo && $a->tipo->esVacaciones();
+                                    $sinModalidadFila = $esVacacionFila && ! $a->modalidad_vacaciones;
+                                    $labModalidad = ($esVacacionFila && $a->modalidad_vacaciones)
                                         ? (Empleado_Ausencia_Sueldos::MODALIDADES_VACACIONES[(int) $a->modalidad_vacaciones] ?? '—')
                                         : '—';
                                 @endphp
-                                <tr>
+                                <tr data-ausencia-id="{{ $a->id }}" data-vacaciones="{{ $esVacacionFila ? 1 : 0 }}" data-sin-modalidad="{{ $sinModalidadFila ? 1 : 0 }}">
+                                    @if ($puedeEditar)
+                                        <td class="text-center">
+                                            @if ($esVacacionFila)
+                                                <input type="checkbox" class="ausencia-check-modalidad" value="{{ $a->id }}">
+                                            @endif
+                                        </td>
+                                    @endif
                                     <td>{{ $a->tipo->nombre ?? '—' }}</td>
-                                    <td>{{ $labModalidad }}</td>
+                                    <td>
+                                        @if ($sinModalidadFila)
+                                            <span class="badge badge-warning">Sin definir</span>
+                                        @else
+                                            {{ $labModalidad }}
+                                        @endif
+                                    </td>
                                     <td>{{ optional($a->fecha_desde)->format('d/m/Y') }}</td>
                                     <td>{{ optional($a->fecha_hasta)->format('d/m/Y') }}</td>
                                     <td class="text-right">{{ number_format((float) $a->dias, 2, ',', '.') }}</td>
@@ -188,7 +230,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-3">
+                                    <td colspan="10" class="text-center text-muted py-3">
                                         Sin eventos. Abrí <strong>Registrar ausencia</strong>, completá el formulario y pulsá
                                         <strong>Guardar ausencia</strong>; aparece acá.
                                     </td>

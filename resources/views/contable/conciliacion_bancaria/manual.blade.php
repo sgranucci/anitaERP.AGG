@@ -205,7 +205,12 @@
                 </div>
 
                 <div class="mt-3">
-                    <h5 class="mb-2">Conciliados del período</h5>
+                    <div class="d-flex flex-wrap align-items-center mb-2">
+                        <h5 class="mb-0 mr-3">Conciliados del período</h5>
+                        <input type="text" id="filtro-pares" class="form-control form-control-sm" style="width:200px;" autocomplete="off"
+                               placeholder="Importe o texto" title="Importe (30309571,03), parte del importe (30.309) o texto del cruce. Esc limpia.">
+                        <span id="cuenta-pares" class="small text-muted ml-2"></span>
+                    </div>
                     <div id="lista-pares" class="border" style="max-height:28vh;overflow:auto;"></div>
                 </div>
 

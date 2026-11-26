@@ -94,11 +94,11 @@ final class ConciliacionBancariaSinConciliarReporteSupport
         // Anita lista el cheque como CHP (aunque después se anule). El OPP del mayor con
         // "Ch: N" no se muestra otra vez. Un cheque ya conciliado contra el banco deja de
         // figurar como CHP; la ACP de la anulación sigue, porque es otro movimiento.
-        $filas = self::unificarChequeYOrdenPago(
-            $filas,
-            (int) ($resultado['empresa_id'] ?? 0),
-            self::cuentacajaIdDesdeResultado($resultado),
-        );
+        $empresaId = (int) ($resultado['empresa_id'] ?? 0);
+        $cuentacajaId = self::cuentacajaIdDesdeResultado($resultado);
+        $filas = self::unificarChequeYOrdenPago($filas, $empresaId, $cuentacajaId);
+        // OPP "cheque a descontar" sin "Ch: N": Anita la lista como CHP, con el número del cheque.
+        $filas = self::mostrarOppDeChequeComoChp($filas, $empresaId, $cuentacajaId);
 
         $filas = ConciliacionBancariaChequeErpEnrichSupport::enriquecerFilasReporte(
             $filas,
@@ -321,6 +321,134 @@ final class ConciliacionBancariaSinConciliarReporteSupport
                 'hash' => (string) ($f['hash'] ?? ''),
             ], 'CHP');
             $final[] = $fila;
+        }
+
+        return $final;
+    }
+
+    /**
+     * Una OPP cuyo texto habla de un cheque y no trae "Ch: N" se muestra como CHP
+     * cuando hay un cheque de la misma cuenta, emitido el mismo día y por el mismo importe.
+     * Si hay más de un cheque para esa fecha e importe, la OPP queda como está.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private static function mostrarOppDeChequeComoChp(array $filas, int $empresaId, int $cuentacajaId): array
+    {
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || ! Schema::hasTable('cheque')) {
+            return $filas;
+        }
+
+        $candidatos = [];
+        $fechas = [];
+        foreach ($filas as $i => $f) {
+            $tip = strtoupper((string) ($f['tip'] ?? ''));
+            if (! in_array($tip, ['OPP', 'OPA'], true) || ($f['fuente'] ?? '') !== 'contable') {
+                continue;
+            }
+            if ((string) ($f['cheque_ref'] ?? '') !== '') {
+                continue;
+            }
+            if (! preg_match('/\bcheques?\b/i', (string) ($f['detalle'] ?? ''))) {
+                continue;
+            }
+            $fecha = (string) ($f['f_mov_ord'] ?? '');
+            $importe = round(max((float) ($f['credito'] ?? 0), (float) ($f['debito'] ?? 0)), 2);
+            if (! preg_match('/^\d{8}$/', $fecha) || $fecha === '00000000' || $importe < 0.005) {
+                continue;
+            }
+            $candidatos[$i] = $fecha.'|'.number_format($importe, 2, '.', '');
+            $fechas[$fecha] = true;
+        }
+        if ($candidatos === []) {
+            return $filas;
+        }
+
+        $desde = Carbon::createFromFormat('Ymd', min(array_keys($fechas)))->toDateString();
+        $hasta = Carbon::createFromFormat('Ymd', max(array_keys($fechas)))->toDateString();
+        $porClave = [];
+        $rows = Cheque::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where(function ($q): void {
+                $q->whereNull('estado')->orWhere('estado', '<>', 'A');
+            })
+            ->whereDate('fechaemision', '>=', $desde)
+            ->whereDate('fechaemision', '<=', $hasta)
+            ->get(['id', 'numerocheque', 'monto', 'fechaemision', 'fechapago', 'anombrede']);
+        foreach ($rows as $ch) {
+            $emision = $ch->fechaemision instanceof \DateTimeInterface
+                ? $ch->fechaemision->format('Ymd')
+                : ($ch->fechaemision ? Carbon::parse((string) $ch->fechaemision)->format('Ymd') : '');
+            if ($emision === '') {
+                continue;
+            }
+            $clave = $emision.'|'.number_format(abs((float) $ch->monto), 2, '.', '');
+            $porClave[$clave][] = $ch;
+        }
+
+        $pedidos = array_count_values($candidatos);
+        $yaListado = [];
+        foreach ($filas as $f) {
+            $tip = strtoupper((string) ($f['tip'] ?? ''));
+            if (($f['fuente'] ?? '') === 'cheque' || in_array($tip, ['CHP', 'CHD', 'CHQ', 'CHE'], true)) {
+                $nro = ltrim((string) preg_replace('/\D/', '', (string) ($f['numero'] ?? '')), '0');
+                if ($nro !== '') {
+                    $yaListado[$nro] = true;
+                }
+            }
+        }
+        $conciliados = self::chequesConciliadosContraBanco($empresaId, $cuentacajaId);
+
+        $usados = [];
+        $final = [];
+        foreach ($filas as $i => $f) {
+            if (! isset($candidatos[$i])) {
+                $final[] = $f;
+                continue;
+            }
+            $clave = $candidatos[$i];
+            $chs = $porClave[$clave] ?? [];
+            if (count($chs) !== ($pedidos[$clave] ?? 0)) {
+                $final[] = $f;
+                continue;
+            }
+            $ch = null;
+            foreach ($chs as $candidato) {
+                $nro = ltrim((string) preg_replace('/\D/', '', (string) $candidato->numerocheque), '0');
+                if ($nro === '' || isset($usados[$nro])) {
+                    continue;
+                }
+                $usados[$nro] = true;
+                $ch = $candidato;
+                break;
+            }
+            if ($ch === null) {
+                $final[] = $f;
+                continue;
+            }
+            $nro = ltrim((string) preg_replace('/\D/', '', (string) $ch->numerocheque), '0');
+            if (isset($yaListado[$nro]) || isset($conciliados[$nro])) {
+                continue;
+            }
+            $pago = $ch->fechapago instanceof \DateTimeInterface
+                ? $ch->fechapago->format('Y-m-d')
+                : ($ch->fechapago ? substr((string) $ch->fechapago, 0, 10) : null);
+            $emision = $ch->fechaemision instanceof \DateTimeInterface
+                ? $ch->fechaemision->format('Y-m-d')
+                : ($ch->fechaemision ? substr((string) $ch->fechaemision, 0, 10) : null);
+            $final[] = self::desdeCheque([
+                'numero_cheque' => $nro,
+                'fecha_emision' => $emision,
+                'fecha_cheque' => $pago,
+                'importe' => abs((float) $ch->monto),
+                'entregado_a' => trim((string) ($ch->anombrede ?? '')),
+                'nro_op' => '',
+                'cheque_id' => (int) $ch->id,
+                'asiento_id' => (int) ($f['asiento_id'] ?? 0),
+                'hash' => (string) ($f['hash'] ?? ''),
+            ], 'CHP');
         }
 
         return $final;

@@ -119,13 +119,13 @@ class SaldoVacacionesReporteConsulta
         if (empty($empleado->fecha_ingreso)) {
             return 0;
         }
-        $previos = VacacionEscalaAntiguedad::aniosDesdeAntiguedadAnterior($empleado->antiguedad_anterior);
         $ingreso = Carbon::parse($empleado->fecha_ingreso)->startOfDay();
         $hasta = ! empty($empleado->fecha_egreso) ? Carbon::parse($empleado->fecha_egreso)->startOfDay() : Carbon::now()->startOfDay();
+        $computable = VacacionEscalaAntiguedad::fechaIngresoComputable($ingreso, (string) ($empleado->antiguedad_anterior ?? ''));
         if ($ingreso->greaterThan($hasta)) {
-            return $previos;
+            return (int) $computable->diffInYears($ingreso);
         }
 
-        return $previos + (int) $ingreso->diffInYears($hasta);
+        return (int) $computable->diffInYears($hasta);
     }
 }

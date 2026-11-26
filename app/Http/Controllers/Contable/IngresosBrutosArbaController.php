@@ -97,9 +97,12 @@ class IngresosBrutosArbaController extends Controller
             'fecha_vencimiento' => ['required', 'string'],
             'observacion' => ['nullable', 'string', 'max:160'],
             'generar_igual' => ['nullable'],
+            'monto_vep' => ['required', 'numeric', 'min:0.01'],
+            'confirmar_diferencia_vep' => ['nullable'],
             'adjuntos.*' => ['nullable', 'file', 'max:10240'],
         ], [], [
             'fecha_vencimiento' => 'vencimiento',
+            'monto_vep' => 'VEP',
         ]);
 
         $filtros = $this->filtrosDesdeRequest($request);
@@ -133,6 +136,8 @@ class IngresosBrutosArbaController extends Controller
                 (string) $validated['fecha_vencimiento'],
                 isset($validated['observacion']) ? (string) $validated['observacion'] : null,
                 $request->boolean('generar_igual'),
+                (float) $validated['monto_vep'],
+                $request->boolean('confirmar_diferencia_vep'),
                 $adjuntos,
             );
 

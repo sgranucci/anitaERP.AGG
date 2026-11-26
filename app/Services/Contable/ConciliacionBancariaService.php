@@ -28,6 +28,7 @@ use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenci
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaKpiSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMarcaAnitaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport;
@@ -248,6 +249,13 @@ class ConciliacionBancariaService
             $hashContConc,
             $hashBancoConc,
         )['contables_pendientes'];
+
+        // TED que Anita ya concilió en tesorería y que no tienen línea de banco con la cual cruzarse.
+        $pendientesContables = ConciliacionBancariaMarcaAnitaSupport::quitarTransferenciasConciliadasEnAnita(
+            $pendientesContables,
+            $cuentacaja,
+            $empresaId,
+        );
 
         $pendientesBanco = ConciliacionBancariaMatcher::emparejar(
             $todosContables,

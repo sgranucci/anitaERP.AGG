@@ -261,6 +261,57 @@
         resetForm();
     });
 
+    // Plus/Adelanto: filtro de las vacaciones que todavía no lo tienen y asignación a varias de una vez.
+    function aplicarFiltroSinModalidad() {
+        var solo = $('#ausencias-solo-sin-modalidad').is(':checked');
+        $('#tabla-ausencias-empleado tbody tr[data-ausencia-id]').each(function () {
+            var oculta = solo && String($(this).data('sin-modalidad')) !== '1';
+            $(this).toggleClass('d-none', oculta);
+            if (oculta) {
+                $(this).find('.ausencia-check-modalidad').prop('checked', false);
+            }
+        });
+    }
+
+    $(document).on('change', '#ausencias-solo-sin-modalidad', aplicarFiltroSinModalidad);
+
+    $(document).on('change', '#ausencias-check-todas', function () {
+        var marcado = $(this).is(':checked');
+        $('#tabla-ausencias-empleado tbody tr[data-ausencia-id]:not(.d-none) .ausencia-check-modalidad')
+            .prop('checked', marcado);
+    });
+
+    $(document).on('click', '#btn-modalidad-masiva', function () {
+        var ids = $('.ausencia-check-modalidad:checked').map(function () { return this.value; }).get();
+        if (!ids.length) {
+            aviso('Tildá al menos una vacación.', 'error');
+            return;
+        }
+        var $sel = $('#ausencias-modalidad-masiva');
+        var etiqueta = $sel.find('option:selected').text();
+        if (!confirm('¿Marcar ' + ids.length + ' vacación(es) como "' + etiqueta + '"?')) {
+            return;
+        }
+        var recordarFiltro = $('#ausencias-solo-sin-modalidad').is(':checked');
+        $.ajax({
+            url: $('#ausencias-modalidad-bar').data('url-modalidad'),
+            type: 'POST',
+            data: { _token: token(), ids: ids, modalidad_vacaciones: $sel.val() }
+        }).done(function (resp) {
+            pintar(resp);
+            if (recordarFiltro) {
+                $('#ausencias-solo-sin-modalidad').prop('checked', true);
+                aplicarFiltroSinModalidad();
+            }
+        }).fail(function (xhr) {
+            var msg = 'No se pudo asignar Plus/Adelanto.';
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                msg = xhr.responseJSON.message;
+            }
+            aviso(msg, 'error');
+        });
+    });
+
     $(document).on('click', '.btn-eliminar-ausencia', function () {
         if (!confirm('¿Eliminar esta ausencia? Se recalcularán los saldos.')) {
             return;

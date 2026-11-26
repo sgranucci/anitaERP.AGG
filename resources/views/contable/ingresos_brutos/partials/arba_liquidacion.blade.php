@@ -3,7 +3,8 @@
     $periodoTxt = substr((string) $arba['periodo'], 4, 2).'/'.substr((string) $arba['periodo'], 0, 4);
     $quincenaTxt = ((int) $arba['quincena']) === 1 ? '1.ª' : '2.ª';
     $control = $arba['control'] ?? [];
-    $sol = $arbaSolicitud ?? ['error' => 'Falta la configuración de la solicitud de pago ARBA.', 'puede_generar' => false];
+    $arbaLiquidacion = $arba_liquidacion ?? null;
+    $sol = $arba_solicitud ?? ['error' => 'Falta la configuración de la solicitud de pago ARBA.', 'puede_generar' => false];
     $puedeSolicitud = ! empty($sol['puede_generar']);
     $estadoDev = [
         'neteo' => ['Neteo', 'badge-success'],
@@ -57,7 +58,7 @@
             </div>
         @endif
 
-        @if ($arbaLiquidacion)
+        @if (! empty($arbaLiquidacion))
             <div class="small text-muted mb-2">
                 Última liquidación de esta quincena: <strong>{{ $arbaLiquidacion->nombre_txt }}</strong>
                 del {{ optional($arbaLiquidacion->created_at)->format('d/m/Y H:i') }}
@@ -103,7 +104,9 @@
                                 <td class="text-right">{{ $m($f['importe']) }}</td>
                                 <td class="small">
                                     {{ $f['proveedor_label'] !== '' ? $f['proveedor_label'] : '—' }}
-                                    @if ($f['identificacion'])
+                                    @if (($f['identificacion'] ?? '') === 'cert')
+                                        <span class="text-muted">(sugerido por importe)</span>
+                                    @elseif (! empty($f['identificacion']))
                                         <span class="text-muted">({{ $f['identificacion'] }})</span>
                                     @endif
                                 </td>
@@ -141,7 +144,7 @@
                                         <input type="checkbox" class="custom-control-input" id="dec-conf-{{ $f['asiento_movimiento_id'] }}"
                                             name="dec[{{ $f['asiento_movimiento_id'] }}][confirmo]" value="1"
                                             @checked(in_array($f['estado'], ['neteo', 'pendiente'], true))>
-                                        <label class="custom-control-label small" for="dec-conf-{{ $f['asiento_movimiento_id'] }}">Confirmo proveedor / certificado</label>
+                                        <label class="custom-control-label small" for="dec-conf-{{ $f['asiento_movimiento_id'] }}">{{ ($f['identificacion'] ?? '') === 'cert' ? 'Confirmo el certificado sugerido por importe' : 'Confirmo proveedor / certificado' }}</label>
                                     </div>
                                 </td>
                             </tr>
@@ -274,7 +277,7 @@
                             <tr><td>Residuo saldo (saldo mayor − TXT + pendientes)</td>
                                 <td class="text-right {{ ! empty($control['ok']) ? '' : 'text-danger' }}">{{ $control['residuo_pendientes'] !== null ? $m($control['residuo_pendientes']) : '—' }}</td></tr>
                             <tr class="font-weight-bold"><td>DJ (suma de líneas truncadas)</td><td class="text-right">{{ $m($t['dj']) }}</td></tr>
-                            <tr class="font-weight-bold"><td>VEP (DJ truncada a 10 centavos)</td><td class="text-right">{{ $m($t['vep']) }}</td></tr>
+                            <tr class="font-weight-bold"><td>VEP de referencia (DJ truncada a 10 centavos). La solicitud usa el VEP que cargue.</td><td class="text-right">{{ $m($t['vep']) }}</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -335,11 +338,12 @@
                                 <tr><th>Concepto / forma</th><td>{{ $sol['concepto_label'] }} — {{ $sol['formapago_label'] }}</td></tr>
                                 <tr><th>Sector / moneda</th><td>{{ $sol['sector_label'] }} — {{ $sol['moneda_label'] }}</td></tr>
                                 <tr><th>Centro de costo</th><td>{{ $sol['centrocosto_label'] }}</td></tr>
-                                <tr><th>DJ / VEP</th><td>DJ {{ $sol['dj_fmt'] }} — <strong>VEP {{ $sol['monto_fmt'] }}</strong></td></tr>
+                                <tr><th>DJ / VEP de la liquidación</th><td>DJ {{ $sol['dj_fmt'] }} — VEP de referencia {{ $sol['monto_fmt'] }}</td></tr>
                                 <tr><th>Detalle</th><td>{{ $sol['detalle'] }}</td></tr>
                             </tbody>
                         </table>
 
+                        <p class="small text-muted mb-2">El asiento se graba con el VEP cargado. La tabla muestra la referencia de la liquidación.</p>
                         <div class="table-responsive mb-3">
                             <table class="table table-sm table-bordered mb-0">
                                 <thead style="background-color:#85C1E9;color:#17202A;">
@@ -359,6 +363,16 @@
                             </table>
                         </div>
 
+                        <div class="form-group">
+                            <label for="arba-monto-vep">VEP a pagar <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="arba-monto-vep" name="monto_vep" required
+                                min="0.01" step="0.01" value="{{ number_format((float) ($sol['monto'] ?? 0), 2, '.', '') }}">
+                            <small class="form-text text-muted">Es el VEP que figura en ARBA. Si difiere de la liquidación en más de $ {{ number_format((float) ($sol['tolerancia_vep'] ?? 1), 2, ',', '.') }}, marque la confirmación.</small>
+                        </div>
+                        <div class="custom-control custom-checkbox mb-3">
+                            <input type="checkbox" class="custom-control-input" id="arba-confirmar-vep" name="confirmar_diferencia_vep" value="1">
+                            <label class="custom-control-label" for="arba-confirmar-vep">Confirmo el VEP aunque difiera de la liquidación en más de $ {{ number_format((float) ($sol['tolerancia_vep'] ?? 1), 2, ',', '.') }}</label>
+                        </div>
                         <div class="form-row">
                             <div class="form-group col-md-4">
                                 <label for="arba-fecha-vto">Vencimiento <span class="text-danger">*</span></label>

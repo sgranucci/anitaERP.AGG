@@ -20,14 +20,14 @@
 
 <hr>
 <h5 class="mb-3">Per&iacute;odos de vacaciones</h5>
-<p class="text-muted small">Cargue los rangos de fechas (desde / hasta), el tipo de d&iacute;a y la cantidad de d&iacute;as. El n&uacute;mero de l&iacute;nea se completa solo si lo deja vac&iacute;o.</p>
+<p class="text-muted small">Cada l&iacute;nea es un tramo de <strong>antig&uuml;edad en a&ntilde;os</strong> (desde inclusive, hasta exclusive) con los d&iacute;as de vacaciones que le corresponden. Ej.: 0 a 5 = 14, 5 a 10 = 21, 10 a 20 = 28, 20 a 99 = 35. El primer tramo es la l&iacute;nea 0. El n&uacute;mero de l&iacute;nea se completa solo si lo deja vac&iacute;o.</p>
 
 <table class="table table-bordered table-sm" id="tabla-vacacion-periodos">
     <thead style="background-color:#85C1E9; color:#17202A;">
         <tr>
             <th style="width: 10%;">N&deg; l&iacute;nea</th>
-            <th style="width: 18%;">Desde</th>
-            <th style="width: 18%;">Hasta</th>
+            <th style="width: 18%;">Antig. desde (a&ntilde;os)</th>
+            <th style="width: 18%;">Antig. hasta (a&ntilde;os)</th>
             <th style="width: 18%;">Tipo d&iacute;a</th>
             <th style="width: 14%;">Cant. d&iacute;as</th>
             <th style="width: 8%;"></th>
@@ -36,12 +36,12 @@
     <tbody id="tbody-vacacion-periodos">
         @php
             $lineasForm = [];
-            if (old('fecha_desde') !== null) {
-                foreach (old('fecha_desde', []) as $idx => $desde) {
+            if (old('anios_desde') !== null) {
+                foreach (old('anios_desde', []) as $idx => $desde) {
                     $lineasForm[] = (object) [
                         'nro_linea' => old('nro_linea.'.$idx),
-                        'fecha_desde' => $desde,
-                        'fecha_hasta' => old('fecha_hasta.'.$idx),
+                        'anios_desde' => $desde,
+                        'anios_hasta' => old('anios_hasta.'.$idx),
                         'tipo_dia' => old('tipo_dia.'.$idx),
                         'cantidad_dias' => old('cantidad_dias.'.$idx),
                     ];

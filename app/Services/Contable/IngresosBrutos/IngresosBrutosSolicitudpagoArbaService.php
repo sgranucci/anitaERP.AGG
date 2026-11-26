@@ -6,6 +6,7 @@ namespace App\Services\Contable\IngresosBrutos;
 
 use App\Models\Contable\IibbLiquidacionArba;
 use App\Models\Contable\IibbSolicitudpagoConfig;
+use App\Models\Contable\Suss_Empresa_Config;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Repositories\Contable\IibbSolicitudpagoConfigRepositoryInterface;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
@@ -19,7 +20,7 @@ use RuntimeException;
 /**
  * Solicitud de pago del VEP ARBA (IIBB retenciones) a partir de la liquidación vigente.
  *
- * Monto = VEP de la liquidación (DJ truncada a 10 centavos).
+ * Monto = VEP que carga el usuario (el de ARBA). La liquidación solo es la referencia.
  * Imputación: D cuenta 214010014 (por empresa) / H banco 111050009 (por empresa).
  * Adjunto: constancia de la liquidación (PDF) + VEP opcional subido por el operador.
  */
@@ -50,18 +51,15 @@ final class IngresosBrutosSolicitudpagoArbaService
             return $this->error('No se encuentra el PDF de la liquidación. Genere la liquidación nuevamente.');
         }
 
-        $monto = round((float) $liq->vep_esperado, 2);
-        if ($monto < 0.01) {
-            return $this->error('El VEP es cero; no se genera solicitud.');
-        }
+        $vepLiquidacion = round((float) $liq->vep_esperado, 2);
 
         $empresa = $config->empresa;
-        $empresaCorta = SicoreLiquidacionTipoSupport::empresaCorta($empresa?->nombre);
+        $empresaCorta = $this->siglaEmpresa($empresaId, (string) ($empresa?->nombre ?? ''));
         $detalle = $this->detalle((string) $config->plantilla_detalle, $quincena, $periodo, $empresaCorta);
         $duplicado = $this->buscarDuplicado(
             $empresaId,
             (int) $config->concepto_solicitudpago_id,
-            $monto,
+            $vepLiquidacion,
             $detalle,
             (int) $config->dias_duplicado,
         );
@@ -81,8 +79,10 @@ final class IngresosBrutosSolicitudpagoArbaService
             'formapago_label' => trim(($config->formapagosol->codigo ?? '').' — '.($config->formapagosol->nombre ?? '')),
             'moneda_label' => (string) ($config->moneda->nombre ?? 'PESOS'),
             'centrocosto_label' => $ccLabel,
-            'monto' => $monto,
-            'monto_fmt' => number_format($monto, 2, ',', '.'),
+            'monto' => $vepLiquidacion,
+            'monto_fmt' => number_format($vepLiquidacion, 2, ',', '.'),
+            'vep_liquidacion' => $vepLiquidacion,
+            'tolerancia_vep' => IibbSolicitudpagoConfig::TOLERANCIA_VEP,
             'dj' => round((float) $liq->total_dj, 2),
             'dj_fmt' => number_format((float) $liq->total_dj, 2, ',', '.'),
             'detalle' => $detalle,
@@ -94,7 +94,7 @@ final class IngresosBrutosSolicitudpagoArbaService
                     'cuenta' => trim(($cuentaDebe->codigo ?? '').' '.($cuentaDebe->nombre ?? '')),
                     'centrocosto' => $ccLabel,
                     'dh' => 'D',
-                    'debe' => $monto,
+                    'debe' => $vepLiquidacion,
                     'haber' => null,
                 ],
                 [
@@ -102,7 +102,7 @@ final class IngresosBrutosSolicitudpagoArbaService
                     'centrocosto' => $ccLabel,
                     'dh' => 'H',
                     'debe' => null,
-                    'haber' => $monto,
+                    'haber' => $vepLiquidacion,
                 ],
             ],
             'nombre_adjunto_dj' => $this->nombreAdjuntoDj($periodo, $quincena, $empresaCorta),
@@ -122,6 +122,8 @@ final class IngresosBrutosSolicitudpagoArbaService
         string $fechaVencimiento,
         ?string $observacion,
         bool $generarIgual,
+        float $montoVep,
+        bool $confirmarDiferenciaVep = false,
         array $adjuntosUsuario = [],
     ): array {
         $prev = $this->preview($empresaId, $periodo, $quincena, $liq);
@@ -129,7 +131,29 @@ final class IngresosBrutosSolicitudpagoArbaService
             throw new RuntimeException((string) $prev['error']);
         }
 
-        if (! empty($prev['duplicado']) && ! $generarIgual) {
+        $monto = round($montoVep, 2);
+        if ($monto < 0.01) {
+            throw new RuntimeException('El monto de la solicitud es el VEP que carga. Tiene que ser mayor a cero.');
+        }
+
+        $referencia = round((float) ($prev['vep_liquidacion'] ?? 0), 2);
+        $tolerancia = (float) ($prev['tolerancia_vep'] ?? IibbSolicitudpagoConfig::TOLERANCIA_VEP);
+        if (abs($monto - $referencia) > $tolerancia + 0.001 && ! $confirmarDiferenciaVep) {
+            throw new RuntimeException(
+                'El VEP cargado difiere de la liquidación en más de $ '.number_format($tolerancia, 2, ',', '.').'. Confirme la diferencia para continuar.'
+            );
+        }
+
+        /** @var IibbSolicitudpagoConfig $config */
+        $config = $this->config($empresaId);
+        $duplicado = $this->buscarDuplicado(
+            $empresaId,
+            (int) $config->concepto_solicitudpago_id,
+            $monto,
+            (string) $prev['detalle'],
+            (int) $config->dias_duplicado,
+        );
+        if ($duplicado !== null && ! $generarIgual) {
             throw new RuntimeException('Hay una solicitud similar. Marque «Generar igual» para continuar.');
         }
 
@@ -138,9 +162,6 @@ final class IngresosBrutosSolicitudpagoArbaService
             throw new RuntimeException('El vencimiento es obligatorio.');
         }
 
-        /** @var IibbSolicitudpagoConfig $config */
-        $config = $this->config($empresaId);
-        $monto = (float) $prev['monto'];
         $ccId = (int) $config->centrocosto_id;
 
         $rutaDj = $this->copiarConstancia($liq);
@@ -202,6 +223,16 @@ final class IngresosBrutosSolicitudpagoArbaService
                 @unlink($rutaDj);
             }
         }
+    }
+
+    private function siglaEmpresa(int $empresaId, string $nombreEmpresa): string
+    {
+        $sigla = trim((string) (Suss_Empresa_Config::paraEmpresa($empresaId)?->sigla ?? ''));
+        if ($sigla !== '') {
+            return strtoupper($sigla);
+        }
+
+        return SicoreLiquidacionTipoSupport::empresaCorta($nombreEmpresa);
     }
 
     private function config(int $empresaId): ?IibbSolicitudpagoConfig

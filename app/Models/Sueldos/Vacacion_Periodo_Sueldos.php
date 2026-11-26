@@ -14,6 +14,8 @@ class Vacacion_Periodo_Sueldos extends Model implements Auditable
     protected $fillable = [
         'vacacion_id',
         'nro_linea',
+        'anios_desde',
+        'anios_hasta',
         'fecha_desde',
         'fecha_hasta',
         'tipo_dia',
@@ -23,6 +25,8 @@ class Vacacion_Periodo_Sueldos extends Model implements Auditable
     protected $casts = [
         'vacacion_id' => 'integer',
         'nro_linea' => 'integer',
+        'anios_desde' => 'integer',
+        'anios_hasta' => 'integer',
         'fecha_desde' => 'date',
         'fecha_hasta' => 'date',
         'cantidad_dias' => 'integer',

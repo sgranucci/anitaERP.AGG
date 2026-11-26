@@ -2,18 +2,8 @@
     use App\Support\Sueldos\VacacionTipoDia;
     $idxLinea = $idxLinea ?? 0;
     $nroLinea = $linea->nro_linea ?? '';
-    $fechaDesde = '';
-    if (! empty($linea->fecha_desde)) {
-        $fechaDesde = $linea->fecha_desde instanceof \Carbon\Carbon
-            ? $linea->fecha_desde->format('Y-m-d')
-            : (string) $linea->fecha_desde;
-    }
-    $fechaHasta = '';
-    if (! empty($linea->fecha_hasta)) {
-        $fechaHasta = $linea->fecha_hasta instanceof \Carbon\Carbon
-            ? $linea->fecha_hasta->format('Y-m-d')
-            : (string) $linea->fecha_hasta;
-    }
+    $aniosDesde = $linea->anios_desde ?? '';
+    $aniosHasta = $linea->anios_hasta ?? '';
     $tipoDia = VacacionTipoDia::normalizar($linea->tipo_dia ?? null) ?? '';
     $cantidadDias = $linea->cantidad_dias ?? '';
     $opcionesTipo = VacacionTipoDia::OPCIONES;
@@ -23,16 +13,16 @@
 @endphp
 <tr class="item-vacacion-periodo">
     <td>
-        <input type="number" name="nro_linea[]" class="form-control nro-linea" min="1" step="1"
+        <input type="number" name="nro_linea[]" class="form-control nro-linea" min="0" step="1"
                value="{{ old('nro_linea.'.$idxLinea, $nroLinea) }}">
     </td>
     <td>
-        <input type="date" name="fecha_desde[]" class="form-control fecha-desde"
-               value="{{ old('fecha_desde.'.$idxLinea, $fechaDesde) }}">
+        <input type="number" name="anios_desde[]" class="form-control anios-desde" min="0" max="99" step="1"
+               value="{{ old('anios_desde.'.$idxLinea, $aniosDesde) }}">
     </td>
     <td>
-        <input type="date" name="fecha_hasta[]" class="form-control fecha-hasta"
-               value="{{ old('fecha_hasta.'.$idxLinea, $fechaHasta) }}">
+        <input type="number" name="anios_hasta[]" class="form-control anios-hasta" min="0" max="99" step="1"
+               value="{{ old('anios_hasta.'.$idxLinea, $aniosHasta) }}">
     </td>
     <td>
         <select name="tipo_dia[]" class="form-control tipo-dia">

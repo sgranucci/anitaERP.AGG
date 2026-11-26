@@ -142,7 +142,7 @@ final class IngresosBrutosReporteService
                     ? IngresosBrutosFormatoArbaSupport::ACTIVIDAD_PERCEPCIONES
                     : IngresosBrutosFormatoArbaSupport::ACTIVIDAD_RETENCIONES));
             $quincena = IngresosBrutosListadoFiltros::quincenaLote((int) ($filtros['liquidacion'] ?? 0));
-            $lote = $this->siguienteLote($empresaId, $periodo, $actividad, $quincena);
+            $lote = $this->loteVigente($empresaId, $periodo, $actividad, $quincena);
             $nombre = IngresosBrutosFormatoArbaSupport::nombreLote($cuitAgente, $periodo, $quincena, $actividad, $lote);
             $nombreNc = '';
         }
@@ -189,12 +189,20 @@ final class IngresosBrutosReporteService
         ];
     }
 
-    private function siguienteLote(int $empresaId, string $periodo, int $actividad, int $quincena): int
+    /**
+     * El lote de una quincena no avanza al consultar ni al bajar de nuevo el archivo.
+     * La primera vez queda en 1; las siguientes repiten el número ya usado.
+     */
+    private function loteVigente(int $empresaId, string $periodo, int $actividad, int $quincena): int
     {
         $key = generaKey(sprintf('iibb_arba_lote_%d_%s_%d_%d', $empresaId, $periodo, $actividad, $quincena));
-        $n = (int) Cache::get($key, 0) + 1;
-        Cache::forever($key, $n);
+        $n = (int) Cache::get($key, 0);
+        if ($n > 0) {
+            return $n;
+        }
 
-        return $n;
+        Cache::forever($key, 1);
+
+        return 1;
     }
 }

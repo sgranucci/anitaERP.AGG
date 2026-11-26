@@ -41,7 +41,7 @@ class SueldosImportarPlanVacacionesAnitaCommand extends Command
         }
 
         $this->info(sprintf(
-            '%s Rango %d–%d · filas Anita %d · tramos %d · empleados %d · liquidados %d · huecos vacliq %d · tabla vac. %d · sin legajo %d · vacliq sintéticos a reemplazar/reemplazados %d',
+            '%s Rango %d–%d · filas Anita %d · tramos %d · empleados %d · liquidados %d · huecos vacliq %d · omitidas por carga manual %d · plus/adelanto conservado %d · tabla vac. %d · sin legajo %d · vacliq sintéticos a reemplazar/reemplazados %d',
             $ejecutar ? 'OK' : '[DRY-RUN]',
             $r['anio_desde'],
             $r['anio_hasta'],
@@ -50,6 +50,8 @@ class SueldosImportarPlanVacacionesAnitaCommand extends Command
             $r['empleados'],
             $r['liquidadas'],
             $r['huecos_vacliq'],
+            $r['omitidas_por_carga_manual'],
+            $r['modalidad_conservada'],
             $r['tablas'],
             $r['sin_empleado'],
             $r['vacliq_reemplazadas']

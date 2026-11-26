@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Ausencia_Sueldos;
+use App\Services\Sueldos\AusenciaNovedadSyncService;
 use App\Support\Sueldos\VacacionPlanAnitaMapper;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +35,8 @@ class AnitaVacacionPlanImportService
      *   sin_empleado:int,
      *   vacliq_reemplazadas:int,
      *   huecos_vacliq:int,
+     *   omitidas_por_carga_manual:int,
+     *   modalidad_conservada:int,
      *   anio_desde:int,
      *   anio_hasta:int,
      *   dry_run:bool,
@@ -63,6 +66,8 @@ class AnitaVacacionPlanImportService
             'sin_empleado' => 0,
             'vacliq_reemplazadas' => 0,
             'huecos_vacliq' => 0,
+            'omitidas_por_carga_manual' => 0,
+            'modalidad_conservada' => 0,
             'anio_desde' => $anioDesde,
             'anio_hasta' => $anioHasta,
             'dry_run' => $dryRun,
@@ -266,6 +271,23 @@ class AnitaVacacionPlanImportService
         }
         $res['huecos_vacliq'] = $huecosVacliq;
 
+        // Lo cargado a mano en el legajo manda: no se duplica un tramo que ya está cargado.
+        $filas = $this->quitarTramosYaCargadosAMano($filas, $res);
+
+        // Plus / adelanto no viene en vacempl: si el operador ya lo cargó en un tramo importado antes,
+        // se conserva al reimportar (mismo empleado y misma fecha de salida).
+        $modalidadPrevia = $dryRun ? [] : $this->modalidadPreviaImportados($anioDesde, $anioHasta);
+        if ($modalidadPrevia !== []) {
+            foreach ($filas as $i => $fila) {
+                $clave = $fila['empleado_id'].'|'.$fila['fecha_desde'];
+                if (isset($modalidadPrevia[$clave])) {
+                    $filas[$i]['modalidad_vacaciones'] = $modalidadPrevia[$clave];
+                    $res['modalidad_conservada']++;
+                }
+            }
+            $filas = $this->homogeneizarColumnas($filas);
+        }
+
         $res['importadas'] = count($filas);
         $res['empleados'] = count($empleadosConEvento);
 
@@ -282,7 +304,36 @@ class AnitaVacacionPlanImportService
             return $res;
         }
 
-        DB::transaction(function () use ($filas, $anioDesde, $anioHasta, &$res) {
+        $bloqueo = null;
+        try {
+        DB::transaction(function () use ($filas, $anioDesde, $anioHasta, $ahora, &$res, &$bloqueo) {
+            // Novedades de las ausencias que se van a reemplazar: la FK las deja sin ausencia (SET NULL).
+            // Pendientes: se anulan y se regeneran con las ausencias nuevas. Incluidas en liquidación: se corta.
+            $idsReemplazo = DB::table('empleado_ausencia_sueldos')
+                ->where('observacion', 'like', self::MARCA.'%')
+                ->where('anio_imputacion', '>=', $anioDesde)
+                ->where('anio_imputacion', '<=', $anioHasta)
+                ->pluck('id')
+                ->all();
+            if ($idsReemplazo !== []) {
+                $incluidas = DB::table('novedad_sueldos')
+                    ->whereIn('ausencia_id', $idsReemplazo)
+                    ->where('estado', 'incluida')
+                    ->count();
+                if ($incluidas > 0) {
+                    $bloqueo = "Hay {$incluidas} novedad(es) ya incluidas en liquidación ligadas a vacaciones Anita: no se reimporta.";
+                    throw new \RuntimeException('bloqueo_importacion');
+                }
+                DB::table('novedad_sueldos')
+                    ->whereIn('ausencia_id', $idsReemplazo)
+                    ->where('estado', '!=', 'anulada')
+                    ->update([
+                        'estado' => 'anulada',
+                        'observacion' => 'Anulada por reimportación de vacempl (se regenera)',
+                        'updated_at' => $ahora,
+                    ]);
+            }
+
             // Quita sintéticos vacliq del rango: vacempl trae los tramos con fecha real.
             $res['vacliq_reemplazadas'] = (int) DB::table('empleado_ausencia_sueldos')
                 ->where(function ($q) {
@@ -302,7 +353,24 @@ class AnitaVacacionPlanImportService
             foreach (array_chunk($filas, 400) as $chunk) {
                 DB::table('empleado_ausencia_sueldos')->insert($chunk);
             }
+
+            // Regenera la novedad de liquidación de cada ausencia nueva (la FK dejó las anteriores sin ausencia).
+            $sync = app(AusenciaNovedadSyncService::class);
+            Empleado_Ausencia_Sueldos::query()
+                ->with(['tipo.concepto', 'empleado'])
+                ->where('observacion', 'like', self::MARCA.'%')
+                ->where('created_at', $ahora)
+                ->get()
+                ->each(fn ($a) => $sync->sincronizar($a));
         });
+        } catch (\RuntimeException $e) {
+            if ($bloqueo === null) {
+                throw $e;
+            }
+            $res['errores'][] = $bloqueo;
+
+            return $res;
+        }
 
         foreach ($tablaPorEmpleado as $empKey => $codigo) {
             $vacacionId = $vacacionPorCodigo[$codigo] ?? null;
@@ -325,6 +393,101 @@ class AnitaVacacionPlanImportService
         }
 
         return $res;
+    }
+
+    /**
+     * Saca los tramos importados que se solapan con una ausencia de vacaciones del mismo empleado
+     * cargada a mano (no creada por esta importación ni por la migración vacliq).
+     *
+     * @param  list<array<string,mixed>>  $filas
+     * @param  array<string,mixed>  $res
+     * @return list<array<string,mixed>>
+     */
+    private function quitarTramosYaCargadosAMano(array $filas, array &$res): array
+    {
+        if ($filas === []) {
+            return $filas;
+        }
+        $empleadoIds = array_values(array_unique(array_map(fn ($f) => (int) $f['empleado_id'], $filas)));
+
+        $manuales = [];
+        foreach (array_chunk($empleadoIds, 1000) as $lote) {
+            $q = DB::table('empleado_ausencia_sueldos as a')
+                ->join('tipo_ausencia_sueldos as t', 't.id', '=', 'a.tipo_ausencia_id')
+                ->where('t.categoria', 'vacaciones')
+                ->whereIn('a.empleado_id', $lote)
+                ->where('a.estado', '<>', 'anulada')
+                ->where(function ($w) {
+                    $w->whereNull('a.observacion')
+                        ->orWhere(function ($x) {
+                            $x->where('a.observacion', 'not like', self::MARCA.'%')
+                                ->where('a.observacion', 'not like', self::MARCA_VACLIQ.'%');
+                        });
+                })
+                ->get(['a.empleado_id', 'a.fecha_desde', 'a.fecha_hasta']);
+            foreach ($q as $m) {
+                $manuales[(int) $m->empleado_id][] = [substr((string) $m->fecha_desde, 0, 10), substr((string) $m->fecha_hasta, 0, 10)];
+            }
+        }
+        if ($manuales === []) {
+            return $filas;
+        }
+
+        $resultado = [];
+        foreach ($filas as $fila) {
+            $solapa = false;
+            foreach ($manuales[(int) $fila['empleado_id']] ?? [] as [$md, $mh]) {
+                if ($fila['fecha_desde'] <= $mh && $md <= $fila['fecha_hasta']) {
+                    $solapa = true;
+                    break;
+                }
+            }
+            if ($solapa) {
+                $res['omitidas_por_carga_manual']++;
+
+                continue;
+            }
+            $resultado[] = $fila;
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * @return array<string,int> "empleado_id|fecha_desde" => modalidad (1 plus / 2 adelanto)
+     */
+    private function modalidadPreviaImportados(int $anioDesde, int $anioHasta): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('empleado_ausencia_sueldos', 'modalidad_vacaciones')) {
+            return [];
+        }
+        $out = [];
+        $q = DB::table('empleado_ausencia_sueldos')
+            ->where('observacion', 'like', self::MARCA.'%')
+            ->whereNotNull('modalidad_vacaciones')
+            ->where('anio_imputacion', '>=', $anioDesde)
+            ->where('anio_imputacion', '<=', $anioHasta)
+            ->get(['empleado_id', 'fecha_desde', 'modalidad_vacaciones']);
+        foreach ($q as $r) {
+            $out[$r->empleado_id.'|'.substr((string) $r->fecha_desde, 0, 10)] = (int) $r->modalidad_vacaciones;
+        }
+
+        return $out;
+    }
+
+    /**
+     * insert() en lote exige las mismas columnas en todas las filas.
+     *
+     * @param  list<array<string,mixed>>  $filas
+     * @return list<array<string,mixed>>
+     */
+    private function homogeneizarColumnas(array $filas): array
+    {
+        foreach ($filas as $i => $fila) {
+            $filas[$i]['modalidad_vacaciones'] = $fila['modalidad_vacaciones'] ?? null;
+        }
+
+        return $filas;
     }
 
     /**

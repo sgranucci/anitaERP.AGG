@@ -869,7 +869,39 @@
             actualizarEstado();
         }
 
-        var pares = estado.pares.map(function (p) {
+        pintarPares();
+
+        actualizarTotales();
+        pintarDetalle();
+    }
+
+    /** Filtro de «Conciliados del período»: importe (381225,12), parte del importe (13.923) o texto del cruce. */
+    function paresFiltrados() {
+        var el = document.getElementById('filtro-pares');
+        var q = el ? String(el.value || '').trim().toLowerCase() : '';
+        if (q === '') return estado.pares;
+        var imp = parseImporteEscrito(q);
+        var impAbs = imp === null ? null : Math.abs(imp);
+        var digitos = q.replace(/[^\d]/g, '');
+        return estado.pares.filter(function (p) {
+            var valor = Math.abs(Number(p.importe) || 0);
+            if (impAbs !== null && Math.abs(valor - impAbs) <= 0.02) return true;
+            if (digitos.length >= 3 && valor.toFixed(2).replace(/[^\d]/g, '').indexOf(digitos) !== -1) return true;
+            var hay = texto((p.fecha_contable || '') + ' ' + (p.detalle_contable || '') + ' ' + (p.fecha_banco || '') + ' '
+                + (p.detalle_banco || '') + ' ' + labelModo(p.modo));
+            return hay.indexOf(q) !== -1;
+        });
+    }
+
+    function pintarPares() {
+        var visibles = paresFiltrados();
+        var cuenta = document.getElementById('cuenta-pares');
+        if (cuenta) {
+            cuenta.textContent = visibles.length === estado.pares.length
+                ? estado.pares.length + ' cruces'
+                : visibles.length + ' de ' + estado.pares.length + ' cruces';
+        }
+        var pares = visibles.map(function (p) {
             var esGrupo = p.tipo === 'grupo';
             var badgeMatch = esGrupo
                 ? ' <span class="badge badge-info">' + (p.n_contable || '?') + ':' + (p.n_banco || '?') + '</span>'
@@ -883,10 +915,10 @@
                 + '<span><strong class="mr-2">' + dinero(p.importe) + '</strong>'
                 + '<button type="button" class="btn btn-outline-danger btn-sm js-desconciliar" ' + dataAttr + '>Desconciliar</button></span></div>';
         }).join('');
-        document.getElementById('lista-pares').innerHTML = pares || '<div class="p-2 text-muted">Todavía no hay cruces en el mes.</div>';
-
-        actualizarTotales();
-        pintarDetalle();
+        var vacio = estado.pares.length
+            ? '<div class="p-2 text-muted">Ningún cruce coincide con ese filtro.</div>'
+            : '<div class="p-2 text-muted">Todavía no hay cruces en el mes.</div>';
+        document.getElementById('lista-pares').innerHTML = pares || vacio;
     }
 
     /** true si todo lo tildado hasta ahora (ambos lados) pertenece a parejas armadas automáticamente. */
@@ -1458,6 +1490,21 @@
     ['filtro-texto', 'filtro-importe'].forEach(function (id) {
         document.getElementById(id).addEventListener('input', pintar);
     });
+    var filtroPares = document.getElementById('filtro-pares');
+    if (filtroPares) {
+        filtroPares.addEventListener('input', pintarPares);
+        filtroPares.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') {
+                ev.stopPropagation();
+                filtroPares.value = '';
+                pintarPares();
+            } else if (ev.key === 'Enter' || ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+                // Enter no concilia ni las flechas mueven las grillas mientras se busca un cruce.
+                ev.stopPropagation();
+                if (ev.key === 'Enter') ev.preventDefault();
+            }
+        });
+    }
     document.getElementById('filtro-fecha').addEventListener('change', function () {
         cargar();
     });

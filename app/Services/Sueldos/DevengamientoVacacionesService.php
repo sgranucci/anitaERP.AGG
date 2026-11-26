@@ -5,9 +5,11 @@ namespace App\Services\Sueldos;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Cuota_Movimiento_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
+use App\Models\Sueldos\Vacacion_Periodo_Sueldos;
 use App\Support\Sueldos\VacacionEscalaAntiguedad;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Motor de cuota de vacaciones (ledger de dias).
@@ -47,13 +49,14 @@ class DevengamientoVacacionesService
 
         $fechaIngreso = Carbon::parse($empleado->fecha_ingreso)->startOfDay();
         $fechaEgreso = ! empty($empleado->fecha_egreso) ? Carbon::parse($empleado->fecha_egreso)->endOfDay() : null;
-        $aniosPrevios = VacacionEscalaAntiguedad::aniosDesdeAntiguedadAnterior($empleado->antiguedad_anterior);
+        $antiguedadAnterior = (string) ($empleado->antiguedad_anterior ?? '');
+        $escala = $this->escalaDeTablaEmpleado($empleado);
 
         $anioDesde = (int) $fechaIngreso->year;
         $anioHasta = (int) ($fechaEgreso !== null ? $fechaEgreso->year : Carbon::now()->year);
 
         Empleado_Cuota_Movimiento_Sueldos::withoutAuditing(function () use (
-            $empleado, $usuarioId, $fechaIngreso, $fechaEgreso, $aniosPrevios, $anioDesde, $anioHasta
+            $empleado, $usuarioId, $fechaIngreso, $fechaEgreso, $antiguedadAnterior, $escala, $anioDesde, $anioHasta
         ) {
             // Idempotente: borra devengamientos previos y regenera.
             Empleado_Cuota_Movimiento_Sueldos::query()
@@ -62,7 +65,7 @@ class DevengamientoVacacionesService
                 ->delete();
 
             for ($anio = $anioDesde; $anio <= $anioHasta; $anio++) {
-                $calc = VacacionEscalaAntiguedad::devengadoPeriodo($fechaIngreso, $anio, $aniosPrevios, $fechaEgreso);
+                $calc = VacacionEscalaAntiguedad::devengadoPeriodo($fechaIngreso, $anio, $antiguedadAnterior, $fechaEgreso, $escala);
                 if ($calc['dias'] <= 0) {
                     continue;
                 }
@@ -83,6 +86,44 @@ class DevengamientoVacacionesService
                 ]);
             }
         });
+    }
+
+    /**
+     * Escala de dias de la tabla de vacaciones asignada al empleado (`vacacion_id`).
+     * Null cuando no tiene tabla o la tabla no esta completa (sin rangos de antiguedad
+     * o sin dias): en ese caso rige la escala de la ley (LCT).
+     *
+     * @return list<array{anios_desde:int, dias:int}>|null
+     */
+    public function escalaDeTablaEmpleado(Empleado_Sueldos $empleado): ?array
+    {
+        if (empty($empleado->vacacion_id)) {
+            return null;
+        }
+        static $tieneColumna = null;
+        $tieneColumna ??= Schema::hasColumn('vacacion_periodo_sueldos', 'anios_desde');
+        if (! $tieneColumna) {
+            return null;
+        }
+
+        $lineas = Vacacion_Periodo_Sueldos::query()
+            ->where('vacacion_id', $empleado->vacacion_id)
+            ->orderBy('nro_linea')
+            ->get(['nro_linea', 'anios_desde', 'tipo_dia', 'cantidad_dias']);
+
+        $escala = [];
+        foreach ($lineas as $linea) {
+            if ((int) $linea->cantidad_dias <= 0) {
+                continue;
+            }
+            if ($linea->anios_desde === null) {
+                // Tabla a medias (migrada sin rangos): no se puede confiar en ella.
+                return null;
+            }
+            $escala[] = ['anios_desde' => (int) $linea->anios_desde, 'dias' => (int) $linea->cantidad_dias];
+        }
+
+        return $escala === [] ? null : $escala;
     }
 
     /**
