@@ -1546,6 +1546,14 @@ Route::put('contable/canon-municipal-config/{id}', 'Contable\CanonMunicipalConfi
 Route::delete('contable/canon-municipal-config/{id}', 'Contable\CanonMunicipalConfigController@eliminar')->name('eliminar_canon_municipal_config');
 
 Route::get('contable/canon-entidades', 'Contable\CanonEntidadesReporteController@index')->name('canon_entidades');
+Route::get('contable/canon-entidades/solicitud-pago/preview', 'Contable\CanonEntidadesReporteController@previewSolicitudPago')->name('preview_canon_entidades_solicitudpago');
+Route::post('contable/canon-entidades/solicitud-pago', 'Contable\CanonEntidadesReporteController@generarSolicitudPago')->name('generar_canon_entidades_solicitudpago');
+Route::get('contable/canon-entidades-config', 'Contable\CanonEntidadesConfigController@index')->name('canon_entidades_config');
+Route::get('contable/canon-entidades-config/crear', 'Contable\CanonEntidadesConfigController@crear')->name('crear_canon_entidades_config');
+Route::post('contable/canon-entidades-config', 'Contable\CanonEntidadesConfigController@guardar')->name('guardar_canon_entidades_config');
+Route::get('contable/canon-entidades-config/{id}/editar', 'Contable\CanonEntidadesConfigController@editar')->name('editar_canon_entidades_config');
+Route::put('contable/canon-entidades-config/{id}', 'Contable\CanonEntidadesConfigController@actualizar')->name('actualizar_canon_entidades_config');
+Route::delete('contable/canon-entidades-config/{id}', 'Contable\CanonEntidadesConfigController@eliminar')->name('eliminar_canon_entidades_config');
 Route::get('contable/exportar-canon-entidades-formulario', 'Contable\CanonEntidadesReporteController@exportarFormulario')->name('exportar_canon_entidades_formulario');
 Route::get('contable/listar-canon-entidades/{formato?}', 'Contable\CanonEntidadesReporteController@listar')->name('listar_canon_entidades');
 

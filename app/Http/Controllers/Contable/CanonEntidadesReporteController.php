@@ -8,9 +8,11 @@ use App\Exports\Contable\CanonEntidadesListadoExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CanonEntidades\CanonEntidadesReporteService;
+use App\Services\Contable\CanonEntidades\CanonEntidadesSolicitudpagoService;
 use App\Support\Contable\CanonEntidades\CanonEntidadesListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class CanonEntidadesReporteController extends Controller
 {
@@ -19,8 +21,98 @@ class CanonEntidadesReporteController extends Controller
     public function __construct(
         private readonly CanonEntidadesReporteService $reporteService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly CanonEntidadesSolicitudpagoService $solicitudpagoService,
     ) {
         $this->middleware('auth');
+    }
+
+    /**
+     * Vista previa (GET, solo lectura) de las solicitudes de pago del canon entidades.
+     */
+    public function previewSolicitudPago(Request $request)
+    {
+        if (! can('exportar-canon-entidades', false) || ! can('crear-solicitud-pago', false)) {
+            return response()->json(['error' => 'Sin permiso.'], 403);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        try {
+            $filtros = CanonEntidadesListadoFiltros::resolverDesdeRequest($request);
+            $preview = $this->solicitudpagoService->preview($filtros);
+
+            return response()->json($preview);
+        } catch (RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage(), 'puede_generar' => false], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['error' => 'No se pudo armar la vista previa.', 'puede_generar' => false], 500);
+        }
+    }
+
+    /**
+     * Confirma (POST): crea las dos solicitudes con el formulario adjunto y las envía a aprobación.
+     */
+    public function generarSolicitudPago(Request $request)
+    {
+        can('exportar-canon-entidades');
+        if (! can('crear-solicitud-pago', false)) {
+            can('crear-solicitud-pago');
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $validated = $request->validate([
+            'empresa_id' => ['required', 'integer'],
+            'periodo' => ['required', 'string'],
+            'fecha_vencimiento' => ['required', 'string'],
+            'observacion' => ['nullable', 'string', 'max:160'],
+            'generar_igual' => ['nullable', 'boolean'],
+            'confirmo_dias' => ['nullable', 'boolean'],
+        ], [], [
+            'fecha_vencimiento' => 'vencimiento',
+        ]);
+
+        $filtros = CanonEntidadesListadoFiltros::resolverDesdeRequest($request);
+        $redirectQuery = array_merge(
+            CanonEntidadesListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1]
+        );
+
+        try {
+            $sps = $this->solicitudpagoService->confirmar(
+                $filtros,
+                (string) $validated['fecha_vencimiento'],
+                isset($validated['observacion']) ? (string) $validated['observacion'] : null,
+                $request->boolean('generar_igual'),
+                $request->boolean('confirmo_dias'),
+            );
+
+            // Orden del lote: [0] máquinas, [1] bingo (solo si el canon de bingo del período es > 0).
+            $partes = [];
+            foreach ($sps as $i => $sp) {
+                $partes[] = '#'.(int) $sp->codigo.' ('.($i === 0 ? 'máquinas' : 'bingo').')';
+            }
+            $etiqueta = count($partes) === 1 ? 'Solicitud de pago ' : 'Solicitudes de pago ';
+            $mensaje = $etiqueta.implode(' y ', $partes).' generada'.(count($partes) === 1 ? '' : 's').', con el formulario adjunto y enviada'.(count($partes) === 1 ? '' : 's').' a aprobación.';
+
+            return redirect()
+                ->route('canon_entidades', $redirectQuery)
+                ->with('mensaje', $mensaje);
+        } catch (RuntimeException $e) {
+            return redirect()
+                ->route('canon_entidades', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('canon_entidades', $redirectQuery)
+                ->with('mensaje_error', 'No se pudieron generar las solicitudes de pago.');
+        }
     }
 
     public function index(Request $request)
