@@ -106,6 +106,16 @@
                     <a href="#" class="btn btn-outline-success btn-sm" id="btn-exportar">
                         <i class="fa fa-file-excel"></i> Excel
                     </a>
+                    <a href="{{ route('listar_conciliacion_bancaria_sin_conciliar', ['formato' => 'EXCEL', 'empresa_id' => $empresa_id, 'cuentacaja_id' => $cuentacaja_id, 'mes' => $mes, 'anio' => $anio, 'consultar' => 1, 'recalcular' => 1]) }}"
+                       class="btn btn-outline-success btn-sm" id="btn-exportar-sin-conciliar"
+                       title="Excel con los movimientos que siguen sin conciliar de esta cuenta y período (el mismo del botón Sin conciliar), recalculado con lo conciliado hasta ahora">
+                        <i class="fa fa-file-excel"></i> Excel sin conciliar
+                    </a>
+                    <button type="button" class="btn btn-outline-success btn-sm" id="btn-reporte-conciliado"
+                            data-toggle="modal" data-target="#modal-reporte-conciliado"
+                            title="Excel de lo conciliado en esta cuenta, por rango de fecha de conciliación">
+                        <i class="fa fa-file-excel"></i> Reporte conciliado
+                    </button>
                     <span class="small text-muted" id="estado-cruce"></span>
                     <span class="badge badge-light ml-1" id="badge-cierre">Período abierto</span>
                 </div>
@@ -203,6 +213,7 @@
                     Atajos: <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Espacio</kbd> marcar · <kbd>Enter</kbd> conciliar ·
                     <kbd>S</kbd> sugerir · <kbd>Esc</kbd> limpiar · <kbd>Ctrl</kbd>+clic multi-selección.
                     Al tildar un movimiento se tilda solo el mejor par del otro lado; confirmá con Enter (no concilia solo).
+                    Varios cheques o transferencias a la vez: tildá el casillero (o Ctrl+clic) en cada uno y se trae su contrapartida (mismo número de cheque o importe); un solo Enter guarda cada par por separado.
                     Multi-match: Ctrl+clic para N:M; si las sumas coinciden, se guarda el grupo.
                     Extracto: Excel Contaduría, CSV (fecha;importe;concepto), OFX, CAMT.053 o MT940 — también para bancos sin Interbanking.
                     Evidencia: adjuntá el respaldo al cerrar o aprobar el período (o con Adjuntar si ya hay corrida).
@@ -211,6 +222,47 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="modal-reporte-conciliado" tabindex="-1" role="dialog" aria-labelledby="modal-reporte-conciliado-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <form method="get" action="{{ route('conciliacion_bancaria_manual_exportar_conciliado') }}" id="form-reporte-conciliado" data-enter-campos="1">
+                <input type="hidden" name="empresa_id" value="{{ (int) $empresa_id }}">
+                <input type="hidden" name="cuentacaja_id" value="{{ (int) $cuentacaja_id }}">
+                <input type="hidden" name="mes" value="{{ (int) $mes }}">
+                <input type="hidden" name="anio" value="{{ (int) $anio }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-reporte-conciliado-titulo">Reporte de lo conciliado</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">
+                        Cruces de {{ $cuentacaja ? $cuentacaja->codigo.' '.$cuentacaja->nombre : 'la cuenta' }} según el día en que se concilió (no la fecha del movimiento).
+                        <strong>Sin fechas = todo lo conciliado.</strong>
+                    </p>
+                    <div class="form-group mb-2">
+                        <label class="mb-0 small" for="reporte-conciliado-desde">Conciliado desde</label>
+                        <input type="date" class="form-control form-control-sm" id="reporte-conciliado-desde" name="desde" value="">
+                    </div>
+                    <div class="form-group mb-0">
+                        <label class="mb-0 small" for="reporte-conciliado-hasta">Conciliado hasta</label>
+                        <input type="date" class="form-control form-control-sm" id="reporte-conciliado-hasta" name="hasta" value="">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-success btn-sm"><i class="fa fa-file-excel"></i> Descargar Excel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('form-reporte-conciliado').addEventListener('submit', function () {
+        setTimeout(function () {
+            if (window.jQuery) window.jQuery('#modal-reporte-conciliado').modal('hide');
+        }, 400);
+    });
+</script>
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'conciliacion-manual-overlay',
     'tituloId' => 'conciliacion-manual-titulo',

@@ -1665,6 +1665,7 @@ Route::put('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomatic
 Route::get('contable/conciliacion-bancaria', 'Contable\ConciliacionBancariaController@index')->name('conciliacion_bancaria');
 Route::get('contable/conciliacion-bancaria/manual', 'Contable\ConciliacionBancariaController@manual')->name('conciliacion_bancaria_manual');
 Route::get('contable/conciliacion-bancaria/manual/exportar', 'Contable\ConciliacionBancariaController@exportarManual')->name('conciliacion_bancaria_manual_exportar');
+Route::get('contable/conciliacion-bancaria/manual/exportar-conciliado', 'Contable\ConciliacionBancariaController@exportarConciliado')->name('conciliacion_bancaria_manual_exportar_conciliado');
 Route::get('contable/conciliacion-bancaria-tablero', 'Contable\ConciliacionBancariaTableroController@index')->name('conciliacion_bancaria_tablero');
 Route::get('contable/listar-conciliacion-bancaria-tablero/{formato}', 'Contable\ConciliacionBancariaTableroController@exportar')->name('listar_conciliacion_bancaria_tablero');
 Route::get('contable/conciliacion-bancaria-aging', 'Contable\ConciliacionBancariaAgingController@index')->name('conciliacion_bancaria_aging');

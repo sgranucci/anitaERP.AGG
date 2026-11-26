@@ -6,6 +6,7 @@ namespace App\Support\Contable\ConciliacionBancaria;
 
 use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
+use App\Models\Contable\ConciliacionBancariaPar;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
@@ -13,8 +14,9 @@ use Illuminate\Support\Facades\Schema;
  * Armado del listado estilo Anita “Movimientos de Cuentas sin conciliar”.
  *
  * Anita Tesorería lista cheques / OP / cobranzas / transferencias tesmov
- * (CH*, ACP, ANULA, OPP/OPA, COB/COA/COC, TED/TEH, EGR).
- * No mete ASI, TRA ni movimientos Interbanking (IB): esos van a la carátula /
+ * (CH*, ACP, ANULA, OPP/OPA, COB/COA/COC, TED/TEH, EGR). La TRA del ERP sale como TED.
+ * Un cheque sale una sola vez (CHP), no además como OPP.
+ * No mete ASI ni movimientos Interbanking (IB): esos van a la carátula /
  * solapas de conciliación, no a este reporte.
  */
 final class ConciliacionBancariaSinConciliarReporteSupport
@@ -80,6 +82,24 @@ final class ConciliacionBancariaSinConciliarReporteSupport
 
         // No incluir pendientes_banco (IB): Anita no los lista en este reporte.
 
+        // La anulación del cheque queda en el mayor como "ANULA OPP" y Anita la lista
+        // aparte, con tip ACP, el mismo número de cheque y la fecha de la anulación.
+        foreach ($resultado['pendientes_contables_anulas'] ?? [] as $mov) {
+            if (! is_array($mov) || ! ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov)) {
+                continue;
+            }
+            self::agregarFila($filas, $vistos, $vistosNegocio, self::desdeAnulacionCheque($mov));
+        }
+
+        // Anita lista el cheque como CHP (aunque después se anule). El OPP del mayor con
+        // "Ch: N" no se muestra otra vez. Un cheque ya conciliado contra el banco deja de
+        // figurar como CHP; la ACP de la anulación sigue, porque es otro movimiento.
+        $filas = self::unificarChequeYOrdenPago(
+            $filas,
+            (int) ($resultado['empresa_id'] ?? 0),
+            self::cuentacajaIdDesdeResultado($resultado),
+        );
+
         $filas = ConciliacionBancariaChequeErpEnrichSupport::enriquecerFilasReporte(
             $filas,
             (int) ($resultado['empresa_id'] ?? 0),
@@ -92,8 +112,13 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             if ($cmp !== 0) {
                 return $cmp;
             }
+            $cmp = strcmp((string) ($a['numero'] ?? ''), (string) ($b['numero'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+            $ordenTip = static fn (string $tip): int => $tip === 'ACP' ? 1 : 0;
 
-            return strcmp((string) ($a['numero'] ?? ''), (string) ($b['numero'] ?? ''));
+            return $ordenTip(strtoupper((string) ($a['tip'] ?? ''))) <=> $ordenTip(strtoupper((string) ($b['tip'] ?? '')));
         });
 
         $debitos = 0.0;
@@ -189,6 +214,173 @@ final class ConciliacionBancariaSinConciliarReporteSupport
     }
 
     /**
+     * Una anulación de OP no concilia el cheque: la OPP y su "ANULA OPP" siguen sin
+     * movimiento de banco. El reporte las deja pendientes.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private static function unificarChequeYOrdenPago(array $filas, int $empresaId, int $cuentacajaId): array
+    {
+        $conciliados = self::chequesConciliadosContraBanco($empresaId, $cuentacajaId);
+        $esTipCheque = static fn (string $tip): bool => in_array(
+            $tip,
+            ConciliacionBancariaChequeErpEnrichSupport::TIPS_CHEQUE,
+            true,
+        );
+
+        $salida = [];
+        $chpListados = [];
+        foreach ($filas as $f) {
+            $tip = strtoupper((string) ($f['tip'] ?? ''));
+            $nro = ltrim((string) ($f['numero'] ?? ''), '0');
+            if (($f['fuente'] ?? '') === 'cheque' && $esTipCheque($tip)) {
+                if ($nro !== '' && isset($conciliados[$nro])) {
+                    continue;
+                }
+                $chpListados[$nro] = true;
+            }
+            $salida[] = $f;
+        }
+
+        // OPP/OPA con "Ch: N": el cheque ya está listado (o conciliado) → se omite el OPP.
+        $porConvertir = [];
+        $resto = [];
+        foreach ($salida as $f) {
+            $ref = (string) ($f['cheque_ref'] ?? '');
+            $tip = strtoupper((string) ($f['tip'] ?? ''));
+            if ($ref === '' || ! in_array($tip, ['OPP', 'OPA'], true) || ($f['fuente'] ?? '') !== 'contable') {
+                $resto[] = $f;
+                continue;
+            }
+            if (isset($conciliados[$ref]) || isset($chpListados[$ref])) {
+                continue;
+            }
+            $porConvertir[$ref][] = $f;
+            $resto[] = $f;
+        }
+
+        if ($porConvertir === [] || ! Schema::hasTable('cheque')) {
+            return $resto;
+        }
+
+        $q = Cheque::query()
+            ->with(['proveedores:id,codigo,nombre'])
+            ->whereIn('numerocheque', array_keys($porConvertir));
+        if ($cuentacajaId > 0 && Schema::hasColumn('cheque', 'cuentacaja_id')) {
+            $q->where('cuentacaja_id', $cuentacajaId);
+        }
+        $cheques = [];
+        foreach ($q->get(['id', 'numerocheque', 'monto', 'fechaemision', 'fechapago', 'anombrede', 'proveedor_id']) as $ch) {
+            $key = ltrim((string) preg_replace('/\D/', '', (string) $ch->numerocheque), '0');
+            if ($key !== '') {
+                $cheques[$key] = $ch;
+            }
+        }
+
+        $fecha = static function (mixed $v): ?string {
+            if ($v instanceof \DateTimeInterface) {
+                return $v->format('Y-m-d');
+            }
+
+            return $v ? substr((string) $v, 0, 10) : null;
+        };
+
+        $final = [];
+        $convertidos = [];
+        foreach ($resto as $f) {
+            $ref = (string) ($f['cheque_ref'] ?? '');
+            $tipFila = strtoupper((string) ($f['tip'] ?? ''));
+            if ($ref === '' || ! isset($porConvertir[$ref]) || ($f['fuente'] ?? '') !== 'contable'
+                || ! in_array($tipFila, ['OPP', 'OPA'], true)) {
+                $final[] = $f;
+                continue;
+            }
+            $ch = $cheques[$ref] ?? null;
+            if ($ch === null) {
+                $final[] = $f;
+                continue;
+            }
+            if (isset($convertidos[$ref])) {
+                continue;
+            }
+            $convertidos[$ref] = true;
+            $anombre = trim((string) ($ch->anombrede ?? ''));
+            $nombre = trim((string) ($ch->proveedores->nombre ?? ''));
+            $fila = self::desdeCheque([
+                'numero_cheque' => $ref,
+                'fecha_emision' => $fecha($ch->fechaemision),
+                'fecha_cheque' => $fecha($ch->fechapago),
+                'fecha_entrega' => null,
+                'fecha_conciliacion' => null,
+                'importe' => abs((float) $ch->monto),
+                'entregado_a' => $anombre !== '' ? $anombre : $nombre,
+                'nro_op' => '',
+                'cheque_id' => (int) $ch->id,
+                'asiento_id' => (int) ($f['asiento_id'] ?? 0),
+                'hash' => (string) ($f['hash'] ?? ''),
+            ], 'CHP');
+            $final[] = $fila;
+        }
+
+        return $final;
+    }
+
+    /**
+     * Cheques cuyo OPP quedó conciliado contra una línea real del banco.
+     * Los pares de “cierre Excel” (contable y banco inventados) no cuentan.
+     *
+     * @return array<string, true>
+     */
+    private static function chequesConciliadosContraBanco(int $empresaId, int $cuentacajaId): array
+    {
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || ! Schema::hasTable('conciliacion_bancaria_par')) {
+            return [];
+        }
+
+        $out = [];
+        ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('contable_json', 'like', '%Ch:%')
+            ->select(['id', 'hash_contable', 'hash_banco', 'contable_json'])
+            ->chunkById(2000, static function ($pares) use (&$out): void {
+                foreach ($pares as $par) {
+                    if ((string) $par->hash_banco === hash('sha256', 'cierre_excel|banco|'.$par->hash_contable)) {
+                        continue;
+                    }
+                    $contable = is_array($par->contable_json) ? $par->contable_json : [];
+                    $nro = ConciliacionBancariaReferenciaSupport::extraerChequeContable($contable);
+                    if ($nro !== null) {
+                        $out[ltrim($nro, '0')] = true;
+                    }
+                }
+            });
+
+        return $out;
+    }
+
+    /**
+     * Anulación de cheque pendiente: tip ACP, número de cheque, fecha de la anulación
+     * en F.Mov y F.Dev, detalle "ANULA OPP nnnnn". El importe va a Débitos.
+     *
+     * @param  array<string, mixed>  $mov
+     * @return array<string, mixed>
+     */
+    private static function desdeAnulacionCheque(array $mov): array
+    {
+        $fila = self::desdeContable($mov);
+        $fila['tip'] = 'ACP';
+        $desc = trim((string) ($mov['descripcion'] ?? ''));
+        if (preg_match('/ANULA\s+OPP\s+(\d+)/i', $desc, $m)) {
+            $fila['detalle'] = 'ANULA OPP '.ltrim($m[1], '0');
+        }
+        $fila['f_dev'] = (string) ($fila['f_mov'] ?? '---');
+
+        return $fila;
+    }
+
+    /**
      * @param  array<string, mixed>  $mov
      * @return array<string, mixed>
      */
@@ -197,6 +389,10 @@ final class ConciliacionBancariaSinConciliarReporteSupport
         $tip = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
         if ($tip === '') {
             $tip = 'ASI';
+        }
+        // La transferencia entre cuentas del ERP (TRA) es el TED de Anita.
+        if ($tip === 'TRA') {
+            $tip = 'TED';
         }
 
         $nroCheque = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
@@ -220,6 +416,12 @@ final class ConciliacionBancariaSinConciliarReporteSupport
 
         $fMov = self::fmtFecha($mov['fecha'] ?? ($mov['fecha_fmt'] ?? null));
 
+        $detalle = (string) ($mov['descripcion'] ?? $mov['emisor'] ?? '');
+        if (strtoupper(trim((string) ($mov['tipo_comp'] ?? ''))) === 'TRA' && $numero !== '') {
+            // Anita antepone el número de la transferencia: "TRA 4080 Trf bi bank a Macro".
+            $detalle = trim('TRA '.ltrim((string) preg_replace('/\D/', '', (string) $numero), '0').' '.$detalle);
+        }
+
         return [
             'lado' => 'contable',
             'tip' => $tip,
@@ -230,7 +432,7 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             'f_entr' => '---',
             'f_conc' => '---',
             'f_mov_ord' => $fMov['ord'],
-            'detalle' => (string) ($mov['descripcion'] ?? $mov['emisor'] ?? ''),
+            'detalle' => $detalle,
             'debito' => round($debe, 2),
             'credito' => round($haber, 2),
             'n_con' => (string) (($mov['concepto_id'] ?? '') ?: ''),
@@ -241,6 +443,7 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             'concepto_id' => (int) ($mov['concepto_id'] ?? 0) ?: null,
             'hash' => (string) ($mov['hash'] ?? ''),
             'fuente' => 'contable',
+            'cheque_ref' => $nroCheque !== null ? ltrim($nroCheque, '0') : '',
             'empresa_id' => (int) ($mov['empresa_id'] ?? 0),
         ];
     }

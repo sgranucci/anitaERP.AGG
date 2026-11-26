@@ -181,6 +181,9 @@ final class ConciliacionBancariaMatcher
                 if (abs($impC - $impB) > $tolerancia) {
                     continue;
                 }
+                if (ConciliacionBancariaReferenciaSupport::chequeNoCoincideConBanco($c, $b)) {
+                    continue;
+                }
 
                 $refScore = ConciliacionBancariaReferenciaSupport::puntajeReferencia($c, $b);
                 if ($refScore < 50) {
@@ -247,6 +250,9 @@ final class ConciliacionBancariaMatcher
 
                 $impB = ConciliacionBancariaHashSupport::importeFirmadoBanco($b);
                 if (abs($impC - $impB) > $tolerancia) {
+                    continue;
+                }
+                if (ConciliacionBancariaReferenciaSupport::chequeNoCoincideConBanco($c, $b)) {
                     continue;
                 }
 
@@ -338,6 +344,9 @@ final class ConciliacionBancariaMatcher
             if (! self::fechasCompatibles($c, $b, $diasMax)) {
                 continue;
             }
+            if (ConciliacionBancariaReferenciaSupport::chequeNoCoincideConBanco($c, $b)) {
+                continue;
+            }
             $score = 35 + ConciliacionBancariaReferenciaSupport::puntajeReferencia($c, $b);
             $pares[] = [
                 'contable' => $c,
@@ -396,6 +405,9 @@ final class ConciliacionBancariaMatcher
                 if (! self::fechasCompatibles($c, $b, $dias)) {
                     continue;
                 }
+                if (ConciliacionBancariaReferenciaSupport::chequeNoCoincideConBanco($c, $b)) {
+                    continue;
+                }
                 $cands[] = ['i' => $ic, 'imp' => $impC, 'mov' => $c];
             }
             $subset = self::buscarSubconjuntoSuma($cands, $impB, $tolerancia, $maxN);
@@ -432,6 +444,9 @@ final class ConciliacionBancariaMatcher
                     continue;
                 }
                 if (! self::fechasCompatibles($c, $b, $dias)) {
+                    continue;
+                }
+                if (ConciliacionBancariaReferenciaSupport::chequeNoCoincideConBanco($c, $b)) {
                     continue;
                 }
                 $cands[] = ['i' => $ib, 'imp' => $impB, 'mov' => $b];

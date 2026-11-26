@@ -91,6 +91,23 @@ final class ConciliacionBancariaReferenciaSupport
     }
 
     /**
+     * El mayor trae un cheque (Ch: N) y el banco no tiene ese mismo número.
+     * El cruce automático no puede usar solo el importe: si no, un cheque queda
+     * conciliado contra el débito de otro.
+     *
+     * @param  array<string, mixed>  $contable
+     * @param  array<string, mixed>  $banco
+     */
+    public static function chequeNoCoincideConBanco(array $contable, array $banco): bool
+    {
+        if (self::extraerChequeContable($contable) === null) {
+            return false;
+        }
+
+        return ! self::coincideCheque($contable, $banco);
+    }
+
+    /**
      * @param  array<string, mixed>  $contable
      * @param  array<string, mixed>  $banco
      */

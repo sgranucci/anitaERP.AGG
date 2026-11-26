@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\ConciliacionBancariaConciliadoExport;
 use App\Exports\Contable\ConciliacionBancariaExport;
 use App\Exports\Contable\ConciliacionBancariaManualExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\Cuentacaja;
+use App\Models\Configuracion\Empresa;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\InterbankingMovimientoPersistenciaService;
 use App\Services\Caja\InterbankingService;
@@ -14,6 +16,7 @@ use App\Services\Contable\ConciliacionBancariaExtractoArchivoImportService;
 use App\Services\Contable\ConciliacionBancariaGastoDocumentoService;
 use App\Services\Contable\ConciliacionBancariaService;
 use App\Support\Caja\InterbankingCuentacajaParametrosSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaConciliadoReporteSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaEngancheSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaModoSupport;
@@ -354,6 +357,69 @@ class ConciliacionBancariaController extends Controller
         }
     }
 
+    /**
+     * Excel de lo conciliado en la cuenta, filtrado por la fecha en que se concilió (modal de la pantalla manual).
+     */
+    public function exportarConciliado(Request $request)
+    {
+        if (! can('exportar-conciliacion-bancaria', false) && ! can('ejecutar-conciliacion-bancaria', false)) {
+            can('exportar-conciliacion-bancaria');
+        }
+
+        $empresaId = (int) $request->input('empresa_id');
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $volver = $request->only(['empresa_id', 'cuentacaja_id', 'mes', 'anio']);
+
+        if ($empresaId <= 0 || $cuentacajaId <= 0) {
+            return redirect()
+                ->route('conciliacion_bancaria_manual', $volver)
+                ->with('errores', ['Faltan empresa o cuenta de caja.']);
+        }
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        // Fechas vacías = todo lo conciliado de la cuenta (por defecto); con una sola, sin límite del otro lado.
+        $desdeTxt = trim((string) $request->input('desde', ''));
+        $hastaTxt = trim((string) $request->input('hasta', ''));
+        try {
+            $desde = $desdeTxt !== '' ? Carbon::createFromFormat('Y-m-d', $desdeTxt)->startOfDay() : null;
+            $hasta = $hastaTxt !== '' ? Carbon::createFromFormat('Y-m-d', $hastaTxt)->startOfDay() : null;
+        } catch (\Throwable) {
+            return redirect()
+                ->route('conciliacion_bancaria_manual', $volver)
+                ->with('errores', ['La fecha de conciliación no es válida.']);
+        }
+        if ($desde !== null && $hasta !== null && $desde->gt($hasta)) {
+            return redirect()
+                ->route('conciliacion_bancaria_manual', $volver)
+                ->with('errores', ['La fecha desde no puede ser posterior a la fecha hasta.']);
+        }
+
+        ini_set('memory_limit', (string) config('conciliacion_bancaria.memory_limit', '2048M'));
+        ini_set('max_execution_time', '0');
+
+        $cc = Cuentacaja::query()->find($cuentacajaId);
+        $reporte = ConciliacionBancariaConciliadoReporteSupport::armar($empresaId, $cuentacajaId, $desde, $hasta);
+        $codigo = preg_replace('/\W+/', '_', (string) ($cc->codigo ?? 'cuenta')) ?: 'cuenta';
+        $nombre = ($desde === null && $hasta === null)
+            ? sprintf('conciliado_%s_todo.xlsx', $codigo)
+            : sprintf('conciliado_%s_%s_a_%s.xlsx', $codigo, $desde?->format('Ymd') ?? 'inicio', $hasta?->format('Ymd') ?? 'hoy');
+
+        return (new ConciliacionBancariaConciliadoExport)
+            ->parametros($reporte, [
+                'empresa_nombre' => (string) (Empresa::query()->where('id', $empresaId)->value('nombre') ?? ''),
+                'cuentacaja_label' => trim(($cc->codigo ?? '').' '.($cc->nombre ?? '')),
+                'periodo_txt' => match (true) {
+                    $desde === null && $hasta === null => 'Todo lo conciliado',
+                    $desde === null => 'Conciliados hasta el '.$hasta->format('d/m/Y'),
+                    $hasta === null => 'Conciliados desde el '.$desde->format('d/m/Y'),
+                    default => 'Conciliados del '.$desde->format('d/m/Y').' al '.$hasta->format('d/m/Y'),
+                },
+            ])
+            ->download($nombre);
+    }
+
     public function apiTablero(Request $request)
     {
         can('ejecutar-conciliacion-bancaria');
@@ -489,7 +555,9 @@ class ConciliacionBancariaController extends Controller
             $bancos = [$banco];
         }
 
-        if ($empresaId <= 0 || $cuentacajaId <= 0 || ! is_array($contables) || ! is_array($bancos) || $contables === [] || $bancos === []) {
+        $soloContables = is_array($contables) && count($contables) >= 2 && (! is_array($bancos) || $bancos === []);
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || ! is_array($contables) || $contables === []
+            || (! $soloContables && (! is_array($bancos) || $bancos === []))) {
             return response()->json(['ok' => false, 'error' => 'Faltan los movimientos a cruzar.'], 422);
         }
         if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
@@ -497,6 +565,24 @@ class ConciliacionBancariaController extends Controller
         }
 
         try {
+            if ($soloContables) {
+                // Orden de pago + su "ANULA OPP": cruce contable sin banco.
+                $grupo = $this->service->conciliarAnulacionOp(
+                    $empresaId,
+                    $cuentacajaId,
+                    $contables,
+                    (int) Auth::id(),
+                );
+
+                return response()->json([
+                    'ok' => true,
+                    'tipo' => 'grupo',
+                    'grupo_id' => (int) ($grupo->id ?? 0),
+                    'n_contable' => count($contables),
+                    'n_banco' => 0,
+                ]);
+            }
+
             if (count($contables) === 1 && count($bancos) === 1) {
                 $par = $this->service->conciliarManual(
                     $empresaId,

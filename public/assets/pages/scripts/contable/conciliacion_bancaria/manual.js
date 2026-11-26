@@ -9,6 +9,11 @@
     var selC = {};
     /** @type {Object.<string, boolean>} */
     var selB = {};
+    /**
+     * Parejas armadas automáticamente al tildar (clic o Ctrl+clic): cada cheque con su contrapartida.
+     * @type {Array<{c: string, b: string}>}
+     */
+    var parejas = [];
     var focoLado = 'c';
     var focoHash = null;
     var tipoChip = '';
@@ -104,7 +109,10 @@
 
     function blobTipo(mov, lado) {
         if (lado === 'c') {
-            return texto(mov.tipo_comp + ' ' + mov.descripcion + ' ' + mov.nro_asiento_fmt + ' ' + mov.nro);
+            var b = texto(mov.tipo_comp + ' ' + mov.descripcion + ' ' + mov.nro_asiento_fmt + ' ' + mov.nro);
+            // El mayor graba la anulación como OPP "ANULA OPP". En pantalla se busca como AOP.
+            if (/\banula\s+opp\b/.test(b)) b += ' aop';
+            return b;
         }
         return texto(mov.code_description_ib + ' ' + mov.code_description_bank + ' ' + mov.voucher_number);
     }
@@ -140,12 +148,44 @@
         });
     }
 
+    var chequesAopCache = null;
+
+    function esBusquedaAop(q) {
+        return q === 'aop';
+    }
+
+    /** Cheques que tienen una ANULA OPP en el tablero. Al buscar "aop" se muestra también el original. */
+    function chequesConAnulacion() {
+        if (chequesAopCache) return chequesAopCache;
+        var set = {};
+        var soloPend = document.getElementById('solo-pendientes').checked;
+        (estado.contables || []).forEach(function (m) {
+            if (!/\banula\s+opp\b/i.test(String(m.descripcion || ''))) return;
+            if (soloPend && mapHashesC[m.hash]) return;
+            var ref = refCheque(m, 'c');
+            if (!ref || /^0+$/.test(ref)) return;
+            set[ref] = true;
+        });
+        chequesAopCache = set;
+        return set;
+    }
+
+    function esOriginalDeAnulacion(mov) {
+        if (/\banula\s+opp\b/i.test(String(mov.descripcion || ''))) return false;
+        var ref = refCheque(mov, 'c');
+        return !!(ref && chequesConAnulacion()[ref]);
+    }
+
     function pasa(mov, lado, ignorarConciliados) {
         var q = texto(document.getElementById('filtro-texto').value);
         var blob = blobTipo(mov, lado);
-        if (q && blob.indexOf(q) === -1) return false;
+        var parejaAop = lado === 'c' && esBusquedaAop(q) && esOriginalDeAnulacion(mov);
+        if (q && blob.indexOf(q) === -1 && !parejaAop) return false;
         var fFiltro = fechaFiltro();
-        if (fFiltro) {
+        // Si el texto encuentra el movimiento (número de cheque, ANULA, AOP) o es el cheque
+        // original de esa anulación, se muestra aunque caiga en otro día.
+        var textoManda = (q !== '' && lado === 'c' && blob.indexOf(q) !== -1) || parejaAop;
+        if (fFiltro && !textoManda) {
             var fMov = fechaMov(mov, lado);
             // Con "Incluir anteriores": el banco queda en el día elegido;
             // anitaERP muestra ese día y asientos previos (cheques, etc.).
@@ -189,12 +229,24 @@
         Object.keys(mapa).forEach(function (h) {
             if (!mapa[h] || enLista[h]) return;
             var m = buscar(fuente, h);
-            if (m) {
+            // El importe no lo esconde; el texto sí. Si no, queda tildado un cheque que ya no se está buscando.
+            if (m && pasa(m, lado)) {
                 m._sugerido = true;
                 pinned.unshift(m);
             }
         });
-        return pinned.concat(rest);
+        var salida = pinned.concat(rest);
+        if (lado === 'c' && esBusquedaAop(texto(document.getElementById('filtro-texto').value))) {
+            salida = salida.slice().sort(function (a, b) {
+                var ra = refCheque(a, 'c') || '\uffff';
+                var rb = refCheque(b, 'c') || '\uffff';
+                if (ra !== rb) return ra < rb ? -1 : 1;
+                var aa = /\banula\s+opp\b/i.test(String(a.descripcion || '')) ? 1 : 0;
+                var bb = /\banula\s+opp\b/i.test(String(b.descripcion || '')) ? 1 : 0;
+                return aa - bb;
+            });
+        }
+        return salida;
     }
 
     function buscar(lista, hash) {
@@ -275,27 +327,48 @@
         });
     }
 
+    function distanciaDias(a, b) {
+        var ta = Date.parse(a);
+        var tb = Date.parse(b);
+        if (isNaN(ta) || isNaN(tb)) return 1e6;
+        return Math.abs(ta - tb) / 86400000;
+    }
+
     /**
      * Busca el mejor candidato del otro lado (prioridad: misma ref de cheque, luego importe).
      * @return {{mejor: object, diff: number, porRef: boolean}|null}
      */
-    function buscarMejorPar(base, ladoBase) {
+    function buscarMejorPar(base, ladoBase, opciones) {
+        opciones = opciones || {};
+        var excluir = opciones.excluir || {};
+        var estricto = !!opciones.estricto;
         var otra = ladoBase === 'c' ? estado.banco : estado.contables;
         var usados = ladoBase === 'c' ? mapHashesB : mapHashesC;
         var ladoOtra = ladoBase === 'c' ? 'b' : 'c';
         var refBase = refCheque(base, ladoBase);
+        if (/^0*$/.test(refBase)) refBase = '';
         var mejor = null;
         var mejorDiff = 1e12;
         var mejorPorRef = null;
         otra.forEach(function (m) {
-            if (usados[m.hash]) return;
+            if (usados[m.hash] || excluir[m.hash]) return;
+            if (estricto) {
+                // Con varios cheques a la vez no se cruzan dos cheques con número distinto aunque el importe coincida.
+                var refM = refCheque(m, ladoOtra);
+                if (/^0*$/.test(refM)) refM = '';
+                if (refBase && refM && refBase !== refM) return;
+            }
             var d = Math.abs(Math.abs(m.importe) - Math.abs(base.importe));
             if (refBase && refCheque(m, ladoOtra) === refBase) {
                 if (!mejorPorRef || d < Math.abs(Math.abs(mejorPorRef.importe) - Math.abs(base.importe))) {
                     mejorPorRef = m;
                 }
             }
-            if (d < mejorDiff) {
+            // Mismo importe (transferencias iguales): gana la de fecha más cercana.
+            var empate = mejor && Math.abs(d - mejorDiff) <= 0.005
+                && distanciaDias(fechaMov(m, ladoOtra), fechaMov(base, ladoBase))
+                    < distanciaDias(fechaMov(mejor, ladoOtra), fechaMov(base, ladoBase));
+            if (d < mejorDiff - 0.005 || empate) {
                 mejorDiff = d;
                 mejor = m;
             }
@@ -315,6 +388,7 @@
         limpiarSugeridos();
         base._sugerido = true;
         mejor._sugerido = true;
+        parejas = [ladoBase === 'c' ? { c: base.hash, b: mejor.hash } : { c: mejor.hash, b: base.hash }];
         if (ladoBase === 'c') {
             selC = {};
             selC[base.hash] = true;
@@ -387,6 +461,9 @@
         var activo = !!mapa[mov.hash];
         var sugerido = mov._sugerido ? ' cm-sugerido' : '';
         var marca = '';
+        if (lado === 'c' && /\banula\s+opp\b/i.test(String(mov.descripcion || ''))) {
+            marca += ' <span class="badge badge-danger">AOP</span>';
+        }
         if (mov.anterior) marca += ' <span class="badge badge-secondary">anterior</span>';
         if (mov.fecha_extra) marca += ' <span class="badge badge-info">día extra</span>';
         if (mov._sugerido) marca += ' <span class="badge badge-warning">sugerido</span>';
@@ -542,13 +619,37 @@
         var aviso = document.getElementById('aviso-multimatch');
         var btnConc = document.getElementById('btn-conciliar');
         var listo = nC > 0 && nB > 0 && Math.abs(diff) <= tolerancia;
+        // Orden de pago + su "ANULA OPP": dos o más contables que suman cero, sin banco.
+        var anulacionOp = nB === 0 && nC >= 2 && Math.abs(sumC) <= tolerancia;
+        if (anulacionOp) listo = true;
+        // Varios cheques con su pareja automática: cada pareja se evalúa sola (no la suma total).
+        var lotePares = parejas.length > 1 && nC === parejas.length && nB === parejas.length && seleccionSoloParejas();
+        if (lotePares) {
+            var difMax = 0;
+            parejas.forEach(function (p) {
+                var mc = buscar(estado.contables, p.c);
+                var mb = buscar(estado.banco, p.b);
+                if (mc && mb) {
+                    difMax = Math.max(difMax, Math.abs(Math.abs(Number(mc.importe) || 0) - Math.abs(Number(mb.importe) || 0)));
+                }
+            });
+            listo = difMax <= tolerancia;
+        }
         if (btnConc) {
             btnConc.classList.toggle('cm-conciliar-listo', listo);
             btnConc.innerHTML = listo
                 ? 'Conciliar <span class="cm-enter-hint">Enter</span>'
                 : 'Conciliar';
         }
-        if (nC === 1 && nB === 1) {
+        if (lotePares) {
+            if (listo) {
+                aviso.innerHTML = parejas.length + ' pares listos (cada cheque con su contrapartida) — <strong>Conciliar</strong> o <kbd>Enter</kbd> los guarda todos';
+                aviso.className = 'small text-success font-weight-bold';
+            } else {
+                aviso.innerHTML = parejas.length + ' pares con diferencia de importe — <strong>Conciliar</strong> / <kbd>Enter</kbd> pide confirmación.';
+                aviso.className = 'small text-warning';
+            }
+        } else if (nC === 1 && nB === 1) {
             if (Math.abs(diff) <= tolerancia) {
                 aviso.innerHTML = 'Par listo — <strong>Conciliar</strong> o <kbd>Enter</kbd>';
                 aviso.className = 'small text-success font-weight-bold';
@@ -564,6 +665,9 @@
                 aviso.textContent = 'Multi-selección ' + nC + ':' + nB + ' — diferencia ' + dinero(diff) + '.';
                 aviso.className = 'small text-muted';
             }
+        } else if (anulacionOp) {
+            aviso.innerHTML = 'Orden de pago y su anulación se compensan (' + nC + ' contables, sin banco) — <strong>Conciliar</strong> o <kbd>Enter</kbd>';
+            aviso.className = 'small text-success font-weight-bold';
         } else if (nC + nB > 0) {
             aviso.textContent = 'Elegí al menos uno del otro lado.';
             aviso.className = 'small text-muted';
@@ -711,7 +815,31 @@
         el.textContent = 'Selección ' + nC + ' contable / ' + nB + ' banco · dif. ' + dinero(sumaSel('c') - sumaSel('b'));
     }
 
+    function soltarSeleccionFueraDeTexto() {
+        var q = texto(document.getElementById('filtro-texto').value);
+        if (!q) return;
+        function fuera(mapa, lado) {
+            var fuente = lado === 'c' ? estado.contables : estado.banco;
+            Object.keys(mapa).forEach(function (h) {
+                if (!mapa[h]) return;
+                var m = buscar(fuente, h);
+                if (m && (blobTipo(m, lado).indexOf(q) !== -1 || (lado === 'c' && esBusquedaAop(q) && esOriginalDeAnulacion(m)))) return;
+                delete mapa[h];
+                parejas.forEach(function (p) {
+                    if ((lado === 'c' ? p.c : p.b) !== h) return;
+                    if (lado === 'c') delete selB[p.b];
+                    else delete selC[p.c];
+                });
+                parejas = parejas.filter(function (p) { return (lado === 'c' ? p.c : p.b) !== h; });
+            });
+        }
+        fuera(selC, 'c');
+        fuera(selB, 'b');
+    }
+
     function pintar() {
+        chequesAopCache = null;
+        soltarSeleccionFueraDeTexto();
         var imp = importeFiltro();
         var cont = listaVisible('c');
         var ban = listaVisible('b');
@@ -761,6 +889,30 @@
         pintarDetalle();
     }
 
+    /** true si todo lo tildado hasta ahora (ambos lados) pertenece a parejas armadas automáticamente. */
+    function seleccionSoloParejas() {
+        var enC = {};
+        var enB = {};
+        parejas.forEach(function (p) { enC[p.c] = true; enB[p.b] = true; });
+        var ok = true;
+        Object.keys(selC).forEach(function (h) { if (selC[h] && !enC[h]) ok = false; });
+        Object.keys(selB).forEach(function (h) { if (selB[h] && !enB[h]) ok = false; });
+        return ok;
+    }
+
+    /** Busca y tilda la contrapartida del movimiento recién tildado (misma ref de cheque o mismo importe). */
+    function autoParear(lado, hash) {
+        var base = buscar(lado === 'c' ? estado.contables : estado.banco, hash);
+        if (!base) return;
+        var mapaOtra = lado === 'c' ? selB : selC;
+        var hallado = buscarMejorPar(base, lado, { excluir: mapaOtra, estricto: true });
+        if (!hallado) return;
+        mapaOtra[hallado.mejor.hash] = true;
+        parejas.push(lado === 'c' ? { c: hash, b: hallado.mejor.hash } : { c: hallado.mejor.hash, b: hash });
+        base._sugerido = true;
+        hallado.mejor._sugerido = true;
+    }
+
     function seleccionar(lado, hash, multi) {
         var mapa = lado === 'c' ? selC : selB;
         var activoAntes = !!mapa[hash];
@@ -769,6 +921,7 @@
             if (activoAntes) {
                 selC = {};
                 selB = {};
+                parejas = [];
                 focoLado = lado;
                 focoHash = null;
                 limpiarSugeridos();
@@ -778,11 +931,25 @@
             // Clic en otra fila: base exclusiva y rearmar par del otro lado.
             selC = {};
             selB = {};
+            parejas = [];
             mapa = lado === 'c' ? selC : selB;
             mapa[hash] = true;
+        } else if (activoAntes) {
+            // Ctrl+clic sobre algo ya tildado: se destilda; si venía de una pareja automática, esa pareja se deshace.
+            delete mapa[hash];
+            // Si venía de una pareja automática, se destilda también su contrapartida.
+            parejas.forEach(function (p) {
+                if ((lado === 'c' ? p.c : p.b) === hash) {
+                    if (lado === 'c') delete selB[p.b]; else delete selC[p.c];
+                }
+            });
+            parejas = parejas.filter(function (p) { return (lado === 'c' ? p.c : p.b) !== hash; });
+            limpiarSugeridos();
         } else {
-            mapa[hash] = !mapa[hash];
-            if (!mapa[hash]) delete mapa[hash];
+            // Ctrl+clic: se suma el movimiento y, si todo lo tildado son parejas automáticas, se trae su contrapartida.
+            var autoOk = seleccionSoloParejas();
+            mapa[hash] = true;
+            if (autoOk) autoParear(lado, hash);
         }
         focoLado = lado;
         focoHash = hash;
@@ -792,10 +959,21 @@
             if (sugerir({ silencio: true })) return;
         }
         marcarSugeridosDesdeBase();
+        marcarSugeridosParejas();
         pintar();
     }
 
+    function marcarSugeridosParejas() {
+        parejas.forEach(function (p) {
+            var mc = buscar(estado.contables, p.c);
+            var mb = buscar(estado.banco, p.b);
+            if (mc) mc._sugerido = true;
+            if (mb) mb._sugerido = true;
+        });
+    }
+
     function limpiarSeleccion() {
+        parejas = [];
         selC = {};
         selB = {};
         focoHash = null;
@@ -823,6 +1001,7 @@
                 rebuildHashMaps();
                 selC = {};
                 selB = {};
+                parejas = [];
                 focoHash = null;
                 limpiarSugeridos();
                 pintar();
@@ -861,6 +1040,7 @@
                     rebuildHashMaps();
                     selC = {};
                     selB = {};
+                    parejas = [];
                     focoHash = null;
                     pintar();
                     document.getElementById('estado-cruce').textContent = 'IB ' + fecha + ': ' + (data.filas || 0) + ' fila(s) sincronizada(s).';
@@ -884,34 +1064,127 @@
         }
         var c = seleccionados('c');
         var b = seleccionados('b');
+        var anulacionOp = b.length === 0 && c.length >= 2 && Math.abs(sumaSel('c')) <= tolerancia;
+        if (anulacionOp) {
+            overlay(true, 'Guardando la anulación…');
+            postConciliar(c, [], false).then(function () {
+                cargar();
+            }).catch(function (e) {
+                overlay(false);
+                alert(e.message || 'Error');
+            });
+            return;
+        }
         if (c.length === 0 || b.length === 0) {
             alert('Elegí al menos un movimiento contable y uno de banco.');
             return;
         }
+
+        var lote = armarLoteParejas(c, b);
+        if (lote === false) return;
+        if (lote) {
+            conciliarLote(lote, forzar);
+            return;
+        }
+
         var diff = Math.abs(sumaSel('c') - sumaSel('b'));
         if (!forzar && diff > tolerancia) {
             if (!confirm('Los importes/sumas difieren en ' + dinero(diff) + ' (' + c.length + ':' + b.length + '). ¿Cruzarlos igual?')) return;
             forzar = true;
         }
         overlay(true, c.length > 1 || b.length > 1 ? 'Guardando el grupo…' : 'Guardando el cruce…');
+        postConciliar(c, b, forzar).then(function () {
+            cargar();
+        }).catch(function (e) {
+            overlay(false);
+            alert(e.message || 'Error');
+        });
+    }
+
+    function postConciliar(c, b, forzar) {
         var body = new URLSearchParams();
         body.set('empresa_id', cfg.empresaId);
         body.set('cuentacaja_id', cfg.cuentacajaId);
         body.set('forzar', forzar ? '1' : '0');
         c.forEach(function (mov, i) { appendMovimiento(body, 'contables', mov, i); });
         b.forEach(function (mov, i) { appendMovimiento(body, 'bancos', mov, i); });
-        fetch(cfg.conciliarUrl, {
+        return fetch(cfg.conciliarUrl, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'X-CSRF-TOKEN': token(), 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
             body: body.toString()
         }).then(function (r) { return r.json(); }).then(function (data) {
             if (!data.ok) throw new Error(data.error || 'No se pudo conciliar');
-            cargar();
-        }).catch(function (e) {
-            overlay(false);
-            alert(e.message || 'Error');
+            return data;
         });
+    }
+
+    /**
+     * Si hay varias parejas armadas al tildar (cada cheque con su contrapartida), se guardan como
+     * cruces 1:1 independientes con un solo Enter. Lo tildado a mano fuera de las parejas se cruza aparte.
+     * @return {Array<{c: object[], b: object[]}>|null|false} null = no aplica (flujo normal); false = hay que corregir la selección.
+     */
+    function armarLoteParejas(c, b) {
+        var porHashC = {};
+        var porHashB = {};
+        c.forEach(function (m) { porHashC[m.hash] = m; });
+        b.forEach(function (m) { porHashB[m.hash] = m; });
+        var usadasC = {};
+        var usadasB = {};
+        var tareas = [];
+        parejas.forEach(function (p) {
+            if (porHashC[p.c] && porHashB[p.b] && !usadasC[p.c] && !usadasB[p.b]) {
+                usadasC[p.c] = true;
+                usadasB[p.b] = true;
+                tareas.push({ c: [porHashC[p.c]], b: [porHashB[p.b]] });
+            }
+        });
+        if (tareas.length === 0) return null;
+        var restoC = c.filter(function (m) { return !usadasC[m.hash]; });
+        var restoB = b.filter(function (m) { return !usadasB[m.hash]; });
+        if (restoC.length === 0 && restoB.length === 0 && tareas.length === 1) return null;
+        if ((restoC.length > 0) !== (restoB.length > 0)) {
+            alert('Quedan ' + (restoC.length + restoB.length) + ' movimiento(s) tildados sin par del otro lado. '
+                + 'Destildalos o elegí su contrapartida antes de conciliar.');
+            return false;
+        }
+        if (restoC.length > 0) tareas.push({ c: restoC, b: restoB });
+        return tareas;
+    }
+
+    function conciliarLote(tareas, forzar) {
+        var conDiferencia = tareas.filter(function (t) {
+            var sc = t.c.reduce(function (a, m) { return a + (Number(m.importe) || 0); }, 0);
+            var sb = t.b.reduce(function (a, m) { return a + (Number(m.importe) || 0); }, 0);
+            return Math.abs(sc - sb) > tolerancia;
+        }).length;
+        if (!forzar && conDiferencia > 0) {
+            if (!confirm(conDiferencia + ' de ' + tareas.length + ' cruces tienen diferencia de importe. ¿Cruzarlos igual?')) return;
+            forzar = true;
+        }
+        var hechos = 0;
+        var paso = function () {
+            if (hechos >= tareas.length) {
+                cargar();
+                return null;
+            }
+            overlay(true, 'Guardando cruce ' + (hechos + 1) + ' de ' + tareas.length + '…');
+            var t = tareas[hechos];
+            return postConciliar(t.c, t.b, forzar).then(function () {
+                hechos++;
+                return paso();
+            });
+        };
+        var p = paso();
+        if (p) {
+            p.catch(function (e) {
+                var msg = e.message || 'Error';
+                cargar();
+                setTimeout(function () {
+                    alert('Se guardaron ' + hechos + ' de ' + tareas.length + ' cruces. El siguiente falló: ' + msg);
+                }, 600);
+            });
+        }
     }
 
     function importarExtracto(file) {
@@ -1124,7 +1397,9 @@
         }
         var fila = ev.target.closest('.js-fila');
         if (fila) {
-            seleccionar(fila.getAttribute('data-lado'), fila.getAttribute('data-hash'), !!(ev.ctrlKey || ev.metaKey));
+            // El tilde (checkbox) suma sin Ctrl: sigue trayendo la contrapartida de cada uno (cheques y transferencias).
+            var esTilde = !!ev.target.closest('.js-check');
+            seleccionar(fila.getAttribute('data-lado'), fila.getAttribute('data-hash'), !!(ev.ctrlKey || ev.metaKey || esTilde));
             return;
         }
         var btn = ev.target.closest('.js-desconciliar');
