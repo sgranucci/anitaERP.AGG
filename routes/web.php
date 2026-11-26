@@ -1498,6 +1498,15 @@ Route::get('contable/exportar-percepciones-iva-reporte', 'Contable\PercepcionSuf
 Route::get('contable/ingresos-brutos', 'Contable\IngresosBrutosReporteController@index')->name('ingresos_brutos');
 Route::get('contable/exportar-ingresos-brutos', 'Contable\IngresosBrutosReporteController@exportar')->name('exportar_ingresos_brutos');
 Route::get('contable/listar-ingresos-brutos/{formato?}', 'Contable\IngresosBrutosReporteController@listar')->name('listar_ingresos_brutos');
+Route::post('contable/ingresos-brutos/arba/recalcular', 'Contable\IngresosBrutosArbaController@recalcular')->name('ingresos_brutos_arba_recalcular');
+Route::post('contable/ingresos-brutos/arba/liquidacion', 'Contable\IngresosBrutosArbaController@liquidar')->name('ingresos_brutos_arba_liquidar');
+Route::post('contable/ingresos-brutos/arba/solicitud-pago', 'Contable\IngresosBrutosArbaController@solicitudPago')->name('ingresos_brutos_arba_solicitud_pago');
+Route::get('contable/iibb-arba-config', 'Contable\IibbArbaConfigController@index')->name('iibb_arba_config');
+Route::get('contable/iibb-arba-config/crear', 'Contable\IibbArbaConfigController@crear')->name('crear_iibb_arba_config');
+Route::post('contable/iibb-arba-config', 'Contable\IibbArbaConfigController@guardar')->name('guardar_iibb_arba_config');
+Route::get('contable/iibb-arba-config/{id}/editar', 'Contable\IibbArbaConfigController@editar')->name('editar_iibb_arba_config');
+Route::put('contable/iibb-arba-config/{id}', 'Contable\IibbArbaConfigController@actualizar')->name('actualizar_iibb_arba_config');
+Route::delete('contable/iibb-arba-config/{id}', 'Contable\IibbArbaConfigController@eliminar')->name('eliminar_iibb_arba_config');
 
 Route::get('contable/ingresos-brutos-config', 'Contable\IngresosBrutosConfigController@index')->name('ingresos_brutos_config');
 Route::get('contable/ingresos-brutos-config/crear', 'Contable\IngresosBrutosConfigController@crear')->name('crear_ingresos_brutos_config');

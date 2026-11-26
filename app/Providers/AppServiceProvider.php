@@ -1262,6 +1262,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Contable\IibbSolicitudpagoConfigRepositoryInterface',
+            'App\Repositories\Contable\IibbSolicitudpagoConfigRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepositoryInterface',
             'App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepository',
         );

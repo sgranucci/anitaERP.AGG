@@ -7,13 +7,17 @@ namespace App\Http\Controllers\Contable;
 use App\Exports\Contable\IngresosBrutosListadoExport;
 use App\Http\Controllers\Controller;
 use App\Models\Configuracion\Provincia;
+use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Contable\IngresosBrutos\IngresosBrutosLiquidacionArbaService;
 use App\Services\Contable\IngresosBrutos\IngresosBrutosReporteService;
+use App\Services\Contable\IngresosBrutos\IngresosBrutosSolicitudpagoArbaService;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosAgenteOpcionesSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Schema;
 
 class IngresosBrutosReporteController extends Controller
 {
@@ -22,6 +26,8 @@ class IngresosBrutosReporteController extends Controller
     public function __construct(
         private readonly IngresosBrutosReporteService $reporteService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly IngresosBrutosLiquidacionArbaService $liquidacionArba,
+        private readonly IngresosBrutosSolicitudpagoArbaService $solicitudArba,
     ) {
         $this->middleware('auth');
     }
@@ -66,6 +72,30 @@ class IngresosBrutosReporteController extends Controller
             $filtrosQuery['consultar'] = 1;
         }
 
+        // Liquidación ARBA: neteo, liquidación vigente y solicitud de pago (solo retenciones por quincena).
+        $arba = null;
+        $arbaLiquidacion = null;
+        $arbaSolicitud = null;
+        if ($consultado && $resultado !== null && IngresosBrutosLiquidacionArbaService::esArbaLiquidable($filtros) && $this->arbaDisponible()) {
+            $decisiones = session()->get(IngresosBrutosLiquidacionArbaService::claveDecisiones($filtros), []);
+            $arba = $this->liquidacionArba->calcular($filtros, $resultado, is_array($decisiones) ? $decisiones : []);
+            $config = $resultado['config'] ?? null;
+            if ($config instanceof Iibb_Presentacion_Config) {
+                $arbaLiquidacion = $this->liquidacionArba->liquidacionVigente(
+                    (int) $arba['empresa_id'],
+                    (int) $config->id,
+                    (string) $arba['periodo'],
+                    (int) $arba['quincena'],
+                );
+                $arbaSolicitud = $this->solicitudArba->preview(
+                    (int) $arba['empresa_id'],
+                    (string) $arba['periodo'],
+                    (int) $arba['quincena'],
+                    $arbaLiquidacion,
+                );
+            }
+        }
+
         $provincia = null;
         if ((int) ($filtros['provincia_id'] ?? 0) > 0) {
             $provincia = Provincia::query()->find((int) $filtros['provincia_id']);
@@ -90,7 +120,38 @@ class IngresosBrutosReporteController extends Controller
             'consultado' => $consultado,
             'resultado' => $resultado,
             'periodo_texto' => IngresosBrutosListadoFiltros::formatearPeriodoTexto($filtros),
+            'arba' => $arba,
+            'arba_liquidacion' => $arbaLiquidacion,
+            'arba_solicitud' => $arbaSolicitud,
         ]);
+    }
+
+    /**
+     * La sección ARBA necesita las tablas de neteo y liquidación (migración 2026_11_25_120000).
+     * Sin migrar, la pantalla IIBB sigue funcionando y solo oculta la sección.
+     */
+    private function arbaDisponible(): bool
+    {
+        foreach (['iibb_neteo_devolucion', 'iibb_neteo_aplicacion', 'iibb_liquidacion_arba', 'iibb_solicitudpago_config'] as $tabla) {
+            if (! Schema::hasTable($tabla)) {
+                return false;
+            }
+        }
+
+        // Parámetros nuevos (migración 2026_11_25_200000): sin ellos la liquidación no puede calcularse.
+        $columnas = [
+            'iibb_presentacion_config' => ['tolerancia_conciliacion', 'palabras_banco'],
+            'iibb_solicitudpago_config' => ['dias_duplicado', 'dias_aviso_pendiente'],
+        ];
+        foreach ($columnas as $tabla => $lista) {
+            foreach ($lista as $columna) {
+                if (! Schema::hasColumn($tabla, $columna)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public function exportar(Request $request)

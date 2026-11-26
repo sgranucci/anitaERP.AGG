@@ -69,6 +69,23 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="tolerancia_conciliacion" class="col-lg-3 col-form-label text-right requerido">Tolerancia de conciliaci&oacute;n ($)</label>
+    <div class="col-lg-3">
+        <input type="number" step="0.01" min="0" max="1000000" name="tolerancia_conciliacion" id="tolerancia_conciliacion"
+            inputmode="decimal" class="form-control" required
+            value="{{ old('tolerancia_conciliacion', $data->tolerancia_conciliacion ?? \App\Models\Contable\Iibb_Presentacion_Config::TOLERANCIA_CONCILIACION_DEFAULT) }}">
+        <small class="form-text text-muted">Diferencia máxima contra el mayor. La usan la conciliación del proceso y el control de la liquidación ARBA.</small>
+    </div>
+</div>
+<div class="form-group row">
+    <label for="palabras_banco" class="col-lg-3 col-form-label text-right">Palabras que identifican un banco</label>
+    <div class="col-lg-8">
+        <input type="text" name="palabras_banco" id="palabras_banco" class="form-control" maxlength="255"
+            value="{{ old('palabras_banco', $data->palabras_banco ?? \App\Models\Contable\Iibb_Presentacion_Config::PALABRAS_BANCO_DEFAULT) }}">
+        <small class="form-text text-muted">Separadas por coma. Si el nombre del proveedor contiene alguna (palabra completa, sin distinguir mayúsculas), no se toma como proveedor en el neteo. Vacío = no se excluye ninguno.</small>
+    </div>
+</div>
+<div class="form-group row">
     <div class="col-lg-3"></div>
     <div class="col-lg-8">
         <div class="custom-control custom-checkbox">
