@@ -15,10 +15,30 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-cm05">
-				@if (isset($data->cliente_cm05s))
-				@if (count($data->cliente_cm05s) > 0)
-		 		@if ($data->cliente_cm05s ?? '') 
-					@foreach (old('cliente_cm05s', $data->cliente_cm05s->count() ? $data->cliente_cm05s : ['']) as $cm05)
+				@php
+					if (\App\Support\Ventas\ClienteFormOldSupport::hayOld()) {
+						$cm05Filas = \App\Support\Ventas\ClienteFormOldSupport::filas([
+							'provincia_id' => 'provincia_ids',
+							'prov_codigo' => 'codigoprovincias',
+							'prov_nombre' => 'nombreprovincias',
+							'tipopercepcion' => 'tipopercepciones',
+							'coeficiente' => 'coeficientes',
+							'fechavigencia' => 'fechavigencias',
+							'certificadonoretencion' => 'certificadonoretenciones',
+							'desdefechanoretencion' => 'desdefechanoretenciones',
+							'hastafechanoretencion' => 'hastafechanoretenciones',
+							'creousuario_id' => 'creousuario_cm05_ids',
+						])->map(function ($f) {
+							$f->provincias = (object) ['codigo' => $f->prov_codigo, 'nombre' => $f->prov_nombre];
+
+							return $f;
+						});
+					} else {
+						$cm05Filas = collect($data->cliente_cm05s ?? []);
+					}
+				@endphp
+				@if ($cm05Filas->count() > 0)
+					@foreach ($cm05Filas as $cm05)
             			<tr class="item-cm05">
                 			<td>
                 				<input type="hidden" name="cliente_cm05[]" class="form-control iicm05" readonly value="{{ $loop->index+1 }}" />
@@ -74,8 +94,6 @@
                 			</td>
                 		</tr>
            			@endforeach
-				@endif
-				@endif
 				@endif
        		</tbody>
        	</table>

@@ -61,8 +61,16 @@ final class TransferenciaPxsolApiService
 
         $mapeo = TransferenciaCrownArcaTipos::resolver($usuarioId);
         $filas = [];
+        $descartados = 0;
         foreach ($vouchers as $voucher) {
-            $filas[] = $this->normalizar(PxsolVoucherNormalizer::aFila($voucher), $mapeo);
+            $cruda = PxsolVoucherNormalizer::aFila($voucher);
+            // Borradores/temporales de la API: sin punto de venta fiscal o sin número no son
+            // facturas. No se muestran en el preview ni se pueden importar.
+            if ((int) $cruda['sucursal'] <= 0 || (int) $cruda['numero'] <= 0) {
+                $descartados++;
+                continue;
+            }
+            $filas[] = $this->normalizar($cruda, $mapeo);
         }
         $filas = $this->writer->marcarExistentes($filas);
         // Reimportación: lo que ya está (con o sin asiento) no se toca.
@@ -74,10 +82,15 @@ final class TransferenciaPxsolApiService
         }
         unset($fila);
 
+        $avisoDescartados = $descartados > 0
+            ? ['Se descartaron '.$descartados.' comprobante(s) de la API sin punto de venta fiscal o sin número (borradores): no se importan.']
+            : [];
+
         return [
             'filas' => $filas,
             'resumen' => $this->resumen($filas),
             'advertencias' => [
+                ...$avisoDescartados,
                 'Origen: API PXSOL voucher/list (no se sube Excel ni ARCA).',
                 'Cuenta corriente: asiento a la cuenta del cliente (cliente.cuentacontable_id, en Crown casi siempre 130110000) y alta en la CC del cliente por CUIT. El resto → efectivo del PV.',
                 'Si el comprobante ya está en el ERP, se omite: la reimportación no pisa facturas ni asientos.',
@@ -239,7 +252,9 @@ final class TransferenciaPxsolApiService
 
         if ((int) $fila['sucursal'] <= 0 || (int) $fila['numero'] <= 0) {
             $fila['estado'] = 'error';
-            $fila['mensaje'] = 'Falta punto de venta fiscal o número.';
+            $fila['mensaje'] = (int) ($fila['numero_temporal'] ?? 0) > 0 && (int) $fila['numero'] <= 0
+                ? 'Comprobante temporal de la API sin número fiscal: no se importa.'
+                : 'Falta punto de venta fiscal o número.';
 
             return $fila;
         }

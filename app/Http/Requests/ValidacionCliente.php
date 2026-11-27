@@ -89,7 +89,7 @@ class ValidacionCliente extends FormRequest
 
             $reglas['secuencia_codigo'] = 'nullable|in:administracion,gastronomia,cliente,empleado';
 
-            if (! ClienteAnitaNumeracionSupport::codigoAutomatico()) {
+            if (ClienteAnitaNumeracionSupport::codigoManual()) {
                 $reglas['codigo'] = [
                     'required',
                     'max:20',

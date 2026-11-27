@@ -146,6 +146,7 @@ final class TransferenciaCrownFacturaWriter
         if (($fila['estado'] ?? '') !== 'nuevo') {
             throw new RuntimeException('El comprobante no está pendiente de grabar.');
         }
+        $this->exigirNumeracionFiscal($fila);
 
         $lineas = is_array($fila['lineas_asiento'] ?? null) ? $fila['lineas_asiento'] : [];
         if ($lineas === []) {
@@ -250,6 +251,22 @@ final class TransferenciaCrownFacturaWriter
     }
 
     /**
+     * Un comprobante sin punto de venta fiscal o sin número no es una factura: viene mal de la
+     * fuente (API/archivo) y no se graba ni como borrador.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private function exigirNumeracionFiscal(array $fila): void
+    {
+        if ((int) ($fila['sucursal'] ?? 0) <= 0 || (int) ($fila['numero'] ?? 0) <= 0) {
+            throw new RuntimeException(
+                'Comprobante sin punto de venta fiscal o sin número ('
+                .TransferenciaCrownComprobante::codigoVisible($fila).'): no se graba.'
+            );
+        }
+    }
+
+    /**
      * Subdiario de deuda del cliente (Lana: organizar facturas por CUIT).
      * El asiento contable usa 130110000; esta fila es la CC operativa por cliente.
      *
@@ -300,6 +317,7 @@ final class TransferenciaCrownFacturaWriter
         if (($fila['estado'] ?? '') !== 'enganchar') {
             throw new RuntimeException('El comprobante no está pendiente de enganchar el asiento.');
         }
+        $this->exigirNumeracionFiscal($fila);
 
         $lineas = is_array($fila['lineas_asiento'] ?? null) ? $fila['lineas_asiento'] : [];
         if ($lineas === []) {

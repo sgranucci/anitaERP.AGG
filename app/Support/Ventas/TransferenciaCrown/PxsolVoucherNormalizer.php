@@ -18,7 +18,10 @@ final class PxsolVoucherNormalizer
         $tipoTexto = trim((string) ($voucher['voucher_type'] ?? ''));
         [$tipoAnita, $letra, $codigoAfip] = self::tipoDesdeTexto($tipoTexto);
         $sucursal = (int) ($voucher['fiscal_point_of_sale'] ?? 0);
-        $numero = (int) ($voucher['cbte_number'] ?? $voucher['temporal_voucher_number'] ?? 0);
+        // Solo el número fiscal (cbte_number). El número temporal de la API es un borrador
+        // sin comprobante emitido: no se usa como número de factura.
+        $numero = (int) ($voucher['cbte_number'] ?? 0);
+        $numeroTemporal = (int) ($voucher['temporal_voucher_number'] ?? 0);
         $fecha = self::fechaYmd((string) ($voucher['cbte_date'] ?? $voucher['date'] ?? ''));
         $vencimiento = self::fechaYmd((string) ($voucher['due_date'] ?? ''));
         if ($vencimiento === '') {
@@ -52,6 +55,7 @@ final class PxsolVoucherNormalizer
             'codigo_afip' => $codigoAfip,
             'sucursal' => $sucursal,
             'numero' => $numero,
+            'numero_temporal' => $numeroTemporal,
             'cae' => $cae,
             'fechavencimientocae' => $vtoCae,
             'cuit' => $doc,

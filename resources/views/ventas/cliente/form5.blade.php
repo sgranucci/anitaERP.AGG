@@ -3,6 +3,11 @@
 @endphp
 <div id="tab-archivos" class="tab-pane fade card form5" role="tabpanel">
     <div class="card-body">
+        @if (\App\Support\Ventas\ClienteFormOldSupport::hayOld())
+            <div class="alert alert-warning py-2 small">
+                El navegador no conserva los archivos elegidos cuando el guardado falla: si hab&iacute;a archivos para adjuntar, volv&eacute; a seleccionarlos.
+            </div>
+        @endif
         @if ($tieneCliente)
             <p class="text-muted small mb-2">Archivos actuales</p>
             @include('ventas.cliente.partials.archivos_adjuntos', ['data' => $data])

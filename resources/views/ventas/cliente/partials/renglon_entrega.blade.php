@@ -17,6 +17,12 @@
 
     $locEntregaId = $esTemplate ? '' : old('localidades_id.'.$idxEntrega, optional($entrega)->localidad_id ?? '');
     $locEntrega = optional($entrega)->localidades;
+    if (! $locEntrega && (int) $locEntregaId > 0) {
+        // Reapertura tras un error de validación: la fila viene de old() y no trae la relación.
+        $locEntrega = \App\Models\Configuracion\Localidad::query()->find((int) $locEntregaId);
+    }
+    $locEntregaNombreOld = $esTemplate ? '' : (string) (old('desc_localidades.'.$idxEntrega) ?? '');
+    $provEntregaNombreOld = $esTemplate ? '' : (string) (old('desc_provincias.'.$idxEntrega) ?? '');
 
     $zonavtaId = $esTemplate ? '' : old('zonavtas_id.'.$idxEntrega, optional($entrega)->zonavta_id ?? '');
     $zonavtaCodigo = $esTemplate ? '' : old('codigozonavtas.'.$idxEntrega, optional(optional($entrega)->zonavtas)->codigo ?? '');
@@ -65,7 +71,7 @@
                     'inputName' => 'provincias_id[]',
                     'provinciaId' => $provEntregaId,
                     'codigo' => optional($provEntrega)->codigo ?? '',
-                    'nombre' => optional($provEntrega)->nombre ?? (optional($entrega)->desc_provincias ?? ''),
+                    'nombre' => optional($provEntrega)->nombre ?? (optional($entrega)->desc_provincias ?? $provEntregaNombreOld),
                     'descName' => 'desc_provincias[]',
                 ])
             </div>
@@ -91,7 +97,7 @@
                     'inputName' => 'localidades_id[]',
                     'localidadId' => $locEntregaId,
                     'codigo' => optional($locEntrega)->codigo ?? '',
-                    'nombre' => optional($locEntrega)->nombre ?? (optional($entrega)->desc_localidades ?? ''),
+                    'nombre' => optional($locEntrega)->nombre ?? (optional($entrega)->desc_localidades ?? $locEntregaNombreOld),
                     'previaName' => 'localidad_id_previas[]',
                     'descName' => 'desc_localidades[]',
                 ])

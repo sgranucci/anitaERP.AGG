@@ -93,7 +93,7 @@
                                                 : trim((string) (old('nombres.'.$loop->index) ?? ''));
                                             $locResumen = is_object($entrega)
                                                 ? trim((string) (optional($entrega->localidades)->nombre ?? ''))
-                                                : '';
+                                                : trim((string) (old('desc_localidades.'.$loop->index) ?? ''));
                                         @endphp
                                         <tr class="entrega-resumen{{ $loop->first ? ' activa' : '' }}" data-entrega-idx="{{ $loop->index }}">
                                             <td class="entrega-resumen-nro text-center">{{ $loop->iteration }}</td>

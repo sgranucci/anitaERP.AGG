@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * Numeración automática de cliente: t_comp (CLI) → numerador Anita (num_clave = tcomp_refer).
  * El siguiente código sale de num_ult_numero + 1; si está ocupado en ERP/climae se incrementa.
- * Activo en EL BIERZO e INTERFORMING.
+ * Activo en EL BIERZO e INTERFORMING, siempre que
+ * CLIENTE_ANITA_NUMERACION_BIERZO=true en .env.
+ * Crown numera en el ERP (ClienteNumeradorErpSupport), no en este numerador.
  */
 final class ClienteAnitaNumeracionSupport
 {
@@ -37,6 +39,16 @@ final class ClienteAnitaNumeracionSupport
     public static function codigoAutomatico(): bool
     {
         return self::estaHabilitada();
+    }
+
+    /**
+     * El operador tipea el código a mano (solo Interforming sin numerador CLI).
+     * En el resto de los entornos (Crown, AGG, Ferli…) el repositorio asigna el código al grabar
+     * y el campo del formulario es de solo lectura: no se puede exigir en la validación.
+     */
+    public static function codigoManual(): bool
+    {
+        return EntornoEmpresaSupport::esInterforming() && ! self::codigoAutomatico();
     }
 
     public static function sistemaTComp(): string

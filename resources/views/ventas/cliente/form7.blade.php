@@ -13,8 +13,28 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla-articulo-suspendido">
-		 		@if (($data->cliente_articulo_suspendidos ?? null) && $data->cliente_articulo_suspendidos->count())
-					@foreach (old('articulo_suspendidos', $data->cliente_articulo_suspendidos) as $suspendido)
+				@php
+					if (\App\Support\Ventas\ClienteFormOldSupport::hayOld()) {
+						$suspendidosFilas = \App\Support\Ventas\ClienteFormOldSupport::filas([
+							'articulo_id' => 'articulo_ids',
+							'sku' => 'codigoarticulos',
+							'codigo' => 'codigo_previo_articulos',
+							'descripcion' => 'descripcionarticulos',
+							'created_at' => 'fechasuspensiones',
+							'creousuario_id' => 'creousuario_articulo_suspendido_ids',
+							'creousuario_nombre' => 'creousuario_articulo_suspendidos',
+						])->map(function ($f) {
+							$f->articulos = (object) ['sku' => $f->sku, 'codigo' => $f->codigo, 'descripcion' => $f->descripcion];
+							$f->creousuarios = (object) ['nombre' => $f->creousuario_nombre];
+
+							return $f;
+						});
+					} else {
+						$suspendidosFilas = collect($data->cliente_articulo_suspendidos ?? []);
+					}
+				@endphp
+				@if ($suspendidosFilas->count())
+					@foreach ($suspendidosFilas as $suspendido)
             			<tr class="item-articulo-suspendido">
                 			<td>
                 				<input type="hidden" name="articulo_suspendidos[]" class="form-control iiarticulo-suspendido" readonly value="{{ $loop->index+1 }}" />

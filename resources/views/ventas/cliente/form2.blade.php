@@ -355,6 +355,14 @@
 					$cuentaContableId = old('cuentacontable_id', $data->cuentacontable_id ?? '');
 					$cuentaContableCodigo = old('codigocuentacontable', optional($data->cuentascontables ?? null)->codigo ?? '');
 					$cuentaContableNombre = old('nombrecuentacontable', optional($data->cuentascontables ?? null)->nombre ?? '');
+					// Tras un error de validación vuelve el id (la request lo completa con el default) pero no el texto.
+					if ((int) $cuentaContableId > 0 && (string) $cuentaContableCodigo === '') {
+						$cuentaGuardada = \App\Models\Contable\Cuentacontable::query()->find((int) $cuentaContableId);
+						if ($cuentaGuardada) {
+							$cuentaContableCodigo = $cuentaGuardada->codigo;
+							$cuentaContableNombre = $cuentaGuardada->nombre;
+						}
+					}
 					if ((string) $cuentaContableId === '' && (string) $cuentaContableCodigo === '') {
 						$cuentaDefault = \App\Support\Ventas\ClienteCuentacontableDefaultSupport::find();
 						if ($cuentaDefault) {

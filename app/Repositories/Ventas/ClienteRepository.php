@@ -36,6 +36,7 @@ use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
 use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
+use App\Support\Ventas\ClienteNumeradorErpSupport;
 use App\Support\Ventas\ClienteAnitaColisionSupport;
 use App\Support\Ventas\ClienteCodigoSecuenciaSupport;
 use App\Support\Ventas\ClienteCodigoEmpleadoBierzoSupport;
@@ -2612,11 +2613,18 @@ class ClienteRepository implements ClienteRepositoryInterface
 	/**
 	 * Siguiente código de cliente para el alta.
 	 * Bierzo/Interforming: numerador CLI Anita.
+	 * Crown: numerador del ERP (sistema_numerador), desde el último código creado.
 	 * AGG: serie ERP###.
 	 * Ferli y demás: max(ERP, climae) + primer libre (no alcanza con Anita solo:
 	 * si anita_sync_cliente_write está apagado el max de climae no avanza y se repetía el código).
 	 */
 	private function ultimoCodigo(&$codigo) {
+		if (ClienteNumeradorErpSupport::habilitada()) {
+			$codigo = ClienteNumeradorErpSupport::reservarSiguiente();
+
+			return;
+		}
+
 		if (ClienteAnitaNumeracionSupport::estaHabilitada()) {
 			$numero = ClienteAnitaNumeracionSupport::asignarCodigoClienteLibre();
 			$codigo = ClienteAnitaNumeracionSupport::formatearCodigoErp($numero);

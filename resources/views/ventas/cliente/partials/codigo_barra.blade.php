@@ -1,14 +1,14 @@
 @php
     use App\Models\Ventas\Cliente;
     use App\Support\Ventas\ClienteAnitaNumeracionSupport;
+    use App\Support\Ventas\ClienteNumeradorErpSupport;
     use App\Support\Ventas\ClienteCodigoEmpleadoBierzoSupport;
     use App\Support\Ventas\ClienteCodigoSecuenciaSupport;
 
     $esCliente = isset($data) && $data instanceof Cliente;
     $codigoActual = trim((string) ($esCliente ? ($data->codigo ?? '') : ''));
     $codigoCliente = old('codigo', $codigoActual !== '' ? $codigoActual : ($data->codigo ?? ''));
-    $codigoEditable = config('app.empresa') === 'INTERFORMING'
-        && ! ClienteAnitaNumeracionSupport::codigoAutomatico();
+    $codigoEditable = ClienteAnitaNumeracionSupport::codigoManual();
     $esAlta = ! $esCliente;
     $mostrarSecuencia = ClienteCodigoSecuenciaSupport::muestraSelector($codigoActual, $esAlta);
     $secuenciaSel = old('secuencia_codigo');
@@ -37,9 +37,13 @@
     $proximoEmpleado = $mostrarSecuenciaEmpleado ? ClienteCodigoEmpleadoBierzoSupport::proximoVisible() : '';
     $desdeEmpleado = ClienteCodigoEmpleadoBierzoSupport::desde();
     $hastaEmpleado = ClienteCodigoEmpleadoBierzoSupport::hasta();
-    $proximoCliente = ($esAlta && ClienteAnitaNumeracionSupport::estaHabilitada())
-        ? ClienteAnitaNumeracionSupport::proximoCodigoVisible()
-        : '';
+    if ($esAlta && ClienteAnitaNumeracionSupport::estaHabilitada()) {
+        $proximoCliente = ClienteAnitaNumeracionSupport::proximoCodigoVisible();
+    } elseif ($esAlta && ClienteNumeradorErpSupport::habilitada()) {
+        $proximoCliente = ClienteNumeradorErpSupport::proximoVisible();
+    } else {
+        $proximoCliente = '';
+    }
     $serieEmpleado = $mostrarSecuenciaEmpleado
         && $secuenciaEmpleadoSel === ClienteCodigoEmpleadoBierzoSupport::EMPLEADO;
     if ($esAlta && $serieEmpleado && $proximoEmpleado !== '') {

@@ -19,7 +19,25 @@
             <tbody id="tbody-tabla-exclusion-percepcion">
                 @php
                     $tipoexclusion_enum = $tipoexclusion_enum ?? \App\Models\Ventas\Cliente_Exclusion_Percepcion::$enumTipo;
-                    $exclusiones = isset($data) ? ($data->cliente_exclusion_percepcions ?? collect()) : collect();
+                    if (\App\Support\Ventas\ClienteFormOldSupport::hayOld()) {
+                        $exclusiones = \App\Support\Ventas\ClienteFormOldSupport::filas([
+                            'id' => 'exclusion_ids',
+                            'creousuario_id' => 'exclusion_creousuario_ids',
+                            'tipo' => 'exclusion_tipos',
+                            'provincia_id' => 'exclusion_provincia_ids',
+                            'prov_codigo' => 'exclusion_codigoprovincias',
+                            'prov_nombre' => 'exclusion_nombreprovincias',
+                            'porcentaje' => 'exclusion_porcentajes',
+                            'desdefecha' => 'exclusion_desdefechas',
+                            'hastafecha' => 'exclusion_hastafechas',
+                        ])->map(function ($f) {
+                            $f->provincias = (object) ['codigo' => $f->prov_codigo, 'nombre' => $f->prov_nombre];
+
+                            return $f;
+                        });
+                    } else {
+                        $exclusiones = isset($data) ? collect($data->cliente_exclusion_percepcions ?? []) : collect();
+                    }
                 @endphp
                 @if ($exclusiones->count() > 0)
                     @foreach ($exclusiones as $exclusion)
