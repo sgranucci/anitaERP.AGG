@@ -304,7 +304,7 @@ final class ConciliacionBancariaCodificacionSupport
      * @param  array<string, int|string>  $overridesSaldo
      * @return list<array<string, mixed>>
      */
-    public static function resumirGastosDiarios(array $movimientos, array $overridesSaldo = []): array
+    public static function resumirGastosDiarios(array $movimientos, array $overridesSaldo = [], ?array $hashesPendientes = null): array
     {
         $grupos = [];
 
@@ -330,12 +330,24 @@ final class ConciliacionBancariaCodificacionSupport
             }
 
             $grupos[$key]['importe'] += $importe;
+            if ($hashesPendientes !== null) {
+                // Con el estado de conciliación del módulo: cuánto del gasto ya está conciliado y cuánto sigue pendiente.
+                $hash = (string) ($mov['hash'] ?? '');
+                $campo = ($hash !== '' && ! isset($hashesPendientes[$hash])) ? 'importe_conciliado' : 'importe_pendiente';
+                $grupos[$key]['importe_conciliado'] = (float) ($grupos[$key]['importe_conciliado'] ?? 0.0);
+                $grupos[$key]['importe_pendiente'] = (float) ($grupos[$key]['importe_pendiente'] ?? 0.0);
+                $grupos[$key][$campo] += $importe;
+            }
         }
 
         uksort($grupos, fn ($a, $b) => (int) $a <=> (int) $b);
 
         return array_values(array_map(function (array $g) {
-            $g['importe'] = round($g['importe'], 2);
+            foreach (['importe', 'importe_conciliado', 'importe_pendiente'] as $campo) {
+                if (isset($g[$campo])) {
+                    $g[$campo] = round($g[$campo], 2);
+                }
+            }
 
             return $g;
         }, $grupos));

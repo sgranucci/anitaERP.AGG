@@ -391,8 +391,12 @@ class ConciliacionBancariaExport
                 $ch['fecha_entrega'] ?? '',
                 $ch['fecha_conciliacion'] ?? '',
                 $ch['entregado_a'] ?? '',
-                null,
-                abs((float) ($ch['importe'] ?? 0)),
+                array_key_exists('debe', $ch) || array_key_exists('haber', $ch)
+                    ? (! empty($ch['debe']) ? (float) $ch['debe'] : null)
+                    : null,
+                array_key_exists('debe', $ch) || array_key_exists('haber', $ch)
+                    ? (! empty($ch['haber']) ? (float) $ch['haber'] : null)
+                    : abs((float) ($ch['importe'] ?? 0)),
                 ! empty($ch['incluye_caratula']) ? 'Sí' : '',
             ];
         }

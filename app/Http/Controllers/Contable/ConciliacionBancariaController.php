@@ -629,8 +629,9 @@ class ConciliacionBancariaController extends Controller
         $cuentacajaId = (int) $request->input('cuentacaja_id');
         $parId = (int) $request->input('par_id');
         $grupoId = (int) $request->input('grupo_id');
+        $marcaId = (int) $request->input('marca_id');
 
-        if ($empresaId <= 0 || $cuentacajaId <= 0 || ($parId <= 0 && $grupoId <= 0)) {
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || ($parId <= 0 && $grupoId <= 0 && $marcaId <= 0)) {
             return response()->json(['ok' => false, 'error' => 'Falta el cruce a desconciliar.'], 422);
         }
         if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
@@ -638,7 +639,9 @@ class ConciliacionBancariaController extends Controller
         }
 
         try {
-            if ($grupoId > 0) {
+            if ($marcaId > 0) {
+                $this->service->quitarMarca($empresaId, $cuentacajaId, $marcaId);
+            } elseif ($grupoId > 0) {
                 $this->service->desconciliarGrupo($empresaId, $cuentacajaId, $grupoId);
             } else {
                 $this->service->desconciliar($empresaId, $cuentacajaId, $parId);

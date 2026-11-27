@@ -7,6 +7,7 @@ namespace App\Support\Contable\ConciliacionBancaria;
 use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Contable\ConciliacionBancariaPar;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
 
@@ -324,6 +325,214 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             ],
             'meta' => self::metaDesdeResultado($resultado),
         ];
+    }
+
+    /**
+     * Suma los cheques y cobranzas pendientes que el mayor no trae: los emitidos antes de la ventana del
+     * mayor (cheques viejos) y los cargados como semilla (sin asiento). Salen del último stock de cheques
+     * guardado. Si el mayor ya trae el movimiento (mismo tipo y número), no se repite.
+     *
+     * @param  array<string, mixed>  $reporte  salida de armarDesdeTablero
+     * @param  array<string, true>  $hashesConciliados  hashes con cruce o marca de conciliado
+     * @return array<string, mixed>
+     */
+    public static function sumarChequesDeStock(
+        array $reporte,
+        int $empresaId,
+        int $cuentacajaId,
+        ?string $ventanaDesde,
+        array $hashesConciliados,
+        array $clavesMayor = [],
+    ): array {
+        $reporte = self::sumarChequesDeSnapshot($reporte, $empresaId, $cuentacajaId, $ventanaDesde, $hashesConciliados);
+
+        return self::sumarChequesVivosPosicion($reporte, $empresaId, $cuentacajaId, $ventanaDesde, $hashesConciliados, $clavesMayor);
+    }
+
+    /**
+     * Cheques propios emitidos que siguen vivos en la cartera (posicion_bancaria_cheque) dentro de la ventana
+     * del mayor y que el mayor no trae como CHP (p. ej. echeqs "a descontar" que el mayor registra como OPP).
+     * Anita los lista como CHP pendiente hasta que el banco los debita. El stock guardado de un mes no los
+     * incorpora si se emitieron después de armarse, por eso se leen de la cartera viva.
+     *
+     * Un cheque que el mayor ya trae (pendiente o cruzado con el banco) no se repite: la marca "activo" de la
+     * cartera puede seguir prendida aunque el banco ya lo debitó.
+     *
+     * @param  array<string, mixed>  $reporte
+     * @param  array<string, true>  $hashesConciliados
+     * @param  array<string, true>  $clavesMayor  claves TIP|número de todos los movimientos del mayor (también los conciliados)
+     * @return array<string, mixed>
+     */
+    private static function sumarChequesVivosPosicion(
+        array $reporte,
+        int $empresaId,
+        int $cuentacajaId,
+        ?string $ventanaDesde,
+        array $hashesConciliados,
+        array $clavesMayor,
+    ): array {
+        if ($ventanaDesde === null || $clavesMayor === [] || ! Schema::hasTable('posicion_bancaria_cheque')) {
+            return $reporte;
+        }
+        $claveFila = static fn (string $tip, string $numero): string => strtoupper(trim($tip)).'|'.(ltrim(trim($numero), '0') ?: '0');
+        $presentes = $clavesMayor;
+        foreach ($reporte['filas'] ?? [] as $f) {
+            $presentes[$claveFila((string) ($f['tip'] ?? ''), (string) ($f['numero'] ?? ''))] = true;
+        }
+        $tope = preg_replace('/\D/', '', (string) ($reporte['meta']['fecha_hasta'] ?? ''));
+
+        $agregadas = 0;
+        $vivos = DB::table('posicion_bancaria_cheque')
+            ->where('empresa_id', $empresaId)->where('cuentacaja_id', $cuentacajaId)
+            ->where('activo', true)->where('tip', 'CHP')
+            ->whereDate('fecha_emision', '>=', $ventanaDesde)
+            ->orderBy('id')
+            ->get();
+        foreach ($vivos as $r) {
+            $emision = substr((string) $r->fecha_emision, 0, 10);
+            if ($tope !== null && strlen($tope) === 8 && str_replace('-', '', $emision) > $tope) {
+                continue;
+            }
+            $tip = 'CHP';
+            $numero = (string) $r->numero_cheque;
+            $hash = ConciliacionBancariaMarcaSupport::hashChequeStock($tip, $numero);
+            if (isset($presentes[$claveFila($tip, $numero)]) || isset($hashesConciliados[$hash]) || (float) $r->importe <= 0) {
+                continue;
+            }
+            $reporte['filas'][] = self::desdeCheque([
+                'numero_cheque' => $numero,
+                'importe' => (float) $r->importe,
+                'fecha_emision' => $r->fecha_emision,
+                'fecha_cheque' => $r->fecha_cheque,
+                'fecha_entrega' => $r->fecha_entrega,
+                'fecha_conciliacion' => null,
+                'entregado_a' => $r->entregado_a,
+                'nro_op' => $r->nro_op,
+                'origen_json' => ['fuente' => 'posicion_bancaria_cheque', 'id' => $r->id, 'cartera_viva' => true],
+                'hash' => $hash,
+            ], $tip);
+            $presentes[$claveFila($tip, $numero)] = true;
+            $agregadas++;
+        }
+        if ($agregadas === 0) {
+            return $reporte;
+        }
+
+        usort($reporte['filas'], static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['f_mov_ord'] ?? ''), (string) ($b['f_mov_ord'] ?? ''));
+
+            return $cmp !== 0 ? $cmp : strcmp((string) ($a['numero'] ?? ''), (string) ($b['numero'] ?? ''));
+        });
+        $debitos = 0.0;
+        $creditos = 0.0;
+        foreach ($reporte['filas'] as $f) {
+            $debitos += (float) ($f['debito'] ?? 0);
+            $creditos += (float) ($f['credito'] ?? 0);
+        }
+        $reporte['totales'] = [
+            'n' => count($reporte['filas']),
+            'debitos' => round($debitos, 2),
+            'creditos' => round($creditos, 2),
+        ];
+
+        return $reporte;
+    }
+
+    /**
+     * @param  array<string, mixed>  $reporte
+     * @param  array<string, true>  $hashesConciliados
+     * @return array<string, mixed>
+     */
+    private static function sumarChequesDeSnapshot(
+        array $reporte,
+        int $empresaId,
+        int $cuentacajaId,
+        ?string $ventanaDesde,
+        array $hashesConciliados,
+    ): array {
+        if (! Schema::hasTable('conciliacion_bancaria_cheque_pendiente')) {
+            return $reporte;
+        }
+        $ejecucionId = (int) DB::table('conciliacion_bancaria_cheque_pendiente')
+            ->where('empresa_id', $empresaId)->where('cuentacaja_id', $cuentacajaId)->max('ejecucion_id');
+        if ($ejecucionId <= 0) {
+            return $reporte;
+        }
+
+        $claveFila = static fn (string $tip, string $numero): string => strtoupper(trim($tip)).'|'.(ltrim(trim($numero), '0') ?: '0');
+        $presentes = [];
+        foreach ($reporte['filas'] ?? [] as $f) {
+            $presentes[$claveFila((string) ($f['tip'] ?? ''), (string) ($f['numero'] ?? ''))] = true;
+        }
+        $tope = preg_replace('/\D/', '', (string) ($reporte['meta']['fecha_hasta'] ?? ''));
+
+        $agregadas = 0;
+        $filas = DB::table('conciliacion_bancaria_cheque_pendiente')
+            ->where('empresa_id', $empresaId)->where('cuentacaja_id', $cuentacajaId)
+            ->where('ejecucion_id', $ejecucionId)
+            ->whereNull('fecha_conciliacion')
+            ->orderBy('id')
+            ->get();
+        foreach ($filas as $r) {
+            $origen = json_decode((string) $r->origen_json, true);
+            $origen = is_array($origen) ? $origen : [];
+            $emision = substr((string) $r->fecha_emision, 0, 10);
+            $esSemilla = ! empty($origen['semilla']);
+            if (! $esSemilla && ($ventanaDesde === null || $emision === '' || $emision >= $ventanaDesde)) {
+                continue;
+            }
+            if ($tope !== null && strlen($tope) === 8 && str_replace('-', '', $emision) > $tope) {
+                continue;
+            }
+            $tip = strtoupper(trim((string) $r->tip)) ?: 'CHP';
+            $numero = (string) $r->numero_cheque;
+            $hash = ConciliacionBancariaMarcaSupport::hashChequeStock($tip, $numero);
+            if (isset($presentes[$claveFila($tip, $numero)]) || isset($hashesConciliados[$hash])) {
+                continue;
+            }
+            $fila = self::desdeCheque([
+                'numero_cheque' => $numero,
+                'importe' => (float) $r->importe,
+                'fecha_emision' => $r->fecha_emision,
+                'fecha_cheque' => $r->fecha_cheque,
+                'fecha_entrega' => $r->fecha_entrega,
+                'fecha_conciliacion' => $r->fecha_conciliacion,
+                'entregado_a' => $r->entregado_a,
+                'nro_op' => $r->nro_op,
+                'origen_json' => $origen,
+                'hash' => $hash,
+            ], $tip);
+            if (in_array($tip, ['COB', 'COA', 'COC'], true) && (float) $r->importe > 0) {
+                // Una cobranza entra al banco: va al Debe.
+                $fila['debito'] = round(abs((float) $r->importe), 2);
+                $fila['credito'] = 0.0;
+            }
+            $reporte['filas'][] = $fila;
+            $presentes[$claveFila($tip, $numero)] = true;
+            $agregadas++;
+        }
+        if ($agregadas === 0) {
+            return $reporte;
+        }
+
+        usort($reporte['filas'], static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['f_mov_ord'] ?? ''), (string) ($b['f_mov_ord'] ?? ''));
+
+            return $cmp !== 0 ? $cmp : strcmp((string) ($a['numero'] ?? ''), (string) ($b['numero'] ?? ''));
+        });
+        $debitos = 0.0;
+        $creditos = 0.0;
+        foreach ($reporte['filas'] as $f) {
+            $debitos += (float) ($f['debito'] ?? 0);
+            $creditos += (float) ($f['credito'] ?? 0);
+        }
+        $reporte['totales'] = [
+            'n' => count($reporte['filas']),
+            'debitos' => round($debitos, 2),
+            'creditos' => round($creditos, 2),
+        ];
+
+        return $reporte;
     }
 
     /**
@@ -722,6 +931,30 @@ final class ConciliacionBancariaSinConciliarReporteSupport
      * @param  array<string, mixed>  $mov
      * @return array<string, mixed>
      */
+    /**
+     * Identidad (tip, número, fecha Ymd) con que un movimiento del mayor sale en este reporte.
+     *
+     * @param  array<string, mixed>  $mov
+     * @return array{tip: string, numero: string, f_mov_ord: string}
+     */
+    public static function identidadContable(array $mov): array
+    {
+        $f = self::desdeContable($mov);
+        // Mismo criterio que armarDesdeTablero: tipo del comprobante; OPP/OPA con "Ch: N" sale como CHP.
+        $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
+        $tip = $tipo !== '' ? $tipo : 'ASI';
+        if (in_array($tip, ['OPP', 'OPA'], true) && (string) ($f['cheque_ref'] ?? '') !== '') {
+            $tip = 'CHP';
+        }
+        $f['tip'] = $tip;
+
+        return [
+            'tip' => (string) $f['tip'],
+            'numero' => (string) $f['numero'],
+            'f_mov_ord' => (string) $f['f_mov_ord'],
+        ];
+    }
+
     private static function desdeContable(array $mov): array
     {
         $tip = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));

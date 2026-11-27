@@ -11,6 +11,7 @@ use App\Models\Contable\ConciliacionBancariaEjecucion;
 use App\Models\Contable\ConciliacionBancariaEjecucionArchivo;
 use App\Models\Contable\ConciliacionBancariaGrupo;
 use App\Models\Contable\ConciliacionBancariaGrupoLinea;
+use App\Models\Contable\ConciliacionBancariaMarca;
 use App\Models\Contable\ConciliacionBancariaPar;
 use Illuminate\Http\UploadedFile;
 use App\Support\Database\EloquentAuditDeleteSupport;
@@ -23,6 +24,7 @@ use App\Support\Ai\AiAgenteOperativoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaAnomaliaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaClearingDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport;
+use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMarcaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCruceChequesIbSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenciaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
@@ -400,10 +402,22 @@ class ConciliacionBancariaService
             'residuales' => ConciliacionBancariaResidualReglaSupport::clasificarPendientes($pendientesBanco),
         ];
 
+        // Las solapas muestran lo mismo que el módulo (cruces, grupos y marcas de conciliado).
+        // Con Excel de Contaduría (flujo de comparación) se conserva el armado histórico.
+        $alinearModulo = ($opciones['alinear_modulo'] ?? true)
+            && trim((string) ($opciones['pendientes_excel'] ?? '')) === '';
+        if ($alinearModulo) {
+            $resultado = $this->alinearResultadoConModulo($resultado);
+        }
+        $pendientesContablesKpi = $resultado['pendientes_erp_modulo'] ?? $pendientesContables;
+        $pendientesBancoKpi = $resultado['pendientes_banco'] ?? $pendientesBanco;
+        $saldoContableEjec = (float) ($resultado['saldo_contable'] ?? $saldoContable);
+        $diferenciaEjec = (float) ($resultado['diferencia'] ?? $diferencia);
+
         $kpi = ConciliacionBancariaKpiSupport::desdeCorrida(
             $nuevosPares,
-            $pendientesContables,
-            $pendientesBanco,
+            $pendientesContablesKpi,
+            $pendientesBancoKpi,
             $paresPreviosMesCount,
             $gruposAutoMesPrevios,
             $gruposManualMesPrevios,
@@ -422,15 +436,15 @@ class ConciliacionBancariaService
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'saldo_banco' => $saldoBanco,
-            'saldo_contable' => $saldoContable,
-            'diferencia' => $diferencia,
+            'saldo_contable' => $saldoContableEjec,
+            'diferencia' => $diferenciaEjec,
             'resumen_json' => [
                 'pares_nuevos' => count($nuevosPares),
-                'pendientes_contables' => count($pendientesContables),
-                'pendientes_banco' => count($pendientesBanco),
-                'pendientes_cheques_cpromae' => count($armPendientes['pendientes']),
-                'pendientes_cheques_caratula' => count($armPendientes['caratula']),
-                'pendientes_cheques_fuente' => $armPendientes['fuente'],
+                'pendientes_contables' => count($pendientesContablesKpi),
+                'pendientes_banco' => count($pendientesBancoKpi),
+                'pendientes_cheques_cpromae' => count($resultado['pendientes_cheques_cpromae'] ?? $armPendientes['pendientes']),
+                'pendientes_cheques_caratula' => count($resultado['pendientes_cheques_caratula'] ?? $armPendientes['caratula']),
+                'pendientes_cheques_fuente' => $resultado['pendientes_cheques_fuente'] ?? $armPendientes['fuente'],
                 'suma_cheques_caratula' => $armPendientes['suma_caratula'],
                 'recla_cheques' => $armPendientes['recla_cheques'] ?? null,
                 'altas_cheques_erp' => $armPendientes['altas_cheques_erp'] ?? 0,
@@ -493,6 +507,7 @@ class ConciliacionBancariaService
         int $anio,
         bool $incluirAnteriores = false,
         ?string $fechaDia = null,
+        bool $incluirBancoAnterior = false,
     ): array {
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
@@ -614,6 +629,7 @@ class ConciliacionBancariaService
         }
 
         $anteriores = [];
+        $ventanaDesde = null;
         if ($incluirAnteriores) {
             $vistosAnt = [];
             $agregarAnterior = function (array $mov) use (&$anteriores, &$vistosAnt, $hashesContablesMes, $hashesGlobal): void {
@@ -645,6 +661,7 @@ class ConciliacionBancariaService
                     $fechaDesdeHistorico = $desdeIb;
                 }
             }
+            $ventanaDesde = $fechaDesdeHistorico->toDateString();
             $fechaHastaHistorico = $fechaDesde->copy()->subDay()->endOfDay();
             if ($fechaHastaHistorico->gte($fechaDesdeHistorico)) {
                 $resHist = $this->mayorPlanoService->generarDesdeFiltros([
@@ -686,10 +703,52 @@ class ConciliacionBancariaService
             }
         }
 
+        if ($incluirBancoAnterior && $ventanaDesde !== null) {
+            // Reportes: el extracto de meses anteriores que sigue sin conciliar también es pendiente del banco.
+            $previos = $this->cargarMovimientosInterbanking(
+                $empresaId,
+                $cuentaInterbanking,
+                Carbon::parse($ventanaDesde)->startOfDay(),
+                $fechaDesde->copy()->subDay()->endOfDay(),
+                $cuentacajaId,
+            );
+            $vistosBanco = [];
+            foreach ($banco as $mov) {
+                $vistosBanco[(string) ($mov['hash'] ?? '')] = true;
+            }
+            $agregados = 0;
+            foreach (array_reverse($previos) as $mov) {
+                $h = (string) ($mov['hash'] ?? '');
+                if ($h === '' || isset($vistosBanco[$h]) || isset($hashesGlobal['banco'][$h])) {
+                    continue;
+                }
+                if ($agregados++ >= 800) {
+                    break;
+                }
+                $mov['anterior'] = true;
+                $banco[] = $mov;
+                $vistosBanco[$h] = true;
+            }
+        }
+
         $paresTablero = $pares->map(fn (ConciliacionBancariaPar $par) => $this->filaTableroPar($par))->all();
         foreach ($grupos as $grupo) {
             $paresTablero[] = $this->filaTableroGrupo($grupo);
         }
+        // Movimientos con marca de conciliado (sin cruce contra el otro lado): también figuran en la lista.
+        if (ConciliacionBancariaMarcaSupport::existeTabla()) {
+            ConciliacionBancariaMarca::query()
+                ->where('empresa_id', $empresaId)
+                ->where('cuentacaja_id', $cuentacajaId)
+                ->whereBetween('fecha_mov', [$fechaDesde->toDateString(), $fechaHasta->toDateString()])
+                ->orderByDesc('id')
+                ->limit(3000)
+                ->get()
+                ->each(function (ConciliacionBancariaMarca $m) use (&$paresTablero): void {
+                    $paresTablero[] = $this->filaTableroMarca($m);
+                });
+        }
+
         usort($paresTablero, static function (array $a, array $b): int {
             return ((int) ($b['id'] ?? 0)) <=> ((int) ($a['id'] ?? 0));
         });
@@ -701,6 +760,7 @@ class ConciliacionBancariaService
             'hashes_contables' => array_keys($hashesGlobal['contables']),
             'hashes_banco' => array_keys($hashesGlobal['banco']),
             'periodo_cierre' => $this->estadoCierrePeriodo($empresaId, $cuentacajaId, $mes, $anio),
+            'ventana_hist_desde' => $ventanaDesde,
         ];
     }
 
@@ -1214,6 +1274,56 @@ class ConciliacionBancariaService
         ];
     }
 
+    private function filaTableroMarca(ConciliacionBancariaMarca $m): array
+    {
+        $esErp = $m->lado === ConciliacionBancariaMarca::LADO_ERP;
+        $detalle = trim((string) $m->tipo.' '.(string) $m->numero.' '.(string) $m->detalle);
+        $fecha = $m->fecha_mov?->format('d/m/Y') ?? '';
+
+        return [
+            'id' => (int) $m->id,
+            'tipo' => 'marca',
+            'grupo_id' => null,
+            'par_id' => null,
+            'marca_id' => (int) $m->id,
+            'hash_contable' => $esErp ? (string) $m->hash : '',
+            'hash_banco' => $esErp ? '' : (string) $m->hash,
+            'n_contable' => $esErp ? 1 : 0,
+            'n_banco' => $esErp ? 0 : 1,
+            'importe' => abs((float) $m->importe),
+            'fecha_contable' => $esErp ? $fecha : '',
+            'fecha_banco' => $esErp ? '' : $fecha,
+            'modo' => (string) $m->origen,
+            'detalle_contable' => $esErp ? $detalle : '',
+            'detalle_banco' => $esErp ? '' : $detalle,
+            'fecha_conciliacion' => $m->fecha_conciliacion?->format('d/m/Y') ?? '',
+        ];
+    }
+
+    /**
+     * Quita la marca de conciliado de un movimiento: vuelve a figurar como pendiente.
+     */
+    public function quitarMarca(int $empresaId, int $cuentacajaId, int $marcaId): void
+    {
+        $marca = ConciliacionBancariaMarca::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereKey($marcaId)
+            ->first();
+        if ($marca === null) {
+            throw new RuntimeException('La marca no existe o no pertenece a esta cuenta.');
+        }
+        if ($marca->fecha_mov !== null) {
+            ConciliacionBancariaPeriodoLockSupport::assertEditable(
+                $empresaId,
+                $cuentacajaId,
+                (int) $marca->fecha_mov->month,
+                (int) $marca->fecha_mov->year,
+            );
+        }
+        $marca->delete();
+    }
+
     private function filaTableroGrupo(ConciliacionBancariaGrupo $grupo): array
     {
         $lineas = $grupo->relationLoaded('lineas') ? $grupo->lineas : $grupo->lineas()->get();
@@ -1606,6 +1716,24 @@ class ConciliacionBancariaService
         ?string $hasta = null,
     ): array {
         $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null);
+
+        return $this->reporteErpDesdeTablero($tablero, $empresaId, $cuentacajaId, $mes, $anio, $hasta);
+    }
+
+    /**
+     * Pendiente del ERP (mayor + cheques de stock) a partir de un tablero ya armado.
+     *
+     * @param  array<string, mixed>  $tablero  salida de tableroManualCrudo(incluirAnteriores = true)
+     * @return array<string, mixed>
+     */
+    private function reporteErpDesdeTablero(
+        array $tablero,
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        ?string $hasta = null,
+    ): array {
         $usados = array_fill_keys($tablero['hashes_contables'], true);
         $pendientes = array_values(array_filter(
             $tablero['contables'],
@@ -1615,6 +1743,22 @@ class ConciliacionBancariaService
         $reporte = ConciliacionBancariaSinConciliarReporteSupport::armarDesdeTablero(
             $pendientes,
             $this->cabeceraReporteSinConciliar($empresaId, $cuentacajaId, $mes, $anio),
+        );
+        // Cheques y cobranzas que el mayor no trae (anteriores a su ventana o sin asiento): salen del stock de cheques.
+        $clavesMayor = [];
+        foreach ($tablero['contables'] as $mov) {
+            $i = ConciliacionBancariaSinConciliarReporteSupport::identidadContable($mov);
+            if ($i['tip'] !== '') {
+                $clavesMayor[strtoupper(trim($i['tip'])).'|'.(ltrim(trim($i['numero']), '0') ?: '0')] = true;
+            }
+        }
+        $reporte = ConciliacionBancariaSinConciliarReporteSupport::sumarChequesDeStock(
+            $reporte,
+            $empresaId,
+            $cuentacajaId,
+            $tablero['ventana_hist_desde'] ?? null,
+            $usados,
+            $clavesMayor,
         );
         if ($hasta !== null && $hasta !== '') {
             $reporte = ConciliacionBancariaSinConciliarReporteSupport::limitarHasta($reporte, $hasta);
@@ -1636,7 +1780,7 @@ class ConciliacionBancariaService
         int $anio,
         ?string $hasta = null,
     ): array {
-        $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null);
+        $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null, true);
         $usados = array_fill_keys($tablero['hashes_banco'], true);
         $pendientes = array_values(array_filter(
             $tablero['banco'],
@@ -1651,6 +1795,254 @@ class ConciliacionBancariaService
         }
 
         return $reporte;
+    }
+
+    /**
+     * Todo lo que hoy figura pendiente (sin cruce ni marca) del lado ERP y del banco, con el hash de cada movimiento.
+     * Lo usa el comando que carga las marcas de conciliado desde el Excel de Contaduría.
+     *
+     * @return array{contables: list<array<string, mixed>>, banco: list<array<string, mixed>>, ventana_hist_desde: ?string}
+     */
+    public function universoPendiente(int $empresaId, int $cuentacajaId, int $mes, int $anio): array
+    {
+        $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null, true);
+        $usadosC = array_fill_keys($tablero['hashes_contables'], true);
+        $usadosB = array_fill_keys($tablero['hashes_banco'], true);
+
+        return [
+            'contables' => array_values(array_filter(
+                $tablero['contables'],
+                static fn (array $m): bool => ! isset($usadosC[(string) ($m['hash'] ?? '')]),
+            )),
+            'banco' => array_values(array_filter(
+                $tablero['banco'],
+                static fn (array $m): bool => ! isset($usadosB[(string) ($m['hash'] ?? '')]),
+            )),
+            'ventana_hist_desde' => $tablero['ventana_hist_desde'] ?? null,
+        ];
+    }
+
+    /**
+     * Hace que las solapas de la pantalla de conciliación muestren lo mismo que el módulo: lo pendiente es lo que
+     * no tiene cruce, grupo ni marca de conciliado (igual que los reportes «sin conciliar»), del lado ERP y del
+     * lado banco. La carátula se recalcula con esas mismas listas, así que «Diferencia» cierra solo cuando todo
+     * lo que falta conciliar está a la vista.
+     *
+     * @param  array<string, mixed>  $resultado  Salida armada de ejecutar() (cabecera, banco, saldos)
+     * @return array<string, mixed>
+     */
+    public function alinearResultadoConModulo(array $resultado): array
+    {
+        $empresaId = (int) ($resultado['empresa_id'] ?? 0);
+        $cuentacaja = $resultado['cuentacaja'] ?? null;
+        $cuentacajaId = (int) (is_object($cuentacaja) ? $cuentacaja->id : ($cuentacaja['id'] ?? 0));
+        $mes = (int) ($resultado['mes'] ?? 0);
+        $anio = (int) ($resultado['anio'] ?? 0);
+        $fechaHasta = (string) ($resultado['fecha_hasta'] ?? '');
+        if ($empresaId <= 0 || $cuentacajaId <= 0 || $mes <= 0 || $anio <= 0) {
+            return $resultado;
+        }
+
+        $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null, true);
+        $erp = $this->reporteErpDesdeTablero($tablero, $empresaId, $cuentacajaId, $mes, $anio, $fechaHasta);
+
+        $usadosB = array_fill_keys($tablero['hashes_banco'], true);
+        $pendBanco = array_values(array_filter(
+            $tablero['banco'],
+            static fn (array $mov): bool => ! isset($usadosB[(string) ($mov['hash'] ?? '')]),
+        ));
+        $hashPendBanco = [];
+        foreach ($pendBanco as $mov) {
+            $hashPendBanco[(string) ($mov['hash'] ?? '')] = true;
+        }
+
+        $cheques = [];
+        $anulas = [];
+        $otros = [];
+        $netoCheques = 0.0;
+        $netoAnulas = 0.0;
+        $netoOtros = 0.0;
+        foreach ($erp['filas'] as $fila) {
+            $tip = strtoupper(trim((string) ($fila['tip'] ?? '')));
+            $neto = (float) ($fila['debito'] ?? 0) - (float) ($fila['credito'] ?? 0);
+            if (in_array($tip, ['ANULA', 'ACP'], true)) {
+                $anulas[] = $this->filaChequePantalla($fila);
+                $netoAnulas += $neto;
+            } elseif (in_array($tip, ['CHP', 'CHD', 'CHQ', 'CHE'], true)) {
+                $cheques[] = $this->filaChequePantalla($fila);
+                $netoCheques += $neto;
+            } else {
+                $otros[] = $this->filaOtroPantalla($fila);
+                $netoOtros += $neto;
+            }
+        }
+        $netoCheques = round($netoCheques, 2);
+        $netoAnulas = round($netoAnulas, 2);
+        $netoOtros = round($netoOtros, 2);
+        $sumaCheques = round($netoCheques + $netoAnulas, 2);
+
+        $partBanco = ConciliacionBancariaPendienteSupport::particionarBanco($pendBanco);
+        $sumaBanco = round((float) $partBanco['suma_creditos'] + (float) $partBanco['suma_debitos'], 2);
+
+        // Gastos bancarios del mes: débitos del extracto que el ERP todavía no contabilizó mientras no se
+        // genere el egreso del mes (misma línea «Gastos bancarios» de la solapa del mes de Contaduría).
+        // Los gastos que siguen pendientes de conciliar ya están en «Pendientes banco»; acá van solo los
+        // conciliados (marcados) que no tienen asiento en el ERP, para no contarlos dos veces.
+        $documentoGastos = is_array($resultado['documento_gastos'] ?? null) ? $resultado['documento_gastos'] : [];
+        $gastosPendientes = 0.0;
+        if (empty($documentoGastos['ya_generado'])) {
+            $movimientosBancoGastos = is_array($resultado['movimientos_banco'] ?? null) ? array_values($resultado['movimientos_banco']) : [];
+            $codigosGastos = is_array($resultado['codigos_saldo_excel'] ?? null) ? $resultado['codigos_saldo_excel'] : [];
+            foreach (ConciliacionBancariaCodificacionSupport::resumirGastosDiarios($movimientosBancoGastos, $codigosGastos, $hashPendBanco) as $g) {
+                if ((string) ($g['codigo'] ?? '') === '9') {
+                    continue;
+                }
+                $gastosPendientes += (float) ($g['importe_conciliado'] ?? 0);
+            }
+            $gastosPendientes = round($gastosPendientes, 2);
+        }
+
+        $saldoBanco = (float) ($resultado['saldo_banco'] ?? 0);
+        $saldoContable = (float) ($resultado['saldo_contable'] ?? 0);
+        $saldoAjustado = round($saldoBanco + $sumaCheques + $netoOtros - $sumaBanco - $gastosPendientes, 2);
+        $diferencia = round($saldoContable - $saldoAjustado, 2);
+
+        $resultado['pendientes_erp_modulo'] = $erp['filas'];
+        $resultado['pendientes_cheques_cpromae'] = $cheques;
+        $resultado['pendientes_cheques_anulas'] = $anulas;
+        $resultado['pendientes_cheques_caratula'] = $cheques;
+        $resultado['pendientes_cheques_fuente'] = 'erp_modulo';
+        $resultado['suma_pendientes_cheques'] = round(-1 * $netoCheques, 2);
+        $resultado['suma_pendientes_cheques_caratula'] = round(-1 * $netoCheques, 2);
+        $resultado['suma_anulas_cheque_caratula'] = $netoAnulas;
+        $resultado['pendientes_contables_otros'] = $otros;
+        $resultado['suma_pendientes_contables_otros'] = $netoOtros;
+        $resultado['suma_pendientes_contables'] = $sumaCheques;
+        $resultado['pendientes_banco'] = $pendBanco;
+        $resultado['pendientes_banco_caratula'] = $pendBanco;
+        $resultado['pendientes_banco_creditos'] = $partBanco['creditos'];
+        $resultado['pendientes_banco_debitos'] = $partBanco['debitos'];
+        $resultado['suma_pendientes_banco'] = $sumaBanco;
+        $resultado['suma_pendientes_banco_creditos'] = $partBanco['suma_creditos'];
+        $resultado['suma_pendientes_banco_debitos'] = $partBanco['suma_debitos'];
+        $resultado['saldo_banco_ajustado'] = $saldoAjustado;
+        $resultado['diferencia'] = $diferencia;
+        $resultado['residuales'] = ConciliacionBancariaResidualReglaSupport::clasificarPendientes($pendBanco);
+
+        $caratula = is_array($resultado['caratula'] ?? null) ? $resultado['caratula'] : [];
+        $caratula['cheques_no_acreditados'] = $sumaCheques;
+        $caratula['pendientes_erp_otros'] = $netoOtros;
+        $caratula['pendientes_banco_neto'] = round(-1 * $sumaBanco, 2);
+        $caratula['gastos_bancarios_pendientes'] = round(-1 * $gastosPendientes, 2);
+        // Excel de Contaduría: «movimientos pendientes por soporte» = todo lo no cheque, de ERP y de banco.
+        $caratula['movimientos_pendientes_banco'] = round($netoOtros - $sumaBanco - $gastosPendientes, 2);
+        $caratula['saldo_banco_ajustado'] = $saldoAjustado;
+        $caratula['diferencia'] = $diferencia;
+        $caratula['cheques_modo'] = 'erp_modulo';
+        $caratula['cheques_pendientes_n'] = count($cheques) + count($anulas);
+        $caratula['cheques_caratula_n'] = count($cheques) + count($anulas);
+        $resultado['caratula'] = $caratula;
+        $resultado['alineado_modulo'] = true;
+
+        // Estado de conciliación de cada movimiento bancario del mes, según el módulo.
+        $movimientosBanco = is_array($resultado['movimientos_banco'] ?? null) ? array_values($resultado['movimientos_banco']) : [];
+        if (is_array($resultado['movimientos_saldo'] ?? null)) {
+            foreach (array_values($resultado['movimientos_saldo']) as $i => $fila) {
+                $hash = (string) ($movimientosBanco[$i]['hash'] ?? '');
+                $fila['hash'] = $hash;
+                $fila['conciliado'] = $hash !== '' && ! isset($hashPendBanco[$hash]);
+                $resultado['movimientos_saldo'][$i] = $fila;
+            }
+        }
+        if (is_array($resultado['cruce_cheques_ib']['filas'] ?? null)) {
+            foreach ($resultado['cruce_cheques_ib']['filas'] as $i => $fila) {
+                $hash = (string) ($fila['hash'] ?? '');
+                $resultado['cruce_cheques_ib']['filas'][$i]['conciliado'] = $hash !== '' && ! isset($hashPendBanco[$hash]);
+            }
+        }
+        $resultado['gastos_resumen'] = ConciliacionBancariaCodificacionSupport::resumirGastosDiarios(
+            $movimientosBanco,
+            is_array($resultado['codigos_saldo_excel'] ?? null) ? $resultado['codigos_saldo_excel'] : [],
+            $hashPendBanco,
+        );
+
+        return $resultado;
+    }
+
+    /**
+     * Fila del reporte «sin conciliar» → forma que usan la pantalla y el Excel en la solapa de cheques.
+     *
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function filaChequePantalla(array $fila): array
+    {
+        $debe = round((float) ($fila['debito'] ?? 0), 2);
+        $haber = round((float) ($fila['credito'] ?? 0), 2);
+
+        return [
+            'tip' => (string) ($fila['tip'] ?? ''),
+            'numero_cheque' => (string) ($fila['numero'] ?? ''),
+            'fecha_emision' => $this->isoDesdeOrdenOTexto($fila['f_mov_ord'] ?? null),
+            'fecha_cheque' => $this->isoDesdeOrdenOTexto($fila['f_dev'] ?? null),
+            'fecha_entrega' => $this->isoDesdeOrdenOTexto($fila['f_entr'] ?? null),
+            'fecha_conciliacion' => null,
+            'entregado_a' => (string) ($fila['detalle'] ?? ''),
+            'importe' => $haber > 0 ? $haber : -$debe,
+            'debe' => $debe > 0 ? $debe : null,
+            'haber' => $haber > 0 ? $haber : null,
+            'incluye_caratula' => true,
+            'hash' => (string) ($fila['hash'] ?? ''),
+            'cheque_id' => $fila['cheque_id'] ?? null,
+            'asiento_id' => (int) ($fila['asiento_id'] ?? 0),
+        ];
+    }
+
+    /**
+     * Fila del reporte «sin conciliar» → forma de movimiento del mayor (solapa «Pendientes otros»).
+     *
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function filaOtroPantalla(array $fila): array
+    {
+        $iso = $this->isoDesdeOrdenOTexto($fila['f_mov_ord'] ?? null);
+        $numero = trim((string) ($fila['numero'] ?? ''));
+        $detalle = trim((string) ($fila['detalle'] ?? ''));
+
+        return [
+            'fecha' => $iso,
+            'fecha_fmt' => $iso !== null ? Carbon::parse($iso)->format('d/m/Y') : '',
+            'tipo_comp' => (string) ($fila['tip'] ?? ''),
+            'nro_asiento_fmt' => $numero !== '' ? $numero : ((int) ($fila['asiento_id'] ?? 0) > 0 ? (string) $fila['asiento_id'] : ''),
+            'descripcion' => $detalle !== '' ? $detalle : trim((string) ($fila['detalle_concepto'] ?? '')),
+            'debe' => round((float) ($fila['debito'] ?? 0), 2),
+            'haber' => round((float) ($fila['credito'] ?? 0), 2),
+            'hash' => (string) ($fila['hash'] ?? ''),
+        ];
+    }
+
+    /**
+     * Acepta `Ymd` (orden) o el texto `m/d/Y` del reporte; devuelve `Y-m-d` o null.
+     */
+    private function isoDesdeOrdenOTexto(mixed $raw): ?string
+    {
+        $s = trim((string) $raw);
+        if ($s === '' || $s === '---' || $s === '00000000') {
+            return null;
+        }
+        try {
+            if (preg_match('/^\d{8}$/', $s)) {
+                return Carbon::createFromFormat('Ymd', $s)->toDateString();
+            }
+            if (preg_match('#^\d{2}/\d{2}/\d{4}$#', $s)) {
+                return Carbon::createFromFormat('m/d/Y', $s)->toDateString();
+            }
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return null;
     }
 
     /**
@@ -1974,6 +2366,9 @@ class ConciliacionBancariaService
             ->orderBy('id')
             ->chunkById(2000, function ($chunk) use (&$contables, &$banco): void {
                 foreach ($chunk as $par) {
+                    if (ConciliacionBancariaMarcaSupport::parIgnorado((int) $par->id)) {
+                        continue;
+                    }
                     $hc = (string) $par->hash_contable;
                     $hb = (string) $par->hash_banco;
                     if ($hc !== '') {
@@ -1992,7 +2387,7 @@ class ConciliacionBancariaService
                 ->chunkById(2000, function ($chunk) use (&$contables, &$banco): void {
                     foreach ($chunk as $linea) {
                         $hash = (string) $linea->hash;
-                        if ($hash === '') {
+                        if ($hash === '' || ConciliacionBancariaMarcaSupport::grupoIgnorado((int) $linea->grupo_id)) {
                             continue;
                         }
                         if ($linea->lado === ConciliacionBancariaGrupoLinea::LADO_CONTABLE) {
@@ -2003,6 +2398,11 @@ class ConciliacionBancariaService
                     }
                 });
         }
+
+        // Marcas de conciliado (por movimiento, con su fecha de conciliación).
+        $marcas = ConciliacionBancariaMarcaSupport::hashes($empresaId, $cuentacajaId);
+        $contables += $marcas[ConciliacionBancariaMarcaSupport::LADO_ERP];
+        $banco += $marcas[ConciliacionBancariaMarcaSupport::LADO_BANCO];
 
         return ['contables' => $contables, 'banco' => $banco];
     }

@@ -101,6 +101,7 @@ final class ConciliacionBancariaCruceChequesIbSupport
                 'fecha' => ConciliacionBancariaMovimientoBancoSupport::fechaMovimiento($mov),
                 'referencia' => ConciliacionBancariaMovimientoBancoSupport::formatearReferencia($mov['voucher_number'] ?? null),
                 'referencia_digits' => $nro,
+                'hash' => (string) ($mov['hash'] ?? ''),
                 'concepto' => trim((string) ($mov['code_description_ib'] ?? '')),
                 'importe' => $importeIb,
                 'codigo' => $clasif['codigo'],

@@ -535,6 +535,7 @@
         if (modo === 'cierre_contaduria') return 'cierre Contaduría';
         if (modo === 'manual_multi') return 'multi';
         if (modo === 'manual') return 'manual';
+        if (modo === 'anita') return 'marca Anita';
         return modo || 'auto';
     }
 
@@ -656,12 +657,13 @@
             elDiff.classList.add(Math.abs(diff) <= tolerancia ? 'cm-diff-ok' : 'cm-diff-mal');
         }
 
-        var totalConc = (estado.pares || []).reduce(function (acc, p) {
+        var soloCruces = (estado.pares || []).filter(function (p) { return p.tipo !== 'marca'; });
+        var totalConc = soloCruces.reduce(function (acc, p) {
             return acc + (Number(p.importe) || 0);
         }, 0);
         document.getElementById('tot-conciliado').textContent = dinero(totalConc);
         var paresN = document.getElementById('tot-pares-n');
-        if (paresN) paresN.textContent = String((estado.pares || []).length);
+        if (paresN) paresN.textContent = String(soloCruces.length);
 
         var aviso = document.getElementById('aviso-multimatch');
         var btnConc = document.getElementById('btn-conciliar');
@@ -949,28 +951,38 @@
     function pintarPares() {
         var visibles = paresFiltrados();
         var cuenta = document.getElementById('cuenta-pares');
+        var nMarcas = estado.pares.filter(function (p) { return p.tipo === 'marca'; }).length;
+        var sufijo = nMarcas ? ' (' + (estado.pares.length - nMarcas) + ' cruces + ' + nMarcas + ' marcas)' : '';
         if (cuenta) {
             cuenta.textContent = visibles.length === estado.pares.length
-                ? estado.pares.length + ' cruces'
-                : visibles.length + ' de ' + estado.pares.length + ' cruces';
+                ? estado.pares.length + ' conciliados' + sufijo
+                : visibles.length + ' de ' + estado.pares.length + ' conciliados' + sufijo;
         }
         var pares = visibles.map(function (p) {
             var esGrupo = p.tipo === 'grupo';
+            var esMarca = p.tipo === 'marca';
             var badgeMatch = esGrupo
                 ? ' <span class="badge badge-info">' + (p.n_contable || '?') + ':' + (p.n_banco || '?') + '</span>'
                 : '';
-            var dataAttr = esGrupo
-                ? 'data-grupo-id="' + p.grupo_id + '"'
-                : 'data-par-id="' + (p.par_id || p.id) + '"';
+            var dataAttr = esMarca
+                ? 'data-marca-id="' + p.marca_id + '"'
+                : (esGrupo
+                    ? 'data-grupo-id="' + p.grupo_id + '"'
+                    : 'data-par-id="' + (p.par_id || p.id) + '"');
+            var texto = esMarca
+                ? (p.fecha_contable || p.fecha_banco || '') + ' ' + (p.detalle_contable || p.detalle_banco || '')
+                    + ' · conciliado el ' + (p.fecha_conciliacion || '') + (p.hash_contable ? ' (ERP)' : ' (banco)')
+                : (p.fecha_contable || '') + ' ' + (p.detalle_contable || '') + ' ↔ ' + (p.fecha_banco || '') + ' ' + (p.detalle_banco || '');
             return '<div class="px-2 py-1 border-bottom d-flex justify-content-between align-items-center">'
-                + '<span class="small">' + escapar((p.fecha_contable || '') + ' ' + (p.detalle_contable || '') + ' ↔ ' + (p.fecha_banco || '') + ' ' + (p.detalle_banco || ''))
+                + '<span class="small">' + escapar(texto)
                 + ' <span class="badge badge-light">' + escapar(labelModo(p.modo)) + '</span>' + badgeMatch + '</span>'
                 + '<span><strong class="mr-2">' + dinero(p.importe) + '</strong>'
-                + '<button type="button" class="btn btn-outline-danger btn-sm js-desconciliar" ' + dataAttr + '>Desconciliar</button></span></div>';
+                + '<button type="button" class="btn btn-outline-danger btn-sm js-desconciliar" ' + dataAttr + '>'
+                + (esMarca ? 'Quitar marca' : 'Desconciliar') + '</button></span></div>';
         }).join('');
         var vacio = estado.pares.length
-            ? '<div class="p-2 text-muted">Ningún cruce coincide con ese filtro.</div>'
-            : '<div class="p-2 text-muted">Todavía no hay cruces en el mes.</div>';
+            ? '<div class="p-2 text-muted">Ningún conciliado coincide con ese filtro.</div>'
+            : '<div class="p-2 text-muted">Todavía no hay conciliados en el mes.</div>';
         document.getElementById('lista-pares').innerHTML = pares || vacio;
     }
 
@@ -1500,12 +1512,17 @@
         }
         var btn = ev.target.closest('.js-desconciliar');
         if (!btn) return;
-        if (!confirm('¿Desconciliar este cruce?')) return;
-        overlay(true, 'Desconciliando…');
+        var esQuitarMarca = !!btn.getAttribute('data-marca-id');
+        if (!confirm(esQuitarMarca
+            ? '¿Quitar la marca de conciliado? El movimiento vuelve a figurar como pendiente.'
+            : '¿Desconciliar este cruce?')) return;
+        overlay(true, esQuitarMarca ? 'Quitando marca…' : 'Desconciliando…');
         var body = new URLSearchParams();
         body.set('empresa_id', cfg.empresaId);
         body.set('cuentacaja_id', cfg.cuentacajaId);
-        if (btn.getAttribute('data-grupo-id')) {
+        if (esQuitarMarca) {
+            body.set('marca_id', btn.getAttribute('data-marca-id'));
+        } else if (btn.getAttribute('data-grupo-id')) {
             body.set('grupo_id', btn.getAttribute('data-grupo-id'));
         } else {
             body.set('par_id', btn.getAttribute('data-par-id') || btn.getAttribute('data-id'));

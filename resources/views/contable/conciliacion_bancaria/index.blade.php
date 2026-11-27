@@ -172,7 +172,13 @@
                                 <tbody>
                                     <tr><th>Saldo banco (extracto)</th><td class="text-right">{{ number_format($c['saldo_banco_extracto'] ?? 0, 2, ',', '.') }}</td></tr>
                                     <tr><th>Cheques no acreditados</th><td class="text-right">{{ number_format($c['cheques_no_acreditados'] ?? 0, 2, ',', '.') }}</td></tr>
-                                    <tr><th>Pendientes banco</th><td class="text-right">{{ number_format($c['movimientos_pendientes_banco'] ?? 0, 2, ',', '.') }}</td></tr>
+                                    @if (array_key_exists('pendientes_erp_otros', $c))
+                                        <tr><th>Otros pendientes ERP</th><td class="text-right">{{ number_format($c['pendientes_erp_otros'] ?? 0, 2, ',', '.') }}</td></tr>
+                                        <tr><th>Pendientes banco</th><td class="text-right">{{ number_format($c['pendientes_banco_neto'] ?? 0, 2, ',', '.') }}</td></tr>
+                                        <tr><th>Gastos bancarios del mes <span class="small text-muted">(sin egreso generado)</span></th><td class="text-right">{{ number_format($c['gastos_bancarios_pendientes'] ?? 0, 2, ',', '.') }}</td></tr>
+                                    @else
+                                        <tr><th>Pendientes banco</th><td class="text-right">{{ number_format($c['movimientos_pendientes_banco'] ?? 0, 2, ',', '.') }}</td></tr>
+                                    @endif
                                     <tr><th>Saldo banco ajustado</th><td class="text-right">{{ number_format($c['saldo_banco_ajustado'] ?? 0, 2, ',', '.') }}</td></tr>
                                     <tr><th>Saldo contable</th><td class="text-right">{{ number_format($c['saldo_contable'] ?? 0, 2, ',', '.') }}</td></tr>
                                     <tr class="{{ abs($c['diferencia'] ?? 0) < 1 ? 'table-success' : 'table-warning' }}">
@@ -184,21 +190,34 @@
                         </div>
                         <div class="col-md-6">
                             <p><strong>Pares conciliados en esta corrida:</strong> {{ count($resultado['pares_nuevos'] ?? []) }}</p>
-                            <p><strong>Pendientes cheques (cpromae):</strong> {{ count($resultado['pendientes_cheques_cpromae'] ?? []) }}
-                                <span class="text-muted small">(fuente: {{ $resultado['pendientes_cheques_fuente'] ?? '—' }})</span>
-                                @if (count($resultado['pendientes_cheques_anulas'] ?? []) > 0)
-                                    · <span class="text-warning">ANULA ya conciliados: {{ count($resultado['pendientes_cheques_anulas']) }}</span>
-                                @endif
-                            </p>
-                            <p><strong>En carátula (F.Dev del mes):</strong> {{ count($resultado['pendientes_cheques_caratula'] ?? []) }}
+                            @php $alineado = ! empty($resultado['alineado_modulo']); @endphp
+                            @if ($alineado)
+                                <p class="text-muted small mb-2">
+                                    Las solapas muestran lo pendiente del módulo: movimientos sin cruce, grupo ni marca de conciliado.
+                                    Es el mismo listado que los reportes «sin conciliar» del ERP y de Interbanking.
+                                </p>
+                            @endif
+                            <p><strong>Pendientes cheques:</strong> {{ count($resultado['pendientes_cheques_cpromae'] ?? []) }}
                                 · {{ number_format($resultado['suma_pendientes_cheques_caratula'] ?? 0, 2, ',', '.') }}
-                                @if (abs((float) ($resultado['suma_anulas_cheque_caratula'] ?? 0)) > 0.005)
-                                    · ANULA en carátula: {{ number_format($resultado['suma_anulas_cheque_caratula'] ?? 0, 2, ',', '.') }}
+                                @if (! $alineado)
+                                    <span class="text-muted small">(fuente: {{ $resultado['pendientes_cheques_fuente'] ?? '—' }})</span>
+                                @endif
+                                @if (count($resultado['pendientes_cheques_anulas'] ?? []) > 0)
+                                    · <span class="text-warning">ANULA: {{ count($resultado['pendientes_cheques_anulas']) }}
+                                        ({{ number_format($resultado['suma_anulas_cheque_caratula'] ?? 0, 2, ',', '.') }})</span>
                                 @endif
                             </p>
-                            <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}</p>
-                            <p><strong>Pendientes banco (soporte MAYO):</strong> {{ count($resultado['pendientes_banco_caratula'] ?? []) }}
-                                <span class="text-muted small">· sin match total: {{ count($resultado['pendientes_banco'] ?? []) }}</span>
+                            <p><strong>{{ $alineado ? 'Otros pendientes ERP' : 'Mayor sin match (otros)' }}:</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}
+                                @if ($alineado)
+                                    · {{ number_format($resultado['suma_pendientes_contables_otros'] ?? 0, 2, ',', '.') }}
+                                @endif
+                            </p>
+                            <p><strong>Pendientes banco:</strong> {{ count($resultado['pendientes_banco'] ?? []) }}
+                                @if ($alineado)
+                                    · {{ number_format($resultado['suma_pendientes_banco'] ?? 0, 2, ',', '.') }}
+                                @else
+                                    <span class="text-muted small">· soporte (TRF/CABAL): {{ count($resultado['pendientes_banco_caratula'] ?? []) }}</span>
+                                @endif
                             </p>
                         </div>
                     </div>
@@ -260,11 +279,19 @@
                     </ul>
                     <div class="tab-content border border-top-0 p-2">
                         <div class="tab-pane active" id="tab-pendientes">
-                            <p class="text-muted small mb-2">
-                                Solapa Contaduría: cheques propios (cpromae). Arriba van las <strong>ANULA</strong> de cheques
-                                ya conciliados en banco (ej. Ch: 70507390): no están en cpromae y Contaduría las necesita
-                                en pendiente de conciliar. La carátula toma F.Dev del mes (marcados) + esas ANULA.
-                            </p>
+                            @if (! empty($resultado['alineado_modulo']))
+                                <p class="text-muted small mb-2">
+                                    Cheques propios del ERP sin conciliar (CHP y similares), con las <strong>ANULA</strong> arriba.
+                                    Son las mismas filas del reporte «sin conciliar» del ERP; el resto de los pendientes del ERP
+                                    está en <strong>Pendientes otros</strong>. Todo entra en la carátula.
+                                </p>
+                            @else
+                                <p class="text-muted small mb-2">
+                                    Solapa Contaduría: cheques propios (cpromae). Arriba van las <strong>ANULA</strong> de cheques
+                                    ya conciliados en banco (ej. Ch: 70507390): no están en cpromae y Contaduría las necesita
+                                    en pendiente de conciliar. La carátula toma F.Dev del mes (marcados) + esas ANULA.
+                                </p>
+                            @endif
                             <table class="table table-sm table-striped" id="tabla-paginada">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>
@@ -294,8 +321,13 @@
                                             <td>{{ ! empty($ch['fecha_cheque']) ? \Carbon\Carbon::parse($ch['fecha_cheque'])->format('d/m/Y') : '' }}</td>
                                             <td>{{ ! empty($ch['fecha_entrega']) ? \Carbon\Carbon::parse($ch['fecha_entrega'])->format('d/m/Y') : '' }}</td>
                                             <td>{{ $ch['entregado_a'] ?? '' }}</td>
-                                            <td></td>
-                                            <td class="text-right">{{ number_format(abs((float) ($ch['importe'] ?? 0)), 2, ',', '.') }}</td>
+                                            @if (array_key_exists('debe', $ch) || array_key_exists('haber', $ch))
+                                                <td class="text-right">{{ ! empty($ch['debe']) ? number_format((float) $ch['debe'], 2, ',', '.') : '' }}</td>
+                                                <td class="text-right">{{ ! empty($ch['haber']) ? number_format((float) $ch['haber'], 2, ',', '.') : '' }}</td>
+                                            @else
+                                                <td></td>
+                                                <td class="text-right">{{ number_format(abs((float) ($ch['importe'] ?? 0)), 2, ',', '.') }}</td>
+                                            @endif
                                             <td>{{ ! empty($ch['incluye_caratula']) ? 'Sí' : '' }}</td>
                                         </tr>
                                     @empty
@@ -327,6 +359,7 @@
                                         <th>Fecha</th><th>Referencia</th><th>Concepto</th><th>Cód.</th>
                                         <th class="text-right">Importe IB</th><th>Match</th>
                                         <th>Estado ERP</th><th>F.Pago</th><th>OP</th><th>Est. OP</th>
+                                        @if (! empty($resultado['alineado_modulo']))<th>Conciliación</th>@endif
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -351,9 +384,12 @@
                                             <td>{{ ! empty($fila['erp_fechapago']) ? \Carbon\Carbon::parse($fila['erp_fechapago'])->format('d/m/Y') : '' }}</td>
                                             <td>{{ $fila['erp_op'] ?? '' }}</td>
                                             <td>{{ $fila['erp_op_estado'] ?? '' }}</td>
+                                            @if (! empty($resultado['alineado_modulo']))
+                                                <td>{!! ! empty($fila['conciliado']) ? '<span class="badge badge-success">Conciliado</span>' : '<span class="badge badge-warning">Pendiente</span>' !!}</td>
+                                            @endif
                                         </tr>
                                     @empty
-                                        <tr><td colspan="10" class="text-muted">Sin débitos de cheques Interbanking en el período.</td></tr>
+                                        <tr><td colspan="11" class="text-muted">Sin débitos de cheques Interbanking en el período.</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>
@@ -362,7 +398,7 @@
                             @endif
                         </div>
                         <div class="tab-pane" id="tab-mayor">
-                            <p class="text-muted small mb-2">Movimientos del mayor sin emparejar que no son cheques pendientes. Las ANULA de cheques ya conciliados están en la solapa <strong>Pendientes cheques</strong> (tip ANULA).</p>
+                            <p class="text-muted small mb-2">Pendientes del ERP que no son cheques (OPP/OPA, cobranzas, transferencias, egresos, asientos). Las ANULA y los cheques están en la solapa <strong>Pendientes cheques</strong>.</p>
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>
@@ -370,7 +406,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @forelse (array_slice($resultado['pendientes_contables_otros'] ?? [], 0, 200) as $mov)
+                                    @forelse (($resultado['pendientes_contables_otros'] ?? []) as $mov)
                                         @php $imp = ($mov['debe'] ?? 0) - ($mov['haber'] ?? 0); @endphp
                                         <tr>
                                             <td>{{ $mov['fecha_fmt'] ?? '' }}</td>
@@ -385,9 +421,6 @@
                                     @endforelse
                                 </tbody>
                             </table>
-                            @if (count($resultado['pendientes_contables_otros'] ?? []) > 200)
-                                <p class="text-muted small">Mostrando 200 de {{ count($resultado['pendientes_contables_otros']) }}. El Excel trae el listado completo.</p>
-                            @endif
                         </div>
                         <div class="tab-pane" id="tab-saldo-banco">
                             <p class="text-muted small">
@@ -398,10 +431,11 @@
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr>
                                         <th>Fecha</th><th>Referencia</th><th>Código</th><th>Concepto</th><th>Importe</th><th>Saldo</th><th>P.C.C.</th>
+                                        @if (! empty($resultado['alineado_modulo']))<th>Conciliación</th>@endif
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach (array_slice($resultado['movimientos_saldo'] ?? [], 0, 100) as $fila)
+                                    @foreach (array_slice($resultado['movimientos_saldo'] ?? [], 0, 500) as $fila)
                                         <tr>
                                             <td>{{ isset($fila['fecha']) ? \Carbon\Carbon::parse($fila['fecha'])->format('d/m/Y') : '' }}</td>
                                             <td>{{ $fila['referencia'] ?? '' }}</td>
@@ -410,20 +444,30 @@
                                             <td class="text-right">{{ number_format($fila['importe'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">{{ number_format($fila['saldo'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="small text-muted">{{ $fila['pcc'] ?? '' }}</td>
+                                            @if (! empty($resultado['alineado_modulo']))
+                                                <td>{!! ! empty($fila['conciliado']) ? '<span class="badge badge-success">Conciliado</span>' : '<span class="badge badge-warning">Pendiente</span>' !!}</td>
+                                            @endif
                                         </tr>
                                     @endforeach
                                 </tbody>
                             </table>
-                            @if (count($resultado['movimientos_saldo'] ?? []) > 100)
-                                <p class="text-muted small">Mostrando 100 de {{ count($resultado['movimientos_saldo']) }} — exporte Excel para el listado completo.</p>
+                            @if (count($resultado['movimientos_saldo'] ?? []) > 500)
+                                <p class="text-muted small">Mostrando 500 de {{ count($resultado['movimientos_saldo']) }} — exporte Excel para el listado completo.</p>
                             @endif
                         </div>
                         <div class="tab-pane" id="tab-banco-pend">
-                            <p class="text-muted small mb-2">
-                                Como Contaduría en la solapa del mes: solo transferencias/créditos de soporte (TRF, CABAL)
-                                pendientes de contabilizar. <strong>No</strong> incluye cheques (van a Pendientes)
-                                ni gastos bancarios (van a Gastos / ING-GTOS).
-                            </p>
+                            @if (! empty($resultado['alineado_modulo']))
+                                <p class="text-muted small mb-2">
+                                    Movimientos del extracto (Interbanking) sin cruce, grupo ni marca de conciliado: el mismo listado del
+                                    reporte «Interbanking sin conciliar». Créditos y débitos, incluidos cheques y gastos bancarios.
+                                </p>
+                            @else
+                                <p class="text-muted small mb-2">
+                                    Como Contaduría en la solapa del mes: solo transferencias/créditos de soporte (TRF, CABAL)
+                                    pendientes de contabilizar. <strong>No</strong> incluye cheques (van a Pendientes)
+                                    ni gastos bancarios (van a Gastos / ING-GTOS).
+                                </p>
+                            @endif
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr><th>Fecha</th><th>Concepto</th><th>Comprobante</th><th>Importe</th></tr>
@@ -442,9 +486,17 @@
                                             <td class="text-right">{{ number_format($imp, 2, ',', '.') }}</td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="4" class="text-muted">Sin pendientes banco de soporte (TRF/CABAL).</td></tr>
+                                        <tr><td colspan="4" class="text-muted">Sin pendientes de banco.</td></tr>
                                     @endforelse
                                 </tbody>
+                                @if (! empty($resultado['alineado_modulo']) && count($resultado['pendientes_banco_caratula'] ?? []) > 0)
+                                    <tfoot>
+                                        <tr class="font-weight-bold">
+                                            <td colspan="3" class="text-right">Total ({{ count($resultado['pendientes_banco_caratula']) }})</td>
+                                            <td class="text-right">{{ number_format($resultado['suma_pendientes_banco'] ?? 0, 2, ',', '.') }}</td>
+                                        </tr>
+                                    </tfoot>
+                                @endif
                             </table>
                         </div>
                         <div class="tab-pane" id="tab-gastos">
@@ -457,7 +509,11 @@
                             ])
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
-                                    <tr><th>Código</th><th>Concepto</th><th>Importe</th></tr>
+                                    @php $gastosConEstado = ! empty($resultado['alineado_modulo']); @endphp
+                                    <tr>
+                                        <th>Código</th><th>Concepto</th><th class="text-right">Importe</th>
+                                        @if ($gastosConEstado)<th class="text-right">Conciliado</th><th class="text-right">Pendiente</th>@endif
+                                    </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($resultado['gastos_resumen'] ?? [] as $g)
@@ -465,6 +521,10 @@
                                             <td>{{ $g['codigo'] ?? '' }}</td>
                                             <td>{{ $g['descripcion'] ?? '' }}</td>
                                             <td class="text-right">{{ number_format($g['importe'] ?? 0, 2, ',', '.') }}</td>
+                                            @if ($gastosConEstado)
+                                                <td class="text-right">{{ number_format($g['importe_conciliado'] ?? 0, 2, ',', '.') }}</td>
+                                                <td class="text-right">{{ number_format($g['importe_pendiente'] ?? 0, 2, ',', '.') }}</td>
+                                            @endif
                                         </tr>
                                     @endforeach
                                 </tbody>
