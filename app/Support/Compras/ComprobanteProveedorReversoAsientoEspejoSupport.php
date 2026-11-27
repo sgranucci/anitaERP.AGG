@@ -41,17 +41,12 @@ final class ComprobanteProveedorReversoAsientoEspejoSupport
     }
 
     /**
-     * La NC es un reverso contable: su asiento sale del espejo de la factura origen.
+     * Una NC o una ND de reverso (interna o fiscal) sale del espejo de la factura origen.
+     * La marca es la leyenda con el id del origen, sin importar el signo del tipo.
      */
     public static function aplica(Comprobante_Proveedor $comprobante): bool
     {
-        if (self::origenId($comprobante) === null) {
-            return false;
-        }
-
-        $comprobante->loadMissing('tipotransaccion_compras');
-
-        return (string) ($comprobante->tipotransaccion_compras?->signo ?? 'S') === 'R';
+        return self::origenId($comprobante) !== null;
     }
 
     /**
@@ -125,7 +120,15 @@ final class ComprobanteProveedorReversoAsientoEspejoSupport
             throw new RuntimeException('El asiento de la factura no tiene líneas de debe y haber para dar vuelta.');
         }
 
-        $neto = round(array_sum(array_column($lineas, 'monto')), 2);
+        // Balance en pesos: una línea en moneda extranjera vale monto × cotización de la línea.
+        // Sumar montos crudos de monedas distintas da un falso descuadre (p. ej. una diferencia de
+        // cambio en pesos contra provisiones en dólares).
+        $neto = 0.0;
+        foreach ($lineas as $linea) {
+            $enMe = $linea['moneda_id'] !== null && (int) $linea['moneda_id'] !== 1 && $linea['cotizacion'] > 0;
+            $neto += $linea['monto'] * ($enMe ? $linea['cotizacion'] : 1.0);
+        }
+        $neto = round($neto, 2);
         if (abs($neto) > self::TOLERANCIA_ASIENTO) {
             throw new RuntimeException(
                 'El asiento de la factura no balancea (diferencia '

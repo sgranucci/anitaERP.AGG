@@ -159,7 +159,12 @@ class ComprobanteProveedorAsientoService
         if (! $asientoModel) {
             throw new RuntimeException('El asiento ERP no quedó grabado. No se continúa la contabilización.');
         }
-        $this->assertAsientoBalanceado($asientoId);
+        // Reverso con espejo: el balance del original ya lo validó invertir() en pesos, y el
+        // reverso se verifica línea por línea contra el original (assertEsEspejo). Sumar montos
+        // crudos de monedas distintas daría un falso descuadre (diferencia de cambio en pesos).
+        if (! ComprobanteProveedorReversoAsientoEspejoSupport::aplica($comprobante)) {
+            $this->assertAsientoBalanceado($asientoId);
+        }
 
         $numeroAsiento = trim((string) ($asientoModel->numeroasiento ?? ''));
         if ($numeroAsiento === '') {

@@ -14,6 +14,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorReversoAsientoEspejoSupport;
 use App\Support\Compras\ComprobanteProveedorReversoContableSupport;
+use App\Support\Compras\ComprobanteProveedorReversoFiscalSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,210 @@ final class ComprobanteProveedorReversoContableService
         $fecha = $this->resolverFechaContable($origen, $fechaContable);
         $request = $this->armarRequestNc($origen, $tipoNc, $fecha);
 
+        return $this->ejecutarReverso($origen, $modo, $request, $fecha);
+    }
+
+    /**
+     * Reverso fiscal: NC (origen factura/ND) o ND (origen NC) de tipo fiscal, que entra al IVA
+     * compras y al Libro IVA Digital del período. El asiento sigue siendo el espejo.
+     *
+     * @param  string  $tratamiento  copiar | no_computable (ver ComprobanteProveedorReversoFiscalSupport)
+     *
+     * @return array<string, mixed> mismo formato que revertir()
+     */
+    public function revertirFiscal(
+        int $comprobanteId,
+        string $tipoAbrev,
+        string $tratamiento,
+        ?string $fechaContable = null,
+    ): array {
+        $origen = Comprobante_Proveedor::query()
+            ->with(['tipotransaccion_compras', 'proveedores'])
+            ->findOrFail($comprobanteId);
+
+        $modo = ComprobanteProveedorReversoFiscalSupport::modo($origen);
+        $tipo = ComprobanteProveedorReversoFiscalSupport::resolverTipo($tipoAbrev, $origen);
+        $conceptos = ComprobanteProveedorReversoFiscalSupport::conceptosNc($origen, $tratamiento);
+        ComprobanteProveedorReversoFiscalSupport::assertConceptosPermitidosPorTipo($tipo, $conceptos);
+
+        $fecha = $this->resolverFechaContable($origen, $fechaContable);
+        $numero = ComprobanteProveedorReversoFiscalSupport::proximoNumero(
+            $origen,
+            strtoupper(substr(trim((string) $origen->letra), 0, 1)),
+            (int) $origen->sucursal,
+        );
+
+        $request = $this->armarRequestFiscal($origen, $tipo, $numero, $fecha, $conceptos);
+
+        return $this->ejecutarReverso($origen, $modo, $request, $fecha);
+    }
+
+    /**
+     * Simulación de solo lectura del reverso fiscal: no crea comprobante, asiento ni aplicación.
+     *
+     * @param  array<string, int>  $reservados  numeración ya simulada en esta corrida
+     * @return array<string, mixed>
+     */
+    public function previsualizarFiscal(
+        int $comprobanteId,
+        string $tipoAbrev,
+        string $tratamiento,
+        ?string $fechaContable,
+        array &$reservados,
+    ): array {
+        $origen = Comprobante_Proveedor::query()
+            ->with(['tipotransaccion_compras', 'proveedores'])
+            ->findOrFail($comprobanteId);
+
+        $errores = [];
+        $modo = '';
+        try {
+            $modo = ComprobanteProveedorReversoFiscalSupport::modo($origen);
+        } catch (\Throwable $e) {
+            $errores[] = 'Origen: '.$e->getMessage();
+        }
+
+        $tipo = null;
+        try {
+            $tipo = ComprobanteProveedorReversoFiscalSupport::resolverTipo($tipoAbrev, $origen);
+        } catch (\Throwable $e) {
+            $errores[] = 'Tipo: '.$e->getMessage();
+        }
+
+        $conceptos = [];
+        try {
+            $conceptos = ComprobanteProveedorReversoFiscalSupport::conceptosNc($origen, $tratamiento);
+            if ($tipo !== null) {
+                ComprobanteProveedorReversoFiscalSupport::assertConceptosPermitidosPorTipo($tipo, $conceptos);
+            }
+        } catch (\Throwable $e) {
+            $errores[] = 'Conceptos: '.$e->getMessage();
+        }
+
+        $fecha = $this->fechaContableSimulada($origen, $fechaContable);
+
+        $letra = strtoupper(substr(trim((string) $origen->letra), 0, 1));
+        $sucursal = (int) $origen->sucursal;
+        $numero = ComprobanteProveedorReversoFiscalSupport::proximoNumero($origen, $letra, $sucursal, $reservados);
+
+        $total = round(array_sum(array_column($conceptos, 'monto')), 2);
+        if (abs($total - round((float) $origen->total, 2)) > 0.01) {
+            $errores[] = 'La suma de conceptos ('.number_format($total, 2, ',', '.')
+                .') no coincide con el total del original ('.number_format((float) $origen->total, 2, ',', '.').').';
+        }
+
+        $conceptosInfo = [];
+        if ($conceptos !== []) {
+            $nombres = DB::table('concepto_ivacompra')
+                ->whereIn('id', array_column($conceptos, 'concepto_ivacompra_id'))
+                ->get(['id', 'codigo', 'nombre'])
+                ->keyBy('id');
+            foreach ($conceptos as $c) {
+                $n = $nombres->get($c['concepto_ivacompra_id']);
+                $conceptosInfo[] = [
+                    'codigo' => (string) ($n->codigo ?? ''),
+                    'nombre' => (string) ($n->nombre ?? ''),
+                    'monto' => (float) $c['monto'],
+                ];
+            }
+        }
+
+        $informable = $tipo !== null && ComprobanteProveedorReversoFiscalSupport::informableIvaCompras($tipo, $letra);
+        if ($tipo !== null && ! $informable) {
+            $errores[] = 'El tipo '.$tipo->abreviatura.' no entra al IVA compras (letra '.$letra.').';
+        }
+
+        $espejo = [];
+        try {
+            if ((int) $origen->asiento_id > 0) {
+                $espejo = ComprobanteProveedorReversoAsientoEspejoSupport::lineasParaPreview((int) $origen->asiento_id);
+            } else {
+                $errores[] = 'Asiento: el original no tiene asiento contable para dar vuelta.';
+            }
+        } catch (\Throwable $e) {
+            $errores[] = 'Asiento: '.$e->getMessage();
+        }
+
+        $periodoOk = true;
+        try {
+            ComprobanteProveedorFechaContableSupport::assertPeriodoContablePermitido(
+                (int) $origen->empresa_id,
+                $fecha
+            );
+        } catch (\Throwable $e) {
+            $periodoOk = false;
+            $errores[] = 'Período: '.$e->getMessage();
+        }
+
+        return [
+            'origen_id' => (int) $origen->id,
+            'origen_etiqueta' => sprintf(
+                '%s %s-%04d-%d',
+                strtoupper(trim((string) ($origen->tipotransaccion_compras?->abreviatura ?? ''))),
+                $origen->letra,
+                (int) $origen->sucursal,
+                (int) $origen->numerocomprobante
+            ),
+            'empresa_id' => (int) $origen->empresa_id,
+            'tipo' => $tipo?->abreviatura ?? $tipoAbrev,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'numero' => $numero,
+            'fecha' => $fecha,
+            'modo' => $modo,
+            'modo_texto' => $this->textoModoFiscal($origen, $modo),
+            'moneda_id' => (int) ($origen->moneda_id ?? 1),
+            'cotizacion' => (float) ($origen->cotizacion ?? 1),
+            'total' => (float) $origen->total,
+            'conceptos' => $conceptosInfo,
+            'espejo' => $espejo,
+            'informable_iva' => $informable,
+            'periodo_ok' => $periodoOk,
+            'errores' => $errores,
+        ];
+    }
+
+    private function textoModoFiscal(Comprobante_Proveedor $origen, string $modo): string
+    {
+        $esNd = ComprobanteProveedorReversoFiscalSupport::signoRaw($origen) === -1;
+        if ($modo === ComprobanteProveedorReversoContableSupport::MODO_A_CUENTA) {
+            return $esNd
+                ? 'La ND queda abierta a favor del proveedor (no se aplica automáticamente).'
+                : 'La NC queda a cuenta del proveedor (no se aplica automáticamente).';
+        }
+
+        return 'Se aplica en cuenta corriente a la factura.';
+    }
+
+    /**
+     * Misma fecha que resolverFechaContable, sin validar período (lo hace la simulación aparte).
+     */
+    private function fechaContableSimulada(Comprobante_Proveedor $origen, ?string $fechaContable): string
+    {
+        $hoy = ComprobanteProveedorFechaContableSupport::fechaCargaHoy();
+        $pedida = ComprobanteProveedorFechaContableSupport::formatear($fechaContable) ?? $hoy;
+        if ($pedida > $hoy) {
+            $pedida = $hoy;
+        }
+        $min = ComprobanteProveedorFechaContableSupport::fechaMinimaOperable((int) $origen->empresa_id);
+        if ($min !== null && $pedida < $min) {
+            $pedida = $min <= $hoy ? $min : $hoy;
+        }
+
+        return $pedida;
+    }
+
+    /**
+     * Pasos comunes del reverso: crear la NC/ND, contabilizar, verificar el espejo y aplicar.
+     *
+     * @return array<string, mixed>
+     */
+    private function ejecutarReverso(
+        Comprobante_Proveedor $origen,
+        string $modo,
+        Request $request,
+        string $fecha,
+    ): array {
         $nc = $this->persistenciaService->crearDesdeRequest($request);
         $ncId = (int) $nc->id;
 
@@ -102,11 +307,18 @@ final class ComprobanteProveedorReversoContableService
 
         $mensaje = 'Reverso contable OK: se creó '.$etiqueta
             .' (asiento #'.(int) $nc->asiento_id.', espejo del asiento de la factura #'.$origen->id.')';
-        $mensaje .= $modo === ComprobanteProveedorReversoContableSupport::MODO_A_CUENTA
-            ? '. La NC quedó a cuenta del proveedor por '
-                .number_format((float) $nc->total, 2, ',', '.')
-                .': se aplica a otros pagos desde la cuenta corriente.'
-            : ' y se aplicó a la factura.';
+        if ($modo === ComprobanteProveedorReversoContableSupport::MODO_A_CUENTA) {
+            // NC (origen factura pagada): crédito a cuenta. ND (origen NC): deuda abierta.
+            $esNd = ComprobanteProveedorReversoFiscalSupport::signoRaw($nc) === 1;
+            $mensaje .= $esNd
+                ? '. La ND quedó abierta a favor del proveedor por '
+                    .number_format((float) $nc->total, 2, ',', '.').' (no se aplicó automáticamente).'
+                : '. La NC quedó a cuenta del proveedor por '
+                    .number_format((float) $nc->total, 2, ',', '.')
+                    .': se aplica a otros pagos desde la cuenta corriente.';
+        } else {
+            $mensaje .= ' y se aplicó a la factura.';
+        }
 
         return [
             'origen_id' => (int) $origen->id,
@@ -229,6 +441,68 @@ final class ComprobanteProveedorReversoContableService
             'cuota_monto' => [$total],
             'cuota_moneda_id' => [(int) ($origen->moneda_id ?? 1)],
             'cuota_cotizacion' => [(float) ($origen->cotizacion ?? 1)],
+        ];
+
+        if ((int) ($origen->provincia_destino_id ?? 0) > 0) {
+            $payload['provincia_destino_id'] = (int) $origen->provincia_destino_id;
+        }
+
+        return Request::create('/compras/comprobante-proveedor/reverso-contable', 'POST', $payload);
+    }
+
+    /**
+     * Request del reverso fiscal: tipo fiscal, letra y punto de venta del original, número de la
+     * serie propia y los conceptos ya armados (copiados o colapsados desde el original).
+     *
+     * @param  list<array{concepto_ivacompra_id:int, monto:float, cuentacontabledebe_id:?int, centrocosto_id:?int}>  $conceptos
+     */
+    private function armarRequestFiscal(
+        Comprobante_Proveedor $origen,
+        Tipotransaccion_Compra $tipo,
+        int $numero,
+        string $fecha,
+        array $conceptos,
+    ): Request {
+        $total = round(array_sum(array_column($conceptos, 'monto')), 4);
+        $letra = strtoupper(substr(trim((string) $origen->letra), 0, 1));
+        $moneda = (int) ($origen->moneda_id ?? 1);
+        $cotizacion = (float) ($origen->cotizacion ?? 1);
+
+        if (abs($total - round((float) $origen->total, 4)) > 0.01) {
+            throw new RuntimeException(
+                'La suma de conceptos del reverso ('.number_format($total, 2, ',', '.')
+                .') no coincide con el total del original ('.number_format((float) $origen->total, 2, ',', '.').').'
+            );
+        }
+
+        $payload = [
+            'empresa_id' => (int) $origen->empresa_id,
+            'proveedor_id' => (int) $origen->proveedor_id,
+            'tipotransaccion_compra_id' => (int) $tipo->id,
+            'letra' => $letra,
+            'sucursal' => (int) $origen->sucursal,
+            'numerocomprobante' => $numero,
+            'fechacomprobante' => $fecha,
+            'fechaiva' => $fecha,
+            'fechavencimiento' => $fecha,
+            'subtotal' => $total,
+            'total' => $total,
+            'moneda_id' => $moneda,
+            'cotizacion' => $cotizacion,
+            'leyenda' => ComprobanteProveedorReversoContableSupport::leyendaPara($origen),
+            'modo_carga' => ComprobanteProveedorModoCarga::SIN_RECEPCION,
+            'origen_entrada' => ComprobanteProveedorOrigenEntrada::MANUAL,
+            'es_fce' => false,
+            'pararevisar' => false,
+            'concepto_ivacompra_ids' => array_column($conceptos, 'concepto_ivacompra_id'),
+            'montos' => array_column($conceptos, 'monto'),
+            'cuentacontabledebe_ids' => array_column($conceptos, 'cuentacontabledebe_id'),
+            'concepto_centrocosto_ids' => array_column($conceptos, 'centrocosto_id'),
+            'cuota_numero' => [1],
+            'cuota_fechavencimiento' => [$fecha],
+            'cuota_monto' => [$total],
+            'cuota_moneda_id' => [$moneda],
+            'cuota_cotizacion' => [$cotizacion],
         ];
 
         if ((int) ($origen->provincia_destino_id ?? 0) > 0) {
