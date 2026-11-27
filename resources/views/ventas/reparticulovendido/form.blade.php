@@ -49,11 +49,61 @@
     'col_label' => 'col-lg-3 col-form-label',
     'col_input' => 'col-lg-5',
 ])
-<div class="form-group row">
-    <div class="col-lg-5 offset-lg-3">
-        <small class="form-text text-muted mt-0">Vac&iacute;o = todas las sucursales. C&oacute;digo + Enter o lupa (F1).</small>
+@php
+    $puntosventaExtraOld = \App\Models\Ventas\Puntoventa::query()
+        ->whereIn('id', \App\Support\Ventas\IvaVentasListadoFiltros::normalizarPuntoventaIds(old('puntoventa_ids', [])))
+        ->orderBy('codigo')
+        ->get(['id', 'codigo', 'nombre']);
+@endphp
+<div class="form-group row mb-1">
+    <div class="col-lg-3 d-none d-lg-block"></div>
+    <div class="col-lg-5">
+        <div id="rep-articulovendido-sucursales-extra">
+            @foreach ($puntosventaExtraOld as $pvExtra)
+                <div class="d-flex align-items-center mb-1 rep-articulovendido-sucursal-extra">
+                    @include('ventas.partials.campo_consulta_puntoventa', [
+                        'prefix' => 'rep_articulovendido_extra_'.$pvExtra->id,
+                        'layout' => 'inline',
+                        'label' => '',
+                        'inputName' => 'puntoventa_ids[]',
+                        'inputId' => 'puntoventa_extra_'.$pvExtra->id,
+                        'puntoventaId' => (int) $pvExtra->id,
+                        'codigo' => $pvExtra->codigo ?? '',
+                        'nombre' => $pvExtra->nombre ?? '',
+                        'required' => false,
+                        'mostrar_editar' => false,
+                    ])
+                    <button type="button" class="btn btn-sm btn-link text-danger quitar-sucursal-articulovendido" title="Quitar sucursal">
+                        <i class="fa fa-times"></i>
+                    </button>
+                </div>
+            @endforeach
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="agregar-sucursal-articulovendido">
+            <i class="fa fa-plus"></i> Agregar sucursal
+        </button>
+        <small class="form-text text-muted mt-1">Vac&iacute;o = todas las sucursales. C&oacute;digo + Enter o lupa (F1). Pod&eacute;s sumar las que quieras con Agregar sucursal.</small>
     </div>
 </div>
+<template id="tpl-sucursal-articulovendido">
+    <div class="d-flex align-items-center mb-1 rep-articulovendido-sucursal-extra">
+        @include('ventas.partials.campo_consulta_puntoventa', [
+            'prefix' => 'rep_articulovendido_extra_NUEVA',
+            'layout' => 'inline',
+            'label' => '',
+            'inputName' => 'puntoventa_ids[]',
+            'inputId' => 'puntoventa_extra_NUEVA',
+            'puntoventaId' => '',
+            'codigo' => '',
+            'nombre' => '',
+            'required' => false,
+            'mostrar_editar' => false,
+        ])
+        <button type="button" class="btn btn-sm btn-link text-danger quitar-sucursal-articulovendido" title="Quitar sucursal">
+            <i class="fa fa-times"></i>
+        </button>
+    </div>
+</template>
 <div class="row">
     <div class="col-sm-6">
         <div class="form-group row">

@@ -12,5 +12,12 @@ interface Asiento_MovimientoRepositoryInterface
     public function findOrFail($id);
     public function delete($asiento_id, $codigo);
     public function leeAsientoMovimiento($asiento_id);
+
+    /**
+     * Fila de la grilla (índice) → id de asiento_movimiento de la última grabación.
+     *
+     * @return array<int, int>
+     */
+    public function filasPorIndice(): array;
 }
 

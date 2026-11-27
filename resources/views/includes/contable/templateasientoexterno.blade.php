@@ -45,6 +45,13 @@
         <td>
             <input type="text" name="observacionasientos[]" class="form-control observacionasiento" value="">
         </td>
+        @if (! empty($asientoComprobanteRefs))
+        <td>
+            <select name="comprobante_refs[]" class="form-control comprobante_ref" data-valor="">
+                <option value="">&mdash;</option>
+            </select>
+        </td>
+        @endif
         <td>
             <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta_asiento tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>

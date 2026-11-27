@@ -28,7 +28,9 @@ use Carbon\Carbon;
 use App\Support\Contable\CuentacontableEmpresaHomologacionSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\AsientoMonedaDesdeOperacionSupport;
+use App\Support\Caja\IngresoEgresoAsientoComprobanteRefSupport;
 use App\Support\Caja\IngresoEgresoAsientoDescripcionSupport;
+use App\Support\Caja\IngresoEgresoAsientoFacturasSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
@@ -123,6 +125,12 @@ class IngresoEgresoService
 		);
 
 		$this->validarComprobantesIvaContraCaja($request);
+
+		try {
+			$this->assertAsientoCubreFacturas($request);
+		} catch (InvalidArgumentException $e) {
+			return ['errores' => $e->getMessage()];
+		}
 
 		try {
 			$data = $this->aplicarPagoSolicitudEnRequest($request);
@@ -331,6 +339,12 @@ class IngresoEgresoService
 		);
 
 		$this->validarComprobantesIvaContraCaja($request);
+
+		try {
+			$this->assertAsientoCubreFacturas($request);
+		} catch (InvalidArgumentException $e) {
+			return ['errores' => $e->getMessage()];
+		}
 
 		try {
 			$data = $this->aplicarPagoSolicitudEnRequest($request);
@@ -690,7 +704,8 @@ class IngresoEgresoService
 							'debe' => $imputacionContable->debeasientos,
 							'haber' => $imputacionContable->haberasientos,
 							'observacion' => $imputacionContable->observacionasientos,
-							'carga_cuentacontable_manual' => $imputacionContable->carga_cuentacontable_manuales
+							'carga_cuentacontable_manual' => $imputacionContable->carga_cuentacontable_manuales,
+							'comprobante_ref' => (string) ($imputacionContable->comprobante_refs ?? ''),
 							];
 			}
 		}
@@ -903,11 +918,16 @@ class IngresoEgresoService
 				$esLiquidacion = IngresoEgresoLiquidacionTarjetaSupport::es($comprobante);
 				$signoConcepto = $esLiquidacion ? -1 : $signo;
 
+				// Toda línea que sale de los conceptos de esta factura lleva su referencia:
+				// aunque el operador le cambie la cuenta en la grilla, queda atada al comprobante.
+				$refComprobante = IngresoEgresoAsientoComprobanteRefSupport::refDesdePayload($comprobante);
+
 				foreach (IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeComprobantes(
 					[$comprobante],
 					1,
 					$empresaId > 0 ? $empresaId : null,
 				) as $linea) {
+					$linea['comprobante_ref'] = $refComprobante;
 					$this->agregarLineaConceptoIva($asiento, $linea, $signoConcepto, $monedaComp, $cotComp);
 				}
 
@@ -942,6 +962,7 @@ class IngresoEgresoService
 			'haber' => $signo >= 0 ? $importe : '',
 			'observacion' => $linea['observacion'] ?? '',
 			'carga_cuentacontable_manual' => 'N',
+			'comprobante_ref' => (string) ($linea['comprobante_ref'] ?? ''),
 		];
 	}
 
@@ -1070,8 +1091,15 @@ class IngresoEgresoService
 			return;
 		}
 
+		$refsPorFilaId = $this->referenciasFacturaPorFilaAsiento($request);
+
 		$json = $request->input('comprobantes_ivacompra_json');
 		if ($json === null || $json === '') {
+			// Facturas sin cambios, pero el asiento se reescribió por posición: reatar las filas.
+			if ($refsPorFilaId !== []) {
+				$this->comprobanteIvaService->vincularAsientoPorReferencias($cajaMovimientoId, $refsPorFilaId);
+			}
+
 			return;
 		}
 
@@ -1080,7 +1108,122 @@ class IngresoEgresoService
 			$comprobantes,
 			$this->lineasCajaParaGastoBanco($request)
 		);
-		$this->comprobanteIvaService->sincronizarDesdeJson($cajaMovimientoId, $empresaId, $comprobantes);
+		$this->comprobanteIvaService->sincronizarDesdeJson(
+			$cajaMovimientoId,
+			$empresaId,
+			$comprobantes,
+			true,
+			$refsPorFilaId
+		);
+	}
+
+	/**
+	 * Cada fila de la grilla del asiento viaja con la referencia de la factura de la que salió
+	 * (`comprobante_refs[]`, mismo orden que `cuentacontable_ids[]`). Se traduce al id de
+	 * `asiento_movimiento` que grabó el repositorio en esta misma corrida.
+	 *
+	 * @param  \Illuminate\Http\Request  $request
+	 * @return array<int, string> asiento_movimiento.id → referencia (solo filas con factura)
+	 */
+	private function referenciasFacturaPorFilaAsiento($request): array
+	{
+		// Pago desde solicitud de pago: el asiento se rearma en servidor y la grilla no coincide.
+		if (IngresoEgresoSolicitudpagoSupport::solicitudpagoIdDesdeData($request->all()) > 0) {
+			return [];
+		}
+
+		$cuentas = $request->input('cuentacontable_ids', []);
+		$refs = IngresoEgresoAsientoComprobanteRefSupport::listaAlineada(
+			$request->input('comprobante_refs'),
+			is_array($cuentas) ? count($cuentas) : 0
+		);
+		if ($refs === []) {
+			return [];
+		}
+
+		// Con una sola factura y un faltante exacto, las líneas sueltas se asignan solas.
+		$evaluado = $this->evaluarAsientoFacturas($request);
+		if ($evaluado !== null && $evaluado['error'] === null) {
+			$refs = $evaluado['refs'];
+		}
+
+		$filas = $this->asiento_movimientoRepository->filasPorIndice();
+		$out = [];
+		foreach ($refs as $indice => $ref) {
+			if ($ref === '' || ! isset($filas[$indice])) {
+				continue;
+			}
+			$out[(int) $filas[$indice]] = $ref;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Solo I/E de egreso con facturas de compras que vienen de la grilla del asiento.
+	 * null = no corresponde controlar (liquidación de tarjeta, OPV, solicitud de pago,
+	 * ingresos, o un cliente que no manda la columna Factura).
+	 *
+	 * @param  \Illuminate\Http\Request  $request
+	 * @return array{refs: array<int, string>, error: ?string}|null
+	 */
+	private function evaluarAsientoFacturas($request): ?array
+	{
+		if (! $request->has('comprobante_refs')) {
+			return null;
+		}
+		if (IngresoEgresoSolicitudpagoSupport::solicitudpagoIdDesdeData($request->all()) > 0) {
+			return null;
+		}
+
+		$comprobantes = $this->decodificarComprobantesIvaJson($request->input('comprobantes_ivacompra_json'));
+		if ($comprobantes === []) {
+			return null;
+		}
+
+		$tipo = $this->tipotransaccion_cajaRepository->find((int) $request->input('tipotransaccion_caja_id', 0));
+		if (IngresoEgresoCajaMontoSignoSupport::signoPersistencia($tipo) >= 0) {
+			return null;
+		}
+
+		$cuentas = $this->listaRequest($request, 'cuentacontable_ids');
+		$refs = IngresoEgresoAsientoComprobanteRefSupport::listaAlineada(
+			$request->input('comprobante_refs'),
+			count($cuentas)
+		);
+		if ($refs === []) {
+			return null;
+		}
+
+		$debes = $this->listaRequest($request, 'debeasientos');
+		$monedas = $this->listaRequest($request, 'monedaasiento_ids');
+		$cotizaciones = $this->listaRequest($request, 'cotizacionasientos');
+		$codigos = $this->listaRequest($request, 'codigoasientos');
+
+		$filas = [];
+		foreach ($cuentas as $i => $cuentaId) {
+			$filas[] = [
+				'indice' => (int) $i,
+				'ref' => (string) ($refs[$i] ?? ''),
+				'debe' => NumeroDecimalLocalSupport::aFloat($debes[$i] ?? 0),
+				'moneda_id' => (int) ($monedas[$i] ?? 1),
+				'cotizacion' => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i] ?? 1, 1.0),
+				'codigo' => (string) ($codigos[$i] ?? ''),
+			];
+		}
+
+		$monedaIds = $this->listaRequest($request, 'moneda_ids');
+
+		return IngresoEgresoAsientoFacturasSupport::evaluar($comprobantes, $filas, (int) ($monedaIds[0] ?? 1));
+	}
+
+	/** Cada factura tiene que cerrar contra las líneas del asiento atadas a ella. */
+	private function assertAsientoCubreFacturas($request): void
+	{
+		$evaluado = $this->evaluarAsientoFacturas($request);
+		if ($evaluado !== null && $evaluado['error'] !== null) {
+			throw new InvalidArgumentException($evaluado['error']);
+		}
 	}
 
 	/**

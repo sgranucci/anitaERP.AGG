@@ -11,6 +11,7 @@ use App\Models\Stock\Mventa;
 use App\Models\Ventas\Puntoventa;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Services\Ventas\RepArticuloVendidoFerliService;
+use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -89,17 +90,29 @@ class RepArticuloVendidoController extends Controller
             }
         }
 
-        $puntoventaId = (int) ($request->puntoventa_id ?? 0);
+        // Sucursal principal + las que se sumaron con "Agregar sucursal". Vacío = todas.
+        $puntoventaIds = IvaVentasListadoFiltros::normalizarPuntoventaIds(array_merge(
+            [$request->input('puntoventa_id')],
+            (array) $request->input('puntoventa_ids', [])
+        ));
         $nombreSucursal = 'Todas las sucursales';
-        if ($puntoventaId > 0) {
-            $puntoventa = Puntoventa::find($puntoventaId);
-            if ($puntoventa) {
+        if ($puntoventaIds !== []) {
+            $etiquetas = [];
+            $puntosventa = Puntoventa::whereIn('id', $puntoventaIds)->get()->keyBy('id');
+            foreach ($puntoventaIds as $pvId) {
+                $puntoventa = $puntosventa->get($pvId);
+                if (! $puntoventa) {
+                    $etiquetas[] = 'Sucursal '.$pvId;
+
+                    continue;
+                }
                 $codigo = trim((string) ($puntoventa->codigo ?? ''));
                 $nombre = trim((string) ($puntoventa->nombre ?? ''));
-                $nombreSucursal = $codigo !== ''
+                $etiquetas[] = $codigo !== ''
                     ? ($nombre !== '' ? $codigo.' — '.$nombre : $codigo)
-                    : ($nombre !== '' ? $nombre : 'Sucursal '.$puntoventaId);
+                    : ($nombre !== '' ? $nombre : 'Sucursal '.$pvId);
             }
+            $nombreSucursal = implode(', ', $etiquetas);
         }
 
         $params = [
@@ -113,7 +126,7 @@ class RepArticuloVendidoController extends Controller
             'hastalinea_id' => $request->hastalinea_id,
             'mventa_id' => $request->mventa_id,
             'nombremventa' => $nombreMventa,
-            'puntoventa_id' => $puntoventaId,
+            'puntoventa_id' => $puntoventaIds,
             'nombresucursal' => $nombreSucursal,
         ];
 
@@ -135,7 +148,7 @@ class RepArticuloVendidoController extends Controller
                 $request->hastalinea_id,
                 $request->mventa_id,
                 $nombreMventa,
-                $puntoventaId,
+                $puntoventaIds,
                 $nombreSucursal
             )
             ->download('articulos_vendidos.'.$extension);

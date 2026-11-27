@@ -50,7 +50,7 @@ class ArticuloVendidoMultiExport implements WithMultipleSheets, WithEvents
         $this->hastalinea_id = $params['hastalinea_id'];
         $this->mventa_id = $params['mventa_id'];
         $this->nombremventa = $params['nombremventa'];
-        $this->puntoventa_id = (int) ($params['puntoventa_id'] ?? 0);
+        $this->puntoventa_id = $params['puntoventa_id'] ?? [];
         $this->nombresucursal = $params['nombresucursal'] ?? 'Todas las sucursales';
     }
 

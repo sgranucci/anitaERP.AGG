@@ -47,6 +47,8 @@
     $asientoCuentasEditables = $asientoCuentasEditables ?? true;
     $asientoCuentasMensaje = $asientoCuentasMensaje ?? null;
     $asientoCuentasUrl = $asientoCuentasUrl ?? null;
+    // Solo el I/E con facturas ata cada línea del asiento a su comprobante (columna Factura).
+    $asientoComprobanteRefs = $asientoComprobanteRefs ?? false;
 @endphp
 <div class="card card-outline card-info formasientoexterno" style="display: none">
     <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{ $valorOldEscalarAsiento('tipoasiento_id', $asientoEdicion?->tipoasiento_id ?? '') }}">
@@ -91,6 +93,9 @@
                     <th style="width: 15%;" class="text-right">Haber</th>
                     <th style="width: 12%;" class="text-right">Cotizaci&oacute;n</th>
                     <th style="width: 30%;">Detalle</th>
+                    @if ($asientoComprobanteRefs)
+                    <th style="width: 18%;">Factura</th>
+                    @endif
                     <th></th>
                 </tr>
             </thead>
@@ -168,6 +173,13 @@
                         <td>
                             <input type="text" name="observacionasientos[]" style="text-align: right;" class="form-control observacionasiento" value="{{ $valorOldIndiceAsiento('observacionasientos', (int) $loop->index, $cuenta->observacion ?? '') }}" @if (! $asientoCuentasEditables) readonly @endif>
                         </td>
+                        @if ($asientoComprobanteRefs)
+                        <td>
+                            <select name="comprobante_refs[]" class="form-control comprobante_ref" data-valor="{{ $valorOldIndiceAsiento('comprobante_refs', (int) $loop->index, (int) ($cuenta->comprobante_proveedor_id ?? 0) > 0 ? 'id:'.(int) $cuenta->comprobante_proveedor_id : '') }}">
+                                <option value="">&mdash;</option>
+                            </select>
+                        </td>
+                        @endif
                         <td>
                             @if ($asientoCuentasEditables)
                             <button type="button" title="Elimina esta linea" style="text-align: right;" class="btn-accion-tabla eliminar_cuenta_asiento tooltipsC">
@@ -188,7 +200,7 @@
                     <td>
                         <input type="text" id="totalhaberasiento" name="totalhaberasiento" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ $totalHaberAsientoExtTxt }}" />
                     </td>
-                    <td colspan="3"></td>
+                    <td colspan="{{ $asientoComprobanteRefs ? 4 : 3 }}"></td>
                 </tr>
             </tfoot>
         </table>

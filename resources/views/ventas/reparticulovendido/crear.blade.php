@@ -34,4 +34,28 @@
     </div>
 </div>
 @include('includes.ventas.modalconsultapuntoventa')
+<script>
+    (function () {
+        var lista = document.getElementById('rep-articulovendido-sucursales-extra');
+        var tpl = document.getElementById('tpl-sucursal-articulovendido');
+        var btn = document.getElementById('agregar-sucursal-articulovendido');
+        if (!lista || !tpl || !btn) {
+            return;
+        }
+        btn.addEventListener('click', function () {
+            lista.insertAdjacentHTML('beforeend', tpl.innerHTML.replace(/NUEVA/g, String(Date.now())));
+            var codigos = lista.querySelectorAll('.codigopuntoventa');
+            if (codigos.length) {
+                codigos[codigos.length - 1].focus();
+            }
+        });
+        lista.addEventListener('click', function (ev) {
+            var quitar = ev.target.closest('.quitar-sucursal-articulovendido');
+            var fila = quitar ? quitar.closest('.rep-articulovendido-sucursal-extra') : null;
+            if (fila) {
+                fila.remove();
+            }
+        });
+    })();
+</script>
 @endsection

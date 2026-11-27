@@ -6,18 +6,33 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Cuentacontable;
+use App\Support\Caja\IngresoEgresoAsientoComprobanteRefSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 
 /**
- * Escribe las FK del DEBE del asiento IE → concepto del comprobante.
+ * Escribe las FK del DEBE del asiento IE → comprobante / concepto.
  * El control factura↔asiento suma por `comprobante_proveedor_id`; este servicio
- * es quien las graba (el formulario del asiento no las lleva).
+ * es quien las graba.
+ *
+ * Regla: toda línea del asiento que sale de una factura queda atada a esa factura,
+ * sin importar la cuenta contable (el operador puede cambiarla en la grilla). Eso
+ * lo resuelve la referencia que viaja en cada fila (`comprobante_ref`). Recién
+ * después, para completar el concepto, se empata por cuenta + importe dentro del
+ * mismo comprobante; las filas sin referencia (asientos viejos o armados a mano)
+ * conservan ese empate como respaldo.
  */
 class IngresoEgresoComprobanteIvaAsientoVinculoService
 {
-    public function vincularPorCajaMovimiento(int $cajaMovimientoId): void
-    {
+    /**
+     * @param  array<int, string>  $refsPorFilaId  asiento_movimiento.id → referencia de factura
+     * @param  array<string, int>  $idPorRef  referencia de factura nueva (`n:…`) → comprobante_proveedor.id
+     */
+    public function vincularPorCajaMovimiento(
+        int $cajaMovimientoId,
+        array $refsPorFilaId = [],
+        array $idPorRef = [],
+    ): void {
         $asiento = Asiento::query()
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->orderByDesc('id')
@@ -36,6 +51,13 @@ class IngresoEgresoComprobanteIvaAsientoVinculoService
         if ($comprobantes->isEmpty()) {
             return;
         }
+
+        $this->vincularPorReferencias(
+            (int) $asiento->id,
+            $refsPorFilaId,
+            $idPorRef,
+            $comprobantes->pluck('id')->map(fn ($id) => (int) $id)->all(),
+        );
 
         $pendientes = $this->armarPendientes($comprobantes);
         $this->completarCodigos($pendientes);
@@ -64,7 +86,17 @@ class IngresoEgresoComprobanteIvaAsientoVinculoService
 
             $cuentaId = (int) $mov->cuentacontable_id;
             $codigo = trim((string) ($codigosMov[$cuentaId] ?? ''));
-            $idx = self::indicePendiente($pendientes, $cuentaId, $codigo, (float) $mov->monto);
+
+            // Fila ya atada a una factura: el concepto se busca solo entre los de esa factura.
+            $comprobanteFila = (int) ($mov->comprobante_proveedor_id ?? 0);
+            $candidatos = $comprobanteFila > 0
+                ? array_filter(
+                    $pendientes,
+                    static fn (array $p): bool => (int) ($p['comprobante_proveedor_id'] ?? 0) === $comprobanteFila
+                )
+                : $pendientes;
+
+            $idx = self::indicePendiente($candidatos, $cuentaId, $codigo, (float) $mov->monto);
             if ($idx === null) {
                 continue;
             }
@@ -78,6 +110,63 @@ class IngresoEgresoComprobanteIvaAsientoVinculoService
                 'concepto_ivacompra_id' => $origen['concepto_ivacompra_id'],
             ])->save();
         }
+    }
+
+    /**
+     * Ata cada fila a su factura según la referencia que viajó en la grilla.
+     *
+     * @param  array<int, string>  $refsPorFilaId  asiento_movimiento.id → referencia
+     * @param  array<string, int>  $idPorRef  `n:…` → comprobante_proveedor.id
+     * @param  list<int>  $idsComprobanteDelMovimiento
+     */
+    private function vincularPorReferencias(
+        int $asientoId,
+        array $refsPorFilaId,
+        array $idPorRef,
+        array $idsComprobanteDelMovimiento,
+    ): void {
+        if ($refsPorFilaId === []) {
+            return;
+        }
+
+        $filas = Asiento_Movimiento::query()
+            ->where('asiento_id', $asientoId)
+            ->whereIn('id', array_map('intval', array_keys($refsPorFilaId)))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($refsPorFilaId as $filaId => $ref) {
+            $comprobanteId = self::resolverComprobanteId((string) $ref, $idPorRef, $idsComprobanteDelMovimiento);
+            if ($comprobanteId <= 0) {
+                continue;
+            }
+
+            $fila = $filas->get((int) $filaId);
+            if (! $fila || (int) ($fila->comprobante_proveedor_id ?? 0) === $comprobanteId) {
+                continue;
+            }
+
+            $fila->forceFill(['comprobante_proveedor_id' => $comprobanteId])->save();
+        }
+    }
+
+    /**
+     * @param  array<string, int>  $idPorRef
+     * @param  list<int>  $idsComprobanteDelMovimiento
+     */
+    public static function resolverComprobanteId(string $ref, array $idPorRef, array $idsComprobanteDelMovimiento): int
+    {
+        $ref = IngresoEgresoAsientoComprobanteRefSupport::normalizar($ref);
+        if ($ref === '') {
+            return 0;
+        }
+
+        $id = str_starts_with($ref, IngresoEgresoAsientoComprobanteRefSupport::PREFIJO_ID)
+            ? (int) substr($ref, strlen(IngresoEgresoAsientoComprobanteRefSupport::PREFIJO_ID))
+            : (int) ($idPorRef[$ref] ?? 0);
+
+        // Solo facturas de este movimiento: una referencia vieja o ajena no ata nada.
+        return in_array($id, $idsComprobanteDelMovimiento, true) ? $id : 0;
     }
 
     /**

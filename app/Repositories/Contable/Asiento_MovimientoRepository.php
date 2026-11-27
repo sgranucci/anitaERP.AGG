@@ -16,6 +16,22 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
     protected $model;
 
     /**
+     * Fila de la grilla (índice de `cuentacontable_ids[]`) → id de asiento_movimiento
+     * de la última grabación. Lo usa el I/E para atar cada fila a su factura.
+     *
+     * @var array<int, int>
+     */
+    private array $filasPorIndice = [];
+
+    /**
+     * @return array<int, int>
+     */
+    public function filasPorIndice(): array
+    {
+        return $this->filasPorIndice;
+    }
+
+    /**
      * PostRepository constructor.
      *
      * @param Post $post
@@ -123,6 +139,11 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 		// En create, si todas las líneas se omiten (monto ~0 / sin cuenta), no se asignaba
 		// y el return disparaba "Undefined variable $asiento_movimiento".
 		$asiento_movimiento = null;
+		$this->filasPorIndice = [];
+
+		// La grilla del I/E manda la referencia de factura de cada fila. Al reescribir por
+		// posición, el vínculo anterior de la fila no vale: se limpia y se vuelve a atar.
+		$limpiaVinculoFactura = is_array($data) && array_key_exists('comprobante_refs', $data);
 
 		if ($funcion == 'update')
 		{
@@ -175,6 +196,14 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 
 						$ccId = $centrocosto_ids[$i] ?? $centrocosto_ids_previo[$i] ?? 0;
 
+						$vinculoFactura = $limpiaVinculoFactura
+							? [
+								'comprobante_proveedor_id' => null,
+								'comprobante_proveedor_concepto_id' => null,
+								'concepto_ivacompra_id' => null,
+							]
+							: [];
+
 						$asiento_movimiento = $this->model->findOrFail($_id[$i])->update(array_merge([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i],
@@ -183,7 +212,8 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 									"monto" => $monto,
 									"cotizacion" => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i] ?? 0),
 									"observacion" => $observaciones[$i] ?? ''
-									], $this->documentoLineaDesdeRequest($data, $i)));
+									], $this->documentoLineaDesdeRequest($data, $i), $vinculoFactura));
+						$this->filasPorIndice[$i] = (int) $_id[$i];
 					}
 				}
 				if ($q_asiento_movimiento > count($cuentacontable_ids))
@@ -226,6 +256,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 									"cotizacion" => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i_movimiento] ?? 0),
 									"observacion" => $observaciones[$i_movimiento] ?? ''
 									], $this->documentoLineaDesdeRequest($data, $i_movimiento)));
+					$this->filasPorIndice[$i_movimiento] = (int) $asiento_movimiento->id;
 				}
 			}
 		}

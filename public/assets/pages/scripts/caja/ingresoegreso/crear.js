@@ -1288,6 +1288,8 @@ var brutoSpIe = 0;
 				cotizacionasientos = $(this).find(".cotizacionasiento").val();
 				observacionasientos = $(this).find(".observacionasiento").val();
 				carga_cuentacontable_manuales = $(this).find(".carga_cuentacontable_manual").val();
+				var $refFactura = $(this).find(".comprobante_ref");
+				var comprobante_refs = $refFactura.val() || $refFactura.attr('data-valor') || '';
 
 				datosCuentasContables.push({
 					cuentacontable_ids,
@@ -1297,7 +1299,8 @@ var brutoSpIe = 0;
 					haberasientos,
 					cotizacionasientos,
 					observacionasientos,
-					carga_cuentacontable_manuales
+					carga_cuentacontable_manuales,
+					comprobante_refs
 				});
 			});
 		}
@@ -1351,6 +1354,8 @@ var brutoSpIe = 0;
 						let haber = value.haber;
 						let observacion = value.observacion;
 						let cargaCuentacontableManual = value.carga_cuentacontable_manual;
+						// Factura de la que salió la línea: se conserva aunque se cambie la cuenta.
+						let comprobanteRef = $('<div>').text(value.comprobante_ref || '').html().replace(/"/g, '&quot;');
 
 						$(wrapper).append('<tr class="item-cuenta-asiento">'+
 							'<td>'+
@@ -1392,6 +1397,11 @@ var brutoSpIe = 0;
 								'<input type="text" name="observacionasientos[]" class="form-control observacionasiento" value="'+observacion+'">'+
 							'</td>'+
 							'<td>'+
+								'<select name="comprobante_refs[]" class="form-control comprobante_ref" data-valor="'+comprobanteRef+'">'+
+									'<option value="">&mdash;</option>'+
+								'</select>'+
+							'</td>'+
+							'<td>'+
 								'<button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta_asiento tooltipsC">'+
 									'<i class="fa fa-times-circle text-danger"></i>'+
 								'</button>'+
@@ -1399,6 +1409,11 @@ var brutoSpIe = 0;
 						'</tr>'
 						);
 					});
+
+					// Columna Factura: opciones y valor de cada línea según las facturas cargadas.
+					if (typeof window.ieRefrescarSelectoresFacturaAsiento === 'function') {
+						window.ieRefrescarSelectoresFacturaAsiento();
+					}
 
 					// Rellena select de moneda y centros de costo (respeta CC de la SP).
 					// Los CC llegan por AJAX: se juntan las promesas para no validar antes.

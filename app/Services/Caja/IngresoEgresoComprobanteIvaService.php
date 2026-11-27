@@ -14,6 +14,7 @@ use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Services\Ai\AiDecisionLogger;
+use App\Support\Caja\IngresoEgresoAsientoComprobanteRefSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAiHashSupport;
 use App\Support\Caja\IngresoEgresoDtcNumeracionSupport;
 use App\Support\Caja\IngresoEgresoConfiguracionSupport;
@@ -176,8 +177,28 @@ class IngresoEgresoComprobanteIvaService
     /**
      * @param  list<array<string, mixed>>  $comprobantesJson
      */
-    public function sincronizarDesdeJson(int $cajaMovimientoId, int $empresaId, array $comprobantesJson, bool $vincularAsiento = true): void
+    /**
+     * Ata las filas del asiento a sus facturas sin tocar los comprobantes (el formulario
+     * no mandó cambios en la grilla de facturas, pero el asiento sí se reescribió).
+     *
+     * @param  array<int, string>  $refsPorFilaId  asiento_movimiento.id → referencia (`id:N`)
+     */
+    public function vincularAsientoPorReferencias(int $cajaMovimientoId, array $refsPorFilaId): void
     {
+        $this->asientoVinculoService->vincularPorCajaMovimiento($cajaMovimientoId, $refsPorFilaId, []);
+    }
+
+    /**
+     * @param  array<int, string>  $refsPorFilaId  asiento_movimiento.id → referencia de factura (`id:N` / `n:…`)
+     * @return array<string, int> referencia de factura nueva (`n:…`) → comprobante_proveedor.id
+     */
+    public function sincronizarDesdeJson(
+        int $cajaMovimientoId,
+        int $empresaId,
+        array $comprobantesJson,
+        bool $vincularAsiento = true,
+        array $refsPorFilaId = [],
+    ): array {
         $this->assertPeriodoComprobantesJson($comprobantesJson, $empresaId, $cajaMovimientoId);
 
         $existentes = Comprobante_Proveedor::query()
@@ -187,8 +208,9 @@ class IngresoEgresoComprobanteIvaService
             ->all();
 
         $conservados = [];
+        $idPorRef = [];
 
-        DB::transaction(function () use ($comprobantesJson, $cajaMovimientoId, $empresaId, &$conservados): void {
+        DB::transaction(function () use ($comprobantesJson, $cajaMovimientoId, $empresaId, &$conservados, &$idPorRef): void {
             foreach ($comprobantesJson as $payload) {
                 if (! is_array($payload)) {
                     continue;
@@ -212,6 +234,11 @@ class IngresoEgresoComprobanteIvaService
                 $this->archivoService->persistirDesdePayload($nuevo, $payload);
                 $this->resolverDecisionIa($payload, (int) $nuevo->id);
                 $conservados[] = (int) $nuevo->id;
+
+                $refNueva = IngresoEgresoAsientoComprobanteRefSupport::refDesdePayload($payload);
+                if ($refNueva !== '') {
+                    $idPorRef[$refNueva] = (int) $nuevo->id;
+                }
             }
         });
 
@@ -229,8 +256,10 @@ class IngresoEgresoComprobanteIvaService
         }
 
         if ($vincularAsiento) {
-            $this->asientoVinculoService->vincularPorCajaMovimiento($cajaMovimientoId);
+            $this->asientoVinculoService->vincularPorCajaMovimiento($cajaMovimientoId, $refsPorFilaId, $idPorRef);
         }
+
+        return $idPorRef;
     }
 
     /**

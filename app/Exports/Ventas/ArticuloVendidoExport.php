@@ -226,7 +226,9 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
         $this->hastalinea_id = $hastalinea_id;
         $this->mventa_id = $mventa_id;
         $this->nombremventa = $nombremventa;
-        $this->puntoventa_id = (int) $puntoventa_id;
+        $this->puntoventa_id = is_array($puntoventa_id)
+            ? array_values(array_map('intval', $puntoventa_id))
+            : (int) $puntoventa_id;
         $this->nombresucursal = $nombresucursal ?: 'Todas las sucursales';
 
         return $this;

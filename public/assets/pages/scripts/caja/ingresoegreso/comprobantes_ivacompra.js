@@ -174,8 +174,77 @@
         }
     }
 
+    // Referencia que ata cada línea del asiento a su factura (aunque se cambie la cuenta).
+    // Factura ya grabada: el servidor usa su id. Factura nueva: token estable en la sesión.
+    function asegurarReferenciasComprobantes() {
+        comprobantesIva.forEach(function (c) {
+            if (!c || c.id || c.ref) {
+                return;
+            }
+            c.ref = 'n:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        });
+    }
+
+    function refComprobante(c) {
+        return c && c.id ? 'id:' + c.id : (c && c.ref ? String(c.ref) : '');
+    }
+
+    // Columna Factura del asiento: una opción por factura cargada en la grilla de arriba.
+    // Conserva lo elegido (o lo que vino grabado en data-valor) y no toca las filas ya resueltas.
+    function refrescarSelectoresFacturaAsiento() {
+        var $selects = $('#tbody-cuenta-asiento-table select.comprobante_ref');
+        if (!$selects.length) {
+            return;
+        }
+        var opciones = [];
+        comprobantesIva.forEach(function (c) {
+            var ref = refComprobante(c);
+            if (!c || !ref) {
+                return;
+            }
+            var proveedor = $.trim(c.proveedor_nombre || c.proveedor_nombre_eventual || '');
+            var texto = $.trim(etiquetaComprobante(c) + (proveedor ? ' · ' + proveedor : ''));
+            opciones.push({ ref: ref, texto: texto });
+        });
+        var firma = JSON.stringify(opciones);
+
+        $selects.each(function () {
+            var $s = $(this);
+            var valor = $s.val() || $s.attr('data-valor') || '';
+            if ($s.data('firmaOpciones') !== firma) {
+                $s.empty().append($('<option>').val('').text('\u2014'));
+                opciones.forEach(function (o) {
+                    $s.append($('<option>').val(o.ref).text(o.texto));
+                });
+                $s.data('firmaOpciones', firma);
+            }
+            // Una referencia que ya no existe (factura quitada) deja la línea sin factura.
+            var existe = opciones.some(function (o) { return o.ref === valor; });
+            $s.val(existe ? valor : '');
+            $s.attr('data-valor', existe ? valor : '');
+        });
+    }
+    window.ieRefrescarSelectoresFacturaAsiento = refrescarSelectoresFacturaAsiento;
+
+    $(document).on('change', '#tbody-cuenta-asiento-table select.comprobante_ref', function () {
+        $(this).attr('data-valor', $(this).val() || '');
+    });
+
+    // Filas nuevas (Agrega renglón, Genera asiento, quitar): se llenan solas.
+    (function observarGrillaAsiento() {
+        var tbody = document.getElementById('tbody-cuenta-asiento-table');
+        if (!tbody || typeof MutationObserver === 'undefined') {
+            return;
+        }
+        new MutationObserver(function () {
+            refrescarSelectoresFacturaAsiento();
+        }).observe(tbody, { childList: true });
+    })();
+
     function syncHidden() {
+        asegurarReferenciasComprobantes();
         $('#comprobantes_ivacompra_json').val(JSON.stringify(comprobantesIva));
+        refrescarSelectoresFacturaAsiento();
         if (typeof window.ieComprobantesIvaCambiaron === 'function') {
             window.ieComprobantesIvaCambiaron(comprobantesIva);
         }
@@ -1901,6 +1970,7 @@
         var previo = (editIdx >= 0 && comprobantesIva[editIdx]) ? comprobantesIva[editIdx] : {};
         return {
             id: previo.id || null,
+            ref: previo.ref || null,
             tipo_tesoreria: $('#ie-cp-tipo-tesoreria').val(),
             tipotransaccion_compra_id: parseInt($('#ie-cp-tipotransaccion-compra-id').val() || '0', 10),
             cuentacaja_id: gastoBanco ? (parseInt(bancoGastoActual.cuentacaja_id || '0', 10) || null) : null,
@@ -2895,6 +2965,7 @@
 
         window.obtenerComprobantesIvaIngresoEgreso = function () {
             refrescarCotizacionesIvaDesdeCaja();
+            asegurarReferenciasComprobantes();
             syncHidden();
             return comprobantesIva;
         };

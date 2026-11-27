@@ -175,8 +175,13 @@ class RepArticuloVendidoFerliService
             $query = $query->where('articulo.mventa_id', $mventa_id);
         }
 
-        if ((int) $puntoventa_id > 0) {
-            $query = $query->where('venta.puntoventa_id', (int) $puntoventa_id);
+        // Acepta un id (histórico) o una lista de ids. Vacío = todas las sucursales.
+        $puntoventaIds = array_values(array_unique(array_filter(
+            array_map('intval', is_array($puntoventa_id) ? $puntoventa_id : [$puntoventa_id]),
+            static fn (int $id) => $id > 0
+        )));
+        if ($puntoventaIds !== []) {
+            $query = $query->whereIn('venta.puntoventa_id', $puntoventaIds);
         }
 
         return $query->get();

@@ -133,7 +133,7 @@
                     @include('caja.ingresoegreso.form2')
                     @include('caja.ingresoegreso.form3')
                     @include('caja.ingresoegreso.form4')
-                    @include('includes.contable.formasientoexterno')
+                    @include('includes.contable.formasientoexterno', ['asientoComprobanteRefs' => true])
                     @include('caja.ingresoegreso.form6')
                 </div>
                 <div class="card-footer">
