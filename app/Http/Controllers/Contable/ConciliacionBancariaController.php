@@ -555,7 +555,7 @@ class ConciliacionBancariaController extends Controller
             $bancos = [$banco];
         }
 
-        $soloContables = is_array($contables) && count($contables) >= 2 && (! is_array($bancos) || $bancos === []);
+        $soloContables = is_array($contables) && count($contables) >= 1 && (! is_array($bancos) || $bancos === []);
         if ($empresaId <= 0 || $cuentacajaId <= 0 || ! is_array($contables) || $contables === []
             || (! $soloContables && (! is_array($bancos) || $bancos === []))) {
             return response()->json(['ok' => false, 'error' => 'Faltan los movimientos a cruzar.'], 422);

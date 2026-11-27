@@ -99,7 +99,6 @@ final class ConciliacionBancariaSinConciliarReporteSupport
         $filas = self::unificarChequeYOrdenPago($filas, $empresaId, $cuentacajaId);
         // OPP "cheque a descontar" sin "Ch: N": Anita la lista como CHP, con el número del cheque.
         $filas = self::mostrarOppDeChequeComoChp($filas, $empresaId, $cuentacajaId);
-
         $filas = ConciliacionBancariaChequeErpEnrichSupport::enriquecerFilasReporte(
             $filas,
             (int) ($resultado['empresa_id'] ?? 0),
@@ -128,9 +127,88 @@ final class ConciliacionBancariaSinConciliarReporteSupport
             $creditos += (float) ($f['credito'] ?? 0);
         }
 
-        $cc = $resultado['cuentacaja'] ?? null;
-        $codigo = is_object($cc) ? (string) ($cc->codigo ?? '') : (string) (is_array($cc) ? ($cc['codigo'] ?? '') : '');
-        $nombre = is_object($cc) ? (string) ($cc->nombre ?? '') : (string) (is_array($cc) ? ($cc['nombre'] ?? '') : '');
+        return [
+            'filas' => $filas,
+            'totales' => [
+                'n' => count($filas),
+                'debitos' => round($debitos, 2),
+                'creditos' => round($creditos, 2),
+            ],
+            'meta' => self::metaDesdeResultado($resultado),
+        ];
+    }
+
+    /**
+     * Mismo listado “Movimientos de Cuentas sin conciliar”, pero del lado Interbanking:
+     * movimientos del extracto bancario que no se emparejaron con el mayor (`pendientes_banco`).
+     *
+     * Misma estructura de filas que {@see armar()} para reutilizar Excel, PDF y CSV.
+     * Débitos = movimientos que el banco debitó (importe negativo); Créditos = acreditados.
+     *
+     * @param  array<string, mixed>  $resultado  Salida de ConciliacionBancariaService::ejecutar / cache
+     * @return array{
+     *   filas: list<array<string, mixed>>,
+     *   totales: array{n: int, debitos: float, creditos: float},
+     *   meta: array<string, mixed>
+     * }
+     */
+    public static function armarInterbanking(array $resultado): array
+    {
+        $filas = [];
+        $debitos = 0.0;
+        $creditos = 0.0;
+
+        foreach ($resultado['pendientes_banco'] ?? [] as $mov) {
+            $mov = is_object($mov) ? (array) $mov : $mov;
+            if (! is_array($mov)) {
+                continue;
+            }
+
+            $importe = round((float) ($mov['amount'] ?? $mov['importe'] ?? 0), 2);
+            $esDebito = $importe < 0
+                || ($importe == 0.0 && strtoupper((string) ($mov['debit_credit_type'] ?? '')) === 'D');
+            $debito = $esDebito ? abs($importe) : 0.0;
+            $credito = $esDebito ? 0.0 : abs($importe);
+            $debitos += $debito;
+            $creditos += $credito;
+
+            $fMov = self::fmtFechaInterbanking($mov['process_date'] ?? null);
+            $voucher = $mov['voucher_number'] ?? null;
+            $depositante = trim((string) ($mov['depositor_description'] ?? ''));
+            $cuit = trim((string) ($mov['customer_cuit'] ?? ''));
+
+            $filas[] = [
+                'lado' => 'banco',
+                'tip' => trim((string) ($mov['code_description_ib'] ?? '')),
+                'numero' => ($voucher !== null && $voucher !== '' && (string) $voucher !== '0') ? (string) $voucher : '',
+                'n_orig' => '',
+                'f_mov' => $fMov['txt'],
+                'f_dev' => '',
+                'f_entr' => '',
+                'f_conc' => '',
+                'f_mov_ord' => $fMov['ord'],
+                'detalle' => trim((string) ($mov['code_description_bank'] ?? '')),
+                'debito' => $debito,
+                'credito' => $credito,
+                'n_con' => '',
+                'detalle_concepto' => $depositante !== '' ? $depositante : ($cuit !== '' ? 'CUIT '.$cuit : ''),
+                'asiento_id' => 0,
+                'cheque_id' => null,
+                'pagoproveedor_id' => null,
+                'concepto_id' => null,
+                'hash' => (string) ($mov['hash'] ?? $mov['dedupe_hash'] ?? ''),
+                'fuente' => 'interbanking',
+            ];
+        }
+
+        usort($filas, static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['f_mov_ord'] ?? ''), (string) ($b['f_mov_ord'] ?? ''));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp((string) ($a['numero'] ?? ''), (string) ($b['numero'] ?? ''));
+        });
 
         return [
             'filas' => $filas,
@@ -139,19 +217,151 @@ final class ConciliacionBancariaSinConciliarReporteSupport
                 'debitos' => round($debitos, 2),
                 'creditos' => round($creditos, 2),
             ],
-            'meta' => [
-                'fecha_desde' => (string) ($resultado['fecha_desde'] ?? ''),
-                'fecha_hasta' => (string) ($resultado['fecha_hasta'] ?? ''),
-                'mes' => (int) ($resultado['mes'] ?? 0),
-                'anio' => (int) ($resultado['anio'] ?? 0),
-                'cuentacaja_codigo' => $codigo,
-                'cuentacaja_nombre' => $nombre,
-                'cuentacaja_label' => trim(
-                    ($codigo !== '' ? '(' . str_pad(ltrim($codigo, '0') !== '' ? $codigo : '0', 8, '0', STR_PAD_LEFT) . ') ' : '')
-                    .$nombre
-                ),
-            ],
+            'meta' => array_merge(self::metaDesdeResultado($resultado), [
+                'lado' => 'interbanking',
+                'titulo' => 'Movimientos de Interbanking sin conciliar',
+            ]),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private static function metaDesdeResultado(array $resultado): array
+    {
+        $cc = $resultado['cuentacaja'] ?? null;
+        $codigo = is_object($cc) ? (string) ($cc->codigo ?? '') : (string) (is_array($cc) ? ($cc['codigo'] ?? '') : '');
+        $nombre = is_object($cc) ? (string) ($cc->nombre ?? '') : (string) (is_array($cc) ? ($cc['nombre'] ?? '') : '');
+
+        return [
+            'fecha_desde' => (string) ($resultado['fecha_desde'] ?? ''),
+            'fecha_hasta' => (string) ($resultado['fecha_hasta'] ?? ''),
+            'mes' => (int) ($resultado['mes'] ?? 0),
+            'anio' => (int) ($resultado['anio'] ?? 0),
+            'cuentacaja_codigo' => $codigo,
+            'cuentacaja_nombre' => $nombre,
+            'cuentacaja_label' => trim(
+                ($codigo !== '' ? '(' . str_pad(ltrim($codigo, '0') !== '' ? $codigo : '0', 8, '0', STR_PAD_LEFT) . ') ' : '')
+                .$nombre
+            ),
+        ];
+    }
+
+    /**
+     * `process_date` del extracto llega como ISO en UTC (03:00Z = 00:00 en Argentina): se pasa a la
+     * zona de la app antes de tomar el día. Mismo formato de salida que el resto del reporte.
+     *
+     * @return array{txt: string, ord: string}
+     */
+    private static function fmtFechaInterbanking(mixed $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return ['txt' => '---', 'ord' => '00000000'];
+        }
+        try {
+            $c = Carbon::parse((string) $raw)->setTimezone((string) config('app.timezone'))->startOfDay();
+
+            return [
+                'txt' => $c->format('m/d/Y'),
+                'ord' => $c->format('Ymd'),
+            ];
+        } catch (\Throwable) {
+            return ['txt' => '---', 'ord' => '00000000'];
+        }
+    }
+
+    /**
+     * Lo pendiente del ERP es lo mismo que muestra la pantalla de conciliación: movimientos del mayor
+     * que no están en ningún cruce. Sin filtro por tipo ni stock de pendientes de Anita.
+     *
+     * @param  list<array<string, mixed>>  $contablesPendientes  Movimientos del mayor (con `hash`) sin cruce
+     * @param  array<string, mixed>  $resultado  Cabecera: empresa_id, cuentacaja, mes, anio, fecha_desde, fecha_hasta
+     * @return array{
+     *   filas: list<array<string, mixed>>,
+     *   totales: array{n: int, debitos: float, creditos: float},
+     *   meta: array<string, mixed>
+     * }
+     */
+    public static function armarDesdeTablero(array $contablesPendientes, array $resultado): array
+    {
+        $filas = [];
+        foreach ($contablesPendientes as $mov) {
+            if (! is_array($mov)) {
+                continue;
+            }
+            $fila = self::desdeContable($mov);
+            $tipo = strtoupper(trim((string) ($mov['tipo_comp'] ?? '')));
+            $fila['tip'] = $tipo !== '' ? $tipo : 'ASI';
+            // Pago con cheque (OPP/OPA con "Ch: N"): se lista como cheque, con el link al cheque.
+            if (in_array($fila['tip'], ['OPP', 'OPA'], true) && (string) ($fila['cheque_ref'] ?? '') !== '') {
+                $fila['tip'] = 'CHP';
+            }
+            $fila['detalle'] = (string) ($mov['descripcion'] ?? $mov['emisor'] ?? '');
+            $filas[] = $fila;
+        }
+        $filas = self::enriquecerLinks($filas, $resultado);
+
+        usort($filas, static function (array $a, array $b): int {
+            $cmp = strcmp((string) ($a['f_mov_ord'] ?? ''), (string) ($b['f_mov_ord'] ?? ''));
+
+            return $cmp !== 0 ? $cmp : strcmp((string) ($a['numero'] ?? ''), (string) ($b['numero'] ?? ''));
+        });
+
+        $debitos = 0.0;
+        $creditos = 0.0;
+        foreach ($filas as $f) {
+            $debitos += (float) ($f['debito'] ?? 0);
+            $creditos += (float) ($f['credito'] ?? 0);
+        }
+
+        return [
+            'filas' => $filas,
+            'totales' => [
+                'n' => count($filas),
+                'debitos' => round($debitos, 2),
+                'creditos' => round($creditos, 2),
+            ],
+            'meta' => self::metaDesdeResultado($resultado),
+        ];
+    }
+
+    /**
+     * Deja solo los movimientos con fecha de movimiento hasta la fecha pedida (inclusive) y recalcula
+     * contador y totales. Sirve para pedir el reporte "al día" sin lo que se está cargando ahora.
+     *
+     * @param  array<string, mixed>  $reporte  salida de armar()
+     * @param  string  $hastaYmd  Y-m-d
+     * @return array<string, mixed>
+     */
+    public static function limitarHasta(array $reporte, string $hastaYmd): array
+    {
+        $corte = preg_replace('/\D/', '', $hastaYmd);
+        if (strlen((string) $corte) !== 8) {
+            return $reporte;
+        }
+
+        $filas = array_values(array_filter(
+            $reporte['filas'] ?? [],
+            static fn (array $f): bool => (string) ($f['f_mov_ord'] ?? '') <= $corte,
+        ));
+
+        $debitos = 0.0;
+        $creditos = 0.0;
+        foreach ($filas as $f) {
+            $debitos += (float) ($f['debito'] ?? 0);
+            $creditos += (float) ($f['credito'] ?? 0);
+        }
+
+        $reporte['filas'] = $filas;
+        $reporte['totales'] = [
+            'n' => count($filas),
+            'debitos' => round($debitos, 2),
+            'creditos' => round($creditos, 2),
+        ];
+        $reporte['meta']['fecha_hasta'] = substr($corte, 0, 4).'-'.substr($corte, 4, 2).'-'.substr($corte, 6, 2);
+
+        return $reporte;
     }
 
     /**

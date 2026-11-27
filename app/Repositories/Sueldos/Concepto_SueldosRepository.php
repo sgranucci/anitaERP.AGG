@@ -17,6 +17,7 @@ use App\Support\Sueldos\Lsd\LsdSubsistemaSupport;
 use App\Support\Sueldos\Formula\Anita\AnitaFormulaTraductor;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Conceptos de liquidacion (Anita sueldos / haberes + habformula).
@@ -226,6 +227,7 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
             'con_formula' => 0,
             'traducidos' => 0,
             'pendientes_traduccion' => 0,
+            'protegidos' => [],
             'errores' => [],
         ];
 
@@ -307,6 +309,13 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
                             ->exists();
 
                     if ($existente !== null && $tieneLineasAnita) {
+                        $resultado['omitidos']++;
+
+                        continue;
+                    }
+
+                    if ($existente !== null && $this->esFormulaProtegida($existente)) {
+                        $resultado['protegidos'][] = $codigo;
                         $resultado['omitidos']++;
 
                         continue;
@@ -462,6 +471,16 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
      *     errores: list<string>
      * }
      */
+    /**
+     * Concepto con la fórmula corregida a mano: la actualización desde Anita no lo pisa.
+     */
+    private function esFormulaProtegida($concepto): bool
+    {
+        return $concepto !== null
+            && Schema::hasColumn('concepto_sueldos', 'formula_local_protegida')
+            && (bool) ($concepto->formula_local_protegida ?? false);
+    }
+
     public function retraducirFormulasDesdeLineas()
     {
         ini_set('max_execution_time', '600');
@@ -472,6 +491,7 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
             'traducidos' => 0,
             'pendientes_traduccion' => 0,
             'sin_lineas' => 0,
+            'protegidos' => [],
             'errores' => [],
         ];
 
@@ -480,6 +500,12 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
         Concepto_Sueldos::withoutAuditing(function () use ($traductor, &$resultado) {
             $this->model->newQuery()->orderBy('codigo')->chunkById(100, function ($chunk) use ($traductor, &$resultado) {
                 foreach ($chunk as $concepto) {
+                    if ($this->esFormulaProtegida($concepto)) {
+                        $resultado['protegidos'][] = (int) $concepto->codigo;
+
+                        continue;
+                    }
+
                     $lineas = Concepto_Formula_Sueldos::query()
                         ->where('concepto_id', $concepto->id)
                         ->orderBy('nro_linea')
@@ -556,6 +582,7 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
             'traducidos' => 0,
             'pendientes_traduccion' => 0,
             'no_en_erp' => 0,
+            'protegidos' => [],
             'errores' => [],
             'ejemplos_cambio' => [],
         ];
@@ -620,6 +647,12 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
                     $concepto = $this->findPorCodigo($codigo);
                     if ($concepto === null) {
                         $resultado['no_en_erp']++;
+
+                        continue;
+                    }
+
+                    if ($this->esFormulaProtegida($concepto)) {
+                        $resultado['protegidos'][] = (int) $concepto->codigo;
 
                         continue;
                     }
@@ -755,7 +788,7 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
             $factor = null;
         }
 
-        return [
+        $payload = [
             'codigo' => $codigo,
             'descripcion' => $this->recortar(trim((string) ($data['descripcion'] ?? '')), 60),
             'tipo' => ConceptoTipo::normalizarTipo($data['tipo'] ?? null),
@@ -780,6 +813,13 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
             'activo' => (bool) ($data['activo'] ?? true),
             'orden' => (int) ($data['orden'] ?? 0),
         ];
+
+        if (array_key_exists('formula_local_protegida', $data)
+            && Schema::hasColumn('concepto_sueldos', 'formula_local_protegida')) {
+            $payload['formula_local_protegida'] = (bool) $data['formula_local_protegida'];
+        }
+
+        return $payload;
     }
 
     /**

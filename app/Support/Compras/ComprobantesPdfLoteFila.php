@@ -6,9 +6,19 @@ namespace App\Support\Compras;
 
 /**
  * Una fila del listado de PDFs (factura, OC, COM, OPP u OPA).
+ *
+ * `origen` = 'anita' para facturas que el ERP no tiene y se leyeron de la tabla compra de Anita
+ * (tipo 'anita'); `anita` trae los datos para buscar el PDF escaneado.
  */
 final class ComprobantesPdfLoteFila
 {
+    public const ORIGEN_ERP = 'erp';
+
+    public const ORIGEN_ANITA = 'anita';
+
+    /**
+     * @param  array<string, mixed>  $anita
+     */
     public function __construct(
         public readonly string $clave,
         public readonly string $tipo,
@@ -23,7 +33,14 @@ final class ComprobantesPdfLoteFila
         public bool $tienePdf,
         public string $pdfEtiqueta,
         public readonly ?string $editarUrl,
-        public readonly ?string $pdfUrl,
+        public ?string $pdfUrl,
         public readonly string $servicioCliente = '',
+        public readonly string $origen = self::ORIGEN_ERP,
+        public array $anita = [],
     ) {}
+
+    public function esAnita(): bool
+    {
+        return $this->origen === self::ORIGEN_ANITA;
+    }
 }

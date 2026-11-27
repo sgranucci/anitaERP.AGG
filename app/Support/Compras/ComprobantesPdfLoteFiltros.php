@@ -98,7 +98,7 @@ final class ComprobantesPdfLoteFiltros
     }
 
     /**
-     * @return list<string> claves tipo:id
+     * @return list<string> claves tipo:id (o anita:empresa-nro_interno)
      */
     public static function clavesDesdeRequest(Request $request): array
     {
@@ -111,6 +111,9 @@ final class ComprobantesPdfLoteFiltros
         foreach ((array) $raw as $clave) {
             $clave = strtolower(trim((string) $clave));
             if (preg_match('/^(fac|oc|com|opp|opa):(\d+)$/', $clave, $m) === 1 && (int) $m[2] > 0) {
+                $ok[$clave] = $clave;
+            } elseif (preg_match('/^anita:(\d+)-(\d+)$/', $clave, $m) === 1 && (int) $m[2] > 0) {
+                // Factura leída de Anita (respaldo): anita:{empresa Anita}-{nro. interno}.
                 $ok[$clave] = $clave;
             }
         }

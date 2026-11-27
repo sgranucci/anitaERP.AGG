@@ -110,8 +110,8 @@
     function blobTipo(mov, lado) {
         if (lado === 'c') {
             var b = texto(mov.tipo_comp + ' ' + mov.descripcion + ' ' + mov.nro_asiento_fmt + ' ' + mov.nro);
-            // El mayor graba la anulación como OPP "ANULA OPP". En pantalla se busca como AOP.
-            if (/\banula\s+opp\b/.test(b)) b += ' aop';
+            // El mayor graba la anulación como "ANULA OPP" o "ANULA TRA". En pantalla se busca como AOP.
+            if (/\banula\s+(opp|tra)\b/.test(b)) b += ' aop';
             return b;
         }
         return texto(mov.code_description_ib + ' ' + mov.code_description_bank + ' ' + mov.voucher_number);
@@ -124,6 +124,11 @@
             return /\bch\b|cheque|chp|chd|ch dep|ch\/pag/.test(b) || texto(mov.tipo_comp || '').indexOf('ch') !== -1;
         }
         if (tipoChip === 'trf') {
+            // Una OPP/OPA con "Ch: N" es un pago con cheque: va en Cheques, no en Transferencias.
+            if (lado === 'c') {
+                var chRef = refCheque(mov, 'c');
+                if (chRef && !/^0+$/.test(chRef)) return false;
+            }
             return /trf|transf|transfer/.test(b) || ['OPP', 'OPA', 'TRF'].indexOf(String(mov.tipo_comp || '').toUpperCase()) !== -1;
         }
         if (tipoChip === 'dep') {
@@ -154,16 +159,38 @@
         return q === 'aop';
     }
 
-    /** Cheques que tienen una ANULA OPP en el tablero. Al buscar "aop" se muestra también el original. */
+    var RE_ANULA = /\banula\s+(opp|tra)\b/i;
+
+    function esAnulacion(mov) {
+        return RE_ANULA.test(String(mov.descripcion || ''));
+    }
+
+    /** "ANULA TRA 4079 …" → 'tra4079'. Vacío si no es una anulación de transferencia. */
+    function refTransferenciaAnulada(mov) {
+        var m = String(mov.descripcion || '').match(/\banula\s+tra\s+0*(\d+)\b/i);
+        return m ? 'tra' + m[1] : '';
+    }
+
+    /** Referencia común de una anulación y de su original: cheque (Ch: N) o transferencia (TRA n). */
+    function refAnulacion(mov) {
+        var ch = refCheque(mov, 'c');
+        if (ch && !/^0+$/.test(ch)) return ch;
+        var anulada = refTransferenciaAnulada(mov);
+        if (anulada) return anulada;
+        if (String(mov.tipo_comp || '').toUpperCase() === 'TRA' && mov.nro) {
+            return 'tra' + String(mov.nro).replace(/^0+/, '');
+        }
+        return '';
+    }
+
+    /** Referencias (cheque o TRA) que tienen una anulación en el tablero. Al buscar "aop" se muestra también el original. */
     function chequesConAnulacion() {
         if (chequesAopCache) return chequesAopCache;
         var set = {};
-        var soloPend = document.getElementById('solo-pendientes').checked;
         (estado.contables || []).forEach(function (m) {
-            if (!/\banula\s+opp\b/i.test(String(m.descripcion || ''))) return;
-            if (soloPend && mapHashesC[m.hash]) return;
-            var ref = refCheque(m, 'c');
-            if (!ref || /^0+$/.test(ref)) return;
+            if (!esAnulacion(m)) return;
+            var ref = refAnulacion(m);
+            if (!ref) return;
             set[ref] = true;
         });
         chequesAopCache = set;
@@ -171,9 +198,19 @@
     }
 
     function esOriginalDeAnulacion(mov) {
-        if (/\banula\s+opp\b/i.test(String(mov.descripcion || ''))) return false;
-        var ref = refCheque(mov, 'c');
+        if (esAnulacion(mov)) return false;
+        var ref = refAnulacion(mov);
         return !!(ref && chequesConAnulacion()[ref]);
+    }
+
+    /** Anulación pendiente cuyo movimiento original (mismo cheque o TRA) ya está en un cruce. */
+    function esAnulacionConOriginalConciliado(mov) {
+        if (!mov || !esAnulacion(mov) || mapHashesC[mov.hash]) return false;
+        var ref = refAnulacion(mov);
+        if (!ref) return false;
+        return (estado.contables || []).some(function (m) {
+            return m.hash !== mov.hash && !esAnulacion(m) && refAnulacion(m) === ref && !!mapHashesC[m.hash];
+        });
     }
 
     function pasa(mov, lado, ignorarConciliados) {
@@ -184,7 +221,9 @@
         var fFiltro = fechaFiltro();
         // Si el texto encuentra el movimiento (número de cheque, ANULA, AOP) o es el cheque
         // original de esa anulación, se muestra aunque caiga en otro día.
-        var textoManda = (q !== '' && lado === 'c' && blob.indexOf(q) !== -1) || parejaAop;
+        // Un importe escrito busca en todo el mes (como Interbanking): la fecha elegida no lo esconde.
+        var importeManda = importeFiltro() !== null;
+        var textoManda = (q !== '' && lado === 'c' && blob.indexOf(q) !== -1) || parejaAop || importeManda;
         if (fFiltro && !textoManda) {
             var fMov = fechaMov(mov, lado);
             // Con "Incluir anteriores": el banco queda en el día elegido;
@@ -196,7 +235,11 @@
             }
         }
         if (!pasaTipo(mov, lado)) return false;
-        if (!ignorarConciliados && document.getElementById('solo-pendientes').checked) {
+        // Buscando "aop" o "anula" se trae el conjunto completo (anulación + original), conciliado o no:
+        // la marca "ya conciliado" avisa cuál está en un cruce.
+        var buscaAnulacion = lado === 'c' && (esBusquedaAop(q) || /\banula\b/.test(q))
+            && (esAnulacion(mov) || esOriginalDeAnulacion(mov));
+        if (!ignorarConciliados && !parejaAop && !buscaAnulacion && document.getElementById('solo-pendientes').checked) {
             var usados = lado === 'c' ? mapHashesC : mapHashesB;
             if (usados[mov.hash]) return false;
         }
@@ -238,11 +281,11 @@
         var salida = pinned.concat(rest);
         if (lado === 'c' && esBusquedaAop(texto(document.getElementById('filtro-texto').value))) {
             salida = salida.slice().sort(function (a, b) {
-                var ra = refCheque(a, 'c') || '\uffff';
-                var rb = refCheque(b, 'c') || '\uffff';
+                var ra = refAnulacion(a) || '\uffff';
+                var rb = refAnulacion(b) || '\uffff';
                 if (ra !== rb) return ra < rb ? -1 : 1;
-                var aa = /\banula\s+opp\b/i.test(String(a.descripcion || '')) ? 1 : 0;
-                var bb = /\banula\s+opp\b/i.test(String(b.descripcion || '')) ? 1 : 0;
+                var aa = esAnulacion(a) ? 1 : 0;
+                var bb = esAnulacion(b) ? 1 : 0;
                 return aa - bb;
             });
         }
@@ -461,8 +504,12 @@
         var activo = !!mapa[mov.hash];
         var sugerido = mov._sugerido ? ' cm-sugerido' : '';
         var marca = '';
-        if (lado === 'c' && /\banula\s+opp\b/i.test(String(mov.descripcion || ''))) {
-            marca += ' <span class="badge badge-danger">AOP</span>';
+        if (lado === 'c' && esAnulacion(mov)) {
+            var esTra = /\banula\s+tra\b/i.test(String(mov.descripcion || ''));
+            marca += ' <span class="badge badge-danger">' + (esTra ? 'ANULA TRA' : 'AOP') + '</span>';
+        }
+        if (lado === 'c' && mapHashesC[mov.hash]) {
+            marca += ' <span class="badge badge-dark" title="Ya está en un cruce. Desconcilialo en Conciliados del período para cruzarlo con su anulación.">ya conciliado</span>';
         }
         if (mov.anterior) marca += ' <span class="badge badge-secondary">anterior</span>';
         if (mov.fecha_extra) marca += ' <span class="badge badge-info">día extra</span>';
@@ -622,6 +669,9 @@
         // Orden de pago + su "ANULA OPP": dos o más contables que suman cero, sin banco.
         var anulacionOp = nB === 0 && nC >= 2 && Math.abs(sumC) <= tolerancia;
         if (anulacionOp) listo = true;
+        // Anulación sola: su original ya está conciliado en otro cruce, no queda nada que compensar.
+        var anulacionSola = nB === 0 && nC === 1 && esAnulacionConOriginalConciliado(seleccionados('c')[0]);
+        if (anulacionSola) listo = true;
         // Varios cheques con su pareja automática: cada pareja se evalúa sola (no la suma total).
         var lotePares = parejas.length > 1 && nC === parejas.length && nB === parejas.length && seleccionSoloParejas();
         if (lotePares) {
@@ -667,6 +717,9 @@
             }
         } else if (anulacionOp) {
             aviso.innerHTML = 'Orden de pago y su anulación se compensan (' + nC + ' contables, sin banco) — <strong>Conciliar</strong> o <kbd>Enter</kbd>';
+            aviso.className = 'small text-success font-weight-bold';
+        } else if (anulacionSola) {
+            aviso.innerHTML = 'Anulación con el original ya conciliado (sin banco) — <strong>Conciliar</strong> o <kbd>Enter</kbd>';
             aviso.className = 'small text-success font-weight-bold';
         } else if (nC + nB > 0) {
             aviso.textContent = 'Elegí al menos uno del otro lado.';
@@ -1097,7 +1150,18 @@
         var c = seleccionados('c');
         var b = seleccionados('b');
         var anulacionOp = b.length === 0 && c.length >= 2 && Math.abs(sumaSel('c')) <= tolerancia;
-        if (anulacionOp) {
+        var anulacionSola = b.length === 0 && c.length === 1 && esAnulacion(c[0]);
+        if (anulacionSola && !esAnulacionConOriginalConciliado(c[0])) {
+            alert('El original de esa anulación no figura conciliado en este mes. Tildalo junto con la anulación para cruzarlos entre sí.');
+            return;
+        }
+        if (anulacionOp || anulacionSola) {
+            var yaConciliado = c.filter(function (m) { return mapHashesC[m.hash]; });
+            if (yaConciliado.length) {
+                alert('Hay ' + yaConciliado.length + ' movimiento(s) ya conciliado(s) en otro cruce (marcados "ya conciliado"). '
+                    + 'Desconcilialos primero en "Conciliados del período" y después cruzá la anulación.');
+                return;
+            }
             overlay(true, 'Guardando la anulación…');
             postConciliar(c, [], false).then(function () {
                 cargar();

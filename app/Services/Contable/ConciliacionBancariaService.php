@@ -28,7 +28,6 @@ use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaExcelReferenci
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaGastoDocumentoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaHashSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaKpiSupport;
-use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMarcaAnitaSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMatcher;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport;
 use App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport;
@@ -249,13 +248,6 @@ class ConciliacionBancariaService
             $hashContConc,
             $hashBancoConc,
         )['contables_pendientes'];
-
-        // TED que Anita ya concilió en tesorería y que no tienen línea de banco con la cual cruzarse.
-        $pendientesContables = ConciliacionBancariaMarcaAnitaSupport::quitarTransferenciasConciliadasEnAnita(
-            $pendientesContables,
-            $cuentacaja,
-            $empresaId,
-        );
 
         $pendientesBanco = ConciliacionBancariaMatcher::emparejar(
             $todosContables,
@@ -481,6 +473,27 @@ class ConciliacionBancariaService
         bool $incluirAnteriores = false,
         ?string $fechaDia = null,
     ): array {
+        $t = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, $incluirAnteriores, $fechaDia);
+        $t['contables'] = array_map(fn (array $mov) => $this->filaTableroContable($mov), $t['contables']);
+        $t['banco'] = array_map(fn (array $mov) => $this->filaTableroBanco($mov), $t['banco']);
+
+        return $t;
+    }
+
+    /**
+     * Mismo tablero que la pantalla, con los movimientos del mayor y del banco tal como salen de la fuente.
+     * Lo usan la pantalla (mapeada) y el reporte «sin conciliar», para que ambos muestren lo mismo.
+     *
+     * @return array<string, mixed>
+     */
+    private function tableroManualCrudo(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        bool $incluirAnteriores = false,
+        ?string $fechaDia = null,
+    ): array {
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
         $cuentacaja = Cuentacaja::query()->with('cuentacontables')->findOrFail($cuentacajaId);
@@ -682,8 +695,8 @@ class ConciliacionBancariaService
         });
 
         return [
-            'contables' => array_map(fn (array $mov) => $this->filaTableroContable($mov), array_merge($contables, $anteriores)),
-            'banco' => array_map(fn (array $mov) => $this->filaTableroBanco($mov), $banco),
+            'contables' => array_merge($contables, $anteriores),
+            'banco' => $banco,
             'pares' => $paresTablero,
             'hashes_contables' => array_keys($hashesGlobal['contables']),
             'hashes_banco' => array_keys($hashesGlobal['banco']),
@@ -812,8 +825,8 @@ class ConciliacionBancariaService
         ?int $usuarioId,
     ): ConciliacionBancariaGrupo {
         $contables = array_values(array_filter($contables, 'is_array'));
-        if (count($contables) < 2) {
-            throw new RuntimeException('Elegí la orden de pago y su anulación (al menos dos movimientos contables).');
+        if ($contables === []) {
+            throw new RuntimeException('Elegí la anulación (y, si sigue pendiente, su movimiento original).');
         }
 
         $fechaRef = self::fechaDesdeYmdOString($contables[0]['fecha'] ?? $contables[0]['fecha_fmt'] ?? null);
@@ -835,11 +848,19 @@ class ConciliacionBancariaService
                 throw new RuntimeException('Hay un movimiento contable que ya está conciliado.');
             }
             $cheque = ConciliacionBancariaReferenciaSupport::extraerChequeContable($mov);
-            if ($cheque === null) {
-                throw new RuntimeException('Todos los movimientos tienen que ser de un cheque (Ch: N).');
+            if ($cheque !== null) {
+                $cheques['CH:'.ltrim($cheque, '0')] = true;
+            } else {
+                // Transferencia anulada: la TRA original y su "ANULA TRA n".
+                $transferencia = ConciliacionBancariaReferenciaSupport::extraerReferenciaTransferencia($mov);
+                if ($transferencia === null) {
+                    throw new RuntimeException('Todos los movimientos tienen que ser de un cheque (Ch: N) o de una transferencia (TRA).');
+                }
+                $cheques['TRA:'.$transferencia] = true;
             }
-            $cheques[ltrim($cheque, '0')] = true;
-            $hayAnula = $hayAnula || ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov);
+            $hayAnula = $hayAnula
+                || ConciliacionBancariaPendienteSupport::esAnulaChequeContable($mov)
+                || ConciliacionBancariaReferenciaSupport::extraerTransferenciaAnulada($mov) !== null;
 
             $imp = ConciliacionBancariaHashSupport::importeFirmadoContable($mov);
             $suma += $imp;
@@ -852,18 +873,26 @@ class ConciliacionBancariaService
             ];
         }
 
-        if (count($lineas) < 2) {
+        if ($lineas === []) {
             throw new RuntimeException('Faltan movimientos válidos para armar el cruce.');
         }
         if (count($cheques) !== 1) {
-            throw new RuntimeException('La orden de pago y su anulación tienen que ser del mismo cheque.');
+            throw new RuntimeException('El movimiento y su anulación tienen que ser del mismo cheque o de la misma transferencia.');
         }
         if (! $hayAnula) {
-            throw new RuntimeException('Falta el movimiento "ANULA OPP" del cheque.');
+            throw new RuntimeException('Falta el movimiento de anulación ("ANULA OPP" o "ANULA TRA").');
         }
-        $suma = round($suma, 2);
-        if (abs($suma) > ConciliacionBancariaReglasSupport::toleranciaImporte()) {
-            throw new RuntimeException('La orden de pago y su anulación no se compensan (diferencia '.$suma.').');
+        if (count($lineas) === 1) {
+            // Anulación sola: vale cuando el original ya está conciliado en otro cruce (no queda nada que compensar).
+            $referencia = (string) array_key_first($cheques);
+            if (! $this->originalDeAnulacionConciliado($empresaId, $cuentacajaId, $referencia)) {
+                throw new RuntimeException('El original de esa anulación todavía está pendiente: tildalo junto con la anulación para cruzarlos.');
+            }
+        } else {
+            $suma = round($suma, 2);
+            if (abs($suma) > ConciliacionBancariaReglasSupport::toleranciaImporte()) {
+                throw new RuntimeException('La orden de pago y su anulación no se compensan (diferencia '.$suma.').');
+            }
         }
 
         try {
@@ -894,6 +923,55 @@ class ConciliacionBancariaService
         } catch (QueryException $e) {
             throw new RuntimeException('No se pudo guardar el cruce. Algún movimiento puede haber quedado conciliado en otra solapa.', 0, $e);
         }
+    }
+
+    /**
+     * ¿El movimiento original de una anulación ya está en un cruce de esta cuenta?
+     *
+     * @param  string  $referencia  'CH:{nro cheque}' o 'TRA:{nro transferencia}'
+     */
+    private function originalDeAnulacionConciliado(int $empresaId, int $cuentacajaId, string $referencia): bool
+    {
+        [$tipo, $nro] = array_pad(explode(':', $referencia, 2), 2, '');
+        $nro = ltrim($nro, '0');
+        if ($nro === '') {
+            return false;
+        }
+
+        $condicion = function (string $col) use ($tipo, $nro): array {
+            $desc = "JSON_UNQUOTE(JSON_EXTRACT({$col}, '\$.descripcion'))";
+            if ($tipo === 'TRA') {
+                return [
+                    "UPPER(JSON_UNQUOTE(JSON_EXTRACT({$col}, '\$.tipo_comp'))) = 'TRA'"
+                    ." AND TRIM(LEADING '0' FROM JSON_UNQUOTE(JSON_EXTRACT({$col}, '\$.nro'))) = ?"
+                    ." AND {$desc} NOT LIKE '%ANULA%'",
+                    [$nro],
+                ];
+            }
+
+            return [
+                "{$desc} REGEXP ? AND {$desc} NOT LIKE '%ANULA%'",
+                ['Ch:[[:space:]]*0*'.$nro.'([^0-9]|$)'],
+            ];
+        };
+
+        [$sqlPar, $bindPar] = $condicion('contable_json');
+        $enPar = ConciliacionBancariaPar::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereRaw($sqlPar, $bindPar)
+            ->exists();
+        if ($enPar) {
+            return true;
+        }
+
+        [$sqlGrupo, $bindGrupo] = $condicion('movimiento_json');
+
+        return ConciliacionBancariaGrupoLinea::query()
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->where('lado', ConciliacionBancariaGrupoLinea::LADO_CONTABLE)
+            ->whereRaw($sqlGrupo, $bindGrupo)
+            ->exists();
     }
 
     /**
@@ -1511,13 +1589,13 @@ class ConciliacionBancariaService
      * @return array{filas: list<array<string,mixed>>, resumen: array<string, mixed>}
      */
     /**
-     * Reporte pantalla/export: movimientos sin conciliar estilo Anita (grilla + Excel/PDF/CSV).
+     * Reporte «sin conciliar» (pantalla, Excel, PDF, CSV): exactamente lo que la pantalla de conciliación
+     * muestra como pendiente del ERP, o sea movimientos del mayor (período + anteriores) que no están en ningún cruce.
      *
      * @return array{
      *   filas: list<array<string, mixed>>,
      *   totales: array{n: int, debitos: float, creditos: float},
-     *   meta: array<string, mixed>,
-     *   resultado: array<string, mixed>
+     *   meta: array<string, mixed>
      * }
      */
     public function movimientosSinConciliar(
@@ -1525,31 +1603,71 @@ class ConciliacionBancariaService
         int $cuentacajaId,
         int $mes,
         int $anio,
-        ?int $usuarioId = null,
-        bool $forzarRecalculo = false,
+        ?string $hasta = null,
     ): array {
-        $resultado = null;
-        if (! $forzarRecalculo) {
-            // Sin tope de edad: el reporte también sirve períodos ya cerrados/aprobados.
-            $resultado = ConciliacionBancariaResultadoCache::leer($empresaId, $cuentacajaId, $mes, $anio, 0);
-        }
-        $resultado ??= $this->ejecutar(
-            $empresaId,
-            $cuentacajaId,
-            $mes,
-            $anio,
-            $usuarioId,
-            false,
-            [
-                'persistir_pendientes' => false,
-                'omitir_lock' => true,
-            ],
-        );
+        $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null);
+        $usados = array_fill_keys($tablero['hashes_contables'], true);
+        $pendientes = array_values(array_filter(
+            $tablero['contables'],
+            static fn (array $mov): bool => ! isset($usados[(string) ($mov['hash'] ?? '')]),
+        ));
 
-        $reporte = ConciliacionBancariaSinConciliarReporteSupport::armar($resultado);
-        $reporte['resultado'] = $resultado;
+        $reporte = ConciliacionBancariaSinConciliarReporteSupport::armarDesdeTablero(
+            $pendientes,
+            $this->cabeceraReporteSinConciliar($empresaId, $cuentacajaId, $mes, $anio),
+        );
+        if ($hasta !== null && $hasta !== '') {
+            $reporte = ConciliacionBancariaSinConciliarReporteSupport::limitarHasta($reporte, $hasta);
+        }
 
         return $reporte;
+    }
+
+    /**
+     * Mismo listado, del lado Interbanking: movimientos del extracto que la pantalla de conciliación
+     * muestra como pendientes del banco (no están en ningún cruce).
+     *
+     * @return array<string, mixed>
+     */
+    public function movimientosInterbankingSinConciliar(
+        int $empresaId,
+        int $cuentacajaId,
+        int $mes,
+        int $anio,
+        ?string $hasta = null,
+    ): array {
+        $tablero = $this->tableroManualCrudo($empresaId, $cuentacajaId, $mes, $anio, true, null);
+        $usados = array_fill_keys($tablero['hashes_banco'], true);
+        $pendientes = array_values(array_filter(
+            $tablero['banco'],
+            static fn (array $mov): bool => ! isset($usados[(string) ($mov['hash'] ?? '')]),
+        ));
+
+        $cabecera = $this->cabeceraReporteSinConciliar($empresaId, $cuentacajaId, $mes, $anio);
+        $cabecera['pendientes_banco'] = $pendientes;
+        $reporte = ConciliacionBancariaSinConciliarReporteSupport::armarInterbanking($cabecera);
+        if ($hasta !== null && $hasta !== '') {
+            $reporte = ConciliacionBancariaSinConciliarReporteSupport::limitarHasta($reporte, $hasta);
+        }
+
+        return $reporte;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function cabeceraReporteSinConciliar(int $empresaId, int $cuentacajaId, int $mes, int $anio): array
+    {
+        $desde = Carbon::createFromDate($anio, $mes, 1)->startOfDay();
+
+        return [
+            'empresa_id' => $empresaId,
+            'cuentacaja' => Cuentacaja::query()->find($cuentacajaId),
+            'mes' => $mes,
+            'anio' => $anio,
+            'fecha_desde' => $desde->toDateString(),
+            'fecha_hasta' => $desde->copy()->endOfMonth()->toDateString(),
+        ];
     }
 
     public function agingPendientes(

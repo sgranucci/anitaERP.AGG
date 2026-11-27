@@ -10,7 +10,6 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\ConciliacionBancariaService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ConciliacionBancariaSinConciliarController extends Controller
@@ -42,8 +41,7 @@ class ConciliacionBancariaSinConciliarController extends Controller
                         $ctx['cuentacaja_id'],
                         $ctx['mes'],
                         $ctx['anio'],
-                        (int) Auth::id(),
-                        $request->boolean('recalcular'),
+                        $ctx['hasta'],
                     );
                 } catch (\Throwable $e) {
                     $errores[] = $e->getMessage();
@@ -78,15 +76,24 @@ class ConciliacionBancariaSinConciliarController extends Controller
             abort(403);
         }
 
+        $esInterbanking = $ctx['lado'] === 'interbanking';
+
         try {
-            $reporte = $this->service->movimientosSinConciliar(
-                $ctx['empresa_id'],
-                $ctx['cuentacaja_id'],
-                $ctx['mes'],
-                $ctx['anio'],
-                (int) Auth::id(),
-                $request->boolean('recalcular'),
-            );
+            $reporte = $esInterbanking
+                ? $this->service->movimientosInterbankingSinConciliar(
+                    $ctx['empresa_id'],
+                    $ctx['cuentacaja_id'],
+                    $ctx['mes'],
+                    $ctx['anio'],
+                    $ctx['hasta'],
+                )
+                : $this->service->movimientosSinConciliar(
+                    $ctx['empresa_id'],
+                    $ctx['cuentacaja_id'],
+                    $ctx['mes'],
+                    $ctx['anio'],
+                    $ctx['hasta'],
+                );
         } catch (\Throwable $e) {
             return redirect()
                 ->route('conciliacion_bancaria_sin_conciliar', $ctx['filtrosQuery'])
@@ -101,7 +108,8 @@ class ConciliacionBancariaSinConciliarController extends Controller
         ]);
         $formato = strtoupper(trim($formato));
         $codigo = preg_replace('/\W+/', '_', (string) ($ctx['cuentacaja']->codigo ?? 'cuenta')) ?: 'cuenta';
-        $base = 'sin_conciliar_'.$codigo.'_'.sprintf('%02d_%d', $ctx['mes'], $ctx['anio']);
+        $base = ($esInterbanking ? 'sin_conciliar_interbanking_' : 'sin_conciliar_')
+            .$codigo.'_'.sprintf('%02d_%d', $ctx['mes'], $ctx['anio']);
 
         return match ($formato) {
             'PDF' => $this->exportarPdf($reporte, $meta, $base),
@@ -157,6 +165,8 @@ class ConciliacionBancariaSinConciliarController extends Controller
      *   mes: int,
      *   anio: int,
      *   consultar: bool,
+     *   lado: string,
+     *   hasta: ?string,
      *   filtrosQuery: array<string, mixed>
      * }
      */
@@ -168,7 +178,32 @@ class ConciliacionBancariaSinConciliarController extends Controller
         $mes = max(1, min(12, (int) $request->input('mes', (int) date('n'))));
         $anio = max(2000, (int) $request->input('anio', (int) date('Y')));
 
+        // Fecha hasta (Y-m-d): deja afuera los movimientos posteriores (lo que se está cargando ahora).
+        $hasta = trim((string) $request->input('hasta', ''));
+        if ($hasta !== '' && ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $hasta)) {
+            $hasta = '';
+        }
+
+        $filtrosQuery = [
+            'empresa_id' => $empresaId,
+            'cuentacaja_id' => $cuentacajaId,
+            'mes' => $mes,
+            'anio' => $anio,
+            'consultar' => 1,
+        ];
+        if ($hasta !== '') {
+            $filtrosQuery['hasta'] = $hasta;
+        }
+
+        // Lado del reporte: vacío = mayor del ERP (Anita); interbanking = extracto sin emparejar.
+        $lado = $request->input('lado') === 'interbanking' ? 'interbanking' : '';
+        if ($lado !== '') {
+            $filtrosQuery['lado'] = $lado;
+        }
+
         return [
+            'lado' => $lado,
+            'hasta' => $hasta !== '' ? $hasta : null,
             'empresa_query' => $empresaQuery,
             'empresa_id' => $empresaId,
             'cuentacaja_id' => $cuentacajaId,
@@ -176,13 +211,7 @@ class ConciliacionBancariaSinConciliarController extends Controller
             'mes' => $mes,
             'anio' => $anio,
             'consultar' => $request->boolean('consultar'),
-            'filtrosQuery' => [
-                'empresa_id' => $empresaId,
-                'cuentacaja_id' => $cuentacajaId,
-                'mes' => $mes,
-                'anio' => $anio,
-                'consultar' => 1,
-            ],
+            'filtrosQuery' => $filtrosQuery,
         ];
     }
 }

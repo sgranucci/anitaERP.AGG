@@ -196,6 +196,61 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         }
     }
 
+    /**
+     * Solo lectura: cuántas cabeceras promov tipo AOP hay en Anita con la clave de este AOP.
+     * Se usa en la vista previa de "Deshacer AOP"; usa el mismo WHERE que el borrado.
+     */
+    public function contarPromovCabeceraAop(Pagoproveedor $aop): int
+    {
+        $aop->loadMissing(['proveedores', 'empresas']);
+
+        $proveedor = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita(
+            (string) ($aop->proveedores?->codigo ?? '')
+        );
+        $nro = (int) ($aop->numerotransaccion ?? 0);
+        if ($proveedor === '' || $nro <= 0) {
+            return 0;
+        }
+
+        $empresa = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $aop->empresa_id);
+        if ($empresa <= 0) {
+            $empresa = (int) ($aop->empresas?->codigo ?? $aop->empresa_id ?? 0);
+        }
+
+        $letra = (string) ($aop->letra ?? 'A');
+        if ($letra === '') {
+            $letra = 'A';
+        }
+
+        $lado = AplicacionCuentacorrienteAnitaLadoSupport::armar(
+            $proveedor,
+            'AOP',
+            $letra,
+            (int) ($aop->sucursal ?? 1),
+            $nro,
+            0,
+            0,
+            $empresa,
+        );
+
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => 'promov',
+            'campos' => 'prov_nro',
+            'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
+        ], 'promov conteo AOP '.$lado['etiqueta']);
+
+        $error = ApiAnita::extraerMensajeError($raw);
+        if ($error !== null) {
+            throw new RuntimeException($error);
+        }
+
+        $filas = json_decode((string) $raw, true);
+
+        return is_array($filas) ? count($filas) : 0;
+    }
+
     public function syncAplicar(Proveedor_Cuentacorriente_Aplicacion $apl): void
     {
         $par = $this->resolverPar($apl);

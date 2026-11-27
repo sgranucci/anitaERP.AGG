@@ -79,6 +79,13 @@ final class PagoproveedorListadoFila
         return $this->etiqueta;
     }
 
+    /** AOP: compensatorio de una OP revertida. La etiqueta ya empieza con "AOP". */
+    public function esAop(): bool
+    {
+        return $this->origen === self::ORIGEN_PAGOPROVEEDOR
+            && preg_match('/^AOP\b/i', trim($this->etiqueta)) === 1;
+    }
+
     /**
      * Descripción para grilla/export: la OPP revertida mantiene el texto original
      * ("Orden de pago Nro.…") mientras la AOP ya dice "ANULA OPP…". Prefija

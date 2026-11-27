@@ -224,8 +224,8 @@ class ReciboAnexoIIIArmadorService
                 : '',
             'convenio' => $emp?->sindicato?->descripcion ?? '',
             'fecha_ingreso' => $fechaIngreso,
-            // Solo la descripción (ej. "VACA 2DA QUINC. 11-2026"); no el número interno Anita.
-            'periodo_liq' => trim((string) ($liq?->descripcion ?: ($liq?->numero ? (string) $liq->numero : ''))),
+            // Descripción + número interno (ej. "VACA 2DA QUINC. 11-2026 (20261101)").
+            'periodo_liq' => $this->periodoLiqRotulo($liq),
             'lugar_pago' => $liq?->lugar_pago ?? '',
             'fecha_pago' => $liq?->fecha_pago ? Carbon::parse($liq->fecha_pago)->format('d-m-Y') : '',
             'cuil' => $recibo->cuil,
@@ -266,6 +266,21 @@ class ReciboAnexoIIIArmadorService
             'firma_imagen_uri' => ReciboFirmaEmpleadorSupport::dataUri($empresa?->id),
             'modo_preview' => false,
         ];
+    }
+
+    /**
+     * Rótulo del período de liquidación: descripción + número interno (si existe).
+     */
+    private function periodoLiqRotulo($liq): string
+    {
+        $descripcion = trim((string) ($liq?->descripcion ?? ''));
+        $numero = trim((string) ($liq?->numero ?? ''));
+
+        if ($descripcion !== '' && $numero !== '') {
+            return $descripcion.' ('.$numero.')';
+        }
+
+        return $descripcion !== '' ? $descripcion : $numero;
     }
 
     private function fmtUnidad($cantidad, ?string $unidad): string

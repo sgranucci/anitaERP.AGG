@@ -282,6 +282,22 @@ class Concepto_SueldosController extends Controller
             ->with('mensaje', 'Concepto actualizado con éxito');
     }
 
+    /**
+     * Conceptos con fórmula protegida que la actualización desde Anita no tocó.
+     *
+     * @param  array<string, mixed>  $resultado
+     */
+    private function textoProtegidos(array $resultado): string
+    {
+        $codigos = array_values(array_unique(array_map('intval', $resultado['protegidos'] ?? [])));
+        if ($codigos === []) {
+            return '';
+        }
+        sort($codigos);
+
+        return ' Protegidos (no se tocaron): '.implode(', ', $codigos).'.';
+    }
+
     public function sincronizarAnita(Request $request)
     {
         can('actualizar-concepto-sueldos');
@@ -304,6 +320,7 @@ class Concepto_SueldosController extends Controller
                 .$resultado['traducidos'].' traducidos OK, '
                 .$resultado['pendientes_traduccion'].' pendientes de revisión '
                 .'(de '.$resultado['en_anita'].' en Anita).'
+                .$this->textoProtegidos($resultado)
         );
     }
 
@@ -318,7 +335,8 @@ class Concepto_SueldosController extends Controller
         $msg = 'Retraducción: '.$resultado['traducidos'].' OK, '
             .$resultado['pendientes_traduccion'].' pendientes/revisión, '
             .$resultado['sin_lineas'].' sin líneas Anita '
-            .'(procesados '.$resultado['procesados'].').';
+            .'(procesados '.$resultado['procesados'].').'
+            .$this->textoProtegidos($resultado);
 
         if (! empty($resultado['errores'])) {
             $msg .= ' Errores: '.implode(' | ', array_slice($resultado['errores'], 0, 5));
@@ -348,7 +366,8 @@ class Concepto_SueldosController extends Controller
             .$resultado['traducidos'].' traducidos OK, '
             .$resultado['pendientes_traduccion'].' pendientes/revisión'
             .($resultado['no_en_erp'] > 0 ? ', '.$resultado['no_en_erp'].' solo en Anita' : '')
-            .' (procesados '.$resultado['procesados'].' de '.$resultado['en_anita_con_formula'].' con fórmula).';
+            .' (procesados '.$resultado['procesados'].' de '.$resultado['en_anita_con_formula'].' con fórmula).'
+            .$this->textoProtegidos($resultado);
 
         if (! empty($resultado['ejemplos_cambio'])) {
             $msg .= ' Ej.: '.implode(', ', $resultado['ejemplos_cambio']);

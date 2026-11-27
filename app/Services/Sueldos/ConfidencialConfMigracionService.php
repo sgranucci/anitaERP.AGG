@@ -383,7 +383,7 @@ final class ConfidencialConfMigracionService
     /**
      * @return list<array<string, mixed>>
      */
-    private function leerConf(string $tabla, string $campos, string $where, string $orderBy): array
+    public function leerConf(string $tabla, string $campos, string $where, string $orderBy): array
     {
         $payload = [
             'acc' => 'list',

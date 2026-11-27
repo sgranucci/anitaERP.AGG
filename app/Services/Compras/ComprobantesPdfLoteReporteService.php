@@ -10,6 +10,7 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Compras\Tracking\TrackingPdfResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
+use App\Models\Compras\Proveedor;
 use App\Support\Compras\ComprobantesPdfLoteFila;
 use App\Support\Compras\ComprobantesPdfLoteFiltros;
 use Carbon\Carbon;
@@ -17,6 +18,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator as Paginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -28,7 +30,21 @@ class ComprobantesPdfLoteReporteService
         private readonly OrdencompraPdfService $ordencompraPdf,
         private readonly RecepcionProveedorPdfService $recepcionPdf,
         private readonly PagoproveedorComprobantePdfService $pagoPdf,
+        private readonly ComprobantesPdfLoteAnitaFallbackService $anitaFallback,
     ) {}
+
+    /** @var list<array{tipo: string, texto: string}> avisos de la última recolección (respaldo Anita) */
+    private array $avisos = [];
+
+    /**
+     * Avisos del respaldo Anita de la última consulta (info o error).
+     *
+     * @return list<array{tipo: string, texto: string}>
+     */
+    public function avisos(): array
+    {
+        return $this->avisos;
+    }
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -38,6 +54,7 @@ class ComprobantesPdfLoteReporteService
         $todas = $this->recolectar($filtros);
         $items = $todas->slice(($page - 1) * $perPage, $perPage)->values();
         $this->completarPdfFacturas($items);
+        $this->anitaFallback->completarPdf($items);
 
         return new Paginator($items, $todas->count(), $perPage, $page, [
             'path' => Paginator::resolveCurrentPath(),
@@ -62,6 +79,7 @@ class ComprobantesPdfLoteReporteService
             $permitidas = array_flip($claves);
             $filas = $filas->filter(fn (ComprobantesPdfLoteFila $fila) => isset($permitidas[$fila->clave]))->values();
         }
+        $this->anitaFallback->completarPdf($filas);
 
         $dir = storage_path('app/tmp');
         if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
@@ -89,6 +107,8 @@ class ComprobantesPdfLoteReporteService
                 $agregado = false;
                 if ($fila->tipo === 'fac') {
                     $agregado = $this->agregarFactura($zip, $fila, $facturas->get($fila->id), $referencias, $usados, $faltantes);
+                } elseif ($fila->tipo === 'anita') {
+                    $agregado = $this->agregarAnita($zip, $fila, $usados, $faltantes);
                 } elseif ($fila->tipo === 'oc') {
                     $agregado = $this->agregarGenerado($zip, $fila, $this->ordencompraPdf->generarArchivo($fila->id), $usados);
                 } elseif ($fila->tipo === 'com') {
@@ -133,10 +153,15 @@ class ComprobantesPdfLoteReporteService
     {
         $tipos = array_flip($filtros['tipos'] ?? []);
         $filas = collect();
+        $this->avisos = [];
 
         if (isset($tipos['fac'])) {
-            foreach ($this->queryFacturas($filtros)->get() as $comprobante) {
+            $facturas = $this->queryFacturas($filtros)->get();
+            foreach ($facturas as $comprobante) {
                 $filas->push($this->filaFactura($comprobante));
+            }
+            foreach ($this->filasFacturasRespaldoAnita($filtros) as $filaAnita) {
+                $filas->push($filaAnita);
             }
         }
         if (isset($tipos['oc'])) {
@@ -185,6 +210,42 @@ class ComprobantesPdfLoteReporteService
             $fila->tienePdf = $ref !== null && filled($ref->ruta);
             $fila->pdfEtiqueta = $fila->tienePdf ? $ref->etiqueta() : 'Sin PDF';
         }
+    }
+
+    /**
+     * Facturas que Anita tiene y el ERP no (por nro. interno o por proveedor + tipo + letra + sucursal + número).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<int, ComprobantesPdfLoteFila>
+     */
+    private function filasFacturasRespaldoAnita(array $filtros): Collection
+    {
+        $proveedorIds = array_values(array_map('intval', $filtros['proveedor_ids']));
+        if ($proveedorIds === []) {
+            return collect();
+        }
+
+        try {
+            $filas = $this->anitaFallback->filasFacturas($filtros, $proveedorIds);
+        } catch (Throwable $e) {
+            Log::warning('comprobantes_pdf_lote.anita_fallback', ['error' => $e->getMessage()]);
+            $this->avisos[] = [
+                'tipo' => 'error',
+                'texto' => 'No se pudo consultar Anita para completar las facturas que faltan en el ERP: '.$e->getMessage(),
+            ];
+
+            return collect();
+        }
+
+        if ($filas->isNotEmpty()) {
+            $this->avisos[] = [
+                'tipo' => 'info',
+                'texto' => 'Se agregan '.$filas->count().' facturas que están en Anita y no en el ERP '
+                    .'(solo consulta, sin edición).',
+            ];
+        }
+
+        return $filas;
     }
 
     /**
@@ -420,6 +481,30 @@ class ComprobantesPdfLoteReporteService
         }
 
         $nombre = $this->nombreFactura($comprobante, $usados);
+        $zip->addFile($path, $nombre);
+        $zip->setCompressionName($nombre, ZipArchive::CM_STORE);
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, true>  $usados
+     * @param  list<string>  $faltantes
+     */
+    private function agregarAnita(ZipArchive $zip, ComprobantesPdfLoteFila $fila, array &$usados, array &$faltantes): bool
+    {
+        $path = (string) ($fila->anita['ruta'] ?? '');
+        if ($path === '' || ! is_readable($path)) {
+            $faltantes[] = $this->lineaFila($fila).' — sin PDF (factura leída de Anita)';
+
+            return false;
+        }
+
+        $nombre = $this->nombreUnico(
+            $this->slug($fila->proveedorCodigo).'_'.$this->slug($fila->tipoEtiqueta).'_'.$this->slug($fila->numero).'.pdf',
+            $usados,
+            $this->slug($fila->proveedorCodigo).'_'.$this->slug($fila->tipoEtiqueta).'_'.$this->slug($fila->numero).'_'.$fila->id.'.pdf',
+        );
         $zip->addFile($path, $nombre);
         $zip->setCompressionName($nombre, ZipArchive::CM_STORE);
 

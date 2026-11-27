@@ -95,6 +95,57 @@ class TrackingPdfResolverService
     }
 
     /**
+     * Busca en el escaneo histórico del Anita (solo fuente 4) por la clave que usa el Anita,
+     * para comprobantes que no existen en el ERP. Una consulta al puente por tanda.
+     *
+     * @param  array<int|string, array{empresa: int, proveedor: string, ctipo: string, letra: string, sucursal: int, numero: int}>  $claves
+     * @return array<int|string, array{documento_id: int, ruta: string}> mismo índice que $claves
+     */
+    public function resolverClavesScan(array $claves): array
+    {
+        $porClave = [];
+        $numeros = [];
+        foreach ($claves as $indice => $c) {
+            if ((int) $c['empresa'] <= 0 || trim((string) $c['proveedor']) === ''
+                || trim((string) $c['ctipo']) === '' || (int) $c['numero'] <= 0) {
+                continue;
+            }
+            $clave = $this->armarClave(
+                (int) $c['empresa'],
+                (string) $c['proveedor'],
+                (string) $c['ctipo'],
+                (string) $c['letra'],
+                (int) $c['sucursal'],
+                (int) $c['numero'],
+            );
+            $porClave[$clave][] = $indice;
+            $numeros[] = (int) $c['numero'];
+        }
+
+        $resueltos = [];
+        $numeros = array_values(array_unique($numeros));
+        foreach (array_chunk($numeros, self::MAX_NUMEROS_POR_CONSULTA) as $chunk) {
+            foreach ($this->consultarScanFactura($chunk) as $fila) {
+                $documentoId = (int) ($fila['idocumentoid'] ?? 0);
+                $clave = $this->claveScanDesdeFila($fila);
+                if ($documentoId <= 0 || ! isset($porClave[$clave])) {
+                    continue;
+                }
+                $ruta = $this->rutaDocumentoAnita($documentoId);
+                if ($ruta === null) {
+                    continue;
+                }
+                foreach ($porClave[$clave] as $indice) {
+                    // Orden por documento descendente: queda el escaneo más reciente.
+                    $resueltos[$indice] ??= ['documento_id' => $documentoId, 'ruta' => $ruta];
+                }
+            }
+        }
+
+        return $resueltos;
+    }
+
+    /**
      * Ruta absoluta del PDF de un documento escaneado del Anita.
      */
     public function rutaDocumentoAnita(int $documentoId): ?string

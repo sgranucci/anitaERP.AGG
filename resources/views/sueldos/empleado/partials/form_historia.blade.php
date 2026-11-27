@@ -72,11 +72,39 @@
                       onsubmit="return confirm('¿Confirma la reincorporación?');">
                     @csrf
                     <div class="form-group row">
-                        <label class="col-lg-3 control-label requerido">Nueva fecha de ingreso</label>
-                        <div class="col-lg-3">
-                            <input type="date" name="fecha_ingreso" class="form-control" required value="{{ now()->format('Y-m-d') }}">
+                        <div class="col-lg-9 offset-lg-3">
+                            <div class="custom-control custom-radio">
+                                <input type="radio" class="custom-control-input" id="reinc-modo-reabrir" name="modo_reincorporacion" value="reabrir">
+                                <label class="custom-control-label" for="reinc-modo-reabrir">
+                                    Reabrir el último período (mismo legajo, se quita egreso y motivo; no crea un ingreso nuevo)
+                                </label>
+                            </div>
+                            <div class="custom-control custom-radio">
+                                <input type="radio" class="custom-control-input" id="reinc-modo-nuevo" name="modo_reincorporacion" value="nuevo" checked>
+                                <label class="custom-control-label" for="reinc-modo-nuevo">Nuevo ingreso con fecha</label>
+                            </div>
                         </div>
                     </div>
+                    <div class="form-group row" id="reinc-fila-fecha">
+                        <label class="col-lg-3 control-label text-right pr-2">Nueva fecha de ingreso</label>
+                        <div class="col-lg-3">
+                            <input type="date" name="fecha_ingreso" id="reinc-fecha-ingreso" class="form-control" value="{{ now()->format('Y-m-d') }}">
+                        </div>
+                    </div>
+                    <script>
+                        (function () {
+                            var radios = document.querySelectorAll('input[name="modo_reincorporacion"]');
+                            var fecha = document.getElementById('reinc-fecha-ingreso');
+                            var fila = document.getElementById('reinc-fila-fecha');
+                            function sync() {
+                                var reabrir = document.getElementById('reinc-modo-reabrir').checked;
+                                fila.style.display = reabrir ? 'none' : '';
+                                fecha.required = !reabrir;
+                            }
+                            radios.forEach(function (r) { r.addEventListener('change', sync); });
+                            sync();
+                        })();
+                    </script>
                     <button type="submit" class="btn btn-success"><i class="fa fa-user-plus"></i> Reincorporar</button>
                 </form>
             </div>

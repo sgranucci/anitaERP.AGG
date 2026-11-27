@@ -8,8 +8,7 @@
 <script>
     window.COMPROBANTES_PDF_LOTE = {
         leerProveedorUrlBase: @json(url('compras/leerproveedorporcodigo')),
-        serviciosUrl: @json(route('comprobantes_pdf_lote_servicios')),
-        nroClienteSeleccionado: @json((string) ($filtros['nro_cliente'] ?? ''))
+        serviciosUrl: @json(route('comprobantes_pdf_lote_servicios'))
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
@@ -82,28 +81,40 @@
                         'proveedoresIniciales' => $proveedores_iniciales ?? [],
                     ])
 
+                    @php
+                        $nroClienteSel = (string) ($filtros['nro_cliente'] ?? '');
+                    @endphp
                     <div class="form-group row" id="bloque-nro-cliente-pdf-lote">
                         <label for="nro_cliente" class="{{ $colLabel }}">Nº cliente / medidor</label>
-                        <div class="col-lg-6">
-                            @php
-                                $nroClienteSel = (string) ($filtros['nro_cliente'] ?? '');
-                                $serviciosOpciones = $servicios_opciones ?? [];
-                            @endphp
-                            <select name="nro_cliente" id="nro_cliente" class="form-control"
-                                title="Opcional. Se completa con los medidores de los proveedores de la lista.">
-                                <option value="">— Sin filtrar (todos) —</option>
-                                @foreach ($serviciosOpciones as $op)
-                                    <option value="{{ $op['cliente'] }}"
-                                        data-servicio-id="{{ $op['id'] }}"
-                                        data-proveedor-id="{{ $op['proveedor_id'] }}"
-                                        @selected($nroClienteSel !== '' && $nroClienteSel === (string) $op['cliente'])>
-                                        {{ $op['etiqueta'] }}
-                                    </option>
-                                @endforeach
-                            </select>
+                        <div class="col-lg-8">
+                            <div class="d-flex flex-wrap align-items-center tm-servicio-campo" style="gap: 6px;">
+                                <button type="button" class="btn btn-outline-secondary btn-sm consultaservicio-pdf-lote"
+                                    id="btn-consulta-nro-cliente" title="Buscar cliente / medidor (F1)">
+                                    <i class="fa fa-search"></i>
+                                </button>
+                                <input type="text"
+                                    name="nro_cliente"
+                                    id="nro_cliente"
+                                    class="form-control form-control-sm"
+                                    value="{{ $nroClienteSel }}"
+                                    placeholder="Código"
+                                    autocomplete="off"
+                                    style="max-width: 180px;">
+                                <input type="text"
+                                    class="form-control form-control-sm flex-grow-1"
+                                    id="descripcion_nro_cliente"
+                                    value="{{ $nro_cliente_descripcion ?? '' }}"
+                                    placeholder="Detalle del cliente / medidor"
+                                    readonly
+                                    tabindex="-1">
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-limpiar-nro-cliente"
+                                    title="Quitar el filtro de cliente / medidor">
+                                    <i class="fa fa-times"></i>
+                                </button>
+                            </div>
                             <small class="form-text text-muted mb-0" id="aviso-nro-cliente-pdf-lote">
-                                Opcional. Agregá proveedores arriba para ver sus clientes/medidores.
-                                Solo filtra facturas.
+                                Opcional. <kbd>F1</kbd> o la lupa abre la consulta con los clientes/medidores de los proveedores de la lista.
+                                Vacío = todos. Solo filtra facturas.
                             </small>
                         </div>
                     </div>
@@ -145,6 +156,11 @@
 
             @if ($consultado ?? false)
                 <div class="card-body p-0 border-top">
+                    @foreach ($avisos_respaldo ?? [] as $aviso)
+                        <div class="alert alert-{{ $aviso['tipo'] === 'error' ? 'danger' : 'info' }} py-2 px-3 mb-0 small rounded-0">
+                            <i class="fa fa-database"></i> {{ $aviso['texto'] }}
+                        </div>
+                    @endforeach
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
                         <div class="small mb-1 mb-md-0">
                             <span class="text-muted">Documentos:</span>
@@ -213,7 +229,12 @@
                                         <td>{{ $fila->fecha }}</td>
                                         <td>{{ $fila->proveedor }}</td>
                                         <td>{{ $fila->tipoEtiqueta }}</td>
-                                        <td>{{ $fila->numero }}</td>
+                                        <td>
+                                            {{ $fila->numero }}
+                                            @if ($fila->esAnita())
+                                                <span class="badge badge-warning" title="El ERP no tiene esta factura: se leyó de Anita">Anita</span>
+                                            @endif
+                                        </td>
                                         <td>{{ $fila->servicioCliente !== '' ? $fila->servicioCliente : '—' }}</td>
                                         <td class="text-right">{{ number_format((float) $fila->total, 2, ',', '.') }}</td>
                                         <td>
@@ -263,4 +284,5 @@
     </div>
 </div>
 @include('includes.compras.modalconsultaproveedor')
+@include('compras.comprobantes_pdf_lote.partials.modal_consulta_servicio')
 @endsection

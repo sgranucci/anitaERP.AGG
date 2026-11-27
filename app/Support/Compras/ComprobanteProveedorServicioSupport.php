@@ -201,7 +201,7 @@ final class ComprobanteProveedorServicioSupport
      *     etiqueta: string
      * }>
      */
-    public static function opcionesParaProveedores(array $proveedorIds): array
+    public static function opcionesParaProveedores(array $proveedorIds, ?int $empresaId = null, ?string $texto = null): array
     {
         $ids = [];
         foreach ($proveedorIds as $id) {
@@ -214,12 +214,30 @@ final class ComprobanteProveedorServicioSupport
             return [];
         }
 
-        $servicios = Proveedor_Servicio::query()
+        $query = Proveedor_Servicio::query()
             ->with(['proveedores:id,codigo,nombre'])
-            ->whereIn('proveedor_id', array_values($ids))
+            ->whereIn('proveedor_id', array_values($ids));
+
+        // Un medidor cargado para otra empresa no se ofrece; sin empresa en la ficha vale para todas.
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where(function ($q) use ($empresaId) {
+                $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
+            });
+        }
+
+        $texto = trim((string) $texto);
+        if ($texto !== '') {
+            $like = '%'.$texto.'%';
+            $query->where(function ($q) use ($like) {
+                $q->where('cliente', 'like', $like)->orWhere('detalle', 'like', $like);
+            });
+        }
+
+        $servicios = $query
             ->orderBy('proveedor_id')
             ->orderBy('cliente')
-            ->get(['id', 'proveedor_id', 'cliente', 'detalle']);
+            ->limit(500)
+            ->get(['id', 'proveedor_id', 'empresa_id', 'cliente', 'detalle']);
 
         $out = [];
         foreach ($servicios as $servicio) {

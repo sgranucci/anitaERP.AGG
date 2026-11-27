@@ -34,6 +34,7 @@ class ValidacionConcepto_Sueldos extends FormRequest
             'formula_cantidad' => 'nullable|string|max:8000',
             'formula_valor' => 'nullable|string|max:8000',
             'va_recibo' => 'nullable|boolean',
+            'formula_local_protegida' => 'nullable|boolean',
             'mes_retroactivo' => 'nullable|integer|min:-99|max:12',
             'leyenda_recibo' => 'nullable|string|max:2000',
             'concepto_afip' => 'nullable|string|max:6',
@@ -76,6 +77,7 @@ class ValidacionConcepto_Sueldos extends FormRequest
             'va_recibo' => $this->boolean('va_recibo'),
             'lsd_repetible' => $this->boolean('lsd_repetible'),
             'activo' => $this->has('activo') ? $this->boolean('activo') : true,
+            'formula_local_protegida' => $this->boolean('formula_local_protegida'),
         ];
         if ($libre !== '') {
             $merge['concepto_afip'] = str_pad(substr($libre, -6), 6, '0', STR_PAD_LEFT);

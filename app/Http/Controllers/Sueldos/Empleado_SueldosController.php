@@ -781,11 +781,14 @@ class Empleado_SueldosController extends Controller
     public function reincorporar(Request $request, $id)
     {
         can('baja-empleado-sueldos');
-        $request->validate(['fecha_ingreso' => 'required|date']);
+        $reabrirUltimo = $request->input('modo_reincorporacion') === 'reabrir';
+        $request->validate([
+            'fecha_ingreso' => $reabrirUltimo ? 'nullable|date' : 'required|date',
+        ]);
 
         try {
             $emp = $this->repository->findOrFail($id);
-            $this->ingresoService->reincorporar($emp, $request->input('fecha_ingreso'));
+            $this->ingresoService->reincorporar($emp, $request->input('fecha_ingreso'), $reabrirUltimo);
             $this->sincronizarSaldosVacaciones($this->repository->findOrFail($id));
         } catch (InvalidArgumentException $e) {
             return back()->with('error', $e->getMessage());

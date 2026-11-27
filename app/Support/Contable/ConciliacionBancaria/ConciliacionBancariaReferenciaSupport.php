@@ -21,6 +21,42 @@ final class ConciliacionBancariaReferenciaSupport
     }
 
     /**
+     * Anulación de transferencia ("ANULA TRA 4079 Trf …"): devuelve el número anulado (4079).
+     *
+     * @param  array<string, mixed>  $contable
+     */
+    public static function extraerTransferenciaAnulada(array $contable): ?string
+    {
+        $desc = (string) ($contable['descripcion'] ?? '');
+        if (preg_match('/\bANULA\s+TRA\s+0*(\d+)\b/i', $desc, $m)) {
+            return $m[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * Referencia común de una transferencia y su anulación: la TRA original (4079) o, en la
+     * anulación, el número que dice anular. Null si no es una TRA.
+     *
+     * @param  array<string, mixed>  $contable
+     */
+    public static function extraerReferenciaTransferencia(array $contable): ?string
+    {
+        $anulada = self::extraerTransferenciaAnulada($contable);
+        if ($anulada !== null) {
+            return $anulada;
+        }
+
+        if (strtoupper(trim((string) ($contable['tipo_comp'] ?? ''))) !== 'TRA') {
+            return null;
+        }
+        $nro = ltrim(preg_replace('/\D/', '', (string) ($contable['nro'] ?? '')) ?? '', '0');
+
+        return $nro !== '' ? $nro : null;
+    }
+
+    /**
      * Número de orden de pago (#122853) o cola del comprobante (00122853).
      *
      * @param  array<string, mixed>  $contable

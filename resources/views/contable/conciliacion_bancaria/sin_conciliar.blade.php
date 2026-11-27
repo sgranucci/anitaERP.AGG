@@ -88,11 +88,12 @@
                         <div class="col-lg-2">
                             <input type="number" name="anio" class="form-control" value="{{ $anio }}">
                         </div>
+                        <div class="col-lg-2">
+                            <input type="date" name="hasta" class="form-control" value="{{ $filtrosQuery['hasta'] ?? '' }}"
+                                title="Fecha hasta: deja afuera los movimientos posteriores (lo que se está cargando ahora). Vacío = todo el período.">
+                        </div>
                         <div class="col-lg-4">
                             <button type="submit" class="btn btn-primary">Consultar</button>
-                            <button type="submit" name="recalcular" value="1" class="btn btn-outline-secondary" title="Ignora cache y vuelve a calcular">
-                                Recalcular
-                            </button>
                         </div>
                     </div>
 
@@ -112,6 +113,14 @@
                             @include('includes.exportar-tabla-queryparams', [
                                 'ruta' => 'listar_conciliacion_bancaria_sin_conciliar',
                                 'queryparams' => $filtrosQuery ?? [],
+                                'variant' => 'compact',
+                            ])
+                            <span class="ml-3 text-muted small" title="Movimientos del extracto de Interbanking que no se emparejaron con el mayor">
+                                <i class="fas fa-university"></i> Interbanking sin conciliar:
+                            </span>
+                            @include('includes.exportar-tabla-queryparams', [
+                                'ruta' => 'listar_conciliacion_bancaria_sin_conciliar',
+                                'queryparams' => array_merge($filtrosQuery ?? [], ['lado' => 'interbanking']),
                                 'variant' => 'compact',
                             ])
                             <span class="ml-3 text-muted small">
@@ -205,8 +214,8 @@
                             </table>
                         </div>
                         <p class="text-muted small mt-2 mb-0">
-                            Links azules abren cheque, orden de pago, asiento o concepto en consulta.
-                            Filas tip <code>IB</code> son movimientos de extracto bancario aún sin emparejar.
+                            Lista lo mismo que la pantalla de conciliación: movimientos del mayor, del período y anteriores, que no están en ningún cruce.
+                            Links azules abren cheque, orden de pago o asiento en consulta.
                         </p>
                     @endif
                 </div>

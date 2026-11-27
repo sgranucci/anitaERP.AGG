@@ -86,6 +86,9 @@ class ContextoLiquidacion implements EntornoFormula
 
     private string $tipoCorrida = 'mensual';
 
+    /** Concepto de días de vacaciones de la corrida (420 adelanto, 422 plus); 0 si no es vacaciones. */
+    private int $conceptoDiasVacaciones = 0;
+
     private Carbon $fechaRef;
 
     private ?Carbon $fechaIngreso = null;
@@ -111,6 +114,9 @@ class ContextoLiquidacion implements EntornoFormula
         $this->empleadoId = (int) $empleado->id;
         $this->empresaId = $liquidacion->empresa_id ? (int) $liquidacion->empresa_id : null;
         $this->tipoCorrida = (string) $liquidacion->tipo;
+        $this->conceptoDiasVacaciones = $this->tipoCorrida === 'vacaciones'
+            ? $liquidacion->conceptoDiasVacaciones()
+            : 0;
         foreach ($acumDefs as $def) {
             $this->acum[strtoupper($def['codigo'])] = 0.0;
         }
@@ -472,6 +478,12 @@ class ContextoLiquidacion implements EntornoFormula
             foreach ($rows as $r) {
                 $cod = (int) $r->concepto_codigo;
                 if ($cod <= 0) {
+                    continue;
+                }
+                // Corrida de vacaciones: solo entran los días del concepto elegido (plus 422 / adelanto 420).
+                if ($this->tipoCorrida === 'vacaciones'
+                    && in_array($cod, [420, 422], true)
+                    && $cod !== $this->conceptoDiasVacaciones) {
                     continue;
                 }
                 $v1 = (float) $r->valor1;

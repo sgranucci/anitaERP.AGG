@@ -11,7 +11,7 @@
         <tr><td colspan="12" style="height:52px;"></td></tr>
     @endif
     <tr>
-        <td colspan="12"><strong style="font-size:16pt;">Movimientos de Cuentas sin conciliar</strong></td>
+        <td colspan="12"><strong style="font-size:16pt;">{{ $meta['titulo'] ?? 'Movimientos de Cuentas sin conciliar' }}</strong></td>
     </tr>
     <tr>
         <td colspan="12">Generado {{ date('d/m/Y H:i') }} · {{ $meta['empresa_nombre'] ?? '' }}</td>

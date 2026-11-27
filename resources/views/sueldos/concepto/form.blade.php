@@ -209,6 +209,12 @@ use App\Support\Sueldos\RubroCostoLaboral;
                     <label class="custom-control-label" for="va_recibo">Va al recibo</label>
                 </div>
                 <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input" name="formula_local_protegida" id="formula_local_protegida" value="1"
+                           {{ old('formula_local_protegida', $data->formula_local_protegida ?? false) ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="formula_local_protegida"
+                           title="La actualización de fórmulas desde Anita, la retraducción y la sincronización no pisan este concepto.">Fórmula protegida (no la pisa Anita)</label>
+                </div>
+                <div class="custom-control custom-checkbox">
                     <input type="checkbox" class="custom-control-input" name="activo" id="activo" value="1"
                            {{ old('activo', $data->activo ?? true) ? 'checked' : '' }}>
                     <label class="custom-control-label" for="activo">Activo</label>

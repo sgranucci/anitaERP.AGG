@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Compras;
 use App\Http\Controllers\Controller;
 use App\Models\Compras\Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Compras\ComprobantesPdfLoteAnitaFallbackService;
 use App\Services\Compras\ComprobantesPdfLoteReporteService;
 use App\Support\Compras\ComprobanteProveedorServicioSupport;
 use App\Support\Compras\ComprobantesPdfLoteFiltros;
@@ -21,6 +22,7 @@ class ComprobantesPdfLoteReporteController extends Controller
     public function __construct(
         private readonly ComprobantesPdfLoteReporteService $reporteService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly ComprobantesPdfLoteAnitaFallbackService $anitaFallback,
     ) {
         $this->middleware('auth');
     }
@@ -66,16 +68,15 @@ class ComprobantesPdfLoteReporteController extends Controller
             $filas->appends($filtrosQuery);
         }
 
-        $serviciosOpciones = ComprobanteProveedorServicioSupport::opcionesParaProveedores(
-            $filtros['proveedor_ids'] ?? []
-        );
+        $nroClienteDescripcion = $this->descripcionNroCliente($filtros);
 
         return view('compras.comprobantes_pdf_lote.index', [
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'empresa_query' => $empresaQuery,
             'proveedores_iniciales' => $proveedoresIniciales,
-            'servicios_opciones' => $serviciosOpciones,
+            'nro_cliente_descripcion' => $nroClienteDescripcion,
+            'avisos_respaldo' => $consultado ? $this->reporteService->avisos() : [],
             'consultado' => $consultado,
             'filas' => $filas,
             'puede_editar' => true,
@@ -83,17 +84,76 @@ class ComprobantesPdfLoteReporteController extends Controller
     }
 
     /**
-     * Medidores/clientes de los proveedores elegidos (para el select del reporte).
+     * Medidores/clientes de los proveedores elegidos (modal de consulta y resolución por código).
+     *
+     * `codigo` exacto devuelve solo esa coincidencia; `q` filtra por texto (cliente o detalle).
+     * Los medidores se limitan a la empresa elegida (o sin empresa en la ficha).
      */
     public function servicios(Request $request)
     {
         can('listar-comprobantes-pdf-lote');
 
         $ids = ComprobantesPdfLoteFiltros::idsDesdeTexto((string) $request->input('proveedor_ids', ''));
+        $empresaId = max(0, (int) $request->input('empresa_id', 0));
+        if ($empresaId > 0 && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
 
-        return response()->json([
-            'servicios' => ComprobanteProveedorServicioSupport::opcionesParaProveedores($ids),
-        ]);
+        $servicios = ComprobanteProveedorServicioSupport::opcionesParaProveedores(
+            $ids,
+            $empresaId > 0 ? $empresaId : null,
+            (string) $request->input('q', '')
+        );
+
+        $codigo = trim((string) $request->input('codigo', ''));
+        if ($codigo !== '') {
+            $servicios = array_values(array_filter(
+                $servicios,
+                static fn (array $op) => mb_strtolower(trim((string) $op['cliente'])) === mb_strtolower($codigo)
+            ));
+        }
+
+        $puedeConsultar = can('editar-proveedor', false);
+        foreach ($servicios as &$op) {
+            $op['url_consultar'] = $puedeConsultar
+                ? route('editar_proveedor', [
+                    'id' => $op['proveedor_id'],
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ])
+                : null;
+        }
+        unset($op);
+
+        return response()->json(['servicios' => $servicios]);
+    }
+
+    /**
+     * PDF escaneado en Anita de una factura leída como respaldo (no existe en el ERP).
+     */
+    public function verPdfAnita(Request $request, int $documento)
+    {
+        can('listar-comprobantes-pdf-lote');
+
+        $empresaId = $this->anitaFallback->empresaIdErpDeDocumento($documento);
+        if ($empresaId === null || ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(404, 'No se encontró el documento escaneado.');
+        }
+
+        $path = $this->anitaFallback->rutaPdf($documento);
+        if ($path === null || ! is_readable($path)) {
+            abort(404, 'No se encontró el PDF escaneado en Anita.');
+        }
+
+        $nombre = basename($path);
+        if ($request->boolean('inline', true)) {
+            return response()->file($path, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$nombre.'"',
+            ]);
+        }
+
+        return response()->download($path, $nombre);
     }
 
     public function descargarZip(Request $request): BinaryFileResponse|\Illuminate\Http\RedirectResponse
@@ -137,6 +197,28 @@ class ComprobantesPdfLoteReporteController extends Controller
         }
 
         return $filtros;
+    }
+
+    /**
+     * Detalle (domicilio/medidor) del nro. de cliente elegido, si está en la ficha de los proveedores.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    private function descripcionNroCliente(array $filtros): string
+    {
+        $nro = trim((string) ($filtros['nro_cliente'] ?? ''));
+        $ids = $filtros['proveedor_ids'] ?? [];
+        if ($nro === '' || $ids === []) {
+            return '';
+        }
+
+        foreach (ComprobanteProveedorServicioSupport::opcionesParaProveedores($ids) as $op) {
+            if (mb_strtolower(trim((string) $op['cliente'])) === mb_strtolower($nro)) {
+                return trim((string) ($op['detalle'] ?? ''));
+            }
+        }
+
+        return '';
     }
 
     /**

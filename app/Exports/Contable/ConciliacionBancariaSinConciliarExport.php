@@ -74,7 +74,7 @@ class ConciliacionBancariaSinConciliarExport implements FromView, WithColumnForm
 
     public function title(): string
     {
-        return 'Sin conciliar';
+        return ($this->meta['lado'] ?? '') === 'interbanking' ? 'Interbanking sin conciliar' : 'Sin conciliar';
     }
 
     public function columnFormats(): array

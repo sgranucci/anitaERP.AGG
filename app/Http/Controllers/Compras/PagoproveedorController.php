@@ -23,6 +23,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Compras\PagoproveedorComprobantePdfService;
+use App\Services\Compras\PagoproveedorDeshacerAopService;
 use App\Services\Compras\PagoproveedorDevolverRetencionesService;
 use App\Services\Compras\PagoproveedorEnvioProveedorService;
 use App\Services\Compras\PagoproveedorService;
@@ -69,6 +70,7 @@ class PagoproveedorController extends Controller
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
         private PagoproveedorService $pagoproveedorService,
         private PagoproveedorAnularRevertirService $anularRevertirService,
+        private PagoproveedorDeshacerAopService $deshacerAopService,
         private PagoproveedorDevolverRetencionesService $devolverRetencionesService,
         private EmpresaRepositoryInterface $empresaRepository,
         private MonedaRepositoryInterface $monedaRepository,
@@ -423,6 +425,38 @@ class PagoproveedorController extends Controller
             $this->anularRevertirService->anularFisicamente($id);
 
             return redirect()->route('pagoproveedor')->with('mensaje', 'Orden de pago anulada físicamente.');
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    /**
+     * Vista previa (solo lectura) de lo que haría "Deshacer AOP", para el modal de confirmación.
+     */
+    public function planDeshacerAop(int $id)
+    {
+        can('anular-pagoproveedor');
+
+        try {
+            return response()->json($this->deshacerAopService->planificar($id));
+        } catch (\Throwable $e) {
+            return response()->json(['mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Deshace un AOP cargado por error: borra el compensatorio y deja la OP original confirmada.
+     */
+    public function deshacerAop(Request $request, int $id)
+    {
+        can('anular-pagoproveedor');
+
+        try {
+            $resultado = $this->deshacerAopService->deshacer($id);
+
+            return redirect()
+                ->route('pagoproveedor')
+                ->with('mensaje', 'AOP deshecho. La OP N° '.$resultado['pagoproveedor_id'].' volvió a estar '.$resultado['estado_restaurado'].'.');
         } catch (\Throwable $e) {
             return redirect()->back()->with('mensaje', $e->getMessage());
         }

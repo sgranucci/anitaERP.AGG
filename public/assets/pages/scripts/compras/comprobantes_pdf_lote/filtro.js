@@ -35,82 +35,163 @@
         $('#aviso-proveedores-pdf-lote').text(
             n === 0 ? 'Todavía no agregó proveedores.' : (n + ' proveedor(es) en la lista.')
         );
-        refrescarSelectClientes();
+        resolverNroClienteSilencioso();
     }
 
-    var serviciosRequestSeq = 0;
+    // --- Nº cliente / medidor: código editable + detalle + modal de consulta (F1 / lupa) ---
+    var modalServicioAbierto = false;
+    var modalServicioAbriendo = false;
+    var resolverNroClienteSeq = 0;
+    var buscarServicioSeq = 0;
+    var buscarServicioTimer = null;
+    var avisoServicioDefault = '';
 
-    function refrescarSelectClientes() {
-        var $sel = $('#nro_cliente');
-        if (!$sel.length) {
+    function empresaIdFiltro() {
+        return parseInt(String($('#empresa_id').val() || '0'), 10) || 0;
+    }
+
+    function serviciosUrl() {
+        return cfg.serviciosUrl || (baseUrl() + '/compras/comprobantes-pdf-lote/servicios');
+    }
+
+    function avisoServicio(texto) {
+        var $aviso = $('#aviso-nro-cliente-pdf-lote');
+        if (!$aviso.length) {
+            return;
+        }
+        $aviso.text(texto ? texto : avisoServicioDefault);
+    }
+
+    function focoSiguienteDespuesDeServicio() {
+        var $sig = $('#form-comprobantes-pdf-lote input[name="tipos[]"]').first();
+        if ($sig.length) {
+            $sig.trigger('focus');
+        }
+    }
+
+    function aplicarServicioElegido(cliente, detalle) {
+        $('#nro_cliente').val(cliente).removeAttr('data-fuera-ficha');
+        $('#descripcion_nro_cliente').val(detalle || '');
+        avisoServicio(null);
+    }
+
+    /** Resuelve el código tipeado contra las fichas de los proveedores: sin alert, solo marca y detalle. */
+    function resolverNroClienteSilencioso() {
+        var codigo = $.trim($('#nro_cliente').val());
+        var $desc = $('#descripcion_nro_cliente');
+        if (!codigo) {
+            $desc.val('');
+            $('#nro_cliente').removeAttr('data-fuera-ficha');
+            avisoServicio(null);
             return;
         }
         var ids = idsDesdeTabla();
-        var seleccionado = String($sel.val() || cfg.nroClienteSeleccionado || '').trim();
-        var $aviso = $('#aviso-nro-cliente-pdf-lote');
-
         if (ids.length === 0) {
-            $sel.empty().append($('<option></option>').val('').text('— Sin filtrar (todos) —'));
-            if ($aviso.length) {
-                $aviso.text('Opcional. Agregá proveedores arriba para ver sus clientes/medidores. Solo filtra facturas.');
-            }
-            cfg.nroClienteSeleccionado = '';
+            $desc.val('');
             return;
         }
-
-        var url = cfg.serviciosUrl || (baseUrl() + '/compras/comprobantes-pdf-lote/servicios');
-        var seq = ++serviciosRequestSeq;
-        $sel.prop('disabled', true);
-        $.getJSON(url, { proveedor_ids: ids.join(',') })
+        var seq = ++resolverNroClienteSeq;
+        $.getJSON(serviciosUrl(), {
+            proveedor_ids: ids.join(','),
+            empresa_id: empresaIdFiltro(),
+            codigo: codigo
+        })
             .done(function (res) {
-                if (seq !== serviciosRequestSeq) {
+                if (seq !== resolverNroClienteSeq || $.trim($('#nro_cliente').val()) !== codigo) {
                     return;
                 }
                 var lista = (res && res.servicios) ? res.servicios : [];
-                $sel.empty().append($('<option></option>').val('').text('— Sin filtrar (todos) —'));
-                var sigue = false;
-                lista.forEach(function (op) {
-                    var cliente = String(op.cliente || '').trim();
-                    if (!cliente) {
-                        return;
-                    }
-                    var $opt = $('<option></option>')
-                        .val(cliente)
-                        .attr('data-servicio-id', op.id || '')
-                        .attr('data-proveedor-id', op.proveedor_id || '')
-                        .text(op.etiqueta || cliente);
-                    if (seleccionado !== '' && seleccionado === cliente) {
-                        $opt.prop('selected', true);
-                        sigue = true;
-                    }
-                    $sel.append($opt);
-                });
-                if (!sigue) {
-                    cfg.nroClienteSeleccionado = '';
+                if (lista.length > 0) {
+                    $desc.val(lista[0].detalle || lista[0].proveedor_nombre || '');
+                    $('#nro_cliente').removeAttr('data-fuera-ficha');
+                    avisoServicio(null);
                 } else {
-                    cfg.nroClienteSeleccionado = seleccionado;
-                }
-                if ($aviso.length) {
-                    $aviso.text(
-                        lista.length === 0
-                            ? 'Esos proveedores no tienen clientes/medidores cargados en la ficha (solapa Servicios).'
-                            : (lista.length + ' cliente(s)/medidor(es) disponibles. Opcional; solo filtra facturas.')
-                    );
+                    $desc.val('');
+                    $('#nro_cliente').attr('data-fuera-ficha', '1');
+                    avisoServicio('«' + codigo + '» no está en la ficha de los proveedores de la lista para esta empresa: se filtra igual por ese texto.');
                 }
             })
             .fail(function () {
-                if (seq !== serviciosRequestSeq) {
-                    return;
-                }
-                if ($aviso.length) {
-                    $aviso.text('No se pudieron cargar los clientes/medidores de los proveedores.');
-                }
-            })
-            .always(function () {
-                if (seq === serviciosRequestSeq) {
-                    $sel.prop('disabled', false);
+                if (seq === resolverNroClienteSeq) {
+                    $desc.val('');
                 }
             });
+    }
+
+    function renderServicios(lista) {
+        var $tb = $('#datosservicio-pdf-lote').empty();
+        if (!lista.length) {
+            $tb.append('<tr><td colspan="4" class="text-muted">Sin resultados</td></tr>');
+            return;
+        }
+        lista.forEach(function (op) {
+            var $tr = $('<tr></tr>')
+                .attr('data-cliente', op.cliente || '')
+                .attr('data-detalle', op.detalle || op.proveedor_nombre || '');
+            $tr.append($('<td></td>').text(((op.proveedor_codigo || '') + ' ' + (op.proveedor_nombre || '')).trim()));
+            $tr.append($('<td></td>').text(op.cliente || ''));
+            $tr.append($('<td></td>').text(op.detalle || ''));
+            var $acc = $('<td class="text-nowrap"></td>');
+            $acc.append($('<a href="#" class="btn btn-warning btn-sm eligeconsultaservicio-pdf-lote">Elegir</a>'));
+            if (op.url_consultar) {
+                $acc.append(' ').append(
+                    $('<a class="btn btn-info btn-sm" target="_blank" rel="noopener">Consultar</a>').attr('href', op.url_consultar)
+                );
+            }
+            $tr.append($acc);
+            $tb.append($tr);
+        });
+    }
+
+    function cargarServicios(texto) {
+        var ids = idsDesdeTabla();
+        var $aviso = $('#consultaservicio-pdf-lote-aviso');
+        var seq = ++buscarServicioSeq;
+        $('#datosservicio-pdf-lote').html('<tr><td colspan="4" class="text-muted">Buscando…</td></tr>');
+        $.getJSON(serviciosUrl(), {
+            proveedor_ids: ids.join(','),
+            empresa_id: empresaIdFiltro(),
+            q: texto || ''
+        })
+            .done(function (res) {
+                if (seq !== buscarServicioSeq) {
+                    return;
+                }
+                var lista = (res && res.servicios) ? res.servicios : [];
+                renderServicios(lista);
+                $aviso.text(lista.length + ' cliente(s)/medidor(es) de los proveedores de la lista'
+                    + (empresaIdFiltro() > 0 ? ', de la empresa elegida o sin empresa en la ficha.' : '.'));
+            })
+            .fail(function () {
+                if (seq !== buscarServicioSeq) {
+                    return;
+                }
+                $('#datosservicio-pdf-lote').html('<tr><td colspan="4" class="text-danger">No se pudieron cargar los clientes/medidores.</td></tr>');
+            });
+    }
+
+    function abrirModalServicio() {
+        if (modalServicioAbierto || modalServicioAbriendo) {
+            return;
+        }
+        if (idsDesdeTabla().length === 0) {
+            avisoServicio('Primero agregue al menos un proveedor a la lista para ver sus clientes/medidores.');
+            $('#codigoproveedor_pdf_lote').trigger('focus');
+            return;
+        }
+        modalServicioAbriendo = true;
+        $('#consultaservicio-pdf-lote').val('');
+        cargarServicios('');
+        $('#consultaservicioPdfLoteModal').modal('show');
+    }
+
+    function elegirPrimerServicioDelModal() {
+        var $btn = $('#datosservicio-pdf-lote .eligeconsultaservicio-pdf-lote').first();
+        if (!$btn.length) {
+            return false;
+        }
+        $btn.get(0).click();
+        return true;
     }
 
     function yaEstaEnLista(id) {
@@ -216,12 +297,82 @@
         $('#aviso-proveedores-pdf-lote').text(
             nInit === 0 ? 'Todavía no agregó proveedores.' : (nInit + ' proveedor(es) en la lista.')
         );
-        if (nInit > 0 && $('#nro_cliente option').length <= 1) {
-            refrescarSelectClientes();
-        }
+        avisoServicioDefault = $.trim($('#aviso-nro-cliente-pdf-lote').text()).replace(/\s+/g, ' ');
 
-        $('#nro_cliente').on('change', function () {
-            cfg.nroClienteSeleccionado = String($(this).val() || '').trim();
+        $('#empresa_id').on('change', resolverNroClienteSilencioso);
+
+        $('#btn-consulta-nro-cliente').on('click', abrirModalServicio);
+
+        $('#btn-limpiar-nro-cliente').on('click', function () {
+            $('#nro_cliente').val('').removeAttr('data-fuera-ficha');
+            $('#descripcion_nro_cliente').val('');
+            avisoServicio(null);
+            $('#nro_cliente').trigger('focus');
+        });
+
+        $('#nro_cliente')
+            .on('keydown', function (e) {
+                if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+                    e.preventDefault();
+                    abrirModalServicio();
+                    return;
+                }
+                if (e.key !== 'Enter') {
+                    return;
+                }
+                // Enter avanza al campo siguiente (no envía el formulario); el blur resuelve en silencio.
+                e.preventDefault();
+                focoSiguienteDespuesDeServicio();
+            })
+            .on('blur', function () {
+                if (modalServicioAbierto || modalServicioAbriendo) {
+                    return;
+                }
+                resolverNroClienteSilencioso();
+            })
+            .on('input', function () {
+                $(this).removeAttr('data-fuera-ficha');
+            });
+
+        $('#consultaservicioPdfLoteModal')
+            .on('shown.bs.modal', function () {
+                modalServicioAbierto = true;
+                modalServicioAbriendo = false;
+                $('#consultaservicio-pdf-lote').trigger('focus');
+            })
+            .on('hidden.bs.modal', function () {
+                modalServicioAbierto = false;
+                modalServicioAbriendo = false;
+                if (typeof window.liberarPantallaModalesBloqueados === 'function' && $('.modal.show').length === 0) {
+                    window.liberarPantallaModalesBloqueados();
+                }
+            });
+
+        $('#consultaservicio-pdf-lote')
+            .on('keydown', function (e) {
+                if (e.key !== 'Enter') {
+                    return;
+                }
+                e.preventDefault();
+                clearTimeout(buscarServicioTimer);
+                if (!elegirPrimerServicioDelModal()) {
+                    cargarServicios($.trim($(this).val()));
+                }
+            })
+            .on('input', function () {
+                var texto = $.trim($(this).val());
+                clearTimeout(buscarServicioTimer);
+                buscarServicioTimer = setTimeout(function () {
+                    cargarServicios(texto);
+                }, 250);
+            });
+
+        $(document).on('click', '.eligeconsultaservicio-pdf-lote', function (e) {
+            e.preventDefault();
+            var $tr = $(this).closest('tr');
+            aplicarServicioElegido(String($tr.attr('data-cliente') || ''), String($tr.attr('data-detalle') || ''));
+            $('#consultaservicioPdfLoteModal').one('hidden.bs.modal', focoSiguienteDespuesDeServicio);
+            $('#consultaservicioPdfLoteModal').modal('hide');
         });
 
         if (typeof window.activa_eventos_consultaproveedor === 'function') {

@@ -79,7 +79,7 @@
                     </div>
                     <div>
                         <label class="mb-0 small" for="filtro-importe">Importe</label>
-                        <input type="text" id="filtro-importe" class="form-control form-control-sm" placeholder="-381225,12" style="width:130px;" title="Acepta 381225,12 o 381225.12">
+                        <input type="text" id="filtro-importe" class="form-control form-control-sm" placeholder="-381225,12" style="width:130px;" title="Acepta 381225,12 o 381225.12. Con un importe escrito se busca en todo el mes, sin importar la fecha.">
                     </div>
                     <div class="form-check mb-1">
                         <input type="checkbox" class="form-check-input" id="solo-pendientes" @checked(($prefs['solo_pendientes_default'] ?? true))>
@@ -106,11 +106,16 @@
                     <a href="#" class="btn btn-outline-success btn-sm" id="btn-exportar">
                         <i class="fa fa-file-excel"></i> Excel
                     </a>
-                    <a href="{{ route('listar_conciliacion_bancaria_sin_conciliar', ['formato' => 'EXCEL', 'empresa_id' => $empresa_id, 'cuentacaja_id' => $cuentacaja_id, 'mes' => $mes, 'anio' => $anio, 'consultar' => 1, 'recalcular' => 1]) }}"
-                       class="btn btn-outline-success btn-sm" id="btn-exportar-sin-conciliar"
-                       title="Excel con los movimientos que siguen sin conciliar de esta cuenta y período (el mismo del botón Sin conciliar), recalculado con lo conciliado hasta ahora">
+                    <button type="button" class="btn btn-outline-success btn-sm" id="btn-exportar-sin-conciliar"
+                            data-toggle="modal" data-target="#modal-sin-conciliar-hasta"
+                            title="Excel con los movimientos que siguen sin conciliar de esta cuenta y período, hasta la fecha que elijas, recalculado con lo conciliado hasta ahora">
                         <i class="fa fa-file-excel"></i> Excel sin conciliar
-                    </a>
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-sm" id="btn-exportar-sin-conciliar-interbanking"
+                            data-toggle="modal" data-target="#modal-sin-conciliar-interbanking-hasta"
+                            title="Excel de los movimientos del extracto de Interbanking que no se emparejaron con el mayor, hasta la fecha que elijas">
+                        <i class="fa fa-file-excel"></i> Excel sin conciliar Interbanking
+                    </button>
                     <button type="button" class="btn btn-outline-success btn-sm" id="btn-reporte-conciliado"
                             data-toggle="modal" data-target="#modal-reporte-conciliado"
                             title="Excel de lo conciliado en esta cuenta, por rango de fecha de conciliación">
@@ -227,6 +232,89 @@
         </div>
     </div>
 </div>
+@php
+    $finMesSc = \Carbon\Carbon::createFromDate((int) $anio, (int) $mes, 1)->endOfMonth()->startOfDay();
+    $hastaSinConciliarDefault = \Carbon\Carbon::yesterday()->min($finMesSc)->toDateString();
+@endphp
+<div class="modal fade" id="modal-sin-conciliar-hasta" tabindex="-1" role="dialog" aria-labelledby="modal-sin-conciliar-hasta-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <form method="get" action="{{ route('listar_conciliacion_bancaria_sin_conciliar', ['formato' => 'EXCEL']) }}" id="form-sin-conciliar-hasta" data-enter-campos="1">
+                <input type="hidden" name="empresa_id" value="{{ (int) $empresa_id }}">
+                <input type="hidden" name="cuentacaja_id" value="{{ (int) $cuentacaja_id }}">
+                <input type="hidden" name="mes" value="{{ (int) $mes }}">
+                <input type="hidden" name="anio" value="{{ (int) $anio }}">
+                <input type="hidden" name="consultar" value="1">
+                <input type="hidden" name="recalcular" value="1">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-sin-conciliar-hasta-titulo">Excel sin conciliar</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">
+                        Movimientos de {{ $cuentacaja ? $cuentacaja->codigo.' '.$cuentacaja->nombre : 'la cuenta' }} que siguen sin conciliar.
+                        La fecha hasta deja afuera lo que se cargó después.
+                    </p>
+                    <div class="form-group mb-0">
+                        <label class="mb-0 small" for="sin-conciliar-hasta">Fecha hasta</label>
+                        <input type="date" class="form-control form-control-sm" id="sin-conciliar-hasta" name="hasta" value="{{ $hastaSinConciliarDefault }}" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-success btn-sm"><i class="fa fa-file-excel"></i> Descargar Excel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('form-sin-conciliar-hasta').addEventListener('submit', function () {
+        setTimeout(function () {
+            if (window.jQuery) window.jQuery('#modal-sin-conciliar-hasta').modal('hide');
+        }, 400);
+    });
+</script>
+<div class="modal fade" id="modal-sin-conciliar-interbanking-hasta" tabindex="-1" role="dialog" aria-labelledby="modal-sin-conciliar-interbanking-hasta-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <form method="get" action="{{ route('listar_conciliacion_bancaria_sin_conciliar', ['formato' => 'EXCEL']) }}" id="form-sin-conciliar-interbanking-hasta" data-enter-campos="1">
+                <input type="hidden" name="empresa_id" value="{{ (int) $empresa_id }}">
+                <input type="hidden" name="cuentacaja_id" value="{{ (int) $cuentacaja_id }}">
+                <input type="hidden" name="mes" value="{{ (int) $mes }}">
+                <input type="hidden" name="anio" value="{{ (int) $anio }}">
+                <input type="hidden" name="consultar" value="1">
+                <input type="hidden" name="recalcular" value="1">
+                <input type="hidden" name="lado" value="interbanking">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-sin-conciliar-interbanking-hasta-titulo">Excel sin conciliar Interbanking</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">
+                        Movimientos del extracto de Interbanking de {{ $cuentacaja ? $cuentacaja->codigo.' '.$cuentacaja->nombre : 'la cuenta' }} que no se emparejaron con el mayor.
+                        La fecha hasta deja afuera lo que se cargó después.
+                    </p>
+                    <div class="form-group mb-0">
+                        <label class="mb-0 small" for="sin-conciliar-interbanking-hasta">Fecha hasta</label>
+                        <input type="date" class="form-control form-control-sm" id="sin-conciliar-interbanking-hasta" name="hasta" value="{{ $hastaSinConciliarDefault }}" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-success btn-sm"><i class="fa fa-file-excel"></i> Descargar Excel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('form-sin-conciliar-interbanking-hasta').addEventListener('submit', function () {
+        setTimeout(function () {
+            if (window.jQuery) window.jQuery('#modal-sin-conciliar-interbanking-hasta').modal('hide');
+        }, 400);
+    });
+</script>
 <div class="modal fade" id="modal-reporte-conciliado" tabindex="-1" role="dialog" aria-labelledby="modal-reporte-conciliado-titulo" aria-hidden="true">
     <div class="modal-dialog modal-sm" role="document">
         <div class="modal-content">

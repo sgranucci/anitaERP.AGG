@@ -1359,7 +1359,7 @@ class LiquidacionCalculadorService
 
         if (Schema::hasTable('novedad_sueldos')) {
             $novIds = DB::table('novedad_sueldos')
-                ->whereIn('concepto_codigo', [420, 422])
+                ->where('concepto_codigo', $liq->conceptoDiasVacaciones())
                 ->where('estado', '!=', NovedadSueldosCatalogo::ESTADO_ANULADA)
                 ->where(function ($q) use ($liq, $periodoYm, $ini, $fin) {
                     if ((int) $liq->id > 0) {

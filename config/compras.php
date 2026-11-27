@@ -250,4 +250,18 @@ return [
         'unique_for' => max(600, (int) env('COMPRAS_OP_ENVIO_MASIVO_UNIQUE_FOR', 7200)),
     ],
 
+    /*
+    | Tablero de compras: PDF del detalle.
+    | Hasta `max_filas_sincrono` líneas se arma al instante (en partes, varios procesos a la vez).
+    | Con más, se genera en la cola y el PDF llega por mail al usuario.
+    */
+    'tablero_pdf' => [
+        'max_filas_sincrono' => max(100, (int) env('COMPRAS_TABLERO_PDF_MAX_FILAS_SINCRONO', 3000)),
+        'filas_por_parte' => max(100, (int) env('COMPRAS_TABLERO_PDF_FILAS_POR_PARTE', 400)),
+        'procesos' => max(1, (int) env('COMPRAS_TABLERO_PDF_PROCESOS', 4)),
+        'cola' => env('COMPRAS_TABLERO_PDF_COLA', 'reports'),
+        'job_timeout' => max(600, (int) env('COMPRAS_TABLERO_PDF_JOB_TIMEOUT', 3600)),
+        'adjunto_max_mb' => max(1, (int) env('COMPRAS_TABLERO_PDF_ADJUNTO_MAX_MB', 8)),
+    ],
+
 ];

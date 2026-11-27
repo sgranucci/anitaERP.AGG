@@ -222,6 +222,15 @@ class Liquidacion_Sueldos extends Model implements Auditable
             : self::TIPO_VACACIONES_PLUS;
     }
 
+    /**
+     * Concepto de días de vacaciones que paga esta corrida: 420 adelanto, 422 plus.
+     * Las novedades del otro concepto no entran en la corrida.
+     */
+    public function conceptoDiasVacaciones(): int
+    {
+        return $this->lvac() === self::TIPO_VACACIONES_ADELANTO ? 420 : 422;
+    }
+
     public function alcanceLabel(): string
     {
         return LiquidacionAlcanceRecibo::ETIQUETAS[LiquidacionAlcanceRecibo::normalizar($this->alcance)]

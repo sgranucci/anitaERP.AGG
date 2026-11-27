@@ -90,7 +90,7 @@ final class CompraCabeceraAnitaMapper
             '".self::conceptoCabecera($ctx)."',
             '0',
             '".self::fechaProxVto($ctx)."',
-            '".$ctx->escape(self::clienteHora(), 30)."',
+            '".$ctx->escape(self::clienteHora($ctx), 30)."',
             '".self::esFce($ctx)."'
         ";
     }
@@ -122,7 +122,7 @@ final class CompraCabeceraAnitaMapper
             com_empresa = '".$ctx->empresaCodigo()."',
             com_concepto = '".self::conceptoCabecera($ctx)."',
             com_fecha_prox_vto = '".self::fechaProxVto($ctx)."',
-            com_cliente = '".$ctx->escape(self::clienteHora(), 30)."',
+            com_cliente = '".$ctx->escape(self::clienteHora($ctx), 30)."',
             com_es_fce = '".self::esFce($ctx)."'
         ";
     }
@@ -238,10 +238,24 @@ final class CompraCabeceraAnitaMapper
         return (int) Carbon::parse($fecha)->format('Ymd');
     }
 
-    /** Campo reutilizado por Anita nativo para hora de carga (char 30, hora a la derecha). */
-    private static function clienteHora(): string
+    /**
+     * Campo reutilizado por Anita nativo: nº de cliente/medidor a la izquierda y hora de carga a la derecha
+     * (char 30). Si el comprobante no tiene cliente queda solo la hora, como antes.
+     */
+    private static function clienteHora(ComprobanteProveedorAnitaContext $ctx): string
     {
-        return str_pad(now()->format('H:i'), 30, ' ', STR_PAD_LEFT);
+        $cp = $ctx->comprobante;
+        $cliente = trim((string) ($cp->servicio_cliente ?? ''));
+        if ($cliente === '') {
+            $cliente = trim((string) ($cp->proveedor_servicios?->cliente ?? ''));
+        }
+        // Sin saltos ni separadores del bridge (|); 24 = 30 menos la hora (5) y un espacio.
+        $cliente = mb_substr(trim(str_replace(['|', "\r", "\n"], ' ', $cliente)), 0, 24);
+        $hora = now()->format('H:i');
+
+        return $cliente === ''
+            ? str_pad($hora, 30, ' ', STR_PAD_LEFT)
+            : str_pad($cliente, 30 - strlen($hora), ' ', STR_PAD_RIGHT).$hora;
     }
 
     private static function esFce(ComprobanteProveedorAnitaContext $ctx): string

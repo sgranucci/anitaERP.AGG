@@ -32,6 +32,7 @@ class Concepto_Sueldos extends Model implements Auditable
         'rubro_costo_laboral',
         'unidad_medida',
         'activo',
+        'formula_local_protegida',
         'orden',
     ];
 
@@ -44,6 +45,7 @@ class Concepto_Sueldos extends Model implements Auditable
         'lsd_bases' => 'array',
         'mes_retroactivo' => 'integer',
         'activo' => 'boolean',
+        'formula_local_protegida' => 'boolean',
         'orden' => 'integer',
     ];
 

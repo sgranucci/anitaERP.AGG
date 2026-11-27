@@ -6,7 +6,6 @@ use App\ApiAnita;
 use App\Models\Sueldos\Empleado_Ausencia_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Tipo_Ausencia_Sueldos;
-use App\Services\Sueldos\AusenciaNovedadSyncService;
 use App\Support\Sueldos\VacacionPlanAnitaMapper;
 use Illuminate\Support\Facades\DB;
 
@@ -354,14 +353,8 @@ class AnitaVacacionPlanImportService
                 DB::table('empleado_ausencia_sueldos')->insert($chunk);
             }
 
-            // Regenera la novedad de liquidación de cada ausencia nueva (la FK dejó las anteriores sin ausencia).
-            $sync = app(AusenciaNovedadSyncService::class);
-            Empleado_Ausencia_Sueldos::query()
-                ->with(['tipo.concepto', 'empleado'])
-                ->where('observacion', 'like', self::MARCA.'%')
-                ->where('created_at', $ahora)
-                ->get()
-                ->each(fn ($a) => $sync->sincronizar($a));
+            // No se generan novedades de liquidación desde la importación: los tramos históricos ya
+            // fueron liquidados en Anita y crear novedades pendientes los volvería a liquidar.
         });
         } catch (\RuntimeException $e) {
             if ($bloqueo === null) {

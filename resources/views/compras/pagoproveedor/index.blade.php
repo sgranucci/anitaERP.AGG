@@ -73,6 +73,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/devolver-retenciones.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/devolver-retenciones.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/deshacer-aop.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/deshacer-aop.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.pagoproveedor.partials.documentos_relacionados_script')
 @php
     $graficoSeriesJs = array_values(array_filter($graficoSeries ?? [], static fn ($serie) => ($serie['labels'] ?? []) !== []));
@@ -534,6 +535,18 @@
                                                 </button>
                                             </form>
                                         @endif
+                                        @if (
+                                            can('anular-pagoproveedor', false)
+                                            && $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                            && $fila->esAop()
+                                        )
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-op-deshacer-aop"
+                                                title="Deshacer AOP (la OP original vuelve a confirmada)"
+                                                data-id="{{ $fila->id }}">
+                                                <i class="fa fa-reply-all text-danger"></i>
+                                            </button>
+                                        @endif
                                     @endif
                                     </div>
                                 </td>
@@ -560,6 +573,7 @@
 @include('compras.pagoproveedor.partials.workbench_modales')
 @include('compras.pagoproveedor.partials.modal_enviar_proveedor')
 @include('compras.pagoproveedor.partials.modal_devolver_retenciones')
+@include('compras.pagoproveedor.partials.modal_deshacer_aop')
 @include('compras.pagoproveedor.partials.documentos_relacionados_modal')
 @include('caja.ingresoegreso.revertiringresoegresomodal')
 @endsection

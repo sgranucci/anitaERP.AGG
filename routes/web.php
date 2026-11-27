@@ -4737,6 +4737,8 @@ Route::post('compras/pagoproveedor/{id}/confirmar', 'Compras\PagoproveedorContro
 Route::delete('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@eliminar')->name('eliminar_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/anular', 'Compras\PagoproveedorController@anularFisicamente')->name('anular_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/revertir', 'Compras\PagoproveedorController@revertir')->name('revertir_pagoproveedor');
+Route::get('compras/pagoproveedor/{id}/deshacer-aop/plan', 'Compras\PagoproveedorController@planDeshacerAop')->name('plan_deshacer_aop_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/deshacer-aop', 'Compras\PagoproveedorController@deshacerAop')->name('deshacer_aop_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/devolver-retenciones/datos', 'Compras\PagoproveedorController@datosDevolverRetenciones')->name('datos_devolver_retenciones_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/devolver-retenciones', 'Compras\PagoproveedorController@devolverRetenciones')->name('devolver_retenciones_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/marcar-pagada', 'Compras\PagoproveedorController@marcarPagada')->name('marcar_pagada_pagoproveedor');
@@ -4939,9 +4941,12 @@ Route::get('compras/listar-iva-compras/{formato}', 'Compras\IvaComprasReporteCon
 Route::get('compras/comprobantes-pdf-lote', 'Compras\ComprobantesPdfLoteReporteController@index')->name('comprobantes_pdf_lote');
 Route::get('compras/comprobantes-pdf-lote/zip', 'Compras\ComprobantesPdfLoteReporteController@descargarZip')->name('comprobantes_pdf_lote_zip');
 Route::get('compras/comprobantes-pdf-lote/servicios', 'Compras\ComprobantesPdfLoteReporteController@servicios')->name('comprobantes_pdf_lote_servicios');
+Route::get('compras/comprobantes-pdf-lote/anita-pdf/{documento}', 'Compras\ComprobantesPdfLoteReporteController@verPdfAnita')->whereNumber('documento')->name('comprobantes_pdf_lote_anita_pdf');
 Route::get('compras/proveedor-control-ganancias-reporte', 'Compras\ProveedorControlGananciasReporteController@index')->name('proveedor_control_ganancias_reporte');
 Route::get('compras/listar-proveedor-control-ganancias-reporte/{formato}', 'Compras\ProveedorControlGananciasReporteController@exportar')->name('listar_proveedor_control_ganancias_reporte');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
+Route::get('compras/tablero-compras', 'Compras\ComprasTableroOcController@index')->name('consultar_tablero_compras');
+Route::get('compras/listar-tablero-compras/{formato?}', 'Compras\ComprasTableroOcController@exportar')->name('listar_tablero_compras');
 
 // Importaciones (comercio exterior compras)
 Route::get('compras/importacion', 'Compras\ImportacionController@index')->name('importacion');

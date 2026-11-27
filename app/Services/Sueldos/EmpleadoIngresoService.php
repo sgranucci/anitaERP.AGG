@@ -235,20 +235,61 @@ class EmpleadoIngresoService
         });
     }
 
-    public function reincorporar(Empleado_Sueldos $empleado, string $fechaIngreso): Empleado_Sueldos
+    /**
+     * Reincorpora el mismo legajo.
+     *
+     * - Con $reabrirUltimo (o sin fecha): reabre el período abierto o, si no hay, el último
+     *   período cerrado (sin egreso, motivo ni comentario). No crea una fila nueva.
+     * - Con fecha: si ya existe un período con esa fecha de ingreso lo reabre; si no, crea uno nuevo.
+     */
+    public function reincorporar(Empleado_Sueldos $empleado, ?string $fechaIngreso, bool $reabrirUltimo = false): Empleado_Sueldos
     {
         if (! EmpleadoEstados::esBaja($empleado->estado)) {
             throw new InvalidArgumentException('Solo se puede reincorporar un empleado de baja definitiva.');
         }
 
-        return DB::transaction(function () use ($empleado, $fechaIngreso) {
-            $existe = Empleado_Ingreso_Sueldos::query()
-                ->where('empleado_id', $empleado->id)
-                ->whereDate('fecha_ingreso', $fechaIngreso)
-                ->exists();
+        return DB::transaction(function () use ($empleado, $fechaIngreso, $reabrirUltimo) {
+            $periodo = null;
+            if ($reabrirUltimo || $fechaIngreso === null || $fechaIngreso === '') {
+                $periodo = Empleado_Ingreso_Sueldos::query()
+                    ->where('empleado_id', $empleado->id)
+                    ->whereNull('fecha_egreso')
+                    ->orderByDesc('fecha_ingreso')
+                    ->orderByDesc('id')
+                    ->first()
+                    ?? Empleado_Ingreso_Sueldos::query()
+                        ->where('empleado_id', $empleado->id)
+                        ->orderByDesc('fecha_ingreso')
+                        ->orderByDesc('id')
+                        ->first();
+                if ($periodo === null) {
+                    throw new InvalidArgumentException('El legajo no tiene historia: indicá la fecha de ingreso.');
+                }
+            } else {
+                $periodo = Empleado_Ingreso_Sueldos::query()
+                    ->where('empleado_id', $empleado->id)
+                    ->whereDate('fecha_ingreso', $fechaIngreso)
+                    ->first();
+            }
 
-            if ($existe) {
-                throw new InvalidArgumentException('Ya existe un período con esa fecha de ingreso.');
+            if ($periodo !== null) {
+                $periodo->update([
+                    'fecha_egreso' => null,
+                    'motivoegreso_id' => null,
+                    'comentario_baja' => null,
+                    'tipo_movimiento' => EmpleadoBajaSupport::MOV_INGRESO,
+                    'usuario_id' => Auth::id(),
+                ]);
+
+                $empleado->update([
+                    'estado' => EmpleadoEstados::ACTIVO,
+                    'fecha_ingreso' => $periodo->fecha_ingreso,
+                    'fecha_egreso' => null,
+                    'motivoegreso_id' => null,
+                    'comentario_baja' => null,
+                ]);
+
+                return $empleado->fresh(['ingresos.motivoegreso']);
             }
 
             Empleado_Ingreso_Sueldos::create([

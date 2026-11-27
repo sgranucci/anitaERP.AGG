@@ -37,7 +37,7 @@
             @endforeach
         </div>
     @endif
-    <h1>Movimientos de Cuentas sin conciliar</h1>
+    <h1>{{ $meta['titulo'] ?? 'Movimientos de Cuentas sin conciliar' }}</h1>
     <div class="meta">
         Generado {{ date('d/m/Y H:i') }} · {{ $meta['empresa_nombre'] ?? '' }}<br>
         Desde primer mov. hasta {{ $hastaTxt }} ·

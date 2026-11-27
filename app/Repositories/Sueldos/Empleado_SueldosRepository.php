@@ -718,6 +718,191 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             : self::CAMPOS_ANITA_EMPLEADO;
     }
 
+    /** Documentos mal cargados en el ERP que se corrigen al valor de conf (empresa:legajo => documento). */
+    private const DOCUMENTO_CORREGIR = ['1:26583465' => '26583465'];
+
+    /**
+     * Legajos confidenciales: completa en el ERP los campos VACÍOS desde conf (/usr2/conf).
+     * Nunca pisa un valor que ya tiene el ERP. No toca CBU, banco, estado de ingreso ni bases de categoría.
+     * El documento solo se corrige en DOCUMENTO_CORREGIR o cuando es "DU NNN" con el mismo DNI de conf.
+     *
+     * @param  list<array<string,mixed>>  $filasConf  filas de conf empleado (emp_empresa, emp_legajo, emp_documento y campos de completar)
+     * @return array{updates: array<int, array<string,mixed>>, resumen: array<string,mixed>, hash: string}
+     */
+    public function planCompletarConfidencialDesdeConf(array $filasConf): array
+    {
+        $empresaPorCodigo = $this->mapaCodigoId('empresa');
+        $maps = [
+            'motivoegreso_id' => $this->mapaCodigoId('motivoegreso_sueldos'),
+            'agrupamiento_id' => $this->mapaCodigoId('agrupamiento_sueldos'),
+            'lugartrabajo_id' => $this->mapaCodigoId('lugartrabajo_sueldos'),
+            'centrocosto_id' => $this->mapaCodigoId('centrocosto'),
+            'obrasocial_id' => $this->mapaCodigoId('obrasocial_sueldos'),
+            'sindicato_id' => $this->mapaCodigoId('sindicato_sueldos'),
+            'art_id' => $this->mapaCodigoId('art_sueldos'),
+            'pais_nacimiento_id' => $this->mapaCodigoId('pais'),
+        ];
+        $categoriaPorCodigo = $this->mapaCategoria();
+
+        $legajos = [];
+        foreach ($filasConf as $f) {
+            $legajos[(int) ($f['emp_legajo'] ?? 0)] = true;
+        }
+        $erp = [];
+        foreach (Empleado_Sueldos::query()->whereIn('legajo', array_keys($legajos))->get() as $e) {
+            $erp[(int) $e->empresa_id.':'.(int) $e->legajo] = $e;
+        }
+
+        // campo => [mapeo desde fila conf, columna conf de origen]
+        $campos = [
+            'domicilio' => [fn ($f) => $this->txt($f['emp_domicilio'] ?? null, 80), 'emp_domicilio'],
+            'entre_calles' => [fn ($f) => $this->txt($f['emp_entre_calles'] ?? null, 80), 'emp_entre_calles'],
+            'localidad' => [fn ($f) => $this->txt($f['emp_localidad'] ?? null, 60), 'emp_localidad'],
+            'codigo_postal' => [fn ($f) => $this->txt($f['emp_cod_postal'] ?? null, 12), 'emp_cod_postal'],
+            'provincia' => [fn ($f) => $this->txt($f['emp_provincia'] ?? null, 40), 'emp_provincia'],
+            'telefono' => [fn ($f) => $this->txt($f['emp_telefono'] ?? null, 40), 'emp_telefono'],
+            'nacionalidad' => [fn ($f) => $this->txt($f['emp_nacionalidad'] ?? null, 40), 'emp_nacionalidad'],
+            'pais_nacimiento_id' => [fn ($f) => $this->fk($maps['pais_nacimiento_id'], $f['emp_pais_nac'] ?? null), 'emp_pais_nac'],
+            'fecha_nacimiento' => [fn ($f) => VacacionFechaAnita::erpDesdeAnita($f['emp_fec_nac'] ?? 0), 'emp_fec_nac'],
+            'cuil' => [fn ($f) => $this->txt($f['emp_afil_jubil'] ?? null, 15), 'emp_afil_jubil'],
+            'sexo' => [fn ($f) => $this->sexo($f['emp_sexo'] ?? null), 'emp_sexo'],
+            'estado_civil' => [fn ($f) => $this->intNull($f['emp_est_civil'] ?? null), 'emp_est_civil'],
+            'categoria_id' => [function ($f) use ($categoriaPorCodigo) {
+                $c = $this->normCodigo($f['emp_categoria'] ?? null);
+
+                return $c !== null ? ($categoriaPorCodigo[$c]['id'] ?? null) : null;
+            }, 'emp_categoria'],
+            'agrupamiento_id' => [fn ($f) => $this->fk($maps['agrupamiento_id'], $f['emp_cod_agrup'] ?? null), 'emp_cod_agrup'],
+            'lugartrabajo_id' => [fn ($f) => $this->fk($maps['lugartrabajo_id'], $f['emp_lugartrabajo'] ?? null), 'emp_lugartrabajo'],
+            'centrocosto_id' => [fn ($f) => $this->fk($maps['centrocosto_id'], $f['emp_centro_costos'] ?? null), 'emp_centro_costos'],
+            'obrasocial_id' => [fn ($f) => $this->fk($maps['obrasocial_id'], $f['emp_codigo_o_soc'] ?? null), 'emp_codigo_o_soc'],
+            'sindicato_id' => [fn ($f) => $this->fk($maps['sindicato_id'], $f['emp_gremio'] ?? null), 'emp_gremio'],
+            'art_id' => [fn ($f) => $this->fk($maps['art_id'], $f['emp_codigo_art'] ?? null), 'emp_codigo_art'],
+            'motivoegreso_id' => [fn ($f) => $this->fk($maps['motivoegreso_id'], $f['emp_motivoegr'] ?? null), 'emp_motivoegr'],
+            'fecha_egreso' => [fn ($f) => VacacionFechaAnita::erpDesdeAnita($f['emp_fec_egr'] ?? 0), 'emp_fec_egr'],
+            'grupo_concepto_1_codigo' => [fn ($f) => $this->intNull($f['emp_grp1'] ?? null), 'emp_grp1'],
+            'grupo_concepto_2_codigo' => [fn ($f) => $this->intNull($f['emp_grp2'] ?? null), 'emp_grp2'],
+            'grupo_concepto_3_codigo' => [fn ($f) => $this->intNull($f['emp_grp3'] ?? null), 'emp_grp3'],
+            'sueldo_basico' => [fn ($f) => $this->numPositivo($f['emp_sueldo'] ?? null), 'emp_sueldo'],
+            'jornal_dia' => [fn ($f) => $this->numPositivo($f['emp_jornal_dia'] ?? null), 'emp_jornal_dia'],
+            'jornal_hora' => [fn ($f) => $this->numPositivo($f['emp_jornal_hora'] ?? null), 'emp_jornal_hora'],
+            'codigo_liquidacion' => [fn ($f) => $this->txt($f['emp_men_quin'] ?? null, 20), 'emp_men_quin'],
+            'antiguedad_anterior' => [fn ($f) => $this->txt($f['emp_antig_ant'] ?? null, 12), 'emp_antig_ant'],
+            'mano_obra' => [fn ($f) => $this->char1($f['emp_mo_dir_ind'] ?? null), 'emp_mo_dir_ind'],
+            'personal_contratado' => [fn ($f) => $this->char1($f['emp_contratado'] ?? null), 'emp_contratado'],
+            'codigo_afjp' => [fn ($f) => $this->txt($f['emp_codigo_afjp'] ?? null, 20), 'emp_codigo_afjp'],
+            'situacion_sijp' => [fn ($f) => $this->txt($f['emp_situacion'] ?? null, 4), 'emp_situacion'],
+            'condicion_sijp' => [fn ($f) => $this->txt($f['emp_condicion'] ?? null, 4), 'emp_condicion'],
+            'modalidad_sijp' => [fn ($f) => $this->txt($f['emp_modalidad'] ?? null, 6), 'emp_modalidad'],
+            'siniestrado_sijp' => [fn ($f) => $this->txt($f['emp_siniestrado'] ?? null, 4), 'emp_siniestrado'],
+            'marca_reduccion_sijp' => [fn ($f) => $this->char1($f['emp_marca_red'] ?? null), 'emp_marca_red'],
+            'tipo_empresa_sijp' => [fn ($f) => $this->char1($f['emp_tipo_empresa'] ?? null), 'emp_tipo_empresa'],
+            'regimen_sijp' => [fn ($f) => $this->char1($f['emp_regimen'] ?? null), 'emp_regimen'],
+        ];
+
+        $updates = [];
+        $resumen = [
+            'filas_conf' => count($filasConf),
+            'sin_fila_erp' => 0,
+            'legajos_con_cambios' => 0,
+            'completados' => [],
+            'sin_mapeo' => [],
+            'documento_corregido' => [],
+        ];
+
+        foreach ($filasConf as $f) {
+            $codEmp = $this->normCodigo($f['emp_empresa'] ?? null);
+            $empresaId = $codEmp !== null ? ($empresaPorCodigo[$codEmp] ?? null) : null;
+            $legajo = (int) ($f['emp_legajo'] ?? 0);
+            $fila = $empresaId !== null ? ($erp[$empresaId.':'.$legajo] ?? null) : null;
+            if ($fila === null) {
+                $resumen['sin_fila_erp']++;
+
+                continue;
+            }
+
+            $key = $codEmp.':'.$legajo;
+            $patch = [];
+
+            $docConf = $this->txt($f['emp_documento'] ?? null, 30);
+            $docErp = trim((string) $fila->documento);
+            if ($docConf !== null && $docErp !== $docConf) {
+                $corregirExplicito = (self::DOCUMENTO_CORREGIR[$key] ?? null) === $docConf;
+                $esDuConMismoDni = preg_match('/^DU\s*(\d+)$/', $docErp, $m) === 1 && $m[1] === $docConf;
+                if ($corregirExplicito || $esDuConMismoDni) {
+                    $patch['documento'] = $docConf;
+                    $resumen['documento_corregido'][] = $key.' '.$docErp.' => '.$docConf;
+                }
+            }
+
+            foreach ($campos as $campo => [$mapear, $rawKey]) {
+                if (! $this->vacioParaCompletar($fila->{$campo} ?? null)) {
+                    continue;
+                }
+                $nuevo = $mapear($f);
+                if ($nuevo === null || $nuevo === '') {
+                    if (! $this->vacioParaCompletar($f[$rawKey] ?? null)) {
+                        $resumen['sin_mapeo'][$campo] = ($resumen['sin_mapeo'][$campo] ?? 0) + 1;
+                    }
+
+                    continue;
+                }
+                $patch[$campo] = $nuevo;
+                $resumen['completados'][$campo] = ($resumen['completados'][$campo] ?? 0) + 1;
+            }
+
+            if ($patch !== []) {
+                $updates[(int) $fila->id] = $patch;
+                $resumen['legajos_con_cambios']++;
+            }
+        }
+
+        ksort($updates);
+
+        return [
+            'updates' => $updates,
+            'resumen' => $resumen,
+            'hash' => hash('sha256', json_encode($updates)),
+        ];
+    }
+
+    /**
+     * Aplica el plan de completar confidencial. Eloquent (con auditoría), en transacción.
+     *
+     * @param  array<int, array<string,mixed>>  $updates
+     */
+    public function aplicarCompletarConfidencialDesdeConf(array $updates): int
+    {
+        return DB::transaction(function () use ($updates) {
+            $n = 0;
+            foreach ($updates as $id => $patch) {
+                Empleado_Sueldos::query()->findOrFail((int) $id)->forceFill($patch)->save();
+                $n++;
+            }
+
+            return $n;
+        });
+    }
+
+    private function vacioParaCompletar($v): bool
+    {
+        if ($v === null) {
+            return true;
+        }
+        if (is_numeric($v)) {
+            return (float) $v == 0.0;
+        }
+
+        return trim((string) $v) === '';
+    }
+
+    private function numPositivo($v): ?float
+    {
+        $n = $this->num($v);
+
+        return $n !== null && $n > 0 ? round($n, 4) : null;
+    }
+
     /**
      * Sync desde Anita (sueldos.empleado + emping + empley).
      * Inserta legajos faltantes por (empresa, legajo) y re-sincroniza egreso/estado,
