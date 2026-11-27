@@ -28,6 +28,7 @@ class ConfiguracionGeneralController extends Controller
         $matrizIibbUsaEnv = EmpresaJurisdiccionIibbSupport::matrizUsaFallbackEnv();
         $matrizIibbJursEnv = EmpresaJurisdiccionIibbSupport::desdeEnv('agente_percepcion_iibb');
         $iibbColumnaPadron = Schema::hasColumn('provincia', 'tiene_padron');
+        $iibbColumnaSircip = Schema::hasColumn('provincia', 'sircip_desde');
 
         return view('configuracion.general.editar', compact(
             'grupos',
@@ -36,6 +37,7 @@ class ConfiguracionGeneralController extends Controller
             'matrizIibbUsaEnv',
             'matrizIibbJursEnv',
             'iibbColumnaPadron',
+            'iibbColumnaSircip',
         ));
     }
 
@@ -75,9 +77,15 @@ class ConfiguracionGeneralController extends Controller
             $padron = [];
         }
 
+        $sircip = $request->input('sircip', []);
+        if (! is_array($sircip)) {
+            $sircip = [];
+        }
+
         try {
             EmpresaJurisdiccionIibbSupport::guardarMatriz($agentes);
             EmpresaJurisdiccionIibbSupport::guardarTienePadron($padron);
+            EmpresaJurisdiccionIibbSupport::guardarSircipDesde($sircip);
             PadronIibbVigenciaSupport::olvidar();
             PadronIibbBandejaSupport::asegurarDirectorios();
         } catch (\RuntimeException $e) {

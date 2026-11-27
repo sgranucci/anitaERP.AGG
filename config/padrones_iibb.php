@@ -76,6 +76,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | SIRCIP — padrón único mensual (COMARB)
+    |--------------------------------------------------------------------------
+    | Carpeta `sircip` de la bandeja: aparece cuando alguna provincia tiene
+    | fecha "SIRCIP desde" en Configuración general. El padrón del mes siguiente
+    | se publica alrededor del día 22.
+    |
+    | conservar_periodos: meses de padrón que se guardan (el actual y los
+    |   anteriores; las NC dentro de los 3 meses del comprobante original los usan).
+    | alertar_desde_dia: desde ese día del mes se avisa por mail si falta el
+    |   padrón del mes siguiente (padron-sircip:alertar-faltante).
+    */
+
+    'sircip' => [
+        'conservar_periodos' => (int) env('PADRON_SIRCIP_CONSERVAR_PERIODOS', 4),
+        'alertar_desde_dia' => (int) env('PADRON_SIRCIP_ALERTAR_DESDE_DIA', 24),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | ARBA DFE — descarga automática (ex bajapadron.sh)
     |--------------------------------------------------------------------------
     */

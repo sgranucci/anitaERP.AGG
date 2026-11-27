@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Configuracion;
 
 use App\Support\Configuracion\PadronIibb\PadronIibbArchivoSupport;
+use App\Support\Configuracion\Sircip\SircipVigenciaSupport;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -18,6 +19,8 @@ use Throwable;
  */
 final class PadronIibbBandejaSupport
 {
+    public const CLAVE_SIRCIP = 'sircip';
+
     /** @var list<string> */
     private const EXTENSIONES = ['txt', 'csv', 'zip'];
 
@@ -30,6 +33,11 @@ final class PadronIibbBandejaSupport
      * @var array<string, array{jurisdiccion: int, tipo: ?string, etiqueta: string}>
      */
     private const CATALOGO = [
+        'sircip' => [
+            'jurisdiccion' => 0,
+            'tipo' => null,
+            'etiqueta' => 'padrón único SIRCIP (SIRCIP_AAAAMM_PadronAgente.zip o el TXT), un archivo por mes para todas las provincias',
+        ],
         'caba' => [
             'jurisdiccion' => 901,
             'tipo' => null,
@@ -78,8 +86,14 @@ final class PadronIibbBandejaSupport
     {
         $agentes = array_flip(EmpresaJurisdiccionIibbSupport::jurisdiccionesPadronEsperado());
         $visibles = [];
+        $sircipActivo = SircipVigenciaSupport::activo();
         foreach (self::CATALOGO as $clave => $def) {
-            if (! isset($agentes[$def['jurisdiccion']])) {
+            // SIRCIP es nacional: no depende de una jurisdicción tildada sino de que alguna provincia tenga fecha SIRCIP.
+            if ($clave === self::CLAVE_SIRCIP) {
+                if (! $sircipActivo) {
+                    continue;
+                }
+            } elseif (! isset($agentes[$def['jurisdiccion']])) {
                 continue;
             }
             $visibles[$clave] = [

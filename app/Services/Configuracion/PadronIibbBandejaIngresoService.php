@@ -7,6 +7,7 @@ namespace App\Services\Configuracion;
 use App\Jobs\Configuracion\ImportarPadronIibbCabaJob;
 use App\Jobs\Configuracion\ImportarPadronIibbProvinciaJob;
 use App\Jobs\Configuracion\ImportarPadronIibbSantaFeJob;
+use App\Jobs\Configuracion\ImportarPadronSircipJob;
 use App\Support\Configuracion\PadronIibb\PadronIibbParserFactory;
 use App\Support\Configuracion\PadronIibbBandejaSupport;
 use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
@@ -235,6 +236,17 @@ final class PadronIibbBandejaIngresoService
      */
     private function encolar(string $clave, array $def, string $archivo): void
     {
+        if ($clave === PadronIibbBandejaSupport::CLAVE_SIRCIP) {
+            $cargaId = PadronIibbCargaRegistroSupport::iniciar([
+                'etiqueta' => ImportarPadronSircipJob::ETIQUETA,
+                'origen' => PadronIibbCargaRegistroSupport::ORIGEN_BANDEJA,
+                'archivo' => $archivo,
+            ]);
+            ImportarPadronSircipJob::dispatch($archivo, $cargaId);
+
+            return;
+        }
+
         $jurisdiccion = (int) $def['jurisdiccion'];
         $tipo = $def['tipo'];
 

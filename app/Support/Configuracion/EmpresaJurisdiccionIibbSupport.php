@@ -323,6 +323,9 @@ final class EmpresaJurisdiccionIibbSupport
                 'nombre' => (string) $provincia->nombre,
                 'jurisdiccion' => $jur,
                 'tiene_padron' => (bool) ($provincia->tiene_padron ?? false),
+                'sircip_desde' => ($provincia->sircip_desde ?? null) !== null
+                    ? $provincia->sircip_desde->format('Y-m-d')
+                    : '',
                 'empresas' => $celdas,
             ];
         }
@@ -338,6 +341,9 @@ final class EmpresaJurisdiccionIibbSupport
         $columnas = ['id', 'nombre', 'jurisdiccion'];
         if (Schema::hasColumn('provincia', 'tiene_padron')) {
             $columnas[] = 'tiene_padron';
+        }
+        if (Schema::hasColumn('provincia', 'sircip_desde')) {
+            $columnas[] = 'sircip_desde';
         }
 
         $provincias = Provincia::query()
@@ -431,6 +437,43 @@ final class EmpresaJurisdiccionIibbSupport
                 continue;
             }
             $modelo->tiene_padron = $nuevo;
+            $modelo->save();
+        }
+    }
+
+    /**
+     * Fecha "SIRCIP desde" por provincia. Vacía = la provincia no usa SIRCIP.
+     *
+     * @param  array<int|string, mixed>  $fechas  [provincia_id => 'Y-m-d' | '']
+     */
+    public static function guardarSircipDesde(array $fechas): void
+    {
+        if (! Schema::hasColumn('provincia', 'sircip_desde')) {
+            return;
+        }
+
+        $validos = [];
+        foreach (self::provinciasParaMatriz() as $provincia) {
+            $validos[(int) $provincia->id] = true;
+        }
+
+        foreach ($fechas as $provinciaId => $valor) {
+            $provinciaId = (int) $provinciaId;
+            if ($provinciaId <= 0 || ! isset($validos[$provinciaId])) {
+                continue;
+            }
+            $modelo = Provincia::query()->find($provinciaId);
+            if ($modelo === null) {
+                continue;
+            }
+
+            $texto = trim((string) $valor);
+            $nueva = $texto === '' ? null : $texto;
+            $actual = $modelo->sircip_desde?->format('Y-m-d');
+            if ($actual === $nueva) {
+                continue;
+            }
+            $modelo->sircip_desde = $nueva;
             $modelo->save();
         }
     }

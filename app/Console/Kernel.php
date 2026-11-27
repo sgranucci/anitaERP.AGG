@@ -144,6 +144,8 @@ class Kernel extends ConsoleKernel
         $schedule->command('padron-iibb-tasa:purge')->monthlyOn(10, '03:00');
         $schedule->command('padron-iibb-arba:purge')->monthlyOn(10, '03:05');
         $schedule->command('padron-iibb-caba:purge')->monthlyOn(10, '03:10');
+        // SIRCIP: borra períodos más viejos que padrones_iibb.sircip.conservar_periodos (nunca el último cargado).
+        $schedule->command('padron-sircip:purge')->monthlyOn(10, '03:15');
 
         // Descarga DFE ARBA + encola import: último día del mes, padrón del mes siguiente.
         // Se prende con el mismo tilde de Buenos Aires que el resto de los padrones.
@@ -171,6 +173,14 @@ class Kernel extends ConsoleKernel
             ->cron('0 8 1,3,5,26,28 * *')
             ->withoutOverlapping(60)
             ->appendOutputTo(storage_path('logs/padron-iibb-alertar-vencidos.log'))
+            ->when(fn () => (bool) config('padrones_iibb.alertar_vencidos', true));
+
+        // SIRCIP: todos los días a las 8 revisa si falta el padrón del mes en curso o,
+        // desde padrones_iibb.sircip.alertar_desde_dia, el del mes siguiente. Solo manda mail si falta.
+        $schedule->command('padron-sircip:alertar-faltante')
+            ->dailyAt('08:00')
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/padron-sircip-alertar-faltante.log'))
             ->when(fn () => (bool) config('padrones_iibb.alertar_vencidos', true));
 
         // CABA y provincias: archivos pegados en la bandeja Samba. ARBA no entra acá.
@@ -299,6 +309,21 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(120)
             ->appendOutputTo(storage_path('logs/compras-factura-anticipada-recepcion-auditor-schedule.log'))
             ->when(fn () => (bool) config('compras.factura_anticipada_recepcion_auditor.habilitada', true));
+
+        // Ventas ERP sin asiento en ctamov de Anita (o con la clave del comprobante en blanco).
+        // Solo --dry-run: avisa en el log; grabar es manual (--ejecutar). Ver config/facturacion.php CTAMOV_AUDITORIA_*.
+        $ventanaAuditoriaCtamov = max(1, (int) config('facturacion.CTAMOV_AUDITORIA_VENTANA_DIAS', 3));
+        $schedule->command('ventas:sincronizar-solo-erp-anita', [
+            '--desde' => Carbon::today()->subDays($ventanaAuditoriaCtamov - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+            '--dry-run', // bandera sin valor: con clave => true el scheduler la compila como --dry-run=1 y falla
+        ])
+            ->dailyAt((string) config('facturacion.CTAMOV_AUDITORIA_HORA', '07:15'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/ventas-ctamov-auditoria-schedule.log'))
+            ->when(fn () => EntornoEmpresaSupport::esElBierzo()
+                && (bool) config('facturacion.CTAMOV_AUDITORIA_HABILITADA', false));
 
         $schedule->command('ventas:auditar-deuda-ficha-cliente')
             ->dailyAt((string) config('ventas.deuda_ficha_auditor.hora', '07:55'))

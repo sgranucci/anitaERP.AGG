@@ -16,6 +16,7 @@ class Provincia extends Model implements Auditable
         'abreviatura',
         'jurisdiccion',
         'tiene_padron',
+        'sircip_desde',
         'codigo',
         'pais_id',
         'codigoexterno',
@@ -29,6 +30,7 @@ class Provincia extends Model implements Auditable
         'minimocoeficientecm05' => 'float',
         'tope_alicuota_percepcion' => 'float',
         'tiene_padron' => 'boolean',
+        'sircip_desde' => 'date',
     ];
 
     public function paises()

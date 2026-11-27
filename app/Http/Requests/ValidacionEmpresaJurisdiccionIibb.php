@@ -23,6 +23,8 @@ class ValidacionEmpresaJurisdiccionIibb extends FormRequest
             'agentes.*.*.consulta' => 'nullable',
             'padron' => 'nullable|array',
             'padron.*' => 'nullable',
+            'sircip' => 'nullable|array',
+            'sircip.*' => 'nullable|date_format:Y-m-d',
         ];
     }
 }

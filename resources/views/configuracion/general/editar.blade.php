@@ -336,6 +336,9 @@ Configuración general del sistema
                                     @if (! empty($iibbColumnaPadron))
                                         <th rowspan="2" class="text-center align-middle" title="La provincia publica padrón. Arma la carpeta de bajada y el mail de vigencia.">Padrón</th>
                                     @endif
+                                    @if (! empty($iibbColumnaSircip))
+                                        <th rowspan="2" class="text-center align-middle" title="Fecha desde la cual la percepción de esta provincia se calcula con el padrón único SIRCIP. Vacío = no usa SIRCIP.">SIRCIP desde</th>
+                                    @endif
                                     @foreach ($empresasIibb as $empresa)
                                         <th colspan="3" class="text-center">{{ $empresa->nombre }}</th>
                                     @endforeach
@@ -359,6 +362,14 @@ Configuración general del sistema
                                                 <input type="checkbox" name="padron[{{ $fila['provincia_id'] }}]" value="1"
                                                     title="Hay padrón publicado. Carpeta de bajada y aviso si no está vigente."
                                                     {{ ! empty($fila['tiene_padron']) ? 'checked' : '' }}>
+                                            </td>
+                                        @endif
+                                        @if (! empty($iibbColumnaSircip))
+                                            <td class="text-center">
+                                                <input type="date" name="sircip[{{ $fila['provincia_id'] }}]"
+                                                    value="{{ $fila['sircip_desde'] ?? '' }}"
+                                                    class="form-control form-control-sm"
+                                                    title="Vacío = la provincia no usa SIRCIP.">
                                             </td>
                                         @endif
                                         @foreach ($empresasIibb as $empresa)

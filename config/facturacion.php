@@ -121,6 +121,11 @@ switch(strtoupper(config('app.empresa')))
             // false (default): al editar pedido en ERP no reescribe pendmae/pendmov (evita fusionar bonif Anita).
             // true: vuelve a sincronizar Anita en cada Guardar. El alta ERP→Anita sigue siempre.
             "ANITA_PEDIDO_SYNC_AL_EDITAR" => filter_var(env('BIERZO_PEDIDO_ANITA_SYNC_AL_EDITAR', false), FILTER_VALIDATE_BOOLEAN),
+            // Auditoría diaria ctamov de ventas ERP (ventas:sincronizar-solo-erp-anita en --dry-run, solo informa).
+            // Default apagado: solo El Bierzo lo prende en su .env. No graba; para grabar se corre a mano con --ejecutar.
+            "CTAMOV_AUDITORIA_HABILITADA" => filter_var(env('BIERZO_VENTAS_CTAMOV_AUDITORIA_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
+            "CTAMOV_AUDITORIA_HORA" => (string) env('BIERZO_VENTAS_CTAMOV_AUDITORIA_HORA', '07:15'),
+            "CTAMOV_AUDITORIA_VENTANA_DIAS" => max(1, (int) env('BIERZO_VENTAS_CTAMOV_AUDITORIA_VENTANA_DIAS', 3)),
             // Último número CAEA forzado por PV (próximo = piso+1). PV 8 no tiene compemis Anita.
             "CAEA_PISO_NUMERO_POR_CODIGO" => [
                 '00008' => (int) env('FACTURACION_CAEA_PISO_PV_00008', 43),
