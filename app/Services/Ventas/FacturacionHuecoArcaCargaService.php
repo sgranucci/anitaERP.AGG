@@ -486,6 +486,7 @@ final class FacturacionHuecoArcaCargaService
         return $this->cerrar($base + $this->datosArca($arca) + $cargado + [
             'cliente' => $armado['cliente'],
             'fecha' => $fecha,
+            'asociado' => (string) ($arca['asociado'] ?? ''),
             'url_pdf' => urlAppAbsoluta('ventas/listaunafacturapdf/'.$cargado['venta_id']),
             'url_editar' => urlAppAbsoluta('ventas/factura/'.$cargado['venta_id'].'/editar'),
         ], FacturacionHuecoArca::CARGADO, 'Cargado '.$cargado['codigo'], false, true);
@@ -1024,8 +1025,9 @@ final class FacturacionHuecoArcaCargaService
         }
 
         $html = '<p>El proceso diario encontró comprobantes autorizados en ARCA que no estaban en el ERP.</p>';
-        $html .= '<p>Si esa misma venta se reemitió con otro número, hay que emitir la <strong>nota de crédito</strong> '
-            .'contra el comprobante recuperado (en ARCA y en el ERP) para anularlo.</p>';
+        foreach (FacturacionHuecoArcaMail::accionesRequeridas($informe['cargados'] ?? []) as $accion) {
+            $html .= '<p><strong>Acción requerida:</strong> '.e($accion).'</p>';
+        }
         foreach (['cargados' => 'Cargados', 'omitidos' => 'Sin carga automática', 'errores' => 'No se pudieron cargar'] as $clave => $titulo) {
             $filas = $informe[$clave] ?? [];
             if ($filas === []) {
@@ -1034,7 +1036,11 @@ final class FacturacionHuecoArcaCargaService
             $html .= '<h3>'.e($titulo).'</h3><ul>';
             foreach ($filas as $fila) {
                 $codigo = (string) ($fila['codigo'] ?? (($fila['puntoventa'] ?? '').' '.($fila['tipo'] ?? '').' '.($fila['numero'] ?? '')));
-                $html .= '<li>'.e($codigo.' — '.($fila['detalle'] ?? '').' — '.($fila['cliente'] ?? ''));
+                $linea = $codigo.' — '.($fila['detalle'] ?? '').' — '.($fila['cliente'] ?? '');
+                if (! empty($fila['asociado'])) {
+                    $linea .= ' — '.$fila['asociado'];
+                }
+                $html .= '<li>'.e($linea);
                 if (! empty($fila['url_editar'])) {
                     $html .= ' <a href="'.e((string) $fila['url_editar']).'">Abrir</a>';
                 }

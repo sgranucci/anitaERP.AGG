@@ -21,11 +21,11 @@
     El renglón es un resumen por alícuota de IVA, no los artículos originales.
     <strong>No movió stock y no se replicó en Anita.</strong>
 </p>
+@foreach ($accionesRequeridas as $accion)
 <p style="margin:0 0 16px 0; background:#FFF3CD; padding:10px; border:1px solid #FFECB5;">
-    <strong>Acción requerida:</strong> si esa misma venta se reemitió con otro número (o el CAE quedó huérfano
-    porque falló el cobro), hay que emitir la <strong>nota de crédito</strong> contra el comprobante recuperado
-    en ARCA y en el ERP, para anularlo. No es una nota de débito.
+    <strong>Acción requerida:</strong> {{ $accion }}
 </p>
+@endforeach
 
 @if ($cargados !== [])
     <h3 style="margin:18px 0 6px 0;">Cargados</h3>
@@ -36,6 +36,7 @@
             <th>Cliente</th>
             <th>Total</th>
             <th>CAE</th>
+            <th>Asociado</th>
             <th></th>
         </tr>
         @foreach ($cargados as $fila)
@@ -45,6 +46,7 @@
                 <td>{{ $fila['cliente'] ?? '' }}</td>
                 <td style="text-align:right;">{{ number_format((float) ($fila['total'] ?? 0), 2, ',', '.') }}</td>
                 <td>{{ $fila['cae'] ?? '' }}</td>
+                <td>{{ $fila['asociado'] ?? '' }}</td>
                 <td>
                     @if (! empty($fila['url_pdf']))
                         <a href="{{ $fila['url_pdf'] }}">Imprimir</a>
