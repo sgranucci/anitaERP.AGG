@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Compras;
 
+use App\Exports\Compras\ComprasTableroOcAhorrosExport;
 use App\Exports\Compras\ComprasTableroOcDetalleExport;
 use App\Http\Controllers\Controller;
 use App\Jobs\Compras\GenerarTableroComprasPdfJob;
@@ -66,7 +67,20 @@ class ComprasTableroOcController extends Controller
             );
         }
 
+        $ahorroDetalle = null;
+        if ($resultado !== null) {
+            $ahorroDetalle = $this->service->paginarFilas(
+                $resultado['ahorros']['filas'],
+                self::POR_PAGINA_DETALLE,
+                max(1, (int) $request->input('page_ahorros', 1)),
+                $filtrosQuery + ['tab' => ComprasTableroOcFiltros::TAB_AHORROS],
+                'page_ahorros',
+            );
+        }
+
         return view('compras.tablero_oc.index', [
+            'ahorros' => $resultado['ahorros'] ?? null,
+            'ahorro_detalle' => $ahorroDetalle,
             'empresa_query' => $empresaQuery,
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
@@ -74,7 +88,7 @@ class ComprasTableroOcController extends Controller
             'tablero' => $resultado['tablero'] ?? null,
             'meses' => $resultado['meses'] ?? [],
             'graficos' => $resultado !== null
-                ? ComprasTableroOcGraficosSupport::desde($resultado['tablero'], $resultado['meses'])
+                ? ComprasTableroOcGraficosSupport::desde($resultado['tablero'], $resultado['meses'], $resultado['ahorros'])
                 : null,
             'detalle' => $detalle,
             'subtitulo' => $this->service->subtituloFiltros($filtros, $empresaQuery),
@@ -84,6 +98,7 @@ class ComprasTableroOcController extends Controller
             'opciones_estado' => ComprasTableroOcFiltros::OPCIONES_ESTADO,
             'opciones_vencimiento' => ComprasTableroOcFiltros::OPCIONES_VENCIMIENTO,
             'opciones_com' => ComprasTableroOcFiltros::OPCIONES_COM,
+            'opciones_factura' => ComprasTableroOcFiltros::OPCIONES_FACTURA,
             'meta_usuarios' => RequisicionReporteCriteriosSupport::metaTextoUsuarios((string) $filtros['usuarios']),
             'meta_proveedores' => OrdencompraReporteCriteriosSupport::metaTextoProveedores((string) $filtros['proveedores']),
             'puede_ver_ordencompra' => can('editar-ordencompra', false) || can('listar-ordencompra', false),
@@ -121,15 +136,35 @@ class ComprasTableroOcController extends Controller
                 return response()->download($ruta, 'tablero_compras_oc.pdf')->deleteFileAfterSend(true);
 
             case 'EXCEL':
+                if ($request->input('tab') === ComprasTableroOcFiltros::TAB_AHORROS) {
+                    return $this->exportarAhorros($resultado['ahorros']['filas'], $subtitulo, 'tablero_compras_ahorros.xlsx');
+                }
+
                 return (new ComprasTableroOcDetalleExport($filas, $titulo, $subtitulo))
                     ->download('tablero_compras_detalle.xlsx');
 
             case 'CSV':
+                if ($request->input('tab') === ComprasTableroOcFiltros::TAB_AHORROS) {
+                    return $this->exportarAhorros($resultado['ahorros']['filas'], $subtitulo, 'tablero_compras_ahorros.csv', Excel::CSV);
+                }
+
                 return (new ComprasTableroOcDetalleExport($filas, $titulo, $subtitulo))
                     ->download('tablero_compras_detalle.csv', Excel::CSV);
         }
 
         return redirect()->route('consultar_tablero_compras', ComprasTableroOcFiltros::paraQueryString($filtros));
+    }
+
+    /**
+     * Excel / CSV del detalle de ahorros (solo líneas con ahorro cargado, con los filtros del tablero).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function exportarAhorros(array $filas, string $subtitulo, string $archivo, ?string $writerType = null)
+    {
+        $export = new ComprasTableroOcAhorrosExport($filas, 'Compras: ahorros por línea de orden de compra', $subtitulo);
+
+        return $writerType === null ? $export->download($archivo) : $export->download($archivo, $writerType);
     }
 
     /**

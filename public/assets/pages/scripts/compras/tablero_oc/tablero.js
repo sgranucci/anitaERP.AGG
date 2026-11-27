@@ -162,19 +162,21 @@
         });
     }
 
-    /* Barra 100%: gestión del comprador vs. entrega del proveedor sobre el ciclo total. */
+    /* Barra 100%: aprobación de la requisición, gestión del comprador y entrega del proveedor sobre el ciclo total. */
     function cicloCien() {
         var ctx = lienzo('tc-ciclo');
         if (!ctx) { return; }
+        var a = D.ciclo.aprobacion || 0;
         var g = D.ciclo.gestion || 0;
         var e = D.ciclo.entrega || 0;
-        var total = g + e;
+        var total = a + g + e;
         if (total <= 0) { return; }
         new Chart(ctx, {
             type: 'horizontalBar',
             data: {
                 labels: ['Ciclo'],
                 datasets: [
+                    { label: 'Aprobación de la requisición', data: [a * 100 / total], dias: a, backgroundColor: '#8E44AD' },
                     { label: 'Gestión del comprador', data: [g * 100 / total], dias: g, backgroundColor: '#2471A3' },
                     { label: 'Entrega del proveedor', data: [e * 100 / total], dias: e, backgroundColor: '#E67E22' }
                 ]
@@ -224,6 +226,15 @@
             barrasHorizontales('tc-prov-monto', D.prov_monto.labels, D.prov_monto.values, 'Monto $', 0, function (v) { return '$ ' + fmt(v, 0); });
             barras('tc-monto-mes', 'Monto $ por mes', D.monto_mes, 0, '#27AE60');
             barras('tc-prov-activos', 'Proveedores activos por mes', D.prov_activos_mes, 0, '#8E44AD');
+        },
+        ahorros: function () {
+            if (!D.ahorros) { return; }
+            var pesos = function (v) { return '$ ' + fmt(v, 0); };
+            barrasHorizontales('tc-ah-comp', D.ahorros.compradores.labels, D.ahorros.compradores.values, 'Ahorro $', 0, pesos);
+            lineas('tc-ah-comp-mes', D.ahorros.compradores_mes, 0);
+            torta('tc-ah-tipo', D.ahorros.tipos.labels, D.ahorros.tipos.values);
+            barrasHorizontales('tc-ah-prov', D.ahorros.proveedores.labels, D.ahorros.proveedores.values, 'Ahorro $', 0, pesos);
+            barras('tc-ah-mes', 'Ahorro $ por mes', D.ahorros.mes, 0, '#27AE60');
         },
         precios: function () {
             if (!D.precios) { return; }

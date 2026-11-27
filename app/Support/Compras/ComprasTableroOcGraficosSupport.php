@@ -12,7 +12,7 @@ final class ComprasTableroOcGraficosSupport
      * @param  list<array{key: string, label: string}>  $meses
      * @return array<string, mixed>
      */
-    public static function desde(array $tablero, array $meses): array
+    public static function desde(array $tablero, array $meses, ?array $ahorros = null): array
     {
         $claves = array_column($meses, 'key');
         $etiquetas = array_column($meses, 'label');
@@ -60,6 +60,7 @@ final class ComprasTableroOcGraficosSupport
             ],
             'estados_mes' => $estadosMes,
             'ciclo' => [
+                'aprobacion' => round((float) ($tablero['ciclo']['aprobacion'] ?? 0), 2),
                 'gestion' => round((float) ($tablero['ciclo']['gestion'] ?? 0), 2),
                 'entrega' => round((float) ($tablero['ciclo']['entrega'] ?? 0), 2),
             ],
@@ -105,6 +106,32 @@ final class ComprasTableroOcGraficosSupport
                 'values' => array_map(static fn ($p) => round($p['monto'], 2), $tablero['proveedores_monto']),
             ],
             'monto_mes' => array_map(static fn (string $k) => round((float) ($tablero['monto_mes'][$k] ?? 0), 2), $claves),
+            'ahorros' => $ahorros === null ? null : [
+                'compradores' => [
+                    'labels' => array_column($ahorros['compradores'], 'nombre'),
+                    'values' => array_map(static fn ($c) => round($c['ahorro'], 2), $ahorros['compradores']),
+                ],
+                'compradores_mes' => array_map(
+                    static fn (array $c) => [
+                        'label' => $c['nombre'],
+                        'data' => array_map(static fn (string $k) => round((float) ($c['por_mes'][$k] ?? 0), 2), $claves),
+                    ],
+                    $ahorros['compradores_mes']
+                ),
+                // La torta no admite negativos: el sobrecosto de un tipo no se dibuja como porción.
+                'tipos' => [
+                    'labels' => array_column(array_filter($ahorros['tipos'], static fn ($t) => $t['ahorro'] > 0), 'nombre'),
+                    'values' => array_values(array_map(
+                        static fn ($t) => round($t['ahorro'], 2),
+                        array_filter($ahorros['tipos'], static fn ($t) => $t['ahorro'] > 0)
+                    )),
+                ],
+                'proveedores' => [
+                    'labels' => array_column($ahorros['proveedores'], 'nombre'),
+                    'values' => array_map(static fn ($p) => round($p['ahorro'], 2), $ahorros['proveedores']),
+                ],
+                'mes' => array_map(static fn (string $k) => round((float) ($ahorros['ahorro_mes'][$k] ?? 0), 2), $claves),
+            ],
             'precios' => $precios === null ? null : [
                 'series' => $precios['series'],
                 'cantidad' => array_map(static fn (string $k) => round((float) ($precios['cantidad_mes'][$k] ?? 0), 2), $claves),

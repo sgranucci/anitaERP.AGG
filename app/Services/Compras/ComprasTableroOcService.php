@@ -19,8 +19,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * Tablero de compras (réplica del Power BI de Alejandro).
  *
- * Universo: OC emitidas (APROBADA / CUMPLIDA / CERRADA) con fecha dentro del período.
- * Las OC en PENDIENTE de aprobación y las SUSPENDIDAS no entran: todavía no son pedido al proveedor.
+ * Universo: todas las OC con fecha dentro del período salvo las SUSPENDIDAS (APROBADA / CUMPLIDA / CERRADA y
+ * también PENDIENTE de aprobación: hay OC que se reciben y facturan sin haber pasado por el circuito de
+ * aprobación y no pueden quedar fuera del tablero). El estado de cabecera de la OC se ve en el detalle.
  *
  * Estado de la OC (derivado):
  * - Finalizada: OC CUMPLIDA o CERRADA, o recibida toda la cantidad pedida.
@@ -29,10 +30,22 @@ use Illuminate\Support\Facades\Log;
  *
  * Vencimiento: solo para OC no finalizadas; vencida si la fecha de entrega es anterior a hoy.
  *
- * Tiempos (días corridos):
- * - Gestión: fecha de la requisición → fecha de la OC.
- * - Entrega: fecha de la OC → fecha de la primera COM confirmada.
- * - Ciclo de vida: requisición → primera COM (solo OC con ambas).
+ * Tiempos (días corridos, se descartan los negativos):
+ * - Aprobación de la requisición: alta de la requisición → aprobación completa del árbol (no depende del comprador).
+ * - Gestión del comprador: aprobación de la requisición → emisión real de la OC. Igual que «KPIs de Compras».
+ *   Una OC generada desde la requisición hereda su fecha, por eso `ordencompra.fecha` no sirve para medir.
+ * - Entrega: emisión de la OC → fecha de la primera COM confirmada.
+ * - Ciclo de vida: aprobación de la requisición → primera COM (solo OC con ambas).
+ * Aprobación de la requisición: primer estado APROBADA de `requisicion_estado` = árbol completo. Solo cuenta si es real:
+ * las requisiciones migradas de Anita con aprobación fechada el día de la carga no tienen aprobación registrada y
+ * quedan fuera de aprobación, gestión y ciclo (si no, una OC de enero medía 4 meses de gestión).
+ * Emisión de la OC: OC nacida en Anita = «Fecha ingreso Anita» del comentario; OC del ERP = primer estado APROBADA de
+ * `ordencompra_estado` o, si no pasó por aprobación, el alta (`created_at`).
+ *
+ * Ahorros (solapa): líneas de OC con ahorro cargado; ver {@see self::ahorros()}.
+ *
+ * COM = recepción de mercadería. La factura del proveedor es otro dato: `comprobante_proveedor` ligado a la OC
+ * (filtro «Factura»).
  *
  * Comprador: quien cargó la OC en el ERP. En las OC importadas de Anita (comentario «Usuario ini: N»)
  * el comprador es el usuario Anita N, vinculado al usuario ERP por logname (AnitaUsuarioBridgeSupport);
@@ -53,7 +66,12 @@ final class ComprasTableroOcService
 
     private const MESES_ABREV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-    private const ESTADOS_EMITIDA = [
+    private const OBS_APROBACION_MIGRADA_ALTA = 'Alta de Requisicion desde Anita';
+
+    private const OBS_APROBACION_MIGRADA_SIN_ARBOL = 'Aprobación histórica (sin árbol Anita';
+
+    private const ESTADOS_EN_ALCANCE = [
+        OrdencompraEstados::PENDIENTE,
         OrdencompraEstados::APROBADA,
         OrdencompraEstados::CUMPLIDA,
         OrdencompraEstados::CERRADA,
@@ -82,6 +100,7 @@ final class ComprasTableroOcService
             'meses' => $meses,
             'tablero' => $tablero,
             'detalle' => $this->armarDetalle($ocs, $lineas),
+            'ahorros' => $this->ahorros($ocs, $meses),
         ];
     }
 
@@ -119,6 +138,32 @@ final class ComprasTableroOcService
                 [Recepcion_Proveedor::TIPO_RECEPCION, Recepcion_Proveedor::TIPO_DEVOLUCION]
             );
 
+        // Solo aprobaciones reales: se descartan las que la migración de Anita grabó con la fecha de la carga
+        // («Alta de Requisicion desde Anita») o sin árbol («Aprobación histórica (sin árbol Anita…»).
+        $aprobRq = DB::table('requisicion_estado')
+            ->where('estado', 'APROBADA')
+            ->where('observacion', 'not like', self::OBS_APROBACION_MIGRADA_ALTA.'%')
+            ->where('observacion', 'not like', self::OBS_APROBACION_MIGRADA_SIN_ARBOL.'%')
+            ->whereIn('requisicion_id', DB::table('ordencompra')->select('requisicion_id')
+                ->whereBetween('fecha', [$desde, $hasta])->whereNotNull('requisicion_id'))
+            ->groupBy('requisicion_id')
+            ->select('requisicion_id')
+            ->selectRaw('MIN(fecha) as fecha_aprobacion');
+
+        $emisionOc = DB::table('ordencompra_estado')
+            ->where('estado', OrdencompraEstados::APROBADA)
+            ->whereIn('ordencompra_id', clone $idsPeriodo)
+            ->groupBy('ordencompra_id')
+            ->select('ordencompra_id')
+            ->selectRaw('MIN(fecha) as fecha_emision');
+
+        $facturas = DB::table('comprobante_proveedor as cp')
+            ->where('cp.estado', '<>', 'BORRADOR')
+            ->whereIn('cp.ordencompra_id', clone $idsPeriodo)
+            ->groupBy('cp.ordencompra_id')
+            ->select('cp.ordencompra_id')
+            ->selectRaw('COUNT(*) as facturas');
+
         $query = DB::table('ordencompra as oc')
             ->join('empresa as e', 'e.id', '=', 'oc.empresa_id')
             ->leftJoin('usuario as u', 'u.id', '=', 'oc.creousuario_id')
@@ -126,6 +171,9 @@ final class ComprasTableroOcService
             ->leftJoin('requisicion as r', 'r.id', '=', 'oc.requisicion_id')
             ->leftJoinSub($lineasSub, 'ln', 'ln.ordencompra_id', '=', 'oc.id')
             ->leftJoinSub($recepciones, 'rc', 'rc.ordencompra_id', '=', 'oc.id')
+            ->leftJoinSub($aprobRq, 'ra', 'ra.requisicion_id', '=', 'oc.requisicion_id')
+            ->leftJoinSub($emisionOc, 'eo', 'eo.ordencompra_id', '=', 'oc.id')
+            ->leftJoinSub($facturas, 'fa', 'fa.ordencompra_id', '=', 'oc.id')
             ->select([
                 'oc.id',
                 'oc.numeroordencompra',
@@ -141,6 +189,10 @@ final class ComprasTableroOcService
                 'p.nombre as proveedor',
                 'oc.estadoordencompra',
                 'r.fecha as fecha_requisicion',
+                'oc.created_at',
+                'ra.fecha_aprobacion as fecha_aprobacion_rq',
+                'eo.fecha_emision',
+                'fa.facturas',
                 'ln.lineas',
                 'ln.cantidad_pedida',
                 'rc.primera_com',
@@ -175,6 +227,12 @@ final class ComprasTableroOcService
                 continue;
             }
             if ($filtros['com'] === F::COM_SIN && $oc['coms'] > 0) {
+                continue;
+            }
+            if ($filtros['factura'] === F::FACTURA_CON && $oc['facturas'] <= 0) {
+                continue;
+            }
+            if ($filtros['factura'] === F::FACTURA_SIN && $oc['facturas'] > 0) {
                 continue;
             }
 
@@ -218,11 +276,16 @@ final class ComprasTableroOcService
         $fecha = (string) $row->fecha;
         $primeraCom = $row->primera_com !== null ? substr((string) $row->primera_com, 0, 10) : null;
         $fechaRq = $row->fecha_requisicion !== null ? substr((string) $row->fecha_requisicion, 0, 10) : null;
+        // Sin aprobación real registrada (requisiciones migradas de Anita) no se mide: ni gestión ni aprobación ni ciclo.
+        $aprobacionRq = $row->fecha_aprobacion_rq !== null ? substr((string) $row->fecha_aprobacion_rq, 0, 10) : null;
+        $emision = $this->fechaEmisionOc($row, $fecha);
 
-        $gestion = $fechaRq !== null ? $this->diasEntre($fechaRq, $fecha) : null;
-        $entrega = ($primeraCom !== null && $coms > 0) ? $this->diasEntre($fecha, $primeraCom) : null;
-        $ciclo = ($gestion !== null && $entrega !== null)
-            ? $this->diasEntre($fechaRq, $primeraCom)
+        $gestion = $aprobacionRq !== null ? $this->diasEntre($aprobacionRq, $emision) : null;
+        // La aprobación solo cuenta si la cadena es coherente (aprobada antes de emitir la OC).
+        $aprobacion = ($gestion !== null && $fechaRq !== null) ? $this->diasEntre($fechaRq, $aprobacionRq) : null;
+        $entrega = ($primeraCom !== null && $coms > 0) ? $this->diasEntre($emision, $primeraCom) : null;
+        $ciclo = ($gestion !== null && $primeraCom !== null && $coms > 0)
+            ? $this->diasEntre($aprobacionRq, $primeraCom)
             : null;
 
         return [
@@ -239,12 +302,15 @@ final class ComprasTableroOcService
             'proveedor_codigo' => (string) ($row->proveedor_codigo ?? ''),
             'proveedor' => trim((string) ($row->proveedor ?? '')) !== '' ? trim((string) $row->proveedor) : '(sin proveedor)',
             'estado_oc' => $estadoOc,
+            'facturas' => (int) ($row->facturas ?? 0),
+            'fecha_emision' => $emision,
             'estado_clave' => $estadoClave,
             'estado' => $estadoNombre,
             'vencimiento' => $vencimiento,
             'lineas' => (int) ($row->lineas ?? 0),
             'coms' => $coms,
             'primera_com' => $primeraCom,
+            'aprobacion_dias' => $aprobacion,
             'gestion_dias' => $gestion,
             'entrega_dias' => $entrega,
             'ciclo_dias' => $ciclo,
@@ -270,7 +336,14 @@ final class ComprasTableroOcService
             }
         }
 
-        $mapaAnita = $this->mapaUsuariosAnita(array_values(array_unique($codigosPorOc)));
+        $anita = $this->mapaUsuariosAnita(array_values(array_unique($codigosPorOc)));
+        $mapaAnita = $anita['mapa'];
+        // Código que Anita no tiene en su tabla de usuarios: en las OC cargadas desde el ERP ese número es el id del
+        // usuario ERP (ej. 71 = Cecilia Kravetz, 73 = Alvaro Nieva). Solo se usa si el usuario ERP existe.
+        $codigosComoIdErp = array_values(array_filter(
+            array_unique($codigosPorOc),
+            static fn (int $c) => ! isset($mapaAnita[$c]) && ! in_array($c, $anita['existentes'], true)
+        ));
 
         $idsErp = [];
         foreach ($filas as $row) {
@@ -278,6 +351,9 @@ final class ComprasTableroOcService
         }
         foreach ($mapaAnita as $erpId) {
             $idsErp[$erpId] = true;
+        }
+        foreach ($codigosComoIdErp as $codigo) {
+            $idsErp[$codigo] = true;
         }
         $nombres = DB::table('usuario')
             ->whereIn('id', array_keys($idsErp))
@@ -292,6 +368,8 @@ final class ComprasTableroOcService
             if ($codigo !== null && isset($mapaAnita[$codigo])) {
                 $erpId = $mapaAnita[$codigo];
                 $resultado[$ocId] = ['id' => $erpId, 'nombre' => trim((string) ($nombres[$erpId] ?? '')) ?: ('Usuario #'.$erpId)];
+            } elseif ($codigo !== null && in_array($codigo, $codigosComoIdErp, true) && isset($nombres[$codigo]) && trim((string) $nombres[$codigo]) !== '') {
+                $resultado[$ocId] = ['id' => $codigo, 'nombre' => trim((string) $nombres[$codigo])];
             } elseif ($codigo !== null) {
                 // Id negativo: no choca con ningún usuario ERP y agrupa por código Anita.
                 $resultado[$ocId] = ['id' => -$codigo, 'nombre' => 'Usuario Anita '.$codigo];
@@ -307,25 +385,36 @@ final class ComprasTableroOcService
 
     /**
      * @param  list<int>  $codigos
-     * @return array<int, int> usu_usuario Anita => usuario.id ERP
+     * @return array{mapa: array<int, int>, existentes: list<int>} mapa usu_usuario Anita => usuario.id ERP;
+     *                                                               existentes = códigos que Anita sí tiene en su tabla de usuarios
      */
     private function mapaUsuariosAnita(array $codigos): array
     {
         if ($codigos === []) {
-            return [];
+            return ['mapa' => [], 'existentes' => []];
         }
         sort($codigos);
 
         return Cache::remember(
-            'compras_tablero_usuarios_anita:'.md5(implode(',', $codigos)),
+            'compras_tablero_usuarios_anita_v2:'.md5(implode(',', $codigos)),
             now()->addMinutes(30),
             function () use ($codigos): array {
                 try {
-                    return AnitaUsuarioBridgeSupport::mapaErpIdPorUsuUsuario($codigos);
+                    $filas = AnitaUsuarioBridgeSupport::usuariosAnitaPorCodigo($codigos);
+                    if ($filas === null) {
+                        // Anita no contestó: no se asume nada.
+                        return ['mapa' => [], 'existentes' => $codigos];
+                    }
+
+                    return [
+                        'mapa' => AnitaUsuarioBridgeSupport::mapaErpIdPorUsuUsuario($codigos),
+                        'existentes' => array_keys($filas),
+                    ];
                 } catch (\Throwable $e) {
                     Log::warning('Tablero compras: no se pudo vincular usuarios Anita', ['error' => $e->getMessage()]);
 
-                    return [];
+                    // Sin respuesta de Anita no se asume nada: todos los códigos cuentan como existentes.
+                    return ['mapa' => [], 'existentes' => $codigos];
                 }
             }
         );
@@ -447,7 +536,7 @@ final class ComprasTableroOcService
     private function aplicarFiltrosBase(Builder $query, array $filtros, string $desde, string $hasta): void
     {
         $query->whereBetween('oc.fecha', [$desde, $hasta])
-            ->whereIn('oc.estadoordencompra', self::ESTADOS_EMITIDA)
+            ->whereIn('oc.estadoordencompra', self::ESTADOS_EN_ALCANCE)
             ->whereIn('oc.empresa_id', $filtros['empresa_ids']);
 
         OrdencompraReporteCriteriosSupport::aplicarFiltroProveedoresCodigo($query, (string) $filtros['proveedores'], 'p.codigo');
@@ -487,6 +576,7 @@ final class ComprasTableroOcService
             $vencidasMes[$nombre] = $ceroMeses;
         }
 
+        $acAprobacion = ['suma' => 0.0, 'n' => 0];
         $acGestion = ['suma' => 0.0, 'n' => 0];
         $acEntrega = ['suma' => 0.0, 'n' => 0];
         $acCiclo = ['suma' => 0.0, 'n' => 0];
@@ -515,6 +605,10 @@ final class ComprasTableroOcService
                 $aTiempo++;
             }
 
+            if ($oc['aprobacion_dias'] !== null) {
+                $acAprobacion['suma'] += $oc['aprobacion_dias'];
+                $acAprobacion['n']++;
+            }
             if ($oc['gestion_dias'] !== null) {
                 $acGestion['suma'] += $oc['gestion_dias'];
                 $acGestion['n']++;
@@ -649,6 +743,7 @@ final class ComprasTableroOcService
 
         arsort($empresas);
 
+        $aprobacionProm = $acAprobacion['n'] > 0 ? $acAprobacion['suma'] / $acAprobacion['n'] : null;
         $gestionProm = $acGestion['n'] > 0 ? $acGestion['suma'] / $acGestion['n'] : null;
         $entregaProm = $acEntrega['n'] > 0 ? $acEntrega['suma'] / $acEntrega['n'] : null;
         $cicloProm = $acCiclo['n'] > 0 ? $acCiclo['suma'] / $acCiclo['n'] : null;
@@ -685,6 +780,8 @@ final class ComprasTableroOcService
             'estados_mes' => $estadosMes,
             'oc_mes' => $ocMes,
             'ciclo' => [
+                'aprobacion' => $aprobacionProm,
+                'n_aprobacion' => $acAprobacion['n'],
                 'gestion' => $gestionProm,
                 'entrega' => $entregaProm,
                 'ciclo' => $cicloProm,
@@ -918,16 +1015,194 @@ final class ComprasTableroOcService
                 'fechaentrega' => $oc['fechaentrega'],
                 'primera_com' => $oc['primera_com'],
                 'tiene_com' => $oc['coms'] > 0 ? 'Sí' : 'No',
+                'estado_oc' => $oc['estado_oc'],
+                'tiene_factura' => $oc['facturas'] > 0 ? 'Sí' : 'No',
             ];
         }
 
         return $filas;
     }
 
+    // ------------------------------------------------------------------
+    // Ahorros
+    // ------------------------------------------------------------------
+
+    /**
+     * Ahorros de las OC filtradas: líneas de OC con ahorro cargado (precio anterior → precio final).
+     *
+     * Ahorro $ = ordencompra_articulo.ahorro_total_pesos (ya convertido con el TC del ahorro).
+     * Base = ahorro + gasto final en pesos (= precio anterior × cantidad × TC). % = ahorro / base.
+     * Un ahorro negativo es sobrecosto y resta en los totales. Los porcentajes agregados se calculan
+     * sobre la suma de bases, nunca promediando porcentajes de línea.
+     *
+     * @param  array<int, array<string, mixed>>  $ocs
+     * @param  list<array{key: string, label: string}>  $meses
+     * @return array<string, mixed>
+     */
+    private function ahorros(array $ocs, array $meses): array
+    {
+        $vacio = [
+            'total' => ['ahorro' => 0.0, 'base' => 0.0, 'pct' => null, 'lineas' => 0, 'ocs' => 0, 'ocs_total' => count($ocs)],
+            'compradores' => [],
+            'tipos' => [],
+            'proveedores' => [],
+            'ahorro_mes' => array_fill_keys(array_column($meses, 'key'), 0.0),
+            'compradores_mes' => [],
+            'filas' => [],
+        ];
+        if ($ocs === []) {
+            return $vacio;
+        }
+
+        $filas = [];
+        foreach (array_chunk(array_keys($ocs), 2000) as $ids) {
+            $query = DB::table('ordencompra_articulo as oa')
+                ->join('ordencompra as oc', 'oc.id', '=', 'oa.ordencompra_id')
+                ->leftJoin('requisicion as r', 'r.id', '=', 'oc.requisicion_id')
+                ->leftJoin('articulo as a', 'a.id', '=', 'oa.articulo_id')
+                ->leftJoin('tipo_ahorro as ta', 'ta.id', '=', 'oa.tipoahorro_id')
+                ->leftJoin('moneda as m', 'm.id', '=', 'oa.moneda_id')
+                ->leftJoin('moneda as ma', 'ma.id', '=', 'oa.moneda_anterior_id')
+                ->whereIn('oa.ordencompra_id', $ids)
+                ->whereNotNull('oa.ahorro_total_pesos')
+                ->where('oa.tc_ahorro', '>', 0)
+                ->orderBy('oc.fecha')
+                ->orderBy('oc.numeroordencompra')
+                ->orderBy('oa.id')
+                ->select([
+                    'oa.id', 'oa.ordencompra_id', 'oa.cantidad', 'oa.precio', 'oa.preciooriginal',
+                    'oa.tc_ahorro', 'oa.ahorro_total', 'oa.ahorro_total_pesos', 'oa.motivoahorro',
+                    'oa.tipoahorro_id', 'ta.nombre as tipo', 'r.numerorequisicion',
+                    'a.sku', 'a.descripcion as articulo',
+                    'm.abreviatura as moneda', 'ma.abreviatura as moneda_anterior',
+                ]);
+
+            foreach ($query->get() as $row) {
+                $filas[] = $row;
+            }
+        }
+
+        $total = ['ahorro' => 0.0, 'base' => 0.0];
+        $compradores = [];
+        $tipos = [];
+        $proveedores = [];
+        $ahorroMes = $vacio['ahorro_mes'];
+        $compradoresMes = [];
+        $ocsConAhorro = [];
+        $detalle = [];
+
+        foreach ($filas as $row) {
+            $oc = $ocs[(int) $row->ordencompra_id];
+            $ahorro = (float) $row->ahorro_total_pesos;
+            $base = $ahorro + (float) $row->precio * (float) $row->cantidad * (float) $row->tc_ahorro;
+            $tipo = trim((string) ($row->tipo ?? '')) !== '' ? trim((string) $row->tipo) : '(sin tipo)';
+            $ocsConAhorro[$oc['id']] = true;
+
+            $total['ahorro'] += $ahorro;
+            $total['base'] += $base;
+
+            $uid = $oc['usuario_id'];
+            $compradores[$uid] ??= ['nombre' => $oc['usuario'], 'ahorro' => 0.0, 'base' => 0.0, 'lineas' => 0];
+            $compradores[$uid]['ahorro'] += $ahorro;
+            $compradores[$uid]['base'] += $base;
+            $compradores[$uid]['lineas']++;
+
+            $tipos[$tipo] ??= ['nombre' => $tipo, 'ahorro' => 0.0, 'base' => 0.0, 'lineas' => 0];
+            $tipos[$tipo]['ahorro'] += $ahorro;
+            $tipos[$tipo]['base'] += $base;
+            $tipos[$tipo]['lineas']++;
+
+            $pid = $oc['proveedor_id'];
+            $proveedores[$pid] ??= [
+                'nombre' => ($oc['proveedor_codigo'] !== '' ? $oc['proveedor_codigo'].' — ' : '').$oc['proveedor'],
+                'ahorro' => 0.0, 'base' => 0.0, 'lineas' => 0,
+            ];
+            $proveedores[$pid]['ahorro'] += $ahorro;
+            $proveedores[$pid]['base'] += $base;
+            $proveedores[$pid]['lineas']++;
+
+            if (isset($ahorroMes[$oc['mes']])) {
+                $ahorroMes[$oc['mes']] += $ahorro;
+                $compradoresMes[$uid][$oc['mes']] = ($compradoresMes[$uid][$oc['mes']] ?? 0.0) + $ahorro;
+            }
+
+            $monedaFinal = (string) ($row->moneda ?? '');
+            $detalle[] = [
+                'oc_id' => $oc['id'],
+                'fecha' => $oc['fecha'],
+                'numero' => $oc['numero'],
+                'nombreempresa' => $oc['empresa'],
+                'empresa' => $oc['empresa'],
+                'requisicion' => $row->numerorequisicion !== null ? (int) $row->numerorequisicion : null,
+                'comprador' => $oc['usuario'],
+                'proveedor' => $oc['proveedor'],
+                'sku' => (string) ($row->sku ?? ''),
+                'articulo' => trim((string) ($row->articulo ?? '')),
+                'cantidad' => (float) $row->cantidad,
+                'moneda' => $monedaFinal,
+                'moneda_anterior' => trim((string) ($row->moneda_anterior ?? '')) !== '' ? (string) $row->moneda_anterior : $monedaFinal,
+                'precio_anterior' => (float) $row->preciooriginal,
+                'precio_final' => (float) $row->precio,
+                'ahorro_pesos' => $ahorro,
+                'pct' => $base > 0.000001 ? $ahorro / $base * 100.0 : null,
+                'tipo' => $tipo,
+                'motivo' => trim((string) ($row->motivoahorro ?? '')),
+            ];
+        }
+
+        $pct = static fn (float $ahorro, float $base): ?float => $base > 0.000001 ? $ahorro / $base * 100.0 : null;
+
+        $porAhorro = static fn (array $a, array $b): int => $b['ahorro'] <=> $a['ahorro'];
+        $conPct = static function (array $lista) use ($pct): array {
+            return array_map(static function (array $x) use ($pct): array {
+                $x['pct'] = $pct($x['ahorro'], $x['base']);
+
+                return $x;
+            }, array_values($lista));
+        };
+
+        $compradoresLista = $conPct($compradores);
+        usort($compradoresLista, $porAhorro);
+        $tiposLista = $conPct($tipos);
+        usort($tiposLista, $porAhorro);
+        $proveedoresLista = $conPct($proveedores);
+        usort($proveedoresLista, $porAhorro);
+
+        $compradoresMesLista = [];
+        foreach (array_slice($compradoresLista, 0, 8) as $c) {
+            foreach ($compradores as $uid => $datos) {
+                if ($datos['nombre'] === $c['nombre']) {
+                    $compradoresMesLista[] = [
+                        'nombre' => $c['nombre'],
+                        'por_mes' => $compradoresMes[$uid] ?? [],
+                    ];
+                    break;
+                }
+            }
+        }
+
+        return [
+            'total' => [
+                'ahorro' => $total['ahorro'],
+                'base' => $total['base'],
+                'pct' => $pct($total['ahorro'], $total['base']),
+                'lineas' => count($filas),
+                'ocs' => count($ocsConAhorro),
+                'ocs_total' => count($ocs),
+            ],
+            'compradores' => $compradoresLista,
+            'tipos' => $tiposLista,
+            'proveedores' => array_slice($proveedoresLista, 0, self::TOP_RANKING),
+            'ahorro_mes' => $ahorroMes,
+            'compradores_mes' => $compradoresMesLista,
+            'filas' => $detalle,
+        ];
+    }
+
     /**
      * @param  list<array<string, mixed>>  $filas
      */
-    public function paginarFilas(array $filas, int $perPage, int $page, array $query = []): LengthAwarePaginatorContract
+    public function paginarFilas(array $filas, int $perPage, int $page, array $query = [], string $pageName = 'page'): LengthAwarePaginatorContract
     {
         $page = max(1, $page);
         $perPage = max(10, min(500, $perPage));
@@ -937,7 +1212,7 @@ final class ComprasTableroOcService
             count($filas),
             $perPage,
             $page,
-            ['path' => request()->url(), 'query' => $query],
+            ['path' => request()->url(), 'query' => $query, 'pageName' => $pageName],
         );
     }
 
@@ -966,6 +1241,7 @@ final class ComprasTableroOcService
             'estado' => [F::OPCIONES_ESTADO, F::ESTADO_TODOS, 'Estado OC'],
             'vencimiento' => [F::OPCIONES_VENCIMIENTO, F::VENCIMIENTO_TODOS, 'Vencimiento'],
             'com' => [F::OPCIONES_COM, F::COM_TODAS, 'COM'],
+            'factura' => [F::OPCIONES_FACTURA, F::FACTURA_TODAS, 'Factura'],
         ] as $clave => [$opciones, $default, $rotulo]) {
             if ($filtros[$clave] !== $default) {
                 $partes[] = $rotulo.': '.collect($opciones)->firstWhere('valor', $filtros[$clave])['etiqueta'];
@@ -978,6 +1254,32 @@ final class ComprasTableroOcService
     // ------------------------------------------------------------------
     // Fechas
     // ------------------------------------------------------------------
+
+    /**
+     * Fecha real de emisión de la OC (ver docblock de la clase).
+     */
+    private function fechaEmisionOc(object $row, string $fechaOc): string
+    {
+        $comentario = (string) ($row->comentario ?? '');
+
+        // OC nacida en Anita: la emisión es su fecha de ingreso. Una aprobación posterior en el ERP (cambio de la OC,
+        // reaprobación) no es la emisión.
+        if (str_contains($comentario, 'Fecha ingreso Anita')) {
+            if (preg_match('/Fecha ingreso Anita:\s*(\d{4})(\d{2})(\d{2})/', $comentario, $m) === 1
+                && checkdate((int) $m[2], (int) $m[3], (int) $m[1])
+            ) {
+                return $m[1].'-'.$m[2].'-'.$m[3];
+            }
+
+            return $fechaOc;
+        }
+
+        if ($row->fecha_emision !== null) {
+            return substr((string) $row->fecha_emision, 0, 10);
+        }
+
+        return $row->created_at !== null ? substr((string) $row->created_at, 0, 10) : $fechaOc;
+    }
 
     private function diasEntre(string $desde, string $hasta): ?int
     {

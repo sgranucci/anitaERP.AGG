@@ -9,10 +9,10 @@
     $fmt = fn ($n, $d = 2) => number_format((float) $n, $d, ',', '.');
     $fechaCorta = fn ($f) => $f ? \Carbon\Carbon::parse($f)->format('d/m/Y') : '';
     // El PDF va más angosto (es lo que más pesa en DomPDF): sin código de proveedor ni ¿COM?
-    // (la 1ª COM ya lo dice) y sin Empresa cuando hay una sola. Pantalla, Excel y CSV conservan las 17.
+    // (la 1ª COM ya lo dice), ni cabecera de la OC ni ¿Factura? y sin Empresa cuando hay una sola. Pantalla, Excel y CSV conservan las 19.
     $verEmpresa = ! ($enPdf && ($ocultar_empresa ?? false));
     $verExtras = ! $enPdf;
-    $nColumnas = 15 + ($verEmpresa ? 1 : 0) + ($verExtras ? 2 : 0);
+    $nColumnas = 15 + ($verEmpresa ? 1 : 0) + ($verExtras ? 4 : 0);
 @endphp
 <thead>
     @if ($enPdf && ($mostrar_cabecera ?? true))
@@ -47,6 +47,8 @@
         <th>1ª COM</th>
         @if ($verExtras)
             <th>¿COM?</th>
+            <th>Cabecera OC</th>
+            <th>¿Factura?</th>
         @endif
     </tr>
 </thead>
@@ -88,6 +90,8 @@
             <td class="text-nowrap">{{ $fechaCorta($f['primera_com']) }}</td>
             @if ($verExtras)
                 <td>{{ $f['tiene_com'] }}</td>
+                <td>{{ $f['estado_oc'] }}</td>
+                <td>{{ $f['tiene_factura'] }}</td>
             @endif
         </tr>
     @empty

@@ -14,23 +14,30 @@
     </div>
     <div class="col-6 col-md-3 mb-2">
         @include('compras.tablero_oc.partials.kpi', [
+            'etiqueta' => 'Aprobaci&oacute;n de la requisici&oacute;n',
+            'valor' => $fmtDias($ciclo['aprobacion']).' d&iacute;as',
+            'nota' => 'Alta &rarr; &uacute;ltima aprobaci&oacute;n del &aacute;rbol · n='.number_format($ciclo['n_aprobacion'], 0, ',', '.'),
+        ])
+    </div>
+    <div class="col-6 col-md-3 mb-2">
+        @include('compras.tablero_oc.partials.kpi', [
             'etiqueta' => 'Gesti&oacute;n del comprador',
             'valor' => $fmtDias($ciclo['gestion']).' d&iacute;as',
-            'nota' => 'Requisici&oacute;n &rarr; OC · n='.number_format($ciclo['n_gestion'], 0, ',', '.'),
+            'nota' => '&Uacute;ltima aprobaci&oacute;n de la requisici&oacute;n &rarr; emisi&oacute;n OC · n='.number_format($ciclo['n_gestion'], 0, ',', '.'),
         ])
     </div>
     <div class="col-6 col-md-3 mb-2">
         @include('compras.tablero_oc.partials.kpi', [
             'etiqueta' => 'Entrega del proveedor',
             'valor' => $fmtDias($ciclo['entrega']).' d&iacute;as',
-            'nota' => 'OC &rarr; primera COM · n='.number_format($ciclo['n_entrega'], 0, ',', '.'),
+            'nota' => 'Emisi&oacute;n OC &rarr; primera COM · n='.number_format($ciclo['n_entrega'], 0, ',', '.'),
         ])
     </div>
     <div class="col-6 col-md-3 mb-2">
         @include('compras.tablero_oc.partials.kpi', [
             'etiqueta' => 'Ciclo de vida',
             'valor' => $fmtDias($ciclo['ciclo']).' d&iacute;as',
-            'nota' => 'Requisici&oacute;n &rarr; entrega · n='.number_format($ciclo['n_ciclo'], 0, ',', '.'),
+            'nota' => 'Aprob. requisici&oacute;n &rarr; entrega · n='.number_format($ciclo['n_ciclo'], 0, ',', '.'),
         ])
     </div>
     <div class="col-6 col-md-3 mb-2">
@@ -97,7 +104,7 @@
         <div class="card card-outline card-info h-100 mb-0">
             <div class="card-header"><span class="tc-card-titulo">Tiempos promedio (d&iacute;as)</span></div>
             <div class="card-body"><div class="tc-grafico" style="height: 160px;"><canvas id="tc-ciclo"></canvas></div>
-                <small class="text-muted">Gesti&oacute;n del comprador + entrega del proveedor, sobre el ciclo total.</small>
+                <small class="text-muted">Aprobaci&oacute;n de la requisici&oacute;n + gesti&oacute;n del comprador + entrega del proveedor, sobre el ciclo total (cada tramo con sus propias OC).</small>
             </div>
         </div>
     </div>

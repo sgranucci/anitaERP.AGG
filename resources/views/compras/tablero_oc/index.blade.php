@@ -30,7 +30,7 @@
 @php
     $claseTabNav = [];
     $claseTabPane = [];
-    foreach (['compras', 'detalle', 'compradores', 'proveedores', 'precios'] as $claveTab) {
+    foreach (['compras', 'detalle', 'compradores', 'proveedores', 'precios', 'ahorros'] as $claveTab) {
         $claseTabNav[$claveTab] = $filtros['tab'] === $claveTab ? 'active' : '';
         $claseTabPane[$claveTab] = $filtros['tab'] === $claveTab ? 'show active' : '';
     }
@@ -175,7 +175,16 @@
                                     <option value="{{ $opcion['valor'] }}" @selected($filtros['com'] === $opcion['valor'])>{{ $opcion['etiqueta'] }}</option>
                                 @endforeach
                             </select>
-                            <small class="form-text text-muted">COM = recepci&oacute;n de mercader&iacute;a confirmada (la factura/recepci&oacute;n de la OC).</small>
+                            <small class="form-text text-muted">COM = recepci&oacute;n de mercader&iacute;a confirmada (no es la factura).</small>
+                        </div>
+                        <label for="factura" class="{{ $colLabel }}">Factura de proveedor</label>
+                        <div class="{{ $colInput }}">
+                            <select name="factura" id="factura" class="form-control">
+                                @foreach ($opciones_factura as $opcion)
+                                    <option value="{{ $opcion['valor'] }}" @selected($filtros['factura'] === $opcion['valor'])>{{ $opcion['etiqueta'] }}</option>
+                                @endforeach
+                            </select>
+                            <small class="form-text text-muted">Comprobante de proveedor cargado contra la OC.</small>
                         </div>
                     </div>
 
@@ -231,6 +240,11 @@
                                     <i class="fa fa-line-chart"></i> Precios
                                 </a>
                             </li>
+                            <li class="nav-item">
+                                <a class="nav-link {{ $claseTabNav['ahorros'] }}" data-toggle="tab" data-tab="ahorros" href="#tab-tablero-ahorros" role="tab">
+                                    <i class="fa fa-piggy-bank"></i> Ahorros
+                                </a>
+                            </li>
                         </ul>
                     </div>
 
@@ -249,6 +263,9 @@
                         </div>
                         <div class="tab-pane fade {{ $claseTabPane['precios'] }}" id="tab-tablero-precios" role="tabpanel">
                             @include('compras.tablero_oc.partials.tab_precios')
+                        </div>
+                        <div class="tab-pane fade {{ $claseTabPane['ahorros'] }}" id="tab-tablero-ahorros" role="tabpanel">
+                            @include('compras.tablero_oc.partials.tab_ahorros')
                         </div>
                     </div>
 

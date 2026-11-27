@@ -100,12 +100,13 @@ final class AnitaUsuarioBridgeSupport
     }
 
     /**
-     * Anita usu_usuario → id ERP (match por logname).
+     * Usuarios que existen en la tabla `usuario` de Anita para esos códigos.
      *
      * @param  list<int>  $codigosAnita
-     * @return array<int, int>  usu_usuario => usuario.id
+     * @return array<int, array{logname: string, nombre: string}>|null usu_usuario => datos (los códigos que no existen no
+     *                                                                   vienen); null si Anita no contestó
      */
-    public static function mapaErpIdPorUsuUsuario(array $codigosAnita, ?string $sistema = null): array
+    public static function usuariosAnitaPorCodigo(array $codigosAnita, ?string $sistema = null): ?array
     {
         $codigos = array_values(array_unique(array_filter(array_map('intval', $codigosAnita), static fn (int $n) => $n > 0)));
         if ($codigos === []) {
@@ -125,15 +126,35 @@ final class AnitaUsuarioBridgeSupport
         if ($err !== null && $err !== '') {
             Log::warning('AnitaUsuarioBridge: error leyendo usuarios Anita por código', ['error' => $err]);
 
-            return [];
+            return null;
         }
 
-        $porLogname = [];
+        $out = [];
         foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
             $cod = (int) ($fila->usu_usuario ?? 0);
-            $log = mb_strtolower(trim((string) ($fila->usu_logname ?? '')));
-            if ($cod > 0 && $log !== '') {
-                $porLogname[$log] = $cod;
+            if ($cod > 0) {
+                $out[$cod] = [
+                    'logname' => mb_strtolower(trim((string) ($fila->usu_logname ?? ''))),
+                    'nombre' => trim((string) ($fila->usu_nombre ?? '')),
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Anita usu_usuario → id ERP (match por logname).
+     *
+     * @param  list<int>  $codigosAnita
+     * @return array<int, int>  usu_usuario => usuario.id
+     */
+    public static function mapaErpIdPorUsuUsuario(array $codigosAnita, ?string $sistema = null): array
+    {
+        $porLogname = [];
+        foreach ((self::usuariosAnitaPorCodigo($codigosAnita, $sistema) ?? []) as $cod => $datos) {
+            if ($datos['logname'] !== '') {
+                $porLogname[$datos['logname']] = $cod;
             }
         }
         if ($porLogname === []) {

@@ -660,8 +660,8 @@ final class ComprasKpisProcesoProductividadSupport
             ->select([
                 DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN o.creousuario_id ELSE r.creousuario_id END as usuario_id'),
                 DB::raw('CASE WHEN o.creousuario_id IS NOT NULL THEN u_oc.nombre ELSE u_rq.nombre END as nombre'),
-                DB::raw(self::EXPR_AHORRO_PESOS.' as ahorro'),
-                DB::raw(self::EXPR_BASE_PESOS.' as base'),
+                DB::raw('SUM('.self::EXPR_AHORRO_PESOS.') as ahorro'),
+                DB::raw('SUM('.self::EXPR_BASE_PESOS.') as base'),
                 DB::raw('COUNT(ra.id) as lineas'),
             ])
             ->groupBy(

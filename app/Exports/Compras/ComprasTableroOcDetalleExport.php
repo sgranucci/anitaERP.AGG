@@ -24,7 +24,7 @@ class ComprasTableroOcDetalleExport implements FromView, WithColumnFormatting, W
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'Q';
+    private const COL_ULTIMA = 'S';
 
     private const FORMAT_IMPORTE = NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2;
 
@@ -84,7 +84,7 @@ class ComprasTableroOcDetalleExport implements FromView, WithColumnFormatting, W
         return [
             'A' => 11, 'B' => 10, 'C' => 20, 'D' => 22, 'E' => 34, 'F' => 10, 'G' => 14,
             'H' => 42, 'I' => 12, 'J' => 6, 'K' => 16, 'L' => 18, 'M' => 16, 'N' => 12,
-            'O' => 11, 'P' => 11, 'Q' => 7,
+            'O' => 11, 'P' => 11, 'Q' => 7, 'R' => 16, 'S' => 10,
         ];
     }
 

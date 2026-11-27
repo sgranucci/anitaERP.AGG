@@ -9,7 +9,8 @@ use Illuminate\Http\Request;
  * Filtros del tablero de compras (réplica del Power BI de Compras).
  *
  * Los filtros valen para todas las solapas: período (año / mes / día), empresa,
- * comprador, proveedor, estado de la OC, vencimiento y si la OC tiene COM.
+ * comprador, proveedor, estado de la OC, vencimiento, si la OC tiene COM
+ * (recepción) y si tiene factura de proveedor.
  */
 final class ComprasTableroOcFiltros
 {
@@ -33,6 +34,12 @@ final class ComprasTableroOcFiltros
 
     public const COM_SIN = 'sin';
 
+    public const FACTURA_TODAS = 'todas';
+
+    public const FACTURA_CON = 'con';
+
+    public const FACTURA_SIN = 'sin';
+
     public const TAB_COMPRAS = 'compras';
 
     public const TAB_DETALLE = 'detalle';
@@ -42,6 +49,8 @@ final class ComprasTableroOcFiltros
     public const TAB_PROVEEDORES = 'proveedores';
 
     public const TAB_PRECIOS = 'precios';
+
+    public const TAB_AHORROS = 'ahorros';
 
     /** @var list<array{valor: string, etiqueta: string}> */
     public const OPCIONES_ESTADO = [
@@ -63,6 +72,13 @@ final class ComprasTableroOcFiltros
         ['valor' => self::COM_TODAS, 'etiqueta' => 'Todas'],
         ['valor' => self::COM_CON, 'etiqueta' => 'Con COM'],
         ['valor' => self::COM_SIN, 'etiqueta' => 'Sin COM'],
+    ];
+
+    /** @var list<array{valor: string, etiqueta: string}> */
+    public const OPCIONES_FACTURA = [
+        ['valor' => self::FACTURA_TODAS, 'etiqueta' => 'Todas'],
+        ['valor' => self::FACTURA_CON, 'etiqueta' => 'Con factura'],
+        ['valor' => self::FACTURA_SIN, 'etiqueta' => 'Sin factura'],
     ];
 
     /** @var array<int, string> número de mes => nombre */
@@ -115,6 +131,11 @@ final class ComprasTableroOcFiltros
             $com = self::COM_TODAS;
         }
 
+        $factura = trim((string) $request->input('factura', self::FACTURA_TODAS));
+        if (! in_array($factura, array_column(self::OPCIONES_FACTURA, 'valor'), true)) {
+            $factura = self::FACTURA_TODAS;
+        }
+
         $tab = trim((string) $request->input('tab', self::TAB_COMPRAS));
         if (! in_array($tab, self::tabs(), true)) {
             $tab = self::TAB_COMPRAS;
@@ -130,6 +151,7 @@ final class ComprasTableroOcFiltros
             'estado' => $estado,
             'vencimiento' => $vencimiento,
             'com' => $com,
+            'factura' => $factura,
             'articulo_id' => max(0, (int) $request->input('articulo_id', 0)),
             'buscar_articulo' => trim((string) $request->input('buscar_articulo', '')),
             'tab' => $tab,
@@ -145,6 +167,7 @@ final class ComprasTableroOcFiltros
             self::TAB_COMPRADORES,
             self::TAB_PROVEEDORES,
             self::TAB_PRECIOS,
+            self::TAB_AHORROS,
         ];
     }
 
@@ -226,6 +249,9 @@ final class ComprasTableroOcFiltros
         }
         if (($filtros['com'] ?? self::COM_TODAS) !== self::COM_TODAS) {
             $query['com'] = $filtros['com'];
+        }
+        if (($filtros['factura'] ?? self::FACTURA_TODAS) !== self::FACTURA_TODAS) {
+            $query['factura'] = $filtros['factura'];
         }
 
         if (($filtros['empresa_ids'] ?? []) !== []) {
