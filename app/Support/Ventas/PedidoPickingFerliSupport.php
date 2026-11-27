@@ -32,6 +32,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use RuntimeException;
 
@@ -2726,6 +2727,10 @@ final class PedidoPickingFerliSupport
             // Compañero de la misma OT: sus pares se fabricaron y se enviaron.
             // No consumen el alta a STOCK de otro cliente de esa OT.
             if (OtClienteCompartidoStockSupport::esFacturaDeCompanero($linea, $otId)) {
+                // Salvo que una NC los haya reingresado (alta «Devolución NC»): al refacturar
+                // esos pares vuelven a salir. Sin este egreso quedan como stock fantasma.
+                self::consumirReingresoNcAlRefacturarCompanero($linea, $otId, $fecha, $ventaId, $depositoId);
+
                 continue;
             }
             $lote = self::loteAsignadoParaStock($linea, $otId);
@@ -2737,6 +2742,65 @@ final class PedidoPickingFerliSupport
             }
 
             self::grabarConsumoStock($linea, $fecha, $ventaId, $lote, $depositoId > 0 ? $depositoId : null, $otId);
+        }
+    }
+
+    /**
+     * Línea de compañero refacturada tras una NC: la NC reingresó los pares (alta
+     * «Devolución NC» en el lote/OT) y la nueva factura los entrega de nuevo.
+     * Solo egresa si la línea entera quedó reingresada y sin salida posterior;
+     * una NC parcial se deja para revisión manual (se avisa en el log).
+     */
+    private static function consumirReingresoNcAlRefacturarCompanero(
+        Pedido_Combinacion $linea,
+        int $otId,
+        string $fecha,
+        int $ventaId,
+        int $depositoId
+    ): void {
+        $codigoOt = trim((string) (Ordentrabajo::query()->whereKey($otId)->value('codigo') ?? ''));
+        if ($codigoOt === '' || $codigoOt === '0') {
+            return;
+        }
+
+        // Todos los movimientos de esta línea en su OT (alta «Devolución NC», consumos y reversos).
+        // netCantidadPorLotePedidoCombinacion no sirve: ignora el alta de la NC sin consumo previo.
+        $neto = (float) Articulo_Movimiento::query()
+            ->where('pedido_combinacion_id', (int) $linea->id)
+            ->where('ordentrabajo_id', $otId)
+            ->sum('cantidad');
+        if ($neto <= 0.0001) {
+            return;
+        }
+
+        $pide = (float) ($linea->cantidad ?? 0);
+        if ($neto + 0.0001 < $pide) {
+            try {
+                Log::warning('ferli.refactura_companero.reingreso_parcial', [
+                    'pedido_combinacion_id' => (int) $linea->id,
+                    'ordentrabajo_id' => $otId,
+                    'venta_id' => $ventaId,
+                    'reingresado' => $neto,
+                    'factura' => $pide,
+                ]);
+            } catch (\Throwable) {
+                // No tumbar la factura por fallo de log.
+            }
+
+            return;
+        }
+
+        self::grabarConsumoStock($linea, $fecha, $ventaId, $codigoOt, $depositoId > 0 ? $depositoId : null, $otId);
+
+        try {
+            Log::info('ferli.refactura_companero.consumo_reingreso_nc', [
+                'pedido_combinacion_id' => (int) $linea->id,
+                'ordentrabajo_id' => $otId,
+                'venta_id' => $ventaId,
+                'pares' => $pide,
+            ]);
+        } catch (\Throwable) {
+            // No tumbar la factura por fallo de log.
         }
     }
 

@@ -134,6 +134,17 @@ final class OtClienteCompartidoStockSupport
                     })
                     ->whereColumn('am_comp_prev.id', '<', $alias.'.id');
             })
+            // Si una NC reingresó los pares (alta «Devolución NC» sin consumo de origen), el consumo
+            // siguiente es la refactura: egresa stock real y debe restar, no se excluye.
+            ->whereNotExists(function ($alta) use ($alias) {
+                $alta->select(DB::raw('1'))
+                    ->from('articulo_movimiento as am_comp_alta')
+                    ->whereColumn('am_comp_alta.pedido_combinacion_id', $alias.'.pedido_combinacion_id')
+                    ->whereColumn('am_comp_alta.ordentrabajo_id', $alias.'.ordentrabajo_id')
+                    ->where('am_comp_alta.concepto', PedidoPickingFerliSupport::CONCEPTO_DEVOLUCION_NC)
+                    ->where('am_comp_alta.cantidad', '>', 0)
+                    ->whereColumn('am_comp_alta.id', '<', $alias.'.id');
+            })
             ->whereExists(function ($oct) use ($alias) {
                 $oct->select(DB::raw('1'))
                     ->from('ordentrabajo_combinacion_talle as oct_comp')

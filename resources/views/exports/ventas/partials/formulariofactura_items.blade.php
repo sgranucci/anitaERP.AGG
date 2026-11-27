@@ -120,8 +120,9 @@
                 $importeBruto = $importesLocal['importe'];
                 $montoDescuentoFerli = $importesLocal['descuento'];
             } else {
-                $precioUnitarioFerli = (float) ($item['precio'] ?? 0);
-                $importeBruto = round((float) ($item['preciosindescuento'] ?? $item['precio'] ?? 0), 2)
+                // Igual que local: el precio grabado ya tiene el dto de línea; item['precio'] lo vuelve a descontar.
+                $precioUnitarioFerli = (float) ($item['preciosindescuento'] ?? $item['precio'] ?? 0);
+                $importeBruto = round($precioUnitarioFerli, 2)
                     * round((float) ($item['cantidad'] ?? 0), 2);
                 $montoDescuentoFerli = 0.0;
             }
