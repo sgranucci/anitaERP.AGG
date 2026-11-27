@@ -34,8 +34,10 @@ return new class extends Migration
     public function up(): void
     {
         $padreId = (int) (DB::table('menu')->where('url', self::URL_IIBB_CONFIG)->value('menu_id') ?? 0);
+        // Base vacía (CI lab PostgreSQL): el padre no existe porque sus menús se crean
+        // desde la estructura del cliente. Igual que 2026_07_24_180200, se omite sin error.
         if ($padreId <= 0) {
-            throw new \RuntimeException('No se encontró el menú «'.self::URL_IIBB_CONFIG.'» para ubicar Configuración ARBA.');
+            return;
         }
 
         $menuId = $this->upsertMenu(
