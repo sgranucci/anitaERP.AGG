@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Compras;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionAplicacionCuentacorrienteProveedor;
+use App\Models\Compras\AplicacionCcProveedorComprobante;
+use App\Models\Compras\AplicacionCcProveedorComprobanteLinea;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -163,6 +165,10 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
         if ($asientos > 0) {
             $mensaje .= ' · '.$asientos.' asiento(s) contable(s)';
         }
+        $numeros = array_column($resultado['comprobantes'] ?? [], 'numero');
+        if ($numeros !== []) {
+            $mensaje .= ' · Comprobante '.implode(', ', $numeros);
+        }
 
         return response()->json([
             'ok' => true,
@@ -183,7 +189,7 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
         }
 
         try {
-            $this->aplicacionService->desaplicar($id, $proveedorId);
+            $anulado = $this->aplicacionService->desaplicar($id, $proveedorId);
         } catch (RuntimeException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         } catch (Throwable $e) {
@@ -194,7 +200,9 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
 
         return response()->json([
             'ok' => true,
-            'mensaje' => 'Aplicación revertida.',
+            'mensaje' => $anulado
+                ? 'Comprobante '.$anulado->numeroFormateado().' anulado ('.(int) $anulado->cantidad_lineas.' aplicación(es) revertida(s)).'
+                : 'Aplicación revertida.',
             'workbench' => $payload,
         ]);
     }
@@ -215,9 +223,23 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             ->values()
             ->all();
 
-        $recientes = $this->cuentacorrienteRepository
-            ->listarAplicacionesManualesRecientes($proveedorId, $empresaId > 0 ? $empresaId : null)
-            ->map(function ($apl) {
+        $aplicacionesRecientes = $this->cuentacorrienteRepository
+            ->listarAplicacionesManualesRecientes($proveedorId, $empresaId > 0 ? $empresaId : null);
+        $comprobantesPorAplicacion = AplicacionCcProveedorComprobanteLinea::query()
+            ->join('aplicacion_cc_proveedor_comprobante as apc', 'apc.id', '=', 'aplicacion_cc_proveedor_comprobante_linea.comprobante_id')
+            ->whereIn('aplicacion_cc_proveedor_comprobante_linea.aplicacion_deuda_id', $aplicacionesRecientes->pluck('id')->all() ?: [0])
+            ->where('apc.estado', AplicacionCcProveedorComprobante::ESTADO_EMITIDO)
+            ->get([
+                'aplicacion_cc_proveedor_comprobante_linea.aplicacion_deuda_id',
+                'apc.id as comprobante_id',
+                'apc.numero',
+                'apc.cantidad_lineas',
+            ])
+            ->keyBy('aplicacion_deuda_id');
+
+        $recientes = $aplicacionesRecientes
+            ->map(function ($apl) use ($comprobantesPorAplicacion) {
+                $comp = $comprobantesPorAplicacion->get($apl->id);
                 $deudaCc = $apl->proveedor_cuentacorrientes;
                 $creditoCc = $apl->proveedor_cuentacorriente_aplicados;
                 $deuda = $deudaCc
@@ -246,6 +268,9 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
                     'credito_id' => (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0),
                     'diferencia_cambio' => round((float) ($apl->diferencia_cambio ?? 0), 4),
                     'asiento_id' => (int) ($apl->asiento_id ?? 0) ?: null,
+                    'comprobante_id' => $comp ? (int) $comp->comprobante_id : null,
+                    'comprobante' => $comp ? AplicacionCcProveedorComprobante::formatearNumero($comp->numero) : '',
+                    'comprobante_lineas' => $comp ? (int) $comp->cantidad_lineas : 0,
                 ];
             })
             ->values()

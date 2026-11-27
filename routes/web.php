@@ -3041,7 +3041,16 @@ Route::get('ventas/cliente/consultadeuda/{cliente_id}/{empresa_id}/{venta_id?}',
 Route::get('ventas/cliente/editacuentacorriente/{id}', 'Ventas\ClienteController@editarCuentaCorriente')->name('editar_cuentacorriente_cliente');
 Route::get('ventas/cliente/leercuentacorrienteaplicacion/{id}', 'Ventas\ClienteController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion');
 
-Route::get('ventas/aplicacion-cuentacorriente', 'Ventas\ClienteCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_cliente')->middleware('modo.consulta');
+Route::get('ventas/aplicacion-cuentacorriente', 'Ventas\AplicacionCcClienteComprobanteController@index')->name('aplicacion_cc_cliente');
+Route::get('ventas/aplicacion-cuentacorriente/listado/{formato?}', 'Ventas\AplicacionCcClienteComprobanteController@listar')->name('lista_aplicacion_cc_cliente');
+Route::post('ventas/aplicacion-cuentacorriente/workbench/vista', 'Ventas\AplicacionCcClienteComprobanteController@guardarVistaListado')->name('guardar_vista_listado_aplicacion_cc_cliente');
+Route::delete('ventas/aplicacion-cuentacorriente/workbench/vista/{id}', 'Ventas\AplicacionCcClienteComprobanteController@eliminarVistaListado')->name('eliminar_vista_listado_aplicacion_cc_cliente');
+Route::post('ventas/aplicacion-cuentacorriente/workbench/columnas', 'Ventas\AplicacionCcClienteComprobanteController@guardarColumnasListado')->name('guardar_columnas_listado_aplicacion_cc_cliente');
+Route::post('ventas/aplicacion-cuentacorriente/workbench/etiquetas', 'Ventas\AplicacionCcClienteComprobanteController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_aplicacion_cc_cliente');
+Route::post('ventas/aplicacion-cuentacorriente/workbench/preview', 'Ventas\AplicacionCcClienteComprobanteController@previewWorkbench')->name('preview_workbench_aplicacion_cc_cliente');
+Route::get('ventas/aplicacion-cuentacorriente/comprobante/{id}/imprimir', 'Ventas\AplicacionCcClienteComprobanteController@imprimir')->name('imprimir_aplicacion_cc_cliente')->where('id', '[0-9]+');
+Route::post('ventas/aplicacion-cuentacorriente/comprobante/{id}/anular', 'Ventas\AplicacionCcClienteComprobanteController@anular')->name('anular_aplicacion_cc_cliente')->where('id', '[0-9]+');
+Route::get('ventas/aplicacion-cuentacorriente/nueva', 'Ventas\ClienteCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_cliente')->middleware('modo.consulta');
 Route::get('ventas/aplicacion-cuentacorriente/api/pendientes', 'Ventas\ClienteCuentacorrienteAplicacionController@apiPendientes')->name('api_pendientes_aplicacion_cuentacorriente_cliente');
 Route::get('ventas/aplicacion-cuentacorriente/api/sugerir', 'Ventas\ClienteCuentacorrienteAplicacionController@apiSugerir')->name('api_sugerir_aplicacion_cuentacorriente_cliente');
 Route::get('ventas/aplicacion-cuentacorriente/api/cotizacion-moneda-fecha', 'Ventas\ClienteCuentacorrienteAplicacionController@apiCotizacionMonedaFecha')->name('api_cotizacion_aplicacion_cuentacorriente_cliente');
@@ -4586,7 +4595,16 @@ Route::post('compras/guardar_proveedor_encuesta', 'Compras\ProveedorController@g
 
 Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}', 'Compras\ProveedorController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion_proveedor');
 
-Route::get('compras/aplicacion-cuentacorriente', 'Compras\ProveedorCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_proveedor')->middleware('modo.consulta');
+Route::get('compras/aplicacion-cuentacorriente', 'Compras\AplicacionCcProveedorComprobanteController@index')->name('aplicacion_cc_proveedor');
+Route::get('compras/aplicacion-cuentacorriente/listado/{formato?}', 'Compras\AplicacionCcProveedorComprobanteController@listar')->name('lista_aplicacion_cc_proveedor');
+Route::post('compras/aplicacion-cuentacorriente/workbench/vista', 'Compras\AplicacionCcProveedorComprobanteController@guardarVistaListado')->name('guardar_vista_listado_aplicacion_cc_proveedor');
+Route::delete('compras/aplicacion-cuentacorriente/workbench/vista/{id}', 'Compras\AplicacionCcProveedorComprobanteController@eliminarVistaListado')->name('eliminar_vista_listado_aplicacion_cc_proveedor');
+Route::post('compras/aplicacion-cuentacorriente/workbench/columnas', 'Compras\AplicacionCcProveedorComprobanteController@guardarColumnasListado')->name('guardar_columnas_listado_aplicacion_cc_proveedor');
+Route::post('compras/aplicacion-cuentacorriente/workbench/etiquetas', 'Compras\AplicacionCcProveedorComprobanteController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_aplicacion_cc_proveedor');
+Route::post('compras/aplicacion-cuentacorriente/workbench/preview', 'Compras\AplicacionCcProveedorComprobanteController@previewWorkbench')->name('preview_workbench_aplicacion_cc_proveedor');
+Route::get('compras/aplicacion-cuentacorriente/comprobante/{id}/imprimir', 'Compras\AplicacionCcProveedorComprobanteController@imprimir')->name('imprimir_aplicacion_cc_proveedor')->where('id', '[0-9]+');
+Route::post('compras/aplicacion-cuentacorriente/comprobante/{id}/anular', 'Compras\AplicacionCcProveedorComprobanteController@anular')->name('anular_aplicacion_cc_proveedor')->where('id', '[0-9]+');
+Route::get('compras/aplicacion-cuentacorriente/nueva', 'Compras\ProveedorCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_proveedor')->middleware('modo.consulta');
 Route::get('compras/aplicacion-cuentacorriente/api/pendientes', 'Compras\ProveedorCuentacorrienteAplicacionController@apiPendientes')->name('api_pendientes_aplicacion_cuentacorriente_proveedor');
 Route::get('compras/aplicacion-cuentacorriente/api/sugerir', 'Compras\ProveedorCuentacorrienteAplicacionController@apiSugerir')->name('api_sugerir_aplicacion_cuentacorriente_proveedor');
 Route::post('compras/aplicacion-cuentacorriente/aplicar', 'Compras\ProveedorCuentacorrienteAplicacionController@aplicar')->name('aplicar_cuentacorriente_proveedor');

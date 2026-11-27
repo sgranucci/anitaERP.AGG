@@ -51,6 +51,9 @@
                         <i class="fa fa-fw fa-times"></i> Cerrar solapa
                     </button>
                 @else
+                    <a href="{{ route('aplicacion_cc_proveedor', $proveedor_id ? ['proveedor_id' => (int) $proveedor_id] : []) }}" class="btn btn-sm btn-light">
+                        <i class="fa fa-fw fa-list"></i> Comprobantes
+                    </a>
                     <a href="{{ route('tesoreria_cockpit') }}" class="btn btn-sm btn-outline-light">Tesorería</a>
                 @endif
                 <a href="#" id="acc-link-cc" class="btn btn-sm btn-outline-light {{ $proveedor_id ? '' : 'd-none' }}">Cuenta corriente</a>

@@ -28,6 +28,7 @@ use App\Support\Contable\CuentacontableInhabilitadaSupport;
 use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\AsientoReferenciaAnitaSupport;
+use App\Support\Caja\AsientoIntegridadIeSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoBancoAsientoSupport;
 use App\Models\Caja\Caja_Movimiento;
@@ -416,6 +417,7 @@ class AsientoController extends Controller
                 is_array($dataRequest['cuentacontable_ids'] ?? null) ? $dataRequest['cuentacontable_ids'] : [],
                 $idsPrevios
             );
+            AsientoIntegridadIeSupport::assertPuedeGuardar($this->asientoRepository->find($id), $dataRequest);
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }

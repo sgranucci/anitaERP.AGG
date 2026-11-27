@@ -785,7 +785,9 @@
         state.recientes.forEach(function (r) {
             var dc = Number(r.diferencia_cambio) || 0;
             html += '<tr>'
-                + '<td>' + fechaUi(r.fecha) + '</td>'
+                + '<td>' + fechaUi(r.fecha)
+                + (r.comprobante ? '<div class="small text-muted">' + $('<span>').text(r.comprobante).html() + '</div>' : '')
+                + '</td>'
                 + '<td></td><td></td>'
                 + '<td class="text-right">' + fmt(r.monto) + ' ' + (r.moneda || '')
                 + (r.cotizacion_liquidacion && r.moneda_contraparte && r.moneda_contraparte !== r.moneda
@@ -1223,7 +1225,14 @@
 
     $('#acc-recientes-body').on('click', '.acc-desaplicar', function () {
         var id = parseInt($(this).data('id'), 10);
-        if (!id || !window.confirm('¿Revertir esta aplicación?')) {
+        var reciente = state.recientes.filter(function (r) { return r.id === id; })[0] || {};
+        var pregunta = reciente.comprobante && reciente.comprobante_lineas > 1
+            ? 'Esta aplicación es parte del comprobante ' + reciente.comprobante + ' (' + reciente.comprobante_lineas
+                + ' aplicaciones). Se anula el comprobante y se revierten todas. ¿Continuar?'
+            : (reciente.comprobante
+                ? '¿Revertir esta aplicación? Se anula el comprobante ' + reciente.comprobante + '.'
+                : '¿Revertir esta aplicación?');
+        if (!id || !window.confirm(pregunta)) {
             return;
         }
         $.ajax({

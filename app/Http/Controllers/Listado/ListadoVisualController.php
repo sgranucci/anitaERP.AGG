@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Listado;
 use App\Http\Controllers\Controller;
 use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\IngresoEgresoListadoColumnas;
+use App\Support\Compras\AplicacionCcProveedorComprobanteListadoColumnas;
+use App\Support\Ventas\AplicacionCcClienteComprobanteListadoColumnas;
 use App\Support\Compras\ComprobanteProveedorListadoColumnas;
 use App\Support\Compras\ProveedorListadoColumnas;
 use App\Support\Contable\BienUsoListadoColumnas;
@@ -93,6 +95,14 @@ class ListadoVisualController extends Controller
             BienUsoListadoColumnas::RECURSO => [
                 'permiso' => 'listar-bien-uso',
                 'ruta' => 'bien_uso',
+            ],
+            AplicacionCcProveedorComprobanteListadoColumnas::RECURSO => [
+                'permiso' => 'aplicar-cuentacorriente-proveedor',
+                'ruta' => 'aplicacion_cc_proveedor',
+            ],
+            AplicacionCcClienteComprobanteListadoColumnas::RECURSO => [
+                'permiso' => 'aplicar-cuentacorriente-cliente',
+                'ruta' => 'aplicacion_cc_cliente',
             ],
             SolicitudLogisticaListadoColumnas::RECURSO => [
                 'permiso' => 'listar-logistica-solicitud',

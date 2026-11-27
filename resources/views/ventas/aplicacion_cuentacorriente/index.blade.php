@@ -53,6 +53,10 @@
                     <button type="button" class="btn btn-sm btn-outline-light" onclick="window.close()">
                         <i class="fa fa-fw fa-times"></i> Cerrar solapa
                     </button>
+                @else
+                    <a href="{{ route('aplicacion_cc_cliente', $cliente_id ? ['cliente_id' => (int) $cliente_id] : []) }}" class="btn btn-sm btn-light">
+                        <i class="fa fa-fw fa-list"></i> Comprobantes
+                    </a>
                 @endif
                 <a href="#" id="acc-link-cc" class="btn btn-sm btn-outline-light {{ $cliente_id ? '' : 'd-none' }}">Cuenta corriente</a>
             </div>

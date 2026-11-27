@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Ventas;
 
 use App\Http\Controllers\Controller;
+use App\Models\Ventas\AplicacionCcClienteComprobante;
+use App\Models\Ventas\AplicacionCcClienteComprobanteLinea;
 use App\Http\Requests\ValidacionAplicacionCuentacorrienteCliente;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
@@ -170,7 +172,8 @@ class ClienteCuentacorrienteAplicacionController extends Controller
             $resultado = $this->aplicacionService->aplicar(
                 (int) $request->input('cliente_id'),
                 (string) $request->input('fecha'),
-                $lineas
+                $lineas,
+                emitirComprobante: true,
             );
         } catch (RuntimeException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
@@ -188,6 +191,10 @@ class ClienteCuentacorrienteAplicacionController extends Controller
         $asientos = (int) ($resultado['asientos_dc'] ?? 0);
         if ($asientos > 0) {
             $mensaje .= ' · '.$asientos.' asiento(s) contable(s)';
+        }
+        $numeros = array_column($resultado['comprobantes'] ?? [], 'numero');
+        if ($numeros !== []) {
+            $mensaje .= ' · Comprobante '.implode(', ', $numeros);
         }
 
         return response()->json([
@@ -209,7 +216,7 @@ class ClienteCuentacorrienteAplicacionController extends Controller
         }
 
         try {
-            $this->aplicacionService->desaplicar($id, $clienteId);
+            $anulado = $this->aplicacionService->desaplicar($id, $clienteId);
         } catch (RuntimeException $e) {
             return response()->json(['error' => $e->getMessage()], 422);
         } catch (Throwable $e) {
@@ -220,7 +227,9 @@ class ClienteCuentacorrienteAplicacionController extends Controller
 
         return response()->json([
             'ok' => true,
-            'mensaje' => 'Aplicación revertida.',
+            'mensaje' => $anulado
+                ? 'Comprobante '.$anulado->numeroFormateado().' anulado ('.(int) $anulado->cantidad_lineas.' aplicación(es) revertida(s)).'
+                : 'Aplicación revertida.',
             'workbench' => $payload,
         ]);
     }
@@ -241,9 +250,23 @@ class ClienteCuentacorrienteAplicacionController extends Controller
             ->values()
             ->all();
 
-        $recientes = $this->cuentacorrienteRepository
-            ->listarAplicacionesManualesRecientes($clienteId, $empresaId > 0 ? $empresaId : null)
-            ->map(function ($apl) {
+        $aplicacionesRecientes = $this->cuentacorrienteRepository
+            ->listarAplicacionesManualesRecientes($clienteId, $empresaId > 0 ? $empresaId : null);
+        $comprobantesPorAplicacion = AplicacionCcClienteComprobanteLinea::query()
+            ->join('aplicacion_cc_cliente_comprobante as apc', 'apc.id', '=', 'aplicacion_cc_cliente_comprobante_linea.comprobante_id')
+            ->whereIn('aplicacion_cc_cliente_comprobante_linea.aplicacion_deuda_id', $aplicacionesRecientes->pluck('id')->all() ?: [0])
+            ->where('apc.estado', AplicacionCcClienteComprobante::ESTADO_EMITIDO)
+            ->get([
+                'aplicacion_cc_cliente_comprobante_linea.aplicacion_deuda_id',
+                'apc.id as comprobante_id',
+                'apc.numero',
+                'apc.cantidad_lineas',
+            ])
+            ->keyBy('aplicacion_deuda_id');
+
+        $recientes = $aplicacionesRecientes
+            ->map(function ($apl) use ($comprobantesPorAplicacion) {
+                $comp = $comprobantesPorAplicacion->get($apl->id);
                 $deudaCc = $apl->cliente_cuentacorrientes;
                 $creditoCc = $apl->cliente_cuentacorriente_aplicados;
                 $deuda = $deudaCc
@@ -272,6 +295,9 @@ class ClienteCuentacorrienteAplicacionController extends Controller
                     'credito_id' => (int) ($apl->cliente_cuentacorriente_aplicado_id ?? 0),
                     'diferencia_cambio' => round((float) ($apl->diferencia_cambio ?? 0), 4),
                     'asiento_id' => (int) ($apl->asiento_id ?? 0) ?: null,
+                    'comprobante_id' => $comp ? (int) $comp->comprobante_id : null,
+                    'comprobante' => $comp ? AplicacionCcClienteComprobante::formatearNumero($comp->numero) : '',
+                    'comprobante_lineas' => $comp ? (int) $comp->cantidad_lineas : 0,
                 ];
             })
             ->values()

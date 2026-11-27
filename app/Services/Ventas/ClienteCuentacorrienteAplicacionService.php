@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas;
 
+use App\Models\Ventas\AplicacionCcClienteComprobante;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
@@ -28,20 +29,23 @@ class ClienteCuentacorrienteAplicacionService
     public function __construct(
         private ClienteCuentacorrienteAplicacionAsientoService $asientoDcService,
         private ClienteCuentacorrienteAplicacionAnitaSyncService $anitaSyncService,
+        private AplicacionCcClienteComprobanteService $comprobanteService,
     ) {}
 
     /**
      * @param  list<array{credito_id:int,deuda_id:int,monto:float,cotizacion_liquidacion?:float|null}>  $lineas
-     * @return array{aplicadas:int, monto:float, dc:float, asientos_dc:int, ids: list<int>, avisos_reclasificacion: list<int>}
+     * @param  bool  $emitirComprobante  true solo desde el workbench manual: emite el comprobante APL.
+     *                                   Cobranzas y NC/ND automáticas no lo emiten.
+     * @return array{aplicadas:int, monto:float, dc:float, asientos_dc:int, ids: list<int>, avisos_reclasificacion: list<int>, comprobantes: list<array{id:int,numero:string}>}
      */
-    public function aplicar(int $clienteId, string $fecha, array $lineas): array
+    public function aplicar(int $clienteId, string $fecha, array $lineas, bool $emitirComprobante = false): array
     {
         $fecha = substr($fecha, 0, 10);
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
             throw new RuntimeException('Fecha de aplicación inválida.');
         }
 
-        $resultado = DB::transaction(function () use ($clienteId, $fecha, $lineas) {
+        $resultado = DB::transaction(function () use ($clienteId, $fecha, $lineas, $emitirComprobante) {
             $ids = [];
             foreach ($lineas as $linea) {
                 $ids[] = (int) ($linea['credito_id'] ?? 0);
@@ -102,6 +106,7 @@ class ClienteCuentacorrienteAplicacionService
             $asientosDc = 0;
             $idsAplicacion = [];
             $avisosReclasificacion = [];
+            $paresComprobante = [];
 
             foreach ($lineas as $linea) {
                 $cid = (int) $linea['credito_id'];
@@ -176,6 +181,25 @@ class ClienteCuentacorrienteAplicacionService
 
                 $idsAplicacion[] = (int) $aplDeuda->id;
                 $idsAplicacion[] = (int) $aplCredito->id;
+                $paresComprobante[] = [
+                    'empresa_id' => (int) $deuda->empresa_id,
+                    'aplicacion_deuda_id' => (int) $aplDeuda->id,
+                    'aplicacion_credito_id' => (int) $aplCredito->id,
+                    'deuda_cc_id' => (int) $deuda->id,
+                    'credito_cc_id' => (int) $credito->id,
+                    'deuda_etiqueta' => $etiquetaDeuda,
+                    'credito_etiqueta' => $etiquetaCredito,
+                    'monto_deuda' => $liq['monto_deuda'],
+                    'moneda_deuda_id' => (int) $deuda->moneda_id,
+                    'cotizacion_deuda' => $deuda->cotizacion,
+                    'monto_credito' => $liq['monto_credito'],
+                    'moneda_credito_id' => (int) $credito->moneda_id,
+                    'cotizacion_credito' => $credito->cotizacion,
+                    'cotizacion_liquidacion' => $liq['cruzada'] ? $liq['cotizacion_liquidacion'] : null,
+                    'valor_local_deuda' => $liq['valor_local_deuda'],
+                    'diferencia_cambio' => $dc,
+                    'asiento_id' => $asientoId ?: null,
+                ];
                 $creadas++;
                 $montoTotal += $monto;
                 $dcTotal += $dc;
@@ -193,6 +217,10 @@ class ClienteCuentacorrienteAplicacionService
                 }
             }
 
+            $comprobantes = $emitirComprobante && $paresComprobante !== []
+                ? $this->comprobanteService->emitir($clienteId, $fecha, $paresComprobante)
+                : [];
+
             return [
                 'aplicadas' => $creadas,
                 'monto' => round($montoTotal, 4),
@@ -200,6 +228,10 @@ class ClienteCuentacorrienteAplicacionService
                 'asientos_dc' => $asientosDc,
                 'ids' => $idsAplicacion,
                 'avisos_reclasificacion' => $avisosReclasificacion,
+                'comprobantes' => array_map(static fn (AplicacionCcClienteComprobante $c) => [
+                    'id' => (int) $c->id,
+                    'numero' => $c->numeroFormateado(),
+                ], $comprobantes),
             ];
         });
 
@@ -216,84 +248,152 @@ class ClienteCuentacorrienteAplicacionService
 
     /**
      * Revierte un par de aplicaciones generado por este proceso (no cobranza).
+     * Si el par está en un comprobante APL emitido, se revierten todos sus pares y el comprobante queda ANULADO.
      */
-    public function desaplicar(int $aplicacionId, int $clienteId): void
+    public function desaplicar(int $aplicacionId, int $clienteId): ?AplicacionCcClienteComprobante
     {
-        $snapshot = null;
+        $snapshots = [];
+        $anulado = null;
 
-        DB::transaction(function () use ($aplicacionId, $clienteId, &$snapshot) {
-            /** @var Cliente_Cuentacorriente_Aplicacion|null $apl */
-            $apl = Cliente_Cuentacorriente_Aplicacion::query()
-                ->lockForUpdate()
-                ->find($aplicacionId);
-            if ($apl === null) {
-                throw new RuntimeException('Aplicación no encontrada.');
-            }
-            if ((int) ($apl->cobranza_id ?? 0) > 0) {
-                throw new RuntimeException('Esta aplicación pertenece a una cobranza. Revierta la cobranza.');
-            }
+        DB::transaction(function () use ($aplicacionId, $clienteId, &$snapshots, &$anulado) {
+            $comprobante = $this->comprobanteService->comprobanteVigenteDeAplicacion($aplicacionId);
 
-            $snapshot = $this->anitaSyncService->snapshotDesdeAplicacion($apl);
-
-            $parId = (int) ($apl->cliente_cuentacorriente_aplicado_id ?? 0);
-            $idsBorrar = [(int) $apl->id];
-            $asientoIds = [];
-            if ((int) ($apl->asiento_id ?? 0) > 0) {
-                $asientoIds[] = (int) $apl->asiento_id;
+            $raices = [$aplicacionId];
+            if ($comprobante !== null) {
+                if ((int) $comprobante->cliente_id !== $clienteId) {
+                    throw new RuntimeException('El comprobante de aplicación no pertenece al cliente indicado.');
+                }
+                $raices = $this->comprobanteService->raicesAplicacion($comprobante);
             }
 
-            if ($parId > 0) {
-                $par = Cliente_Cuentacorriente_Aplicacion::query()
-                    ->lockForUpdate()
-                    ->where('cliente_cuentacorriente_id', $parId)
-                    ->where('cliente_cuentacorriente_aplicado_id', $apl->cliente_cuentacorriente_id)
-                    ->where(function ($q) {
-                        $q->whereNull('cobranza_id')->orWhere('cobranza_id', 0);
-                    })
-                    ->where('id', '!=', $apl->id)
-                    ->orderByDesc('id')
-                    ->first();
-                if ($par !== null) {
-                    $idsBorrar[] = (int) $par->id;
-                    if ((int) ($par->asiento_id ?? 0) > 0) {
-                        $asientoIds[] = (int) $par->asiento_id;
-                    }
+            foreach ($raices as $raizId) {
+                $snapshot = $this->desaplicarParEnTransaccion($raizId, $clienteId, $comprobante !== null);
+                if ($snapshot !== null) {
+                    $snapshots[] = $snapshot;
                 }
             }
 
-            $ccIds = Cliente_Cuentacorriente_Aplicacion::query()
-                ->whereIn('id', $idsBorrar)
-                ->pluck('cliente_cuentacorriente_id');
-
-            $ajenos = Cliente_Cuentacorriente::query()
-                ->whereIn('id', $ccIds)
-                ->where('cliente_id', '!=', $clienteId)
-                ->exists();
-            if ($ajenos) {
-                throw new RuntimeException('La aplicación no pertenece al cliente indicado.');
+            if ($comprobante !== null) {
+                $this->comprobanteService->marcarAnulado($comprobante);
+                $anulado = $comprobante;
             }
-
-            $fechaReverso = now()->format('Y-m-d');
-            foreach (array_values(array_unique($asientoIds)) as $asientoId) {
-                $this->asientoDcService->revertirSiCorresponde($asientoId, $fechaReverso);
-            }
-
-            EloquentAuditDeleteSupport::each(
-                Cliente_Cuentacorriente_Aplicacion::query()->whereIn('id', $idsBorrar)
-            );
         });
 
-        if ($snapshot === null) {
-            return;
+        $errores = [];
+        foreach ($snapshots as $snapshot) {
+            try {
+                $this->anitaSyncService->revertir($snapshot);
+            } catch (Throwable $e) {
+                $errores[] = $e->getMessage();
+            }
         }
-
-        try {
-            $this->anitaSyncService->revertir($snapshot);
-        } catch (Throwable $e) {
+        if ($errores !== []) {
             throw new RuntimeException(
-                'La aplicación se deshizo en anitaERP pero no se revirtió en Anita (climov/aplmov): '.$e->getMessage()
+                'La aplicación se deshizo en anitaERP pero no se revirtió en Anita (climov/aplmov): '.implode(' | ', $errores)
             );
         }
+
+        return $anulado;
+    }
+
+    /**
+     * Anula el comprobante APL revirtiendo todas sus aplicaciones (subledger, asientos DC y Anita).
+     */
+    public function anularComprobante(int $comprobanteId): AplicacionCcClienteComprobante
+    {
+        $comprobante = AplicacionCcClienteComprobante::query()->find($comprobanteId);
+        if ($comprobante === null) {
+            throw new RuntimeException('Comprobante de aplicación no encontrado.');
+        }
+        if ($comprobante->estaAnulado()) {
+            throw new RuntimeException('El comprobante '.$comprobante->numeroFormateado().' ya está anulado.');
+        }
+
+        $raices = $this->comprobanteService->raicesAplicacion($comprobante);
+        if ($raices === []) {
+            DB::transaction(function () use ($comprobante) {
+                $this->comprobanteService->marcarAnulado($comprobante);
+            });
+
+            return $comprobante->fresh();
+        }
+
+        $this->desaplicar($raices[0], (int) $comprobante->cliente_id);
+
+        return $comprobante->fresh();
+    }
+
+    /**
+     * Borra un par (aplicación + contraparte) y devuelve el snapshot para revertir Anita después del commit.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function desaplicarParEnTransaccion(int $aplicacionId, int $clienteId, bool $omitirSiNoExiste): ?array
+    {
+        /** @var Cliente_Cuentacorriente_Aplicacion|null $apl */
+        $apl = Cliente_Cuentacorriente_Aplicacion::query()
+            ->lockForUpdate()
+            ->find($aplicacionId);
+        if ($apl === null) {
+            if ($omitirSiNoExiste) {
+                return null;
+            }
+            throw new RuntimeException('Aplicación no encontrada.');
+        }
+        if ((int) ($apl->cobranza_id ?? 0) > 0) {
+            throw new RuntimeException('Esta aplicación pertenece a una cobranza. Revierta la cobranza.');
+        }
+
+        $snapshot = $this->anitaSyncService->snapshotDesdeAplicacion($apl);
+
+        $parId = (int) ($apl->cliente_cuentacorriente_aplicado_id ?? 0);
+        $idsBorrar = [(int) $apl->id];
+        $asientoIds = [];
+        if ((int) ($apl->asiento_id ?? 0) > 0) {
+            $asientoIds[] = (int) $apl->asiento_id;
+        }
+
+        if ($parId > 0) {
+            $par = Cliente_Cuentacorriente_Aplicacion::query()
+                ->lockForUpdate()
+                ->where('cliente_cuentacorriente_id', $parId)
+                ->where('cliente_cuentacorriente_aplicado_id', $apl->cliente_cuentacorriente_id)
+                ->where(function ($q) {
+                    $q->whereNull('cobranza_id')->orWhere('cobranza_id', 0);
+                })
+                ->where('id', '!=', $apl->id)
+                ->orderByDesc('id')
+                ->first();
+            if ($par !== null) {
+                $idsBorrar[] = (int) $par->id;
+                if ((int) ($par->asiento_id ?? 0) > 0) {
+                    $asientoIds[] = (int) $par->asiento_id;
+                }
+            }
+        }
+
+        $ccIds = Cliente_Cuentacorriente_Aplicacion::query()
+            ->whereIn('id', $idsBorrar)
+            ->pluck('cliente_cuentacorriente_id');
+
+        $ajenos = Cliente_Cuentacorriente::query()
+            ->whereIn('id', $ccIds)
+            ->where('cliente_id', '!=', $clienteId)
+            ->exists();
+        if ($ajenos) {
+            throw new RuntimeException('La aplicación no pertenece al cliente indicado.');
+        }
+
+        $fechaReverso = now()->format('Y-m-d');
+        foreach (array_values(array_unique($asientoIds)) as $asientoId) {
+            $this->asientoDcService->revertirSiCorresponde($asientoId, $fechaReverso);
+        }
+
+        EloquentAuditDeleteSupport::each(
+            Cliente_Cuentacorriente_Aplicacion::query()->whereIn('id', $idsBorrar)
+        );
+
+        return $snapshot;
     }
 
     /**
