@@ -766,8 +766,11 @@ class ContextoLiquidacion implements EntornoFormula
      * Importe liquidado del concepto en un período (IC / novedad_periodo).
      *
      * No suma todas las corridas del mes (duplicaba ERP+Anita). Elige UNA mensual:
-     * - En el mismo período de la corrida actual: solo si está cerrada (si el
-     *   mensual aún es borrador, IC=0 y la fórmula cae al mes anterior, como Anita).
+     * - En el mismo período de la corrida actual: si la corrida es de vacaciones,
+     *   la mensual liquidada de ese mes (calculada, revisada o cerrada): vacaciones
+     *   de noviembre toman la mensual de noviembre aunque no esté cerrada. En el
+     *   resto de las corridas solo cuenta si está cerrada. Si la mensual es
+     *   borrador o no existe, IC=0 y la fórmula cae al mes anterior, como Anita.
      * - En períodos históricos: prioriza recibo motor_erp, luego cerrada, luego id.
      */
     private function importeConceptoEnPeriodo(int $conceptoCodigo, int $periodoYm): float
@@ -784,7 +787,12 @@ class ContextoLiquidacion implements EntornoFormula
                 ->whereIn('l.tipo', ['mensual', 'quincena_1', 'quincena_2'])
                 ->when($this->liquidacionId > 0, fn ($q) => $q->where('l.id', '!=', $this->liquidacionId))
                 ->when($this->empresaId, fn ($q) => $q->where('l.empresa_id', $this->empresaId))
-                ->when($mismoPeriodoCorrida, fn ($q) => $q->where('l.estado', 'cerrada'))
+                ->when($mismoPeriodoCorrida, fn ($q) => $q->whereIn(
+                    'l.estado',
+                    $this->tipoCorrida === 'vacaciones'
+                        ? ['calculada', 'revisada', 'cerrada', 'contabilizada', 'pagada']
+                        : ['cerrada']
+                ))
                 ->orderByRaw("CASE l.tipo WHEN 'mensual' THEN 0 WHEN 'quincena_2' THEN 1 ELSE 2 END")
                 ->orderByDesc('l.id')
                 ->get(['l.id', 'l.estado', 'l.tipo']);

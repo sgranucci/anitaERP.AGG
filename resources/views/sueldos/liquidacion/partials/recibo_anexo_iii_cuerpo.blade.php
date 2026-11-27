@@ -241,16 +241,19 @@
             <p class="nota">Nota: Seguridad social del empleador incluye SIPA, Fondo Nacional de Empleo y Asignaciones Familiares.</p>
         </td>
         <td style="width:42%; text-align:center;">
-            <div class="sec-title">Costo total empleador</div>
-            <img class="torta-grafico" src="{{ $d['torta_uri'] }}" alt="Gráfico de composición del costo empleador">
+            <div class="sec-title">{{ $d['pie_titulo'] ?? 'Costo total empleador' }}</div>
+            <img class="torta-grafico" src="{{ $d['torta_uri'] }}" alt="{{ $d['pie_alt'] ?? 'Gráfico de composición del costo empleador' }}">
             <table class="comp-tbl" style="margin:4px auto; width:90%;">
+                @php($posicionPie = 0)
                 @foreach ($d['pie_leyenda'] as $lab => $val)
                     @if ((float)$val > 0)
                         <tr>
+                            <td style="width:8px; background:{{ \App\Support\Sueldos\ReciboAnexoIIITortaSvg::color($posicionPie) }};">&nbsp;</td>
                             <td>{{ $lab }}</td>
                             <td class="num">{{ $fmt($val) }}</td>
                         </tr>
                     @endif
+                    @php($posicionPie++)
                 @endforeach
             </table>
         </td>

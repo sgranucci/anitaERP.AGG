@@ -25,11 +25,13 @@ class ReciboAnexoIIITortaSvg
     public static function render(array $valores, int $size = 120): string
     {
         $items = [];
+        $posicion = 0;
         foreach ($valores as $label => $monto) {
             $m = (float) $monto;
             if ($m > 0.0001) {
-                $items[] = ['label' => (string) $label, 'valor' => $m];
+                $items[] = ['label' => (string) $label, 'valor' => $m, 'color' => $posicion];
             }
+            $posicion++;
         }
         if ($items === []) {
             return '<svg xmlns="http://www.w3.org/2000/svg" width="'.$size.'" height="'.$size.'"></svg>';
@@ -41,10 +43,9 @@ class ReciboAnexoIIITortaSvg
         $r = $size / 2 - 2;
         $angle = -90.0;
         $paths = '';
-        $i = 0;
         foreach ($items as $item) {
             $sweep = ($item['valor'] / $total) * 360.0;
-            $color = self::COLORES[$i % count(self::COLORES)];
+            $color = self::color($item['color']);
             if (count($items) === 1 || $sweep >= 359.9) {
                 $paths .= sprintf(
                     '<circle cx="%.1f" cy="%.1f" r="%.1f" fill="%s"/>',
@@ -57,7 +58,6 @@ class ReciboAnexoIIITortaSvg
                 $paths .= self::slice($cx, $cy, $r, $angle, $angle + $sweep, $color);
             }
             $angle += $sweep;
-            $i++;
         }
 
         return '<svg xmlns="http://www.w3.org/2000/svg" width="'.$size.'" height="'.$size.'" viewBox="0 0 '.$size.' '.$size.'">'
@@ -77,10 +77,13 @@ class ReciboAnexoIIITortaSvg
             return 'data:image/svg+xml;base64,'.base64_encode(self::render($valores, $size));
         }
 
-        $items = array_values(array_filter(
-            $valores,
-            static fn ($monto): bool => (float) $monto > 0.0001
-        ));
+        // El color depende de la posición del rubro en la leyenda, no de cuántos rubros tengan importe.
+        $items = [];
+        foreach (array_values($valores) as $indice => $monto) {
+            if ((float) $monto > 0.0001) {
+                $items[$indice] = (float) $monto;
+            }
+        }
         $imagen = imagecreatetruecolor($size, $size);
         imageantialias($imagen, true);
         $blanco = imagecolorallocate($imagen, 255, 255, 255);
@@ -91,7 +94,7 @@ class ReciboAnexoIIITortaSvg
             $inicio = -90.0;
             foreach ($items as $indice => $valor) {
                 $barrido = ((float) $valor / $total) * 360.0;
-                [$rojo, $verde, $azul] = self::rgb(self::COLORES[$indice % count(self::COLORES)]);
+                [$rojo, $verde, $azul] = self::rgb(self::color($indice));
                 $color = imagecolorallocate($imagen, $rojo, $verde, $azul);
                 imagefilledarc(
                     $imagen,
@@ -114,6 +117,12 @@ class ReciboAnexoIIITortaSvg
         imagedestroy($imagen);
 
         return 'data:image/png;base64,'.base64_encode($png);
+    }
+
+    /** Color fijo del rubro según su posición en la leyenda. */
+    public static function color(int $posicion): string
+    {
+        return self::COLORES[$posicion % count(self::COLORES)];
     }
 
     /**

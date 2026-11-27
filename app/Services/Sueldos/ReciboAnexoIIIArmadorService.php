@@ -187,6 +187,22 @@ class ReciboAnexoIIIArmadorService
             RubroCostoLaboral::ETIQUETAS_TORTA[RubroCostoLaboral::SCVO] => $rubrosEmp[RubroCostoLaboral::SCVO] ?? 0,
         ];
 
+        // Recibos sin contribuciones del empleador (vacaciones, etc.): la torta sería un solo
+        // color. Se muestra la composición del bruto: neto + descuentos del trabajador por rubro.
+        $pieTitulo = 'Costo total empleador';
+        $pieAlt = 'Gráfico de composición del costo empleador';
+        $sumaEmpleador = array_sum(array_slice($pieVals, 1));
+        if ($sumaEmpleador <= 0.0001) {
+            $pieTitulo = 'Composición del recibo';
+            $pieAlt = 'Gráfico de composición del recibo: neto y descuentos';
+            $pieVals = ['Sueldo Neto' => max(0, $neto)];
+            foreach ($rubrosTra as $rubroTra => $montoTra) {
+                if ((float) $montoTra > 0.0001) {
+                    $pieVals['Desc. '.RubroCostoLaboral::etiqueta($rubroTra)] = (float) $montoTra;
+                }
+            }
+        }
+
         $mesNom = [
             1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril', 5 => 'Mayo', 6 => 'Junio',
             7 => 'Julio', 8 => 'Agosto', 9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
@@ -261,6 +277,8 @@ class ReciboAnexoIIIArmadorService
             'tot_scvo' => $rubrosEmp[RubroCostoLaboral::SCVO] ?? 0,
             'torta_uri' => ReciboAnexoIIITortaSvg::dataUri($pieVals, 110),
             'pie_leyenda' => $pieVals,
+            'pie_titulo' => $pieTitulo,
+            'pie_alt' => $pieAlt,
             'firma_nombre' => ReciboFirmaEmpleadorSupport::nombre($empresa?->id),
             'firma_cargo' => ReciboFirmaEmpleadorSupport::cargo($empresa?->id),
             'firma_imagen_uri' => ReciboFirmaEmpleadorSupport::dataUri($empresa?->id),
