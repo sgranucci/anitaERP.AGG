@@ -4934,6 +4934,8 @@ Route::post('compras/ahorro-importacion/confirmar', 'Compras\AhorroImportacionCo
 Route::post('compras/ordencompra/{id}/guardar-ahorro', 'Compras\OrdencompraAhorroController@guardar')->name('ordencompra_guardar_ahorro');
 Route::get('compras/articulo-cuenta-oc-reporte', 'Compras\ArticuloCuentaOcReporteController@index')->name('reporte_articulo_cuenta_oc');
 Route::get('compras/listar-articulo-cuenta-oc-reporte/{formato?}', 'Compras\ArticuloCuentaOcReporteController@exportar')->name('listar_reporte_articulo_cuenta_oc');
+Route::get('compras/proveedor-servicio-reporte', 'Compras\ProveedorServicioReporteController@index')->name('reporte_proveedor_servicio');
+Route::get('compras/listar-proveedor-servicio-reporte/{formato?}', 'Compras\ProveedorServicioReporteController@exportar')->name('listar_reporte_proveedor_servicio');
 Route::get('compras/comprobante-proveedor-imputacion-ap-reporte', 'Compras\ComprobanteProveedorImputacionApReporteController@index')->name('reporte_imputacion_ap_proveedor');
 Route::get('compras/listar-comprobante-proveedor-imputacion-ap/{formato?}', 'Compras\ComprobanteProveedorImputacionApReporteController@exportar')->name('listar_reporte_imputacion_ap_proveedor');
 Route::get('compras/iva-compras', 'Compras\IvaComprasReporteController@index')->name('iva_compras');
